@@ -1,0 +1,265 @@
+[package]
+authors = ["Akira Hayakawa <ruby.wktk@gmail.com>"]
+autoexamples = false
+categories = ["algorithms", "concurrency", "science"]
+description = "Multi-platform GPU parallel algorithms for Rust."
+edition = "2024"
+keywords = ["gpu", "gpgpu", "parallel", "algorithms", "cubecl"]
+license = "MIT"
+name = "massively"
+readme = "README.md"
+repository = "https://github.com/akiradeveloper/massively"
+version = "0.1.0"
+
+[dependencies]
+cubecl = { version = "0.9.0", default-features = true }
+
+[dev-dependencies]
+criterion = "0.5"
+futures-lite = "2.6"
+
+[[bench]]
+name = "transform"
+harness = false
+
+[[bench]]
+name = "scan"
+harness = false
+
+[[bench]]
+name = "select"
+harness = false
+
+[[bench]]
+name = "gather_scatter"
+harness = false
+
+[[bench]]
+name = "sort"
+harness = false
+
+[features]
+default = ["wgpu"]
+cuda = ["cubecl/cuda"]
+hip = ["cubecl/hip"]
+wgpu = ["cubecl/wgpu"]
+
+[[example]]
+name = "adjacent-difference"
+path = "examples/adjacent_difference.rs"
+
+[[example]]
+name = "adjacent-find"
+path = "examples/adjacent_find.rs"
+
+[[example]]
+name = "all-of"
+path = "examples/all_of.rs"
+
+[[example]]
+name = "any-of"
+path = "examples/any_of.rs"
+
+[[example]]
+name = "binary-search"
+path = "examples/binary_search.rs"
+
+[[example]]
+name = "copy-if"
+path = "examples/copy_if.rs"
+
+[[example]]
+name = "count-if"
+path = "examples/count_if.rs"
+
+[[example]]
+name = "equal"
+path = "examples/equal.rs"
+
+[[example]]
+name = "equal-range"
+path = "examples/equal_range.rs"
+
+[[example]]
+name = "exclusive-scan"
+path = "examples/exclusive_scan.rs"
+
+[[example]]
+name = "exclusive-scan-by-key"
+path = "examples/exclusive_scan_by_key.rs"
+
+[[example]]
+name = "find-end"
+path = "examples/find_end.rs"
+
+[[example]]
+name = "find-first-of"
+path = "examples/find_first_of.rs"
+
+[[example]]
+name = "find-if"
+path = "examples/find_if.rs"
+
+[[example]]
+name = "find-if-not"
+path = "examples/find_if_not.rs"
+
+[[example]]
+name = "gather"
+path = "examples/gather.rs"
+
+[[example]]
+name = "gather-if"
+path = "examples/gather_if.rs"
+
+[[example]]
+name = "includes"
+path = "examples/includes.rs"
+
+[[example]]
+name = "inclusive-scan"
+path = "examples/inclusive_scan.rs"
+
+[[example]]
+name = "inclusive-scan-by-key"
+path = "examples/inclusive_scan_by_key.rs"
+
+[[example]]
+name = "inner-product"
+path = "examples/inner_product.rs"
+
+[[example]]
+name = "is-partitioned"
+path = "examples/is_partitioned.rs"
+
+[[example]]
+name = "is-sorted"
+path = "examples/is_sorted.rs"
+
+[[example]]
+name = "is-sorted-until"
+path = "examples/is_sorted_until.rs"
+
+[[example]]
+name = "lexicographical-compare"
+path = "examples/lexicographical_compare.rs"
+
+[[example]]
+name = "lower-bound"
+path = "examples/lower_bound.rs"
+
+[[example]]
+name = "max-element"
+path = "examples/max_element.rs"
+
+[[example]]
+name = "merge"
+path = "examples/merge.rs"
+
+[[example]]
+name = "merge-by-key"
+path = "examples/merge_by_key.rs"
+
+[[example]]
+name = "min-element"
+path = "examples/min_element.rs"
+
+[[example]]
+name = "minmax-element"
+path = "examples/minmax_element.rs"
+
+[[example]]
+name = "mismatch"
+path = "examples/mismatch.rs"
+
+[[example]]
+name = "none-of"
+path = "examples/none_of.rs"
+
+[[example]]
+name = "partition"
+path = "examples/partition.rs"
+
+[[example]]
+name = "partition-copy"
+path = "examples/partition_copy.rs"
+
+[[example]]
+name = "partition-point"
+path = "examples/partition_point.rs"
+
+[[example]]
+name = "reduce"
+path = "examples/reduce.rs"
+
+[[example]]
+name = "reduce-by-key"
+path = "examples/reduce_by_key.rs"
+
+[[example]]
+name = "remove-if"
+path = "examples/remove_if.rs"
+
+[[example]]
+name = "replace-if"
+path = "examples/replace_if.rs"
+
+[[example]]
+name = "reverse"
+path = "examples/reverse.rs"
+
+[[example]]
+name = "scatter"
+path = "examples/scatter.rs"
+
+[[example]]
+name = "scatter-if"
+path = "examples/scatter_if.rs"
+
+[[example]]
+name = "set-difference"
+path = "examples/set_difference.rs"
+
+[[example]]
+name = "set-intersection"
+path = "examples/set_intersection.rs"
+
+[[example]]
+name = "set-symmetric-difference"
+path = "examples/set_symmetric_difference.rs"
+
+[[example]]
+name = "set-union"
+path = "examples/set_union.rs"
+
+[[example]]
+name = "sort"
+path = "examples/sort.rs"
+
+[[example]]
+name = "sort-by-key"
+path = "examples/sort_by_key.rs"
+
+[[example]]
+name = "stable-sort"
+path = "examples/stable_sort.rs"
+
+[[example]]
+name = "stable-sort-by-key"
+path = "examples/stable_sort_by_key.rs"
+
+[[example]]
+name = "transform"
+path = "examples/transform.rs"
+
+[[example]]
+name = "unique"
+path = "examples/unique.rs"
+
+[[example]]
+name = "unique-by-key"
+path = "examples/unique_by_key.rs"
+
+[[example]]
+name = "upper-bound"
+path = "examples/upper_bound.rs"
