@@ -1,13 +1,15 @@
+use super::memory::{MaterializeOutput, materialize};
 use crate::{
     device::{
-        DeviceVec, KernelColumn, KernelColumnAt, OwnedKernelColumn, S0, SoA, SoA1, SoA2, SoA3,
-        SoA4, SoA5, SoA6, SoA7, SoA8, SoA9, SoA10, SoA11, SoA12, SoVA, SoVA1, SoVA2, SoVA3, SoVA4,
-        SoVA5, SoVA6, SoVA7, SoVA8, SoVA9, SoVA10, SoVA11, SoVA12,
+        DeviceVec, KernelColumn, KernelColumnAt, S0, SoA, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
+        SoA8, SoA9, SoA10, SoA11, SoA12, SoVA, SoVA1, SoVA2, SoVA3, SoVA4, SoVA5, SoVA6, SoVA7,
+        SoVA8, SoVA9, SoVA10, SoVA11, SoVA12, StorageKernelColumn,
     },
     error::Error,
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
     op::{GpuOp, PredicateOp},
+    policy::CubePolicy,
     primitives::{scan, search, select},
 };
 use cubecl::prelude::*;
@@ -38,6 +40,34 @@ struct TupleSelectionHandles {
     len_u32: u32,
 }
 
+fn invert_flag_handle<R>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    flag: &cubecl::server::Handle,
+) -> Result<cubecl::server::Handle, Error>
+where
+    R: Runtime,
+{
+    let client = policy.client();
+    let inverted = client.empty(len * std::mem::size_of::<u32>());
+    if len != 0 {
+        let block_count_u32 = selection_block_count(len)?;
+        unsafe {
+            invert_flags_kernel::launch_unchecked::<R>(
+                client,
+                CubeCount::Static(block_count_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_SELECTION_SIZE),
+                ArrayArg::from_raw_parts::<u32>(flag, len, 1),
+                ArrayArg::from_raw_parts::<u32>(&inverted, len, 1),
+            )
+            .map_err(|err| Error::Launch {
+                message: format!("{err:?}"),
+            })?;
+        }
+    }
+    Ok(inverted)
+}
+
 macro_rules! tuple_selection_handles {
     (
         $self:expr,
@@ -52,12 +82,7 @@ macro_rules! tuple_selection_handles {
         $self.$first_field.validate()?;
         $(
             $self.$field.validate()?;
-            if $self.$first_field.len() != $self.$field.len() {
-                return Err(Error::LengthMismatch {
-                    input: $self.$first_field.len(),
-                    output: $self.$field.len(),
-                });
-            }
+            super::ensure_same_len($self.$field.len(), $self.$first_field.len())?;
         )+
         let $first_field = super::device_expr_collect(&$self.$first_field)?;
         $(
@@ -146,7 +171,7 @@ where
 impl<Source> OwnedSelectionInput for SoA1<Source>
 where
     Self: SoA<Item = Source::Item, Scalar = Source::Item>,
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
+    Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
 {
 }
@@ -169,7 +194,7 @@ where
 
 impl<Source> OwnedSelectionInput for Source
 where
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
+    Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
 {
 }
@@ -252,9 +277,23 @@ macro_rules! impl_tuple_selection {
         impl<$first, $( $rest ),+> OwnedSelectionInput for $name<$first, $( $rest ),+>
         where
             Self: SoA<Scalar = <$first as KernelColumn>::Item>,
-            $first: OwnedKernelColumn + KernelColumnAt<S0>,
+            $first: StorageKernelColumn + KernelColumnAt<S0>,
             $(
-                $rest: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+                $rest: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            $(
+                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
+            )+
+        {
+        }
+
+        impl<$first, $( $rest ),+> OwnedPartitionInput for $name<$first, $( $rest ),+>
+        where
+            Self: SoA<Scalar = <$first as KernelColumn>::Item>,
+            $first: StorageKernelColumn + KernelColumnAt<S0>,
+            $(
+                $rest: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
             )+
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             $(
@@ -346,6 +385,203 @@ macro_rules! impl_tuple_selection {
                     )?;
                 $( let _ = &$field; )+
                 search::first_flag($first_field.policy(), handles.flag, handles.len, handles.len)
+            }
+        }
+
+        impl<$first, $( $rest ),+, Pred> PartitionInput<Pred> for $name<$first, $( $rest ),+>
+        where
+            Self: SoA<Scalar = <$first as KernelColumn>::Item>,
+            $first: KernelColumn + KernelColumnAt<S0>,
+            $(
+                $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
+            $(
+                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
+            )+
+            $(
+                <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
+            )+
+            Pred: PredicateOp<(
+                impl_tuple_selection!(@item_ty $first),
+                $( impl_tuple_selection!(@item_ty $rest) ),+
+            )>,
+        {
+            type Output = $name<
+                DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
+                $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
+            >;
+            type SplitOutput = (Self::Output, Self::Output);
+
+            fn partition_input(self, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        false,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                let first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    handles.flag,
+                    $first_field.handle.clone(),
+                )?;
+                let control_handles = first_handles.clone();
+                let $first_field = select::partition_from_handles::<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                >($first_field.policy(), first_handles)?;
+                $(
+                    let $field = select::partition_from_handles::<
+                        <$rest as KernelColumn>::Runtime,
+                        <$rest as KernelColumn>::Item,
+                    >(
+                        $field.policy(),
+                        select::handles_for_value(&control_handles, $field.handle.clone()),
+                    )?;
+                )+
+                Ok($name { $first_field, $( $field ),+ })
+            }
+
+            fn is_partitioned_input(self, _pred: GpuOp<Pred>) -> Result<bool, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        false,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                $( let _ = &$field; )+
+                let first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    handles.flag.clone(),
+                    $first_field.handle.clone(),
+                )?;
+                let selected_count = select::selected_count($first_field.policy(), &first_handles)?;
+                let rejected_flag =
+                    invert_flag_handle($first_field.policy(), handles.len, &handles.flag)?;
+                let first_rejected = search::first_flag(
+                    $first_field.policy(),
+                    rejected_flag,
+                    handles.len,
+                    handles.len,
+                )?
+                .unwrap_or(handles.len);
+                Ok(selected_count == first_rejected)
+            }
+
+            fn partition_point_input(self, _pred: GpuOp<Pred>) -> Result<usize, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        true,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                $( let _ = &$field; )+
+                Ok(search::first_flag($first_field.policy(), handles.flag, handles.len, handles.len)?
+                    .unwrap_or(handles.len))
+            }
+
+            fn partition_copy_input(self, _pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        false,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                let selected_first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    handles.flag.clone(),
+                    $first_field.handle.clone(),
+                )?;
+                let selected_count =
+                    select::selected_count($first_field.policy(), &selected_first_handles)?;
+                let rejected_flag =
+                    invert_flag_handle($first_field.policy(), handles.len, &handles.flag)?;
+                let rejected_first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    rejected_flag,
+                    $first_field.handle.clone(),
+                )?;
+                let rejected_count =
+                    select::selected_count($first_field.policy(), &rejected_first_handles)?;
+                let selected_control = selected_first_handles.clone();
+                let rejected_control = rejected_first_handles.clone();
+                let selected_first = select::compact_with_count::<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                >($first_field.policy(), selected_first_handles, selected_count)?;
+                let rejected_first = select::compact_with_count::<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                >($first_field.policy(), rejected_first_handles, rejected_count)?;
+                Ok((
+                    $name {
+                        $first_field: selected_first,
+                        $(
+                            $field: select::compact_with_count::<
+                                <$rest as KernelColumn>::Runtime,
+                                <$rest as KernelColumn>::Item,
+                            >(
+                                $field.policy(),
+                                select::handles_for_value(&selected_control, $field.handle.clone()),
+                                selected_count,
+                            )?,
+                        )+
+                    },
+                    $name {
+                        $first_field: rejected_first,
+                        $(
+                            $field: select::compact_with_count::<
+                                <$rest as KernelColumn>::Runtime,
+                                <$rest as KernelColumn>::Item,
+                            >(
+                                $field.policy(),
+                                select::handles_for_value(&rejected_control, $field.handle.clone()),
+                                rejected_count,
+                            )?,
+                        )+
+                    },
+                ))
             }
         }
     };
@@ -539,6 +775,226 @@ impl_readonly_tuple_selection!(SoVA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a
 impl_readonly_tuple_selection!(SoVA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k }, tuple11_predicate_flags_kernel);
 impl_readonly_tuple_selection!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l }, tuple12_predicate_flags_kernel);
 
+macro_rules! impl_readonly_tuple_partition {
+    (@item_ty $field:ident) => {
+        <$field as KernelColumn>::Item
+    };
+
+    (
+        $input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ },
+        $kernel_name:ident
+    ) => {
+        impl<$first, $( $rest ),+, Pred> PartitionInput<Pred> for $input<$first, $( $rest ),+>
+        where
+            Self: SoVA<Scalar = <$first as KernelColumn>::Item>,
+            $first: KernelColumn + KernelColumnAt<S0>,
+            $(
+                $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
+            $(
+                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
+            )+
+            $(
+                <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
+            )+
+            Pred: PredicateOp<(
+                impl_readonly_tuple_partition!(@item_ty $first),
+                $( impl_readonly_tuple_partition!(@item_ty $rest) ),+
+            )>,
+        {
+            type Output = $output<
+                DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
+                $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
+            >;
+            type SplitOutput = (Self::Output, Self::Output);
+
+            fn partition_input(self, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        false,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                let first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    handles.flag,
+                    $first_field.handle.clone(),
+                )?;
+                let control_handles = first_handles.clone();
+                let $first_field = select::partition_from_handles::<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                >($first_field.policy(), first_handles)?;
+                $(
+                    let $field = select::partition_from_handles::<
+                        <$rest as KernelColumn>::Runtime,
+                        <$rest as KernelColumn>::Item,
+                    >(
+                        $field.policy(),
+                        select::handles_for_value(&control_handles, $field.handle.clone()),
+                    )?;
+                )+
+                Ok($output { $first_field, $( $field ),+ })
+            }
+
+            fn is_partitioned_input(self, _pred: GpuOp<Pred>) -> Result<bool, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        false,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                $( let _ = &$field; )+
+                let first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    handles.flag.clone(),
+                    $first_field.handle.clone(),
+                )?;
+                let selected_count = select::selected_count($first_field.policy(), &first_handles)?;
+                let rejected_flag =
+                    invert_flag_handle($first_field.policy(), handles.len, &handles.flag)?;
+                let first_rejected = search::first_flag(
+                    $first_field.policy(),
+                    rejected_flag,
+                    handles.len,
+                    handles.len,
+                )?
+                .unwrap_or(handles.len);
+                Ok(selected_count == first_rejected)
+            }
+
+            fn partition_point_input(self, _pred: GpuOp<Pred>) -> Result<usize, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        true,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                $( let _ = &$field; )+
+                Ok(search::first_flag($first_field.policy(), handles.flag, handles.len, handles.len)?
+                    .unwrap_or(handles.len))
+            }
+
+            fn partition_copy_input(self, _pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+                let (handles, $first_field, $( $field ),+) =
+                    tuple_selection_handles!(
+                        self,
+                        false,
+                        $kernel_name,
+                        (
+                            <$first as KernelColumn>::Item,
+                            $( <$rest as KernelColumn>::Item ),+
+                        ),
+                        <$first as KernelColumn>::Runtime,
+                        Pred,
+                        $first_field,
+                        $( $field ),+
+                    )?;
+                let selected_first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    handles.flag.clone(),
+                    $first_field.handle.clone(),
+                )?;
+                let selected_count =
+                    select::selected_count($first_field.policy(), &selected_first_handles)?;
+                let rejected_flag =
+                    invert_flag_handle($first_field.policy(), handles.len, &handles.flag)?;
+                let rejected_first_handles = select::handles_from_flags(
+                    $first_field.policy(),
+                    handles.len,
+                    handles.len_u32,
+                    rejected_flag,
+                    $first_field.handle.clone(),
+                )?;
+                let rejected_count =
+                    select::selected_count($first_field.policy(), &rejected_first_handles)?;
+                let selected_control = selected_first_handles.clone();
+                let rejected_control = rejected_first_handles.clone();
+                let selected_first = select::compact_with_count::<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                >($first_field.policy(), selected_first_handles, selected_count)?;
+                let rejected_first = select::compact_with_count::<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                >($first_field.policy(), rejected_first_handles, rejected_count)?;
+                Ok((
+                    $output {
+                        $first_field: selected_first,
+                        $(
+                            $field: select::compact_with_count::<
+                                <$rest as KernelColumn>::Runtime,
+                                <$rest as KernelColumn>::Item,
+                            >(
+                                $field.policy(),
+                                select::handles_for_value(&selected_control, $field.handle.clone()),
+                                selected_count,
+                            )?,
+                        )+
+                    },
+                    $output {
+                        $first_field: rejected_first,
+                        $(
+                            $field: select::compact_with_count::<
+                                <$rest as KernelColumn>::Runtime,
+                                <$rest as KernelColumn>::Item,
+                            >(
+                                $field.policy(),
+                                select::handles_for_value(&rejected_control, $field.handle.clone()),
+                                rejected_count,
+                            )?,
+                        )+
+                    },
+                ))
+            }
+        }
+    };
+}
+
+impl_readonly_tuple_partition!(SoVA2 -> SoA2<A, B> { left, right }, tuple2_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA3 -> SoA3<A, B, C> { first, second, third }, tuple3_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA4 -> SoA4<A, B, C, D> { a, b, c, d }, tuple4_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e }, tuple5_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f }, tuple6_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g }, tuple7_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h }, tuple8_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i }, tuple9_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j }, tuple10_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k }, tuple11_predicate_flags_kernel);
+impl_readonly_tuple_partition!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l }, tuple12_predicate_flags_kernel);
+
 /// Keeps values satisfying `Pred`.
 ///
 /// This is a borrowing algorithm. It reads the input and returns newly owned SoA
@@ -546,25 +1002,27 @@ impl_readonly_tuple_selection!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, 
 pub fn copy_if<Source, Pred>(
     source: Source,
     _pred: Pred,
-) -> Result<<Source as SelectInput<Pred>>::Output, Error>
+) -> Result<<<Source as SelectInput<Pred>>::Output as MaterializeOutput>::Output, Error>
 where
     Source: SelectInput<Pred> + ReadOnlySelectionInput,
+    <Source as SelectInput<Pred>>::Output: MaterializeOutput,
 {
-    source.select_input(false, GpuOp::<Pred>::new())
+    materialize(source.select_input(false, GpuOp::<Pred>::new())?)
 }
 
 /// Removes values satisfying `Pred`.
 ///
-/// This is a consuming algorithm. It takes owned SoA input and returns owned SoA
+/// This is a borrowing algorithm. It reads the input and returns newly owned SoA
 /// storage for the remaining values.
 pub fn remove_if<Source, Pred>(
     source: Source,
     _pred: Pred,
-) -> Result<<Source as SelectInput<Pred>>::Output, Error>
+) -> Result<<<Source as SelectInput<Pred>>::Output as MaterializeOutput>::Output, Error>
 where
     Source: SelectInput<Pred> + OwnedSelectionInput,
+    <Source as SelectInput<Pred>>::Output: MaterializeOutput,
 {
-    source.select_input(true, GpuOp::<Pred>::new())
+    materialize(source.select_input(true, GpuOp::<Pred>::new())?)
 }
 
 #[doc(hidden)]
@@ -658,14 +1116,14 @@ where
 impl<Source> OwnedPartitionInput for SoA1<Source>
 where
     Self: SoA<Item = Source::Item, Scalar = Source::Item>,
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
+    Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
 {
 }
 
 impl<Source> OwnedPartitionInput for Source
 where
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
+    Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
 {
 }
@@ -753,8 +1211,7 @@ where
     source.find_input(false, GpuOp::<Pred>::new())
 }
 
-/// Finds the first value not satisfying `Pred`.
-pub fn find_if_not<Source, Pred>(source: Source, _pred: Pred) -> Result<Option<usize>, Error>
+fn find_if_not<Source, Pred>(source: Source, _pred: Pred) -> Result<Option<usize>, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
@@ -765,11 +1222,12 @@ where
 pub fn partition<Input, Pred>(
     input: Input,
     _pred: Pred,
-) -> Result<<Input as PartitionInput<Pred>>::Output, Error>
+) -> Result<<<Input as PartitionInput<Pred>>::Output as MaterializeOutput>::Output, Error>
 where
     Input: PartitionInput<Pred> + OwnedPartitionInput,
+    <Input as PartitionInput<Pred>>::Output: MaterializeOutput,
 {
-    input.partition_input(GpuOp::<Pred>::new())
+    materialize(input.partition_input(GpuOp::<Pred>::new())?)
 }
 
 /// Returns whether all elements satisfying `Pred` appear before all non-matching elements.
@@ -778,23 +1236,4 @@ where
     Input: PartitionInput<Pred>,
 {
     input.is_partitioned_input(GpuOp::<Pred>::new())
-}
-
-/// Returns the first non-matching position in a partitioned range.
-pub fn partition_point<Input, Pred>(input: Input, _pred: Pred) -> Result<usize, Error>
-where
-    Input: PartitionInput<Pred>,
-{
-    input.partition_point_input(GpuOp::<Pred>::new())
-}
-
-/// Copies both partition sides into separate device vectors.
-pub fn partition_copy<Input, Pred>(
-    input: Input,
-    _pred: Pred,
-) -> Result<<Input as PartitionInput<Pred>>::SplitOutput, Error>
-where
-    Input: PartitionInput<Pred>,
-{
-    input.partition_copy_input(GpuOp::<Pred>::new())
 }

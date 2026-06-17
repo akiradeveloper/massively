@@ -1,6 +1,6 @@
 mod common;
 
-use massively::{CubeWgpu, merge_by_key, unzip};
+use massively::{CubeWgpu, merge_by_key};
 
 fn main() -> common::Result {
     let policy = CubeWgpu::cpu();
@@ -16,8 +16,6 @@ fn main() -> common::Result {
         &right_values,
         common::LessU32,
     )?;
-    let keys = unzip(keys)?;
-    let values = unzip(values)?;
 
     assert_eq!(keys.to_vec()?, vec![0, 1, 2, 3]);
     assert_eq!(values.to_vec()?, vec![0.0, 10.0, 20.0, 30.0]);

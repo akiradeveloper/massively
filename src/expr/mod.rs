@@ -1,16 +1,10 @@
-use crate::op::{BinaryOp, UnaryOp};
+use crate::op::BinaryOp;
 use cubecl::prelude::*;
 use std::marker::PhantomData;
 
 /// Type-level input node for a device expression.
 pub struct Input<T> {
     _item: PhantomData<fn() -> T>,
-}
-
-/// Type-level map node for a device expression.
-pub struct Map<Source, Op> {
-    _source: PhantomData<fn() -> Source>,
-    _op: PhantomData<fn() -> Op>,
 }
 
 /// Type-level binary map node over two device expressions.
@@ -154,42 +148,6 @@ impl<T: CubePrimitive> DeviceGpuExpr<T> for Slot3<T> {
         index: usize,
     ) -> T {
         slot3[index]
-    }
-}
-
-#[cube]
-impl<T, Source, Op> GpuExpr<T> for Map<Source, Op>
-where
-    T: CubePrimitive,
-    Source: GpuExpr<T>,
-    Op: UnaryOp<T, Output = T>,
-{
-    fn eval(
-        input: &Array<T>,
-        indices: &Array<u32>,
-        rhs: &Array<T>,
-        rhs_indices: &Array<u32>,
-        index: usize,
-    ) -> T {
-        Op::apply(Source::eval(input, indices, rhs, rhs_indices, index))
-    }
-}
-
-#[cube]
-impl<T, Source, Op> DeviceGpuExpr<T> for Map<Source, Op>
-where
-    T: CubePrimitive,
-    Source: DeviceGpuExpr<T>,
-    Op: UnaryOp<T, Output = T>,
-{
-    fn eval(
-        slot0: &Array<T>,
-        slot1: &Array<T>,
-        slot2: &Array<T>,
-        slot3: &Array<T>,
-        index: usize,
-    ) -> T {
-        Op::apply(Source::eval(slot0, slot1, slot2, slot3, index))
     }
 }
 

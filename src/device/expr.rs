@@ -1,17 +1,11 @@
 use super::DeviceVec;
 use crate::{
-    error::Error,
-    expr::{BinaryMap, Map, Slot0, Slot1, Slot2, Slot3},
+    error::{Error, ensure_same_len},
+    expr::{BinaryMap, Slot0, Slot1, Slot2, Slot3},
     policy::CubePolicy,
 };
 use cubecl::prelude::*;
 use std::marker::PhantomData;
-
-/// Unary transform expression used by fused kernels.
-pub struct DeviceMap<Source, Op> {
-    pub(crate) source: Source,
-    pub(crate) _op: PhantomData<fn() -> Op>,
-}
 
 /// Binary transform expression used by fused kernels.
 pub struct DeviceBinaryMap<Left, Right, Op> {
@@ -88,12 +82,7 @@ macro_rules! define_device_soa {
                 self.$first_field.validate()?;
                 $(
                     self.$field.validate()?;
-                    if self.$first_field.len() != self.$field.len() {
-                        return Err(Error::LengthMismatch {
-                            input: self.$first_field.len(),
-                            output: self.$field.len(),
-                        });
-                    }
+                    ensure_same_len(self.$field.len(), self.$first_field.len())?;
                 )+
                 Ok(())
             }
@@ -110,6 +99,41 @@ define_device_soa!(SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i }
 define_device_soa!(SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
 define_device_soa!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
 define_device_soa!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+
+macro_rules! impl_soa_as_sova {
+    ($name:ident < $( $ty:ident ),+ >) => {
+        impl<$( $ty ),+> SoVA for $name<$( $ty ),+>
+        where
+            Self: SoA,
+        {
+            type Runtime = <Self as SoA>::Runtime;
+            type Item = <Self as SoA>::Item;
+            type Scalar = <Self as SoA>::Scalar;
+
+            fn policy(&self) -> &CubePolicy<Self::Runtime> {
+                SoA::policy(self)
+            }
+
+            fn len(&self) -> usize {
+                SoA::len(self)
+            }
+
+            fn validate(&self) -> Result<(), Error> {
+                SoA::validate(self)
+            }
+        }
+    };
+}
+
+impl_soa_as_sova!(SoA4<A, B, C, D>);
+impl_soa_as_sova!(SoA5<A, B, C, D, E>);
+impl_soa_as_sova!(SoA6<A, B, C, D, E, F>);
+impl_soa_as_sova!(SoA7<A, B, C, D, E, F, G>);
+impl_soa_as_sova!(SoA8<A, B, C, D, E, F, G, H>);
+impl_soa_as_sova!(SoA9<A, B, C, D, E, F, G, H, I>);
+impl_soa_as_sova!(SoA10<A, B, C, D, E, F, G, H, I, J>);
+impl_soa_as_sova!(SoA11<A, B, C, D, E, F, G, H, I, J, K>);
+impl_soa_as_sova!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L>);
 
 macro_rules! define_device_sova {
     ($name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
@@ -147,12 +171,10 @@ macro_rules! define_device_sova {
                 KernelColumn::validate(&self.$first_field)?;
                 $(
                     KernelColumn::validate(&self.$field)?;
-                    if KernelColumn::len(&self.$first_field) != KernelColumn::len(&self.$field) {
-                        return Err(Error::LengthMismatch {
-                            input: KernelColumn::len(&self.$first_field),
-                            output: KernelColumn::len(&self.$field),
-                        });
-                    }
+                    ensure_same_len(
+                        KernelColumn::len(&self.$field),
+                        KernelColumn::len(&self.$first_field),
+                    )?;
                 )+
                 Ok(())
             }
@@ -183,8 +205,8 @@ pub struct S4;
 
 /// Internal scalar-column expression that can be lowered into GPU kernels.
 ///
-/// This is not a public API concept. Public code deals in `DeviceVec` and
-/// `SoVA`; this trait is the private staging layer used by algorithms to pass
+/// This is not a public API concept. Public code deals in `DeviceVec`, `zip`,
+/// and `SoA`; this trait is the private staging layer used by algorithms to pass
 /// one or more columns to kernels.
 #[doc(hidden)]
 pub trait KernelColumn {
@@ -214,15 +236,19 @@ pub trait KernelColumn {
     }
 }
 
-/// Internal shorthand for columns backed by owned device storage.
+/// Internal shorthand for storage-backed columns that can be staged for kernels.
 ///
-/// Consuming algorithms use this to reject read-only inputs at compile time.
-pub(crate) trait OwnedKernelColumn: KernelColumn {}
+/// This includes both owned `DeviceVec` outputs being materialized internally
+/// and borrowed `&DeviceVec` public inputs.
+pub(crate) trait StorageKernelColumn: KernelColumn {}
 
-/// Struct-of-virtual-arrays.
+/// Internal shorthand for public algorithm inputs that must be borrowed.
+pub(crate) trait ReadOnlyKernelColumn: StorageKernelColumn {}
+
+/// Internal read-only SoA compatibility layer.
 ///
-/// This is one logical finite device sequence with row type `Item`, backed by
-/// one or more virtual vector columns.
+/// Public API terminology is `SoA`; this trait remains as an implementation
+/// detail for virtual/read-only expression inputs.
 pub trait SoVA {
     type Runtime: Runtime;
     type Item;
@@ -234,9 +260,6 @@ pub trait SoVA {
 }
 
 /// Storage-backed structure-of-arrays.
-///
-/// Consuming algorithms accept this trait. Read-only sources such as
-/// `&DeviceVec` are `SoVA`, not `SoA`.
 pub trait SoA {
     type Runtime: Runtime;
     type Item;
@@ -270,6 +293,28 @@ where
 }
 
 impl<R, T> SoVA for &DeviceVec<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type Runtime = R;
+    type Item = T;
+    type Scalar = T;
+
+    fn policy(&self) -> &CubePolicy<Self::Runtime> {
+        DeviceVec::policy(self)
+    }
+
+    fn len(&self) -> usize {
+        DeviceVec::len(self)
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
+impl<R, T> SoA for &DeviceVec<R, T>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
@@ -325,12 +370,10 @@ where
     fn validate(&self) -> Result<(), Error> {
         KernelColumn::validate(&self.left)?;
         KernelColumn::validate(&self.right)?;
-        if KernelColumn::len(&self.left) != KernelColumn::len(&self.right) {
-            return Err(Error::LengthMismatch {
-                input: KernelColumn::len(&self.left),
-                output: KernelColumn::len(&self.right),
-            });
-        }
+        ensure_same_len(
+            KernelColumn::len(&self.right),
+            KernelColumn::len(&self.left),
+        )?;
         Ok(())
     }
 }
@@ -355,13 +398,29 @@ where
     fn validate(&self) -> Result<(), Error> {
         self.left.validate()?;
         self.right.validate()?;
-        if self.left.len() != self.right.len() {
-            return Err(Error::LengthMismatch {
-                input: self.left.len(),
-                output: self.right.len(),
-            });
-        }
+        ensure_same_len(self.right.len(), self.left.len())?;
         Ok(())
+    }
+}
+
+impl<Left, Right> SoVA for SoA2<Left, Right>
+where
+    Self: SoA,
+{
+    type Runtime = <Self as SoA>::Runtime;
+    type Item = <Self as SoA>::Item;
+    type Scalar = <Self as SoA>::Scalar;
+
+    fn policy(&self) -> &CubePolicy<Self::Runtime> {
+        SoA::policy(self)
+    }
+
+    fn len(&self) -> usize {
+        SoA::len(self)
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        SoA::validate(self)
     }
 }
 
@@ -388,7 +447,7 @@ where
 
 impl<Source> SoA for SoA1<Source>
 where
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
+    Source: StorageKernelColumn + KernelColumnAt<S0>,
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
@@ -465,18 +524,14 @@ where
         KernelColumn::validate(&self.first)?;
         KernelColumn::validate(&self.second)?;
         KernelColumn::validate(&self.third)?;
-        if KernelColumn::len(&self.first) != KernelColumn::len(&self.second) {
-            return Err(Error::LengthMismatch {
-                input: KernelColumn::len(&self.first),
-                output: KernelColumn::len(&self.second),
-            });
-        }
-        if KernelColumn::len(&self.first) != KernelColumn::len(&self.third) {
-            return Err(Error::LengthMismatch {
-                input: KernelColumn::len(&self.first),
-                output: KernelColumn::len(&self.third),
-            });
-        }
+        ensure_same_len(
+            KernelColumn::len(&self.second),
+            KernelColumn::len(&self.first),
+        )?;
+        ensure_same_len(
+            KernelColumn::len(&self.third),
+            KernelColumn::len(&self.first),
+        )?;
         Ok(())
     }
 }
@@ -503,19 +558,30 @@ where
         self.first.validate()?;
         self.second.validate()?;
         self.third.validate()?;
-        if self.first.len() != self.second.len() {
-            return Err(Error::LengthMismatch {
-                input: self.first.len(),
-                output: self.second.len(),
-            });
-        }
-        if self.first.len() != self.third.len() {
-            return Err(Error::LengthMismatch {
-                input: self.first.len(),
-                output: self.third.len(),
-            });
-        }
+        ensure_same_len(self.second.len(), self.first.len())?;
+        ensure_same_len(self.third.len(), self.first.len())?;
         Ok(())
+    }
+}
+
+impl<First, Second, Third> SoVA for SoA3<First, Second, Third>
+where
+    Self: SoA,
+{
+    type Runtime = <Self as SoA>::Runtime;
+    type Item = <Self as SoA>::Item;
+    type Scalar = <Self as SoA>::Scalar;
+
+    fn policy(&self) -> &CubePolicy<Self::Runtime> {
+        SoA::policy(self)
+    }
+
+    fn len(&self) -> usize {
+        SoA::len(self)
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        SoA::validate(self)
     }
 }
 
@@ -621,6 +687,9 @@ where
     }
 }
 
+impl<'a, R, T> StorageKernelColumn for &'a DeviceVec<R, T> where R: Runtime {}
+impl<'a, R, T> ReadOnlyKernelColumn for &'a DeviceVec<R, T> where R: Runtime {}
+
 impl<'a, R, T> KernelColumnAt<S0> for &'a DeviceVec<R, T>
 where
     R: Runtime,
@@ -701,7 +770,7 @@ where
     }
 }
 
-impl<R, T> OwnedKernelColumn for DeviceVec<R, T> where R: Runtime {}
+impl<R, T> StorageKernelColumn for DeviceVec<R, T> where R: Runtime {}
 
 impl<R, T> KernelColumnAt<S0> for DeviceVec<R, T>
 where
@@ -755,43 +824,6 @@ where
     }
 }
 
-impl<Source, Op> KernelColumn for DeviceMap<Source, Op>
-where
-    Source: KernelColumn + KernelColumnAt<S0>,
-{
-    type Runtime = Source::Runtime;
-    type Item = Source::Item;
-    type Expr = Map<<Source as KernelColumnAt<S0>>::ExprAt, Op>;
-
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        self.source.policy()
-    }
-
-    fn len(&self) -> usize {
-        self.source.len()
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        self.source.validate()
-    }
-
-    fn stage(&self) -> Result<KernelColumnBindings, Error> {
-        self.source.stage()
-    }
-}
-
-impl<Source, Op, Start> KernelColumnAt<Start> for DeviceMap<Source, Op>
-where
-    Source: KernelColumnAt<Start>,
-{
-    type ExprAt = Map<Source::ExprAt, Op>;
-    type Next = Source::Next;
-
-    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        self.source.stage_at(bindings)
-    }
-}
-
 impl<Left, Right, Op> KernelColumn for DeviceBinaryMap<Left, Right, Op>
 where
     Left: KernelColumn + KernelColumnAt<S0>,
@@ -818,12 +850,7 @@ where
     fn validate(&self) -> Result<(), Error> {
         self.left.validate()?;
         self.right.validate()?;
-        if self.left.len() != self.right.len() {
-            return Err(Error::LengthMismatch {
-                input: self.left.len(),
-                output: self.right.len(),
-            });
-        }
+        ensure_same_len(self.right.len(), self.left.len())?;
         Ok(())
     }
 

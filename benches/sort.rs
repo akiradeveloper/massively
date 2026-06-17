@@ -3,7 +3,7 @@ mod common;
 use common::{Backend, SORT_SIZES, descending_f32, shuffled_u32, sync};
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use massively::op::BinaryPredicateOp;
-use massively::{CubeWgpu, sort_by_key, unzip};
+use massively::{CubeWgpu, sort_by_key};
 
 struct Less;
 
@@ -24,9 +24,7 @@ impl BinaryPredicateOp<u32> for Less {
 fn check_sort_by_key(policy: &CubeWgpu) {
     let keys = policy.to_device(&[2_u32, 0, 1]).unwrap();
     let values = policy.to_device(&[20.0_f32, 0.0, 10.0]).unwrap();
-    let (keys, values) = sort_by_key(keys, values, Less).unwrap();
-    let keys = unzip(keys).unwrap();
-    let values = unzip(values).unwrap();
+    let (keys, values) = sort_by_key(&keys, &values, Less).unwrap();
     assert_eq!(keys.to_vec().unwrap(), vec![0, 1, 2]);
     assert_eq!(values.to_vec().unwrap(), vec![0.0, 10.0, 20.0]);
 }
@@ -51,7 +49,7 @@ fn bench_sort(c: &mut Criterion) {
                         input
                     },
                     |(keys, values)| {
-                        let output = sort_by_key(keys, values, Less).unwrap();
+                        let output = sort_by_key(&keys, &values, Less).unwrap();
                         sync(&policy);
                         black_box(output)
                     },

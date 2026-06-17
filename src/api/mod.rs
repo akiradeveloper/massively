@@ -8,14 +8,11 @@ mod search;
 mod selection;
 
 pub use gather_scatter::{gather, gather_if, scatter, scatter_if};
-pub use memory::{
-    transform, unzip, vzip, vzip3, vzip4, vzip5, vzip6, vzip7, vzip8, vzip9, vzip10, vzip11,
-    vzip12, zip, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
-};
+pub use memory::{transform, zip, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12};
 pub use mutation::{replace_if, unique, unique_by_key};
 pub use ordering::{
-    merge, merge_by_key, reverse, set_difference, set_intersection, set_symmetric_difference,
-    set_union, sort, sort_by_key, stable_sort, stable_sort_by_key,
+    merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,
+    stable_sort, stable_sort_by_key,
 };
 pub use reduce::{inner_product, reduce, reduce_by_key};
 pub use scan::{
@@ -23,18 +20,17 @@ pub use scan::{
     inclusive_scan_by_key,
 };
 pub use search::{
-    adjacent_find, binary_search, equal, equal_range, find_end, find_first_of, includes, is_sorted,
-    is_sorted_until, lexicographical_compare, lower_bound, max_element, min_element,
-    minmax_element, mismatch, upper_bound,
+    adjacent_find, equal, equal_range, find_first_of, is_sorted, is_sorted_until,
+    lexicographical_compare, lower_bound, max_element, min_element, minmax_element, mismatch,
+    upper_bound,
 };
 pub use selection::{
-    all_of, any_of, copy_if, count_if, find_if, find_if_not, is_partitioned, none_of, partition,
-    partition_copy, partition_point, remove_if,
+    all_of, any_of, copy_if, count_if, find_if, is_partitioned, none_of, partition, remove_if,
 };
 
 use crate::{
     device::{DeviceVec, KernelColumn, KernelColumnAt, S0},
-    error::Error,
+    error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr, Input},
     kernels::*,
     op::{BinaryOp, BinaryPredicateOp, GpuOp, PredicateOp},
@@ -103,64 +99,6 @@ where
         output_handle,
         len,
     ))
-}
-
-pub(super) fn device_expr_collect_into<ExprSource>(
-    expr: &ExprSource,
-    output: &mut DeviceVec<ExprSource::Runtime, ExprSource::Item>,
-) -> Result<(), Error>
-where
-    ExprSource: KernelColumn + KernelColumnAt<S0>,
-    ExprSource::Runtime: Runtime,
-    ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
-{
-    expr.validate()?;
-    let len = expr.len();
-    if len != output.len() {
-        return Err(Error::LengthMismatch {
-            input: len,
-            output: output.len(),
-        });
-    }
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let client = expr.policy().client();
-
-    if len != 0 {
-        let bindings = expr.stage()?;
-        let slot0 = bindings.slots.first().unwrap();
-        let slot1 = bindings.slots.get(1).unwrap_or(slot0);
-        let slot2 = bindings.slots.get(2).unwrap_or(slot0);
-        let slot3 = bindings.slots.get(3).unwrap_or(slot0);
-        let block_size = 256_u32;
-        let block_count = len.div_ceil(block_size as usize);
-        let block_count_u32 =
-            u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
-        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-
-        unsafe {
-            device_collect_expr_block_kernel::launch_unchecked::<
-                ExprSource::Item,
-                ExprSource::Expr,
-                ExprSource::Runtime,
-            >(
-                client,
-                CubeCount::Static(block_count_u32, 1, 1),
-                CubeDim::new_1d(block_size),
-                ArrayArg::from_raw_parts::<ExprSource::Item>(&output.handle, len, 1),
-                ArrayArg::from_raw_parts::<ExprSource::Item>(&slot0.0, slot0.1, 1),
-                ArrayArg::from_raw_parts::<ExprSource::Item>(&slot1.0, slot1.1, 1),
-                ArrayArg::from_raw_parts::<ExprSource::Item>(&slot2.0, slot2.1, 1),
-                ArrayArg::from_raw_parts::<ExprSource::Item>(&slot3.0, slot3.1, 1),
-                ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
-            )
-            .map_err(|err| Error::Launch {
-                message: format!("{err:?}"),
-            })?;
-        }
-    }
-
-    Ok(())
 }
 
 pub(super) fn device_expr_gather<InputSource, IndexSource>(
@@ -248,12 +186,7 @@ where
 {
     values.validate()?;
     indices.validate()?;
-    if values.len() != indices.len() {
-        return Err(Error::LengthMismatch {
-            input: values.len(),
-            output: indices.len(),
-        });
-    }
+    ensure_same_len(values.len(), indices.len())?;
 
     let output = device_expr_collect(initial)?;
     let len = values.len();
@@ -332,18 +265,8 @@ where
     values.validate()?;
     indices.validate()?;
     stencil.validate()?;
-    if values.len() != indices.len() {
-        return Err(Error::LengthMismatch {
-            input: values.len(),
-            output: indices.len(),
-        });
-    }
-    if values.len() != stencil.len() {
-        return Err(Error::LengthMismatch {
-            input: values.len(),
-            output: stencil.len(),
-        });
-    }
+    ensure_same_len(values.len(), indices.len())?;
+    ensure_same_len(values.len(), stencil.len())?;
 
     let output = device_expr_collect(initial)?;
     let len = values.len();
@@ -724,12 +647,7 @@ where
     Op: BinaryOp<ExprSource::Item>,
 {
     expr.validate()?;
-    if keys.len != expr.len() {
-        return Err(Error::LengthMismatch {
-            input: expr.len(),
-            output: keys.len,
-        });
-    }
+    ensure_same_len(expr.len(), keys.len)?;
 
     let values = device_expr_collect(expr)?;
     primitive_scan::inclusive_scan_by_key_device_vec(
@@ -755,12 +673,7 @@ where
     Op: BinaryOp<ExprSource::Item>,
 {
     expr.validate()?;
-    if keys.len != expr.len() {
-        return Err(Error::LengthMismatch {
-            input: expr.len(),
-            output: keys.len,
-        });
-    }
+    ensure_same_len(expr.len(), keys.len)?;
 
     let values = device_expr_collect(expr)?;
     primitive_scan::exclusive_scan_by_key_device_vec(
@@ -772,7 +685,7 @@ where
     )
 }
 
-pub(super) fn device_expr_reduce_by_key<ExprSource, K, Op>(
+pub(super) fn device_expr_reduce_by_key<ExprSource, K, KeyEq, Op>(
     expr: &ExprSource,
     keys: &DeviceVec<ExprSource::Runtime, K>,
     init: ExprSource::Item,
@@ -789,15 +702,11 @@ where
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
+    KeyEq: BinaryPredicateOp<K>,
     Op: BinaryOp<ExprSource::Item>,
 {
     expr.validate()?;
-    if keys.len != expr.len() {
-        return Err(Error::LengthMismatch {
-            input: expr.len(),
-            output: keys.len,
-        });
-    }
+    ensure_same_len(expr.len(), keys.len)?;
 
     let bindings = expr.stage()?;
     primitive_reduce::reduce_by_key_expr_handle::<
@@ -805,6 +714,7 @@ where
         K,
         ExprSource::Item,
         ExprSource::Expr,
+        KeyEq,
         Op,
     >(
         expr.policy(),
@@ -814,5 +724,86 @@ where
         bindings.rhs,
         bindings.rhs_len,
         init,
+    )
+}
+
+pub(super) fn device_expr_reduce_by_key_with_control<ExprSource, K, KeyEq, Op>(
+    expr: &ExprSource,
+    keys: &DeviceVec<ExprSource::Runtime, K>,
+    init: ExprSource::Item,
+) -> Result<
+    (
+        DeviceVec<ExprSource::Runtime, K>,
+        DeviceVec<ExprSource::Runtime, ExprSource::Item>,
+        primitive_reduce::ReduceByKeyControl,
+    ),
+    Error,
+>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    K: CubePrimitive + CubeElement,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<ExprSource::Item>,
+{
+    expr.validate()?;
+    ensure_same_len(expr.len(), keys.len)?;
+
+    let bindings = expr.stage()?;
+    primitive_reduce::reduce_by_key_expr_handle_with_control::<
+        ExprSource::Runtime,
+        K,
+        ExprSource::Item,
+        ExprSource::Expr,
+        KeyEq,
+        Op,
+    >(
+        expr.policy(),
+        keys,
+        bindings.input,
+        bindings.input_len,
+        bindings.rhs,
+        bindings.rhs_len,
+        init,
+    )
+}
+
+pub(super) fn device_expr_reduce_by_key_with_existing_control<ExprSource, K, KeyEq, Op>(
+    expr: &ExprSource,
+    keys: &DeviceVec<ExprSource::Runtime, K>,
+    init: ExprSource::Item,
+    control: &primitive_reduce::ReduceByKeyControl,
+) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    K: CubePrimitive + CubeElement,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<ExprSource::Item>,
+{
+    expr.validate()?;
+    ensure_same_len(expr.len(), keys.len)?;
+
+    let bindings = expr.stage()?;
+    primitive_reduce::reduce_by_key_expr_handle_with_existing_control::<
+        ExprSource::Runtime,
+        K,
+        ExprSource::Item,
+        ExprSource::Expr,
+        KeyEq,
+        Op,
+    >(
+        expr.policy(),
+        keys,
+        bindings.input,
+        bindings.input_len,
+        bindings.rhs,
+        bindings.rhs_len,
+        init,
+        control,
     )
 }

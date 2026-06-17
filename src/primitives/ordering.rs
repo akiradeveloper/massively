@@ -11,6 +11,15 @@ const BLOCK_ORDERING_SIZE: u32 = 256;
 #[allow(dead_code)]
 const RADIX_DIGITS: usize = 16;
 
+#[derive(Clone)]
+pub(crate) struct MergeByKeyControl {
+    source_sides: cubecl::server::Handle,
+    source_indices: cubecl::server::Handle,
+    left_len: usize,
+    right_len: usize,
+    len: usize,
+}
+
 pub(crate) fn sort<R, T, Less>(
     input: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
@@ -84,12 +93,7 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<K>,
 {
-    if keys.len() != values.len() {
-        return Err(Error::LengthMismatch {
-            input: values.len(),
-            output: keys.len(),
-        });
-    }
+    super::ensure_same_len(values.len(), keys.len())?;
 
     let num_blocks = keys.len().div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
@@ -162,12 +166,7 @@ where
     B: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<(A, B)>,
 {
-    if first.len() != second.len() {
-        return Err(Error::LengthMismatch {
-            input: second.len(),
-            output: first.len(),
-        });
-    }
+    super::ensure_same_len(second.len(), first.len())?;
 
     let len = first.len();
     let client = first.policy().client();
@@ -243,18 +242,8 @@ where
     C: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<(A, B, C)>,
 {
-    if first.len() != second.len() {
-        return Err(Error::LengthMismatch {
-            input: second.len(),
-            output: first.len(),
-        });
-    }
-    if first.len() != third.len() {
-        return Err(Error::LengthMismatch {
-            input: third.len(),
-            output: first.len(),
-        });
-    }
+    super::ensure_same_len(second.len(), first.len())?;
+    super::ensure_same_len(third.len(), first.len())?;
 
     let len = first.len();
     let client = first.policy().client();
@@ -328,34 +317,446 @@ where
     ))
 }
 
+pub(crate) fn sort_tuple2_by_key<R, A, B, T, Less>(
+    key_a: &DeviceVec<R, A>,
+    key_b: &DeviceVec<R, B>,
+    values: &DeviceVec<R, T>,
+    _less: GpuOp<Less>,
+) -> Result<(DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, T>), Error>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    T: CubePrimitive + CubeElement,
+    Less: BinaryPredicateOp<(A, B)>,
+{
+    super::ensure_same_len(key_b.len(), key_a.len())?;
+    super::ensure_same_len(values.len(), key_a.len())?;
+
+    let len = key_a.len();
+    let client = key_a.policy().client();
+    if len <= 1 {
+        return Ok((
+            DeviceVec::from_handle(key_a.policy().clone(), key_a.handle.clone(), len),
+            DeviceVec::from_handle(key_b.policy().clone(), key_b.handle.clone(), len),
+            DeviceVec::from_handle(values.policy().clone(), values.handle.clone(), len),
+        ));
+    }
+
+    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let scratch_a_a = client.empty(len * std::mem::size_of::<A>());
+    let scratch_b_a = client.empty(len * std::mem::size_of::<B>());
+    let scratch_values_a = client.empty(len * std::mem::size_of::<T>());
+    let scratch_a_b = client.empty(len * std::mem::size_of::<A>());
+    let scratch_b_b = client.empty(len * std::mem::size_of::<B>());
+    let scratch_values_b = client.empty(len * std::mem::size_of::<T>());
+    let mut input_a_handle = key_a.handle.clone();
+    let mut input_b_handle = key_b.handle.clone();
+    let mut input_value_handle = values.handle.clone();
+    let mut output_a_handle = scratch_a_a.clone();
+    let mut output_b_handle = scratch_b_a.clone();
+    let mut output_value_handle = scratch_values_a.clone();
+    let mut next_uses_a = false;
+    let mut width = 1usize;
+
+    while width < len {
+        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
+        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
+        unsafe {
+            merge_sort_tuple2_by_key_pass_kernel::launch_unchecked::<A, B, T, Less, R>(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                ArrayArg::from_raw_parts::<A>(&input_a_handle, len, 1),
+                ArrayArg::from_raw_parts::<B>(&input_b_handle, len, 1),
+                ArrayArg::from_raw_parts::<T>(&input_value_handle, len, 1),
+                ArrayArg::from_raw_parts::<u32>(&width_handle, 1, 1),
+                ArrayArg::from_raw_parts::<A>(&output_a_handle, len, 1),
+                ArrayArg::from_raw_parts::<B>(&output_b_handle, len, 1),
+                ArrayArg::from_raw_parts::<T>(&output_value_handle, len, 1),
+            )
+            .map_err(|err| Error::Launch {
+                message: format!("{err:?}"),
+            })?;
+        }
+
+        input_a_handle = output_a_handle.clone();
+        input_b_handle = output_b_handle.clone();
+        input_value_handle = output_value_handle.clone();
+        if next_uses_a {
+            output_a_handle = scratch_a_a.clone();
+            output_b_handle = scratch_b_a.clone();
+            output_value_handle = scratch_values_a.clone();
+        } else {
+            output_a_handle = scratch_a_b.clone();
+            output_b_handle = scratch_b_b.clone();
+            output_value_handle = scratch_values_b.clone();
+        }
+        next_uses_a = !next_uses_a;
+        width *= 2;
+    }
+
+    Ok((
+        DeviceVec::from_handle(key_a.policy().clone(), input_a_handle, len),
+        DeviceVec::from_handle(key_b.policy().clone(), input_b_handle, len),
+        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+    ))
+}
+
+pub(crate) fn sort_tuple3_by_key<R, A, B, C, T, Less>(
+    key_a: &DeviceVec<R, A>,
+    key_b: &DeviceVec<R, B>,
+    key_c: &DeviceVec<R, C>,
+    values: &DeviceVec<R, T>,
+    _less: GpuOp<Less>,
+) -> Result<
+    (
+        DeviceVec<R, A>,
+        DeviceVec<R, B>,
+        DeviceVec<R, C>,
+        DeviceVec<R, T>,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    T: CubePrimitive + CubeElement,
+    Less: BinaryPredicateOp<(A, B, C)>,
+{
+    super::ensure_same_len(key_b.len(), key_a.len())?;
+    super::ensure_same_len(key_c.len(), key_a.len())?;
+    super::ensure_same_len(values.len(), key_a.len())?;
+
+    let len = key_a.len();
+    let client = key_a.policy().client();
+    if len <= 1 {
+        return Ok((
+            DeviceVec::from_handle(key_a.policy().clone(), key_a.handle.clone(), len),
+            DeviceVec::from_handle(key_b.policy().clone(), key_b.handle.clone(), len),
+            DeviceVec::from_handle(key_c.policy().clone(), key_c.handle.clone(), len),
+            DeviceVec::from_handle(values.policy().clone(), values.handle.clone(), len),
+        ));
+    }
+
+    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let scratch_a_a = client.empty(len * std::mem::size_of::<A>());
+    let scratch_b_a = client.empty(len * std::mem::size_of::<B>());
+    let scratch_c_a = client.empty(len * std::mem::size_of::<C>());
+    let scratch_values_a = client.empty(len * std::mem::size_of::<T>());
+    let scratch_a_b = client.empty(len * std::mem::size_of::<A>());
+    let scratch_b_b = client.empty(len * std::mem::size_of::<B>());
+    let scratch_c_b = client.empty(len * std::mem::size_of::<C>());
+    let scratch_values_b = client.empty(len * std::mem::size_of::<T>());
+    let mut input_a_handle = key_a.handle.clone();
+    let mut input_b_handle = key_b.handle.clone();
+    let mut input_c_handle = key_c.handle.clone();
+    let mut input_value_handle = values.handle.clone();
+    let mut output_a_handle = scratch_a_a.clone();
+    let mut output_b_handle = scratch_b_a.clone();
+    let mut output_c_handle = scratch_c_a.clone();
+    let mut output_value_handle = scratch_values_a.clone();
+    let mut next_uses_a = false;
+    let mut width = 1usize;
+
+    while width < len {
+        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
+        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
+        unsafe {
+            merge_sort_tuple3_by_key_pass_kernel::launch_unchecked::<A, B, C, T, Less, R>(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                ArrayArg::from_raw_parts::<A>(&input_a_handle, len, 1),
+                ArrayArg::from_raw_parts::<B>(&input_b_handle, len, 1),
+                ArrayArg::from_raw_parts::<C>(&input_c_handle, len, 1),
+                ArrayArg::from_raw_parts::<T>(&input_value_handle, len, 1),
+                ArrayArg::from_raw_parts::<u32>(&width_handle, 1, 1),
+                ArrayArg::from_raw_parts::<A>(&output_a_handle, len, 1),
+                ArrayArg::from_raw_parts::<B>(&output_b_handle, len, 1),
+                ArrayArg::from_raw_parts::<C>(&output_c_handle, len, 1),
+                ArrayArg::from_raw_parts::<T>(&output_value_handle, len, 1),
+            )
+            .map_err(|err| Error::Launch {
+                message: format!("{err:?}"),
+            })?;
+        }
+
+        input_a_handle = output_a_handle.clone();
+        input_b_handle = output_b_handle.clone();
+        input_c_handle = output_c_handle.clone();
+        input_value_handle = output_value_handle.clone();
+        if next_uses_a {
+            output_a_handle = scratch_a_a.clone();
+            output_b_handle = scratch_b_a.clone();
+            output_c_handle = scratch_c_a.clone();
+            output_value_handle = scratch_values_a.clone();
+        } else {
+            output_a_handle = scratch_a_b.clone();
+            output_b_handle = scratch_b_b.clone();
+            output_c_handle = scratch_c_b.clone();
+            output_value_handle = scratch_values_b.clone();
+        }
+        next_uses_a = !next_uses_a;
+        width *= 2;
+    }
+
+    Ok((
+        DeviceVec::from_handle(key_a.policy().clone(), input_a_handle, len),
+        DeviceVec::from_handle(key_b.policy().clone(), input_b_handle, len),
+        DeviceVec::from_handle(key_c.policy().clone(), input_c_handle, len),
+        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+    ))
+}
+
+macro_rules! define_sort_tuple_by_key {
+    (
+        $fn_name:ident,
+        $kernel_name:ident,
+        ( $( $ty:ident: $arg:ident: $scratch_a:ident: $scratch_b:ident: $input_handle:ident: $output_handle:ident ),+ )
+    ) => {
+        pub(crate) fn $fn_name<R, $( $ty ),+, T, Less>(
+            $( $arg: &DeviceVec<R, $ty>, )+
+            values: &DeviceVec<R, T>,
+            _less: GpuOp<Less>,
+        ) -> Result<( $( DeviceVec<R, $ty>, )+ DeviceVec<R, T> ), Error>
+        where
+            R: Runtime,
+            $( $ty: CubePrimitive + CubeElement, )+
+            T: CubePrimitive + CubeElement,
+            Less: BinaryPredicateOp<($( $ty ),+)>,
+        {
+            let len = values.len();
+            $(
+                super::ensure_same_len($arg.len(), len)?;
+            )+
+
+            let client = values.policy().client();
+            if len <= 1 {
+                return Ok((
+                    $( DeviceVec::from_handle($arg.policy().clone(), $arg.handle.clone(), len), )+
+                    DeviceVec::from_handle(values.policy().clone(), values.handle.clone(), len),
+                ));
+            }
+
+            let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+            let num_blocks_u32 =
+                u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+            $(
+                let $scratch_a = client.empty(len * std::mem::size_of::<$ty>());
+                let $scratch_b = client.empty(len * std::mem::size_of::<$ty>());
+                let mut $input_handle = $arg.handle.clone();
+                let mut $output_handle = $scratch_a.clone();
+            )+
+            let scratch_values_a = client.empty(len * std::mem::size_of::<T>());
+            let scratch_values_b = client.empty(len * std::mem::size_of::<T>());
+            let mut input_value_handle = values.handle.clone();
+            let mut output_value_handle = scratch_values_a.clone();
+            let mut next_uses_a = false;
+            let mut width = 1usize;
+
+            while width < len {
+                let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
+                let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
+                unsafe {
+                    $kernel_name::launch_unchecked::<$( $ty, )+ T, Less, R>(
+                        client,
+                        CubeCount::Static(num_blocks_u32, 1, 1),
+                        CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                        $( ArrayArg::from_raw_parts::<$ty>(&$input_handle, len, 1), )+
+                        ArrayArg::from_raw_parts::<T>(&input_value_handle, len, 1),
+                        ArrayArg::from_raw_parts::<u32>(&width_handle, 1, 1),
+                        $( ArrayArg::from_raw_parts::<$ty>(&$output_handle, len, 1), )+
+                        ArrayArg::from_raw_parts::<T>(&output_value_handle, len, 1),
+                    )
+                    .map_err(|err| Error::Launch {
+                        message: format!("{err:?}"),
+                    })?;
+                }
+
+                $(
+                    $input_handle = $output_handle.clone();
+                )+
+                input_value_handle = output_value_handle.clone();
+                if next_uses_a {
+                    $(
+                        $output_handle = $scratch_a.clone();
+                    )+
+                    output_value_handle = scratch_values_a.clone();
+                } else {
+                    $(
+                        $output_handle = $scratch_b.clone();
+                    )+
+                    output_value_handle = scratch_values_b.clone();
+                }
+                next_uses_a = !next_uses_a;
+                width *= 2;
+            }
+
+            Ok((
+                $( DeviceVec::from_handle($arg.policy().clone(), $input_handle, len), )+
+                DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+            ))
+        }
+    };
+}
+
+define_sort_tuple_by_key!(
+    sort_tuple4_by_key,
+    merge_sort_tuple4_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple5_by_key,
+    merge_sort_tuple5_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple6_by_key,
+    merge_sort_tuple6_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple7_by_key,
+    merge_sort_tuple7_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle,
+        G: key_g: scratch_g_a: scratch_g_b: input_g_handle: output_g_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple8_by_key,
+    merge_sort_tuple8_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle,
+        G: key_g: scratch_g_a: scratch_g_b: input_g_handle: output_g_handle,
+        H: key_h: scratch_h_a: scratch_h_b: input_h_handle: output_h_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple9_by_key,
+    merge_sort_tuple9_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle,
+        G: key_g: scratch_g_a: scratch_g_b: input_g_handle: output_g_handle,
+        H: key_h: scratch_h_a: scratch_h_b: input_h_handle: output_h_handle,
+        I: key_i: scratch_i_a: scratch_i_b: input_i_handle: output_i_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple10_by_key,
+    merge_sort_tuple10_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle,
+        G: key_g: scratch_g_a: scratch_g_b: input_g_handle: output_g_handle,
+        H: key_h: scratch_h_a: scratch_h_b: input_h_handle: output_h_handle,
+        I: key_i: scratch_i_a: scratch_i_b: input_i_handle: output_i_handle,
+        J: key_j: scratch_j_a: scratch_j_b: input_j_handle: output_j_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple11_by_key,
+    merge_sort_tuple11_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle,
+        G: key_g: scratch_g_a: scratch_g_b: input_g_handle: output_g_handle,
+        H: key_h: scratch_h_a: scratch_h_b: input_h_handle: output_h_handle,
+        I: key_i: scratch_i_a: scratch_i_b: input_i_handle: output_i_handle,
+        J: key_j: scratch_j_a: scratch_j_b: input_j_handle: output_j_handle,
+        K: key_k: scratch_k_a: scratch_k_b: input_k_handle: output_k_handle
+    )
+);
+define_sort_tuple_by_key!(
+    sort_tuple12_by_key,
+    merge_sort_tuple12_by_key_pass_kernel,
+    (
+        A: key_a: scratch_a_a: scratch_a_b: input_a_handle: output_a_handle,
+        B: key_b: scratch_b_a: scratch_b_b: input_b_handle: output_b_handle,
+        C: key_c: scratch_c_a: scratch_c_b: input_c_handle: output_c_handle,
+        D: key_d: scratch_d_a: scratch_d_b: input_d_handle: output_d_handle,
+        E: key_e: scratch_e_a: scratch_e_b: input_e_handle: output_e_handle,
+        F: key_f: scratch_f_a: scratch_f_b: input_f_handle: output_f_handle,
+        G: key_g: scratch_g_a: scratch_g_b: input_g_handle: output_g_handle,
+        H: key_h: scratch_h_a: scratch_h_b: input_h_handle: output_h_handle,
+        I: key_i: scratch_i_a: scratch_i_b: input_i_handle: output_i_handle,
+        J: key_j: scratch_j_a: scratch_j_b: input_j_handle: output_j_handle,
+        K: key_k: scratch_k_a: scratch_k_b: input_k_handle: output_k_handle,
+        L: key_l: scratch_l_a: scratch_l_b: input_l_handle: output_l_handle
+    )
+);
+
 macro_rules! define_sort_tuple {
-    (@vec_ty $field:ident) => {
-        DeviceVec<R, T>
+    (@vec_ty $ty:ident) => {
+        DeviceVec<R, $ty>
     };
 
     (
         $fn_name:ident,
         $kernel_name:ident,
-        ($first:ident, $($field:ident),+),
-        $tuple_ty:ty
+        ($first:ident : $first_ty:ident, $($field:ident : $ty:ident),+)
     ) => {
-        pub(crate) fn $fn_name<R, T, Less>(
-            $first: &DeviceVec<R, T>,
-            $($field: &DeviceVec<R, T>,)+
+        pub(crate) fn $fn_name<R, $first_ty, $($ty,)+ Less>(
+            $first: &DeviceVec<R, $first_ty>,
+            $($field: &DeviceVec<R, $ty>,)+
             _less: GpuOp<Less>,
-        ) -> Result<(define_sort_tuple!(@vec_ty $first), $(define_sort_tuple!(@vec_ty $field)),+), Error>
+        ) -> Result<(define_sort_tuple!(@vec_ty $first_ty), $(define_sort_tuple!(@vec_ty $ty)),+), Error>
         where
             R: Runtime,
-            T: CubePrimitive + CubeElement,
-            Less: BinaryPredicateOp<$tuple_ty>,
+            $first_ty: CubePrimitive + CubeElement,
+            $($ty: CubePrimitive + CubeElement,)+
+            Less: BinaryPredicateOp<($first_ty, $($ty,)+)>,
         {
             $(
-                if $first.len() != $field.len() {
-                    return Err(Error::LengthMismatch {
-                        input: $field.len(),
-                        output: $first.len(),
-                    });
-                }
+                super::ensure_same_len($field.len(), $first.len())?;
             )+
 
             let len = $first.len();
@@ -372,28 +773,19 @@ macro_rules! define_sort_tuple {
             let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
             let num_blocks_u32 =
                 u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+            // Tuple sort compares the full row and carries every column through
+            // the same merge decision. Keep scratch typed per column so
+            // heterogeneous SoA rows do not collapse back to first-column type.
             let scratch_a = vec![
-                {
-                    let _ = &$first;
-                    client.empty(len * std::mem::size_of::<T>())
-                },
+                client.empty(len * std::mem::size_of::<$first_ty>()),
                 $(
-                    {
-                        let _ = &$field;
-                        client.empty(len * std::mem::size_of::<T>())
-                    },
+                    client.empty(len * std::mem::size_of::<$ty>()),
                 )+
             ];
             let scratch_b = vec![
-                {
-                    let _ = &$first;
-                    client.empty(len * std::mem::size_of::<T>())
-                },
+                client.empty(len * std::mem::size_of::<$first_ty>()),
                 $(
-                    {
-                        let _ = &$field;
-                        client.empty(len * std::mem::size_of::<T>())
-                    },
+                    client.empty(len * std::mem::size_of::<$ty>()),
                 )+
             ];
             let mut input_handles = vec![
@@ -413,37 +805,31 @@ macro_rules! define_sort_tuple {
                 let mut input_iter = input_handles.iter();
                 let mut output_iter = output_handles.iter();
                 unsafe {
-                    $kernel_name::launch_unchecked::<T, Less, R>(
+                    $kernel_name::launch_unchecked::<$first_ty, $($ty,)+ Less, R>(
                         client,
                         CubeCount::Static(num_blocks_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-                        ArrayArg::from_raw_parts::<T>(
+                        ArrayArg::from_raw_parts::<$first_ty>(
                             input_iter.next().expect("tuple sort input handle"),
                             len,
                             1,
                         ),
                         $(
-                            ArrayArg::from_raw_parts::<T>(
-                                {
-                                    let _ = &$field;
-                                    input_iter.next().expect("tuple sort input handle")
-                                },
+                            ArrayArg::from_raw_parts::<$ty>(
+                                input_iter.next().expect("tuple sort input handle"),
                                 len,
                                 1,
                             ),
                         )+
                         ArrayArg::from_raw_parts::<u32>(&width_handle, 1, 1),
-                        ArrayArg::from_raw_parts::<T>(
+                        ArrayArg::from_raw_parts::<$first_ty>(
                             output_iter.next().expect("tuple sort output handle"),
                             len,
                             1,
                         ),
                         $(
-                            ArrayArg::from_raw_parts::<T>(
-                                {
-                                    let _ = &$field;
-                                    output_iter.next().expect("tuple sort output handle")
-                                },
+                            ArrayArg::from_raw_parts::<$ty>(
+                                output_iter.next().expect("tuple sort output handle"),
                                 len,
                                 1,
                             ),
@@ -486,65 +872,61 @@ macro_rules! define_sort_tuple {
 define_sort_tuple!(
     sort_tuple4,
     merge_sort_tuple4_pass_kernel,
-    (first, second, third, fourth),
-    (T, T, T, T)
+    (first: A, second: B, third: C, fourth: D)
 );
 define_sort_tuple!(
     sort_tuple5,
     merge_sort_tuple5_pass_kernel,
-    (first, second, third, fourth, fifth),
-    (T, T, T, T, T)
+    (first: A, second: B, third: C, fourth: D, fifth: E)
 );
 define_sort_tuple!(
     sort_tuple6,
     merge_sort_tuple6_pass_kernel,
-    (first, second, third, fourth, fifth, sixth),
-    (T, T, T, T, T, T)
+    (first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
 );
 define_sort_tuple!(
     sort_tuple7,
     merge_sort_tuple7_pass_kernel,
-    (first, second, third, fourth, fifth, sixth, seventh),
-    (T, T, T, T, T, T, T)
+    (first: A, second: B, third: C, fourth: D, fifth: E, sixth: F, seventh: G)
 );
 define_sort_tuple!(
     sort_tuple8,
     merge_sort_tuple8_pass_kernel,
-    (first, second, third, fourth, fifth, sixth, seventh, eighth),
-    (T, T, T, T, T, T, T, T)
+    (
+        first: A, second: B, third: C, fourth: D, fifth: E, sixth: F, seventh: G, eighth: H
+    )
 );
 define_sort_tuple!(
     sort_tuple9,
     merge_sort_tuple9_pass_kernel,
     (
-        first, second, third, fourth, fifth, sixth, seventh, eighth, ninth
-    ),
-    (T, T, T, T, T, T, T, T, T)
+        first: A, second: B, third: C, fourth: D, fifth: E, sixth: F, seventh: G, eighth: H,
+        ninth: I
+    )
 );
 define_sort_tuple!(
     sort_tuple10,
     merge_sort_tuple10_pass_kernel,
     (
-        first, second, third, fourth, fifth, sixth, seventh, eighth, ninth, tenth
-    ),
-    (T, T, T, T, T, T, T, T, T, T)
+        first: A, second: B, third: C, fourth: D, fifth: E, sixth: F, seventh: G, eighth: H,
+        ninth: I, tenth: J
+    )
 );
 define_sort_tuple!(
     sort_tuple11,
     merge_sort_tuple11_pass_kernel,
     (
-        first, second, third, fourth, fifth, sixth, seventh, eighth, ninth, tenth, eleventh
-    ),
-    (T, T, T, T, T, T, T, T, T, T, T)
+        first: A, second: B, third: C, fourth: D, fifth: E, sixth: F, seventh: G, eighth: H,
+        ninth: I, tenth: J, eleventh: K
+    )
 );
 define_sort_tuple!(
     sort_tuple12,
     merge_sort_tuple12_pass_kernel,
     (
-        first, second, third, fourth, fifth, sixth, seventh, eighth, ninth, tenth, eleventh,
-        twelfth
-    ),
-    (T, T, T, T, T, T, T, T, T, T, T, T)
+        first: A, second: B, third: C, fourth: D, fifth: E, sixth: F, seventh: G, eighth: H,
+        ninth: I, tenth: J, eleventh: K, twelfth: L
+    )
 );
 
 #[allow(dead_code)]
@@ -632,12 +1014,7 @@ where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
-    if keys.len() != values.len() {
-        return Err(Error::LengthMismatch {
-            input: values.len(),
-            output: keys.len(),
-        });
-    }
+    super::ensure_same_len(values.len(), keys.len())?;
 
     let client = keys.policy().client();
     let len = keys.len();
@@ -770,39 +1147,43 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<K>,
 {
-    if left_keys.len() != left_values.len() {
-        return Err(Error::LengthMismatch {
-            input: left_values.len(),
-            output: left_keys.len(),
-        });
-    }
-    if right_keys.len() != right_values.len() {
-        return Err(Error::LengthMismatch {
-            input: right_values.len(),
-            output: right_keys.len(),
-        });
-    }
+    super::ensure_same_len(left_values.len(), left_keys.len())?;
+    super::ensure_same_len(right_values.len(), right_keys.len())?;
 
+    let (keys, control) = merge_by_key_control::<R, K, Less>(left_keys, right_keys)?;
+    let values = merge_by_key_values_with_control(left_values, right_values, &control)?;
+    Ok((keys, values))
+}
+
+pub(crate) fn merge_by_key_control<R, K, Less>(
+    left_keys: &DeviceVec<R, K>,
+    right_keys: &DeviceVec<R, K>,
+) -> Result<(DeviceVec<R, K>, MergeByKeyControl), Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    Less: BinaryPredicateOp<K>,
+{
     let len = left_keys.len() + right_keys.len();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
     let client = left_keys.policy().client();
     let out_key_handle = client.empty(len * std::mem::size_of::<K>());
-    let out_value_handle = client.empty(len * std::mem::size_of::<T>());
+    let source_sides = client.empty(len * std::mem::size_of::<u32>());
+    let source_indices = client.empty(len * std::mem::size_of::<u32>());
 
     if len != 0 {
         unsafe {
-            merge_by_key_path_kernel::launch_unchecked::<K, T, Less, R>(
+            merge_by_key_control_path_kernel::launch_unchecked::<K, Less, R>(
                 client,
                 CubeCount::Static(num_blocks_u32, 1, 1),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 ArrayArg::from_raw_parts::<K>(&left_keys.handle, left_keys.len(), 1),
-                ArrayArg::from_raw_parts::<T>(&left_values.handle, left_values.len(), 1),
                 ArrayArg::from_raw_parts::<K>(&right_keys.handle, right_keys.len(), 1),
-                ArrayArg::from_raw_parts::<T>(&right_values.handle, right_values.len(), 1),
                 ArrayArg::from_raw_parts::<K>(&out_key_handle, len, 1),
-                ArrayArg::from_raw_parts::<T>(&out_value_handle, len, 1),
+                ArrayArg::from_raw_parts::<u32>(&source_sides, len, 1),
+                ArrayArg::from_raw_parts::<u32>(&source_indices, len, 1),
             )
             .map_err(|err| Error::Launch {
                 message: format!("{err:?}"),
@@ -812,7 +1193,57 @@ where
 
     Ok((
         DeviceVec::from_handle(left_keys.policy().clone(), out_key_handle, len),
-        DeviceVec::from_handle(left_values.policy().clone(), out_value_handle, len),
+        MergeByKeyControl {
+            source_sides,
+            source_indices,
+            left_len: left_keys.len(),
+            right_len: right_keys.len(),
+            len,
+        },
+    ))
+}
+
+pub(crate) fn merge_by_key_values_with_control<R, T>(
+    left_values: &DeviceVec<R, T>,
+    right_values: &DeviceVec<R, T>,
+    control: &MergeByKeyControl,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    super::ensure_same_len(left_values.len(), control.left_len)?;
+    super::ensure_same_len(right_values.len(), control.right_len)?;
+
+    let len = control.len;
+    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let client = left_values.policy().client();
+    let out_value_handle = client.empty(len * std::mem::size_of::<T>());
+
+    if len != 0 {
+        unsafe {
+            merge_by_key_values_from_control_kernel::launch_unchecked::<T, R>(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                ArrayArg::from_raw_parts::<T>(&left_values.handle, left_values.len(), 1),
+                ArrayArg::from_raw_parts::<T>(&right_values.handle, right_values.len(), 1),
+                ArrayArg::from_raw_parts::<u32>(&control.source_sides, len, 1),
+                ArrayArg::from_raw_parts::<u32>(&control.source_indices, len, 1),
+                ArrayArg::from_raw_parts::<T>(&out_value_handle, len, 1),
+            )
+            .map_err(|err| Error::Launch {
+                message: format!("{err:?}"),
+            })?;
+        }
+    }
+
+    Ok(DeviceVec::from_handle(
+        left_values.policy().clone(),
+        out_value_handle,
+        len,
     ))
 }
 

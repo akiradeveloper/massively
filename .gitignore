@@ -23,5 +23,6 @@ target
 
 .agents
 .codex
-doc
+*.log
+doc.ai
 AGENTS.md

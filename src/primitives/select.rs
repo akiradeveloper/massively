@@ -266,29 +266,6 @@ pub(crate) fn handles_for_value(
     }
 }
 
-pub(crate) fn compact_pair_from_flags<R, A, B>(
-    first_policy: &CubePolicy<R>,
-    second_policy: &CubePolicy<R>,
-    len: usize,
-    len_u32: u32,
-    flag_handle: cubecl::server::Handle,
-    first_value_handle: cubecl::server::Handle,
-    second_value_handle: cubecl::server::Handle,
-) -> Result<(DeviceVec<R, A>, DeviceVec<R, B>), Error>
-where
-    R: Runtime,
-    A: CubePrimitive + CubeElement,
-    B: CubePrimitive + CubeElement,
-{
-    let first_handles =
-        handles_from_flags(first_policy, len, len_u32, flag_handle, first_value_handle)?;
-    let count = selected_count(first_policy, &first_handles)?;
-    let second_handles = handles_for_value(&first_handles, second_value_handle);
-    let first = compact_with_count::<R, A>(first_policy, first_handles, count)?;
-    let second = compact_with_count::<R, B>(second_policy, second_handles, count)?;
-    Ok((first, second))
-}
-
 fn predicate_handles<R, T, Pred>(
     input: &DeviceVec<R, T>,
     invert: bool,
@@ -333,7 +310,7 @@ where
     )
 }
 
-fn partition_from_handles<R, T>(
+pub(crate) fn partition_from_handles<R, T>(
     policy: &CubePolicy<R>,
     handles: SelectionHandles,
 ) -> Result<DeviceVec<R, T>, Error>

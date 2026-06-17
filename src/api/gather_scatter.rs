@@ -1,8 +1,9 @@
+use super::memory::{MaterializeOutput, materialize};
 use crate::{
     device::{
-        DeviceVec, KernelColumn, KernelColumnAt, OwnedKernelColumn, S0, SoA1, SoA2, SoA3, SoA4,
-        SoA5, SoA6, SoA7, SoA8, SoA9, SoA10, SoA11, SoA12, SoVA, SoVA1, SoVA2, SoVA3, SoVA4, SoVA5,
-        SoVA6, SoVA7, SoVA8, SoVA9, SoVA10, SoVA11, SoVA12,
+        DeviceVec, KernelColumn, KernelColumnAt, S0, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
+        SoA8, SoA9, SoA10, SoA11, SoA12, SoVA, SoVA1, SoVA2, SoVA3, SoVA4, SoVA5, SoVA6, SoVA7,
+        SoVA8, SoVA9, SoVA10, SoVA11, SoVA12, StorageKernelColumn,
     },
     error::Error,
     expr::{DeviceGpuExpr, GpuExpr},
@@ -44,18 +45,8 @@ where
     let stencil = super::device_expr_collect(stencil)?;
     let initial = super::device_expr_collect(initial)?;
 
-    if indices.len != stencil.len {
-        return Err(Error::LengthMismatch {
-            input: indices.len,
-            output: stencil.len,
-        });
-    }
-    if initial.len != indices.len {
-        return Err(Error::LengthMismatch {
-            input: indices.len,
-            output: initial.len,
-        });
-    }
+    super::ensure_same_len(stencil.len, indices.len)?;
+    super::ensure_same_len(initial.len, indices.len)?;
 
     let output = primitive_range::copy_device(&initial)?;
     let num_blocks = indices.len.div_ceil(BLOCK_API_SIZE as usize);
@@ -187,16 +178,27 @@ macro_rules! impl_gather_input {
 }
 
 impl_gather_input!(SoVA2 -> SoA2<A, B> { left, right });
+impl_gather_input!(SoA2 -> SoA2<A, B> { left, right });
 impl_gather_input!(SoVA3 -> SoA3<A, B, C> { first, second, third });
+impl_gather_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
 impl_gather_input!(SoVA4 -> SoA4<A, B, C, D> { a, b, c, d });
+impl_gather_input!(SoA4 -> SoA4<A, B, C, D> { a, b, c, d });
 impl_gather_input!(SoVA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_gather_input!(SoA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
 impl_gather_input!(SoVA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_gather_input!(SoA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
 impl_gather_input!(SoVA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_gather_input!(SoA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
 impl_gather_input!(SoVA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_gather_input!(SoA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
 impl_gather_input!(SoVA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_gather_input!(SoA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
 impl_gather_input!(SoVA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_gather_input!(SoA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
 impl_gather_input!(SoVA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_gather_input!(SoA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
 impl_gather_input!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_gather_input!(SoA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
 macro_rules! impl_gather_input_index_source {
     ($name:ident < $( $field_ty:ident ),+ >) => {
@@ -219,16 +221,27 @@ macro_rules! impl_gather_input_index_source {
 }
 
 impl_gather_input_index_source!(SoVA2<A, B>);
+impl_gather_input_index_source!(SoA2<A, B>);
 impl_gather_input_index_source!(SoVA3<A, B, C>);
+impl_gather_input_index_source!(SoA3<A, B, C>);
 impl_gather_input_index_source!(SoVA4<A, B, C, D>);
+impl_gather_input_index_source!(SoA4<A, B, C, D>);
 impl_gather_input_index_source!(SoVA5<A, B, C, D, E>);
+impl_gather_input_index_source!(SoA5<A, B, C, D, E>);
 impl_gather_input_index_source!(SoVA6<A, B, C, D, E, F>);
+impl_gather_input_index_source!(SoA6<A, B, C, D, E, F>);
 impl_gather_input_index_source!(SoVA7<A, B, C, D, E, F, G>);
+impl_gather_input_index_source!(SoA7<A, B, C, D, E, F, G>);
 impl_gather_input_index_source!(SoVA8<A, B, C, D, E, F, G, H>);
+impl_gather_input_index_source!(SoA8<A, B, C, D, E, F, G, H>);
 impl_gather_input_index_source!(SoVA9<A, B, C, D, E, F, G, H, I>);
+impl_gather_input_index_source!(SoA9<A, B, C, D, E, F, G, H, I>);
 impl_gather_input_index_source!(SoVA10<A, B, C, D, E, F, G, H, I, J>);
+impl_gather_input_index_source!(SoA10<A, B, C, D, E, F, G, H, I, J>);
 impl_gather_input_index_source!(SoVA11<A, B, C, D, E, F, G, H, I, J, K>);
+impl_gather_input_index_source!(SoA11<A, B, C, D, E, F, G, H, I, J, K>);
 impl_gather_input_index_source!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L>);
+impl_gather_input_index_source!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L>);
 
 /// Input accepted by [`gather_if`].
 #[doc(hidden)]
@@ -443,16 +456,27 @@ macro_rules! impl_gather_if_input {
 }
 
 impl_gather_if_input!(SoVA2 -> SoA2<A, B> { left, right });
+impl_gather_if_input!(SoA2 -> SoA2<A, B> { left, right });
 impl_gather_if_input!(SoVA3 -> SoA3<A, B, C> { first, second, third });
+impl_gather_if_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
 impl_gather_if_input!(SoVA4 -> SoA4<A, B, C, D> { a, b, c, d });
+impl_gather_if_input!(SoA4 -> SoA4<A, B, C, D> { a, b, c, d });
 impl_gather_if_input!(SoVA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_gather_if_input!(SoA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
 impl_gather_if_input!(SoVA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_gather_if_input!(SoA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
 impl_gather_if_input!(SoVA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_gather_if_input!(SoA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
 impl_gather_if_input!(SoVA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_gather_if_input!(SoA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
 impl_gather_if_input!(SoVA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_gather_if_input!(SoA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
 impl_gather_if_input!(SoVA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_gather_if_input!(SoA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
 impl_gather_if_input!(SoVA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_gather_if_input!(SoA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
 impl_gather_if_input!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_gather_if_input!(SoA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
 macro_rules! impl_gather_if_input_sources {
     ($name:ident < $( $field_ty:ident ),+ >) => {
@@ -496,16 +520,27 @@ macro_rules! impl_gather_if_input_sources {
 }
 
 impl_gather_if_input_sources!(SoVA2<A, B>);
+impl_gather_if_input_sources!(SoA2<A, B>);
 impl_gather_if_input_sources!(SoVA3<A, B, C>);
+impl_gather_if_input_sources!(SoA3<A, B, C>);
 impl_gather_if_input_sources!(SoVA4<A, B, C, D>);
+impl_gather_if_input_sources!(SoA4<A, B, C, D>);
 impl_gather_if_input_sources!(SoVA5<A, B, C, D, E>);
+impl_gather_if_input_sources!(SoA5<A, B, C, D, E>);
 impl_gather_if_input_sources!(SoVA6<A, B, C, D, E, F>);
+impl_gather_if_input_sources!(SoA6<A, B, C, D, E, F>);
 impl_gather_if_input_sources!(SoVA7<A, B, C, D, E, F, G>);
+impl_gather_if_input_sources!(SoA7<A, B, C, D, E, F, G>);
 impl_gather_if_input_sources!(SoVA8<A, B, C, D, E, F, G, H>);
+impl_gather_if_input_sources!(SoA8<A, B, C, D, E, F, G, H>);
 impl_gather_if_input_sources!(SoVA9<A, B, C, D, E, F, G, H, I>);
+impl_gather_if_input_sources!(SoA9<A, B, C, D, E, F, G, H, I>);
 impl_gather_if_input_sources!(SoVA10<A, B, C, D, E, F, G, H, I, J>);
+impl_gather_if_input_sources!(SoA10<A, B, C, D, E, F, G, H, I, J>);
 impl_gather_if_input_sources!(SoVA11<A, B, C, D, E, F, G, H, I, J, K>);
+impl_gather_if_input_sources!(SoA11<A, B, C, D, E, F, G, H, I, J, K>);
 impl_gather_if_input_sources!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L>);
+impl_gather_if_input_sources!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L>);
 
 /// Input accepted by [`scatter`].
 #[doc(hidden)]
@@ -525,7 +560,7 @@ where
     SoVA1<InitialSource>: SoVA<Item = ValueSource::Item, Scalar = ValueSource::Item>,
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    InitialSource: OwnedKernelColumn<Runtime = ValueSource::Runtime, Item = ValueSource::Item>
+    InitialSource: StorageKernelColumn<Runtime = ValueSource::Runtime, Item = ValueSource::Item>
         + KernelColumnAt<S0>,
     ValueSource::Item: CubePrimitive + CubeElement,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
@@ -620,9 +655,9 @@ macro_rules! impl_scatter_input {
                     + KernelColumnAt<S0>,
             )+
             IndexSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = u32> + KernelColumnAt<S0>,
-            InitialFirst: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$first as KernelColumn>::Item> + KernelColumnAt<S0>,
+            InitialFirst: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$first as KernelColumn>::Item> + KernelColumnAt<S0>,
             $(
-                $field: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$rest as KernelColumn>::Item>
+                $field: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$rest as KernelColumn>::Item>
                     + KernelColumnAt<S0>,
             )+
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
@@ -670,16 +705,27 @@ macro_rules! impl_scatter_input {
 }
 
 impl_scatter_input!(SoVA2 -> SoA2<A, B> { left, right });
+impl_scatter_input!(SoA2 -> SoA2<A, B> { left, right });
 impl_scatter_input!(SoVA3 -> SoA3<A, B, C> { first, second, third });
+impl_scatter_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
 impl_scatter_input!(SoVA4 -> SoA4<A, B, C, D> { a, b, c, d });
+impl_scatter_input!(SoA4 -> SoA4<A, B, C, D> { a, b, c, d });
 impl_scatter_input!(SoVA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_scatter_input!(SoA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
 impl_scatter_input!(SoVA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_scatter_input!(SoA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
 impl_scatter_input!(SoVA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_scatter_input!(SoA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
 impl_scatter_input!(SoVA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_scatter_input!(SoA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
 impl_scatter_input!(SoVA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_scatter_input!(SoA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
 impl_scatter_input!(SoVA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_scatter_input!(SoA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
 impl_scatter_input!(SoVA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_scatter_input!(SoA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
 impl_scatter_input!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_scatter_input!(SoA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
 macro_rules! impl_scatter_input_index_source {
     ($name:ident < $( $field_ty:ident ),+ >) => {
@@ -707,16 +753,27 @@ macro_rules! impl_scatter_input_index_source {
 }
 
 impl_scatter_input_index_source!(SoVA2<A, B>);
+impl_scatter_input_index_source!(SoA2<A, B>);
 impl_scatter_input_index_source!(SoVA3<A, B, C>);
+impl_scatter_input_index_source!(SoA3<A, B, C>);
 impl_scatter_input_index_source!(SoVA4<A, B, C, D>);
+impl_scatter_input_index_source!(SoA4<A, B, C, D>);
 impl_scatter_input_index_source!(SoVA5<A, B, C, D, E>);
+impl_scatter_input_index_source!(SoA5<A, B, C, D, E>);
 impl_scatter_input_index_source!(SoVA6<A, B, C, D, E, F>);
+impl_scatter_input_index_source!(SoA6<A, B, C, D, E, F>);
 impl_scatter_input_index_source!(SoVA7<A, B, C, D, E, F, G>);
+impl_scatter_input_index_source!(SoA7<A, B, C, D, E, F, G>);
 impl_scatter_input_index_source!(SoVA8<A, B, C, D, E, F, G, H>);
+impl_scatter_input_index_source!(SoA8<A, B, C, D, E, F, G, H>);
 impl_scatter_input_index_source!(SoVA9<A, B, C, D, E, F, G, H, I>);
+impl_scatter_input_index_source!(SoA9<A, B, C, D, E, F, G, H, I>);
 impl_scatter_input_index_source!(SoVA10<A, B, C, D, E, F, G, H, I, J>);
+impl_scatter_input_index_source!(SoA10<A, B, C, D, E, F, G, H, I, J>);
 impl_scatter_input_index_source!(SoVA11<A, B, C, D, E, F, G, H, I, J, K>);
+impl_scatter_input_index_source!(SoA11<A, B, C, D, E, F, G, H, I, J, K>);
 impl_scatter_input_index_source!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L>);
+impl_scatter_input_index_source!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L>);
 
 /// Input accepted by [`scatter_if`].
 #[doc(hidden)]
@@ -745,7 +802,7 @@ where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
     StencilSource: KernelColumn<Runtime = ValueSource::Runtime> + KernelColumnAt<S0>,
-    InitialSource: OwnedKernelColumn<Runtime = ValueSource::Runtime, Item = ValueSource::Item>
+    InitialSource: StorageKernelColumn<Runtime = ValueSource::Runtime, Item = ValueSource::Item>
         + KernelColumnAt<S0>,
     ValueSource::Item: CubePrimitive + CubeElement,
     StencilSource::Item: CubePrimitive + CubeElement,
@@ -878,9 +935,9 @@ macro_rules! impl_scatter_if_input {
             )+
             IndexSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = u32> + KernelColumnAt<S0>,
             StencilSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            InitialFirst: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$first as KernelColumn>::Item> + KernelColumnAt<S0>,
+            InitialFirst: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$first as KernelColumn>::Item> + KernelColumnAt<S0>,
             $(
-                $field: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$rest as KernelColumn>::Item>
+                $field: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$rest as KernelColumn>::Item>
                     + KernelColumnAt<S0>,
             )+
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
@@ -948,16 +1005,27 @@ macro_rules! impl_scatter_if_input {
 }
 
 impl_scatter_if_input!(SoVA2 -> SoA2<A, B> { left, right });
+impl_scatter_if_input!(SoA2 -> SoA2<A, B> { left, right });
 impl_scatter_if_input!(SoVA3 -> SoA3<A, B, C> { first, second, third });
+impl_scatter_if_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
 impl_scatter_if_input!(SoVA4 -> SoA4<A, B, C, D> { a, b, c, d });
+impl_scatter_if_input!(SoA4 -> SoA4<A, B, C, D> { a, b, c, d });
 impl_scatter_if_input!(SoVA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_scatter_if_input!(SoA5 -> SoA5<A, B, C, D, E> { a, b, c, d, e });
 impl_scatter_if_input!(SoVA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_scatter_if_input!(SoA6 -> SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
 impl_scatter_if_input!(SoVA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_scatter_if_input!(SoA7 -> SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
 impl_scatter_if_input!(SoVA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_scatter_if_input!(SoA8 -> SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
 impl_scatter_if_input!(SoVA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_scatter_if_input!(SoA9 -> SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
 impl_scatter_if_input!(SoVA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_scatter_if_input!(SoA10 -> SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
 impl_scatter_if_input!(SoVA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_scatter_if_input!(SoA11 -> SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
 impl_scatter_if_input!(SoVA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_scatter_if_input!(SoA12 -> SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
 macro_rules! impl_scatter_if_input_sources {
     ($name:ident < $( $field_ty:ident ),+ >) => {
@@ -1001,29 +1069,41 @@ macro_rules! impl_scatter_if_input_sources {
 }
 
 impl_scatter_if_input_sources!(SoVA2<A, B>);
+impl_scatter_if_input_sources!(SoA2<A, B>);
 impl_scatter_if_input_sources!(SoVA3<A, B, C>);
+impl_scatter_if_input_sources!(SoA3<A, B, C>);
 impl_scatter_if_input_sources!(SoVA4<A, B, C, D>);
+impl_scatter_if_input_sources!(SoA4<A, B, C, D>);
 impl_scatter_if_input_sources!(SoVA5<A, B, C, D, E>);
+impl_scatter_if_input_sources!(SoA5<A, B, C, D, E>);
 impl_scatter_if_input_sources!(SoVA6<A, B, C, D, E, F>);
+impl_scatter_if_input_sources!(SoA6<A, B, C, D, E, F>);
 impl_scatter_if_input_sources!(SoVA7<A, B, C, D, E, F, G>);
+impl_scatter_if_input_sources!(SoA7<A, B, C, D, E, F, G>);
 impl_scatter_if_input_sources!(SoVA8<A, B, C, D, E, F, G, H>);
+impl_scatter_if_input_sources!(SoA8<A, B, C, D, E, F, G, H>);
 impl_scatter_if_input_sources!(SoVA9<A, B, C, D, E, F, G, H, I>);
+impl_scatter_if_input_sources!(SoA9<A, B, C, D, E, F, G, H, I>);
 impl_scatter_if_input_sources!(SoVA10<A, B, C, D, E, F, G, H, I, J>);
+impl_scatter_if_input_sources!(SoA10<A, B, C, D, E, F, G, H, I, J>);
 impl_scatter_if_input_sources!(SoVA11<A, B, C, D, E, F, G, H, I, J, K>);
+impl_scatter_if_input_sources!(SoA11<A, B, C, D, E, F, G, H, I, J, K>);
 impl_scatter_if_input_sources!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L>);
+impl_scatter_if_input_sources!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L>);
 
 /// Gathers `input[indices[i]]` into new owned device storage.
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only. For
-/// multiple value columns, pass a read-only SoVA built with [`vzip`](crate::vzip).
+/// multiple value columns, pass a borrowed SoA built with [`zip`](crate::zip).
 pub fn gather<Input, Indices>(
     input: Input,
     indices: Indices,
-) -> Result<<Input as GatherInput<Indices>>::Output, Error>
+) -> Result<<<Input as GatherInput<Indices>>::Output as MaterializeOutput>::Output, Error>
 where
     Input: GatherInput<Indices>,
+    <Input as GatherInput<Indices>>::Output: MaterializeOutput,
 {
-    input.gather_input(indices)
+    materialize(input.gather_input(indices)?)
 }
 
 /// Gathers selected elements into a copy of `initial`.
@@ -1037,27 +1117,32 @@ pub fn gather_if<Input, Indices, Stencil, Initial, Pred>(
     stencil: Stencil,
     initial: Initial,
     _pred: Pred,
-) -> Result<<Input as GatherIfInput<Indices, Stencil, Initial, Pred>>::Output, Error>
+) -> Result<
+    <<Input as GatherIfInput<Indices, Stencil, Initial, Pred>>::Output as MaterializeOutput>::Output,
+    Error,
+>
 where
     Input: GatherIfInput<Indices, Stencil, Initial, Pred>,
+    <Input as GatherIfInput<Indices, Stencil, Initial, Pred>>::Output: MaterializeOutput,
 {
-    input.gather_if_input(indices, stencil, initial, GpuOp::<Pred>::new())
+    materialize(input.gather_if_input(indices, stencil, initial, GpuOp::<Pred>::new())?)
 }
 
 /// Scatters `values[i]` into a copy of `initial[indices[i]]`.
 ///
 /// This is a mixed algorithm: `values` and `indices` are read-only, while
 /// `initial` is owned output storage. For multiple value columns, pass
-/// `vzip(...)` for `values` and `zip(...)` for `initial`.
+/// `zip(...)` for `values` and `initial`.
 pub fn scatter<Values, Indices, Initial>(
     values: Values,
     indices: Indices,
     initial: Initial,
-) -> Result<<Values as ScatterInput<Indices, Initial>>::Output, Error>
+) -> Result<<<Values as ScatterInput<Indices, Initial>>::Output as MaterializeOutput>::Output, Error>
 where
     Values: ScatterInput<Indices, Initial>,
+    <Values as ScatterInput<Indices, Initial>>::Output: MaterializeOutput,
 {
-    values.scatter_input(indices, initial)
+    materialize(values.scatter_input(indices, initial)?)
 }
 
 /// Scatters selected values into a copy of `initial[indices[i]]`.
@@ -1070,9 +1155,13 @@ pub fn scatter_if<Values, Indices, Stencil, Initial, Pred>(
     stencil: Stencil,
     initial: Initial,
     _pred: Pred,
-) -> Result<<Values as ScatterIfInput<Indices, Stencil, Initial, Pred>>::Output, Error>
+) -> Result<
+    <<Values as ScatterIfInput<Indices, Stencil, Initial, Pred>>::Output as MaterializeOutput>::Output,
+    Error,
+>
 where
     Values: ScatterIfInput<Indices, Stencil, Initial, Pred>,
+    <Values as ScatterIfInput<Indices, Stencil, Initial, Pred>>::Output: MaterializeOutput,
 {
-    values.scatter_if_input(indices, stencil, initial, GpuOp::<Pred>::new())
+    materialize(values.scatter_if_input(indices, stencil, initial, GpuOp::<Pred>::new())?)
 }

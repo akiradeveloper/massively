@@ -3,7 +3,7 @@ mod common;
 use common::{Backend, SIZES, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use massively::op::PredicateOp;
-use massively::{CubeWgpu, copy_if, unzip};
+use massively::{CubeWgpu, copy_if};
 
 struct Positive;
 
@@ -25,7 +25,7 @@ fn alternating_signed(len: usize) -> Vec<f32> {
 
 fn check_copy_if(policy: &CubeWgpu) {
     let values = policy.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
-    let output = unzip(copy_if(&values, Positive).unwrap()).unwrap();
+    let output = copy_if(&values, Positive).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![2.0, 4.0]);
 }
 

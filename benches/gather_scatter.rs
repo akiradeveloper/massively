@@ -3,7 +3,7 @@ mod common;
 use common::{Backend, SIZES, dense_f32, reverse_indices, sync};
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use massively::op::UnaryOp;
-use massively::{CubeWgpu, gather, scatter, transform, unzip};
+use massively::{CubeWgpu, gather, scatter, transform};
 
 struct MulTwo;
 
@@ -19,7 +19,7 @@ impl UnaryOp<f32> for MulTwo {
 fn check_gather(policy: &CubeWgpu) {
     let values = policy.to_device(&[10.0_f32, 20.0, 30.0, 40.0]).unwrap();
     let indices = policy.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let output = unzip(gather(&values, &indices).unwrap()).unwrap();
+    let output = gather(&values, &indices).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
 }
 
@@ -27,7 +27,7 @@ fn check_scatter(policy: &CubeWgpu) {
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let indices = policy.to_device(&[3_u32, 2, 1, 0]).unwrap();
     let initial = policy.device_filled(4, 0.0_f32).unwrap();
-    let output = unzip(scatter(&values, &indices, initial).unwrap()).unwrap();
+    let output = scatter(&values, &indices, initial).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![4.0, 3.0, 2.0, 1.0]);
 }
 
@@ -60,7 +60,7 @@ fn bench_gather_scatter(c: &mut Criterion) {
         for &len in SIZES {
             let input = policy.to_device(&dense_f32(len)).unwrap();
             let indices = policy.to_device(&reverse_indices(len)).unwrap();
-            let values = unzip(transform(&input, MulTwo).unwrap()).unwrap();
+            let values = transform(&input, MulTwo).unwrap();
             sync(&policy);
             scatter_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter_batched(

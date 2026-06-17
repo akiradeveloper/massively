@@ -1,6 +1,10 @@
 <div align="center">
 <img src="assets/logo.svg" alt="massively" width="400">
 
+[![Crates.io](https://img.shields.io/crates/v/massively.svg)](https://crates.io/crates/massively)
+[![API doc](https://docs.rs/massively/badge.svg)](https://docs.rs/massively)
+![CI](https://github.com/akiradeveloper/massively/actions/workflows/ci.yml/badge.svg)
+
 ---- 
 
 **Multi-platform GPU parallel algorithms for Rust.**
@@ -29,8 +33,7 @@ parallel operations as ordinary Rust API calls over GPU-resident data.
 
 ## Data Model
 
-`massively` keeps host data, owned device storage, and read-only device input
-separate.
+`massively` keeps host data and device-resident data separate.
 
 `DeviceVec<T>` is an owned column on the GPU. Moving data into a `DeviceVec`
 with `policy.to_device(...)` is an explicit host-to-device transfer, and reading
@@ -41,25 +44,16 @@ For GPU algorithms this keeps each field in its own contiguous device buffer,
 which improves coalesced memory access and lets algorithms reuse or move columns
 independently.
 
-- `DeviceVec<T>` is a one-column owned SoA.
-- `zip(a, b)` combines owned SoA columns into a wider owned SoA.
-- `unzip(soa)` consumes an owned SoA and returns its `DeviceVec` columns.
-
-Read-only algorithm inputs use a separate virtual view of columns. A borrowed
-`&DeviceVec<T>` is a one-column read-only view, and `vzip(&a, &b)` combines
-multiple read-only columns into a wider read-only view. Internally and in the
-design docs, this read-only Structure of Virtual Arrays is called `SoVA`.
-
-Read-only algorithms such as `transform`, `reduce`, and `gather` accept these
-read-only views and return owned SoA outputs when they materialize data.
-Consuming algorithms such as `sort`, `reverse`, and `remove_if` take owned SoA
-inputs. The two concepts are intentionally separate: `zip(...)` is for owned
-storage, while `vzip(...)` is for read-only input.
+- `DeviceVec<T>` is a one-column device vector.
+- `&DeviceVec<T>` is a one-column SoA input.
+- `zip(&a, &b)` combines borrowed SoA inputs into a wider SoA input.
+- Algorithms return owned device storage directly: `DeviceVec<T>` for one
+  output column, or a tuple of `DeviceVec` columns for multi-column output.
 
 ## Example
 
 ```rust
-use massively::{CubeWgpu, reduce, transform, unzip, vzip3};
+use massively::{CubeWgpu, reduce, transform, zip3};
 
 struct Sum;
 #[cubecl::cube]
@@ -86,8 +80,8 @@ fn main() -> Result<(), massively::Error> {
     let vy = policy.to_device(&[0.0_f32, 2.0, 0.0])?;
     let vz = policy.to_device(&[0.0_f32, 0.0, 2.0])?;
 
-    let velocity = vzip3(&vx, &vy, &vz);
-    let energy = unzip(transform(velocity, KineticEnergy)?)?;
+    let velocity = zip3(&vx, &vy, &vz);
+    let energy = transform(velocity, KineticEnergy)?;
     let sum = reduce(&energy, 0.0, Sum)?;
 
     assert_eq!(energy.to_vec()?, vec![0.5, 2.0, 4.0]);
@@ -96,4 +90,3 @@ fn main() -> Result<(), massively::Error> {
     Ok(())
 }
 ```
-

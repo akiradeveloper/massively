@@ -29,3 +29,13 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
+
+pub(crate) fn ensure_same_len(actual: usize, expected: usize) -> Result<(), Error> {
+    if actual != expected {
+        return Err(Error::LengthMismatch {
+            input: actual,
+            output: expected,
+        });
+    }
+    Ok(())
+}

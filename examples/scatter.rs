@@ -1,6 +1,6 @@
 mod common;
 
-use massively::{CubeWgpu, scatter, unzip};
+use massively::{CubeWgpu, scatter};
 
 fn main() -> common::Result {
     let policy = CubeWgpu::cpu();
@@ -8,7 +8,7 @@ fn main() -> common::Result {
     let indices = policy.to_device(&[2_u32, 0, 1])?;
     let initial = policy.device_filled(3, 0.0_f32)?;
 
-    let output = unzip(scatter(&values, &indices, initial)?)?;
+    let output = scatter(&values, &indices, initial)?;
 
     assert_eq!(output.to_vec()?, vec![20.0, 30.0, 10.0]);
     Ok(())

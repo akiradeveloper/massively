@@ -58,21 +58,40 @@ where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
-    u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
-    let client = input.policy().client();
-    let output_handle = client.empty(input.len() * std::mem::size_of::<T>());
+    let output_handle = copy_handle::<R, T>(input.policy(), &input.handle, input.len())?;
 
-    if input.len() != 0 {
-        let block_count = input.len().div_ceil(BLOCK_RANGE_SIZE as usize);
+    Ok(DeviceVec::from_handle(
+        input.policy().clone(),
+        output_handle,
+        input.len(),
+    ))
+}
+
+pub(crate) fn concat_device<R, T>(
+    left: &DeviceVec<R, T>,
+    right: &DeviceVec<R, T>,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    let len = left.len() + right.len();
+    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let client = left.policy().client();
+    let output_handle = client.empty(len * std::mem::size_of::<T>());
+
+    if len != 0 {
+        let block_count = len.div_ceil(BLOCK_RANGE_SIZE as usize);
         let block_count_u32 =
             u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
         unsafe {
-            copy_kernel::launch_unchecked::<T, R>(
+            concat_kernel::launch_unchecked::<T, R>(
                 client,
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(BLOCK_RANGE_SIZE),
-                ArrayArg::from_raw_parts::<T>(&input.handle, input.len(), 1),
-                ArrayArg::from_raw_parts::<T>(&output_handle, input.len(), 1),
+                ArrayArg::from_raw_parts::<T>(&left.handle, left.len(), 1),
+                ArrayArg::from_raw_parts::<T>(&right.handle, right.len(), 1),
+                ArrayArg::from_raw_parts::<T>(&output_handle, len, 1),
             )
             .map_err(|err| Error::Launch {
                 message: format!("{err:?}"),
@@ -81,10 +100,44 @@ where
     }
 
     Ok(DeviceVec::from_handle(
-        input.policy().clone(),
+        left.policy().clone(),
         output_handle,
-        input.len(),
+        len,
     ))
+}
+
+pub(crate) fn copy_handle<R, T>(
+    policy: &CubePolicy<R>,
+    input_handle: &cubecl::server::Handle,
+    len: usize,
+) -> Result<cubecl::server::Handle, Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let client = policy.client();
+    let output_handle = client.empty(len * std::mem::size_of::<T>());
+
+    if len != 0 {
+        let block_count = len.div_ceil(BLOCK_RANGE_SIZE as usize);
+        let block_count_u32 =
+            u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+        unsafe {
+            copy_kernel::launch_unchecked::<T, R>(
+                client,
+                CubeCount::Static(block_count_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_RANGE_SIZE),
+                ArrayArg::from_raw_parts::<T>(input_handle, len, 1),
+                ArrayArg::from_raw_parts::<T>(&output_handle, len, 1),
+            )
+            .map_err(|err| Error::Launch {
+                message: format!("{err:?}"),
+            })?;
+        }
+    }
+
+    Ok(output_handle)
 }
 
 pub(crate) fn indices_u32<R>(policy: &CubePolicy<R>, len: usize) -> Result<DeviceVec<R, u32>, Error>

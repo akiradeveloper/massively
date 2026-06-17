@@ -3,7 +3,7 @@ mod common;
 use common::{Backend, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use massively::op::UnaryOp;
-use massively::{CubeWgpu, transform, unzip};
+use massively::{CubeWgpu, transform};
 
 struct MulTwo;
 
@@ -18,7 +18,7 @@ impl UnaryOp<f32> for MulTwo {
 
 fn check_transform(policy: &CubeWgpu) {
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let output = unzip(transform(&values, MulTwo).unwrap()).unwrap();
+    let output = transform(&values, MulTwo).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
