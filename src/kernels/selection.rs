@@ -465,29 +465,53 @@ pub(crate) fn sorted_membership_flags_kernel<T: CubePrimitive, Less: BinaryPredi
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < candidates.len() {
         let value = RuntimeCell::<T>::new(candidates[global]);
-        let first = RuntimeCell::<usize>::new(0usize);
-        let count = RuntimeCell::<usize>::new(sorted.len());
+        let candidate_first = RuntimeCell::<usize>::new(0usize);
+        let candidate_count = RuntimeCell::<usize>::new(candidates.len());
 
-        while count.read() > 0usize {
-            let step = count.read() / 2usize;
-            let mid = first.read() + step;
-            if Less::apply(sorted[mid], value.read()) {
-                first.store(mid + 1usize);
-                count.store(count.read() - step - 1usize);
+        while candidate_count.read() > 0usize {
+            let step = candidate_count.read() / 2usize;
+            let mid = candidate_first.read() + step;
+            if Less::apply(candidates[mid], value.read()) {
+                candidate_first.store(mid + 1usize);
+                candidate_count.store(candidate_count.read() - step - 1usize);
             } else {
-                count.store(step);
+                candidate_count.store(step);
             }
         }
 
-        let present = RuntimeCell::<u32>::new(0u32);
-        if first.read() < sorted.len()
-            && !Less::apply(sorted[first.read()], value.read())
-            && !Less::apply(value.read(), sorted[first.read()])
-        {
-            present.store(1u32);
+        let sorted_first = RuntimeCell::<usize>::new(0usize);
+        let sorted_count = RuntimeCell::<usize>::new(sorted.len());
+
+        while sorted_count.read() > 0usize {
+            let step = sorted_count.read() / 2usize;
+            let mid = sorted_first.read() + step;
+            if Less::apply(sorted[mid], value.read()) {
+                sorted_first.store(mid + 1usize);
+                sorted_count.store(sorted_count.read() - step - 1usize);
+            } else {
+                sorted_count.store(step);
+            }
         }
 
-        if present.read() == keep_present[0] {
+        let sorted_after = RuntimeCell::<usize>::new(0usize);
+        let sorted_after_count = RuntimeCell::<usize>::new(sorted.len());
+
+        while sorted_after_count.read() > 0usize {
+            let step = sorted_after_count.read() / 2usize;
+            let mid = sorted_after.read() + step;
+            if !Less::apply(value.read(), sorted[mid]) {
+                sorted_after.store(mid + 1usize);
+                sorted_after_count.store(sorted_after_count.read() - step - 1usize);
+            } else {
+                sorted_after_count.store(step);
+            }
+        }
+
+        let rank = global - candidate_first.read();
+        let other_count = sorted_after.read() - sorted_first.read();
+        if (keep_present[0] != 0u32 && rank < other_count)
+            || (keep_present[0] == 0u32 && rank >= other_count)
+        {
             flags[global] = 1u32;
         } else {
             flags[global] = 0u32;
@@ -522,6 +546,25 @@ pub(crate) fn replace_if_value_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < input.len() {
         if Pred::apply(input[global]) {
+            output[global] = replacement[0];
+        } else {
+            output[global] = input[global];
+        }
+    }
+}
+
+#[cube(launch_unchecked)]
+pub(crate) fn replace_with_flags_kernel<T: CubePrimitive>(
+    input: &Array<T>,
+    replacement: &Array<T>,
+    flags: &Array<u32>,
+    output: &mut Array<T>,
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < input.len() {
+        if flags[global] != 0u32 {
             output[global] = replacement[0];
         } else {
             output[global] = input[global];

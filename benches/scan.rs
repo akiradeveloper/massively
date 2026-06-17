@@ -3,7 +3,7 @@ mod common;
 use common::{Backend, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use massively::op::{BinaryOp, BinaryPredicateOp};
-use massively::{CubeWgpu, inclusive_scan, inclusive_scan_by_key, unzip};
+use massively::{CubeWgpu, inclusive_scan, inclusive_scan_by_key};
 
 struct Sum;
 
@@ -29,14 +29,14 @@ fn keys(len: usize) -> Vec<u32> {
 
 fn check_scan(policy: &CubeWgpu) {
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
-    let output = unzip(inclusive_scan(&values, Sum).unwrap()).unwrap();
+    let output = inclusive_scan(&values, Sum).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![1.0, 3.0, 6.0, 10.0]);
 }
 
 fn check_scan_by_key(policy: &CubeWgpu) {
     let keys = policy.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = policy.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
-    let output = unzip(inclusive_scan_by_key(&values, &keys, KeyEq, Sum).unwrap()).unwrap();
+    let output = inclusive_scan_by_key(&keys, &values, KeyEq, Sum).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![1.0, 3.0, 10.0, 30.0]);
 }
 
@@ -72,7 +72,7 @@ fn bench_scan(c: &mut Criterion) {
             by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output =
-                        inclusive_scan_by_key(black_box(&values), black_box(&keys), KeyEq, Sum)
+                        inclusive_scan_by_key(black_box(&keys), black_box(&values), KeyEq, Sum)
                             .unwrap();
                     sync(&policy);
                     black_box(output)

@@ -1,8 +1,8 @@
 use crate::{
     device::{
-        DeviceMap, DeviceVec, KernelColumn, KernelColumnAt, OwnedKernelColumn, S0, SoA, SoA1, SoA2,
-        SoA3, SoA4, SoA5, SoA6, SoA7, SoA8, SoA9, SoA10, SoA11, SoA12, SoVA, SoVA1, SoVA2, SoVA3,
-        SoVA4, SoVA5, SoVA6, SoVA7, SoVA8, SoVA9, SoVA10, SoVA11, SoVA12,
+        DeviceVec, KernelColumn, KernelColumnAt, S0, SoA, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
+        SoA8, SoA9, SoA10, SoA11, SoA12, SoVA, SoVA1, SoVA2, SoVA3, SoVA4, SoVA5, SoVA6, SoVA7,
+        SoVA8, SoVA9, SoVA10, SoVA11, SoVA12, StorageKernelColumn,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -10,369 +10,74 @@ use crate::{
     op::{GpuOp, UnaryOp},
 };
 use cubecl::prelude::*;
-use std::marker::PhantomData;
 
-/// Owned input accepted by [`zip`].
+/// Borrowed input accepted by `zip`.
 #[doc(hidden)]
-pub trait ZipInput {
-    /// SoA source returned for this tuple shape.
+pub trait BorrowedZipInput {
+    /// Borrowed SoA returned for this tuple shape.
     type Output;
 
-    /// Builds the SoA source.
-    fn zip(self) -> Self::Output;
+    /// Builds the borrowed SoA.
+    fn borrowed_zip(self) -> Self::Output;
 }
 
-#[doc(hidden)]
-pub trait ZipColumn {
-    type Source;
+pub(crate) trait BorrowedZipSource: KernelColumn {}
 
-    fn into_source(self) -> Self::Source;
-}
-
-impl<R, T> ZipColumn for DeviceVec<R, T>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-{
-    type Source = DeviceVec<R, T>;
-
-    fn into_source(self) -> Self::Source {
-        self
-    }
-}
-
-impl<Source> ZipColumn for SoA1<Source>
-where
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
-    Source::Item: CubePrimitive + CubeElement,
-{
-    type Source = Source;
-
-    fn into_source(self) -> Self::Source {
-        self.source
-    }
-}
-
-impl<Left, Right> ZipInput for (Left, Right)
-where
-    Left: ZipColumn,
-    Right: ZipColumn,
-    Left::Source: KernelColumn + KernelColumnAt<S0>,
-    Right::Source: KernelColumn<Runtime = <Left::Source as KernelColumn>::Runtime>
-        + KernelColumnAt<S0>
-        + KernelColumnAt<<Left::Source as KernelColumnAt<S0>>::Next>,
-    <Left::Source as KernelColumn>::Item: CubePrimitive + CubeElement,
-    <Right::Source as KernelColumn>::Item: CubePrimitive + CubeElement,
-{
-    type Output = SoA2<Left::Source, Right::Source>;
-
-    fn zip(self) -> Self::Output {
-        SoA2 {
-            left: self.0.into_source(),
-            right: self.1.into_source(),
-        }
-    }
-}
-
-macro_rules! impl_raw_zip_input {
-    ($name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+> ZipInput for ($first, $( $rest ),+)
-        where
-            $first: OwnedKernelColumn,
-            $(
-                $rest: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime>,
-            )+
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $(
-                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
-            )+
-        {
-            type Output = $name<$first, $( $rest ),+>;
-
-            fn zip(self) -> Self::Output {
-                let ($first_field, $( $field ),+) = self;
-                $name { $first_field, $( $field ),+ }
-            }
-        }
-    };
-}
-
-impl_raw_zip_input!(SoA3<A, B, C> { first, second, third });
-impl_raw_zip_input!(SoA4<A, B, C, D> { a, b, c, d });
-impl_raw_zip_input!(SoA5<A, B, C, D, E> { a, b, c, d, e });
-impl_raw_zip_input!(SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
-impl_raw_zip_input!(SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
-impl_raw_zip_input!(SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
-impl_raw_zip_input!(SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
-impl_raw_zip_input!(SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
-impl_raw_zip_input!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
-impl_raw_zip_input!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
-
-macro_rules! impl_zip_column_left {
-    ($name:ident < $( $ty:ident ),+ > { $( $field:ident : $var:ident ),+ }) => {
-        impl<Column, $( $ty ),+> ZipInput for (Column, $name<$( $ty ),+>)
-        where
-            Column: ZipColumn,
-            (<Column as ZipColumn>::Source, $( $ty ),+): ZipInput,
-        {
-            type Output = <(<Column as ZipColumn>::Source, $( $ty ),+) as ZipInput>::Output;
-
-            fn zip(self) -> Self::Output {
-                let source = self.0.into_source();
-                let $name { $( $field: $var ),+ } = self.1;
-                (source, $( $var ),+).zip()
-            }
-        }
-    };
-}
-
-macro_rules! impl_zip_column_right {
-    ($name:ident < $( $ty:ident ),+ > { $( $field:ident : $var:ident ),+ }) => {
-        impl<Column, $( $ty ),+> ZipInput for ($name<$( $ty ),+>, Column)
-        where
-            Column: ZipColumn,
-            ($( $ty, )+ <Column as ZipColumn>::Source): ZipInput,
-        {
-            type Output = <($( $ty, )+ <Column as ZipColumn>::Source) as ZipInput>::Output;
-
-            fn zip(self) -> Self::Output {
-                let $name { $( $field: $var ),+ } = self.0;
-                let source = self.1.into_source();
-                ($( $var, )+ source).zip()
-            }
-        }
-    };
-}
-
-macro_rules! impl_zip_concat {
-    (
-        $left_name:ident < $( $left_ty:ident ),+ > { $( $left_field:ident : $left_var:ident ),+ }
-        +
-        $right_name:ident < $( $right_ty:ident ),+ > { $( $right_field:ident : $right_var:ident ),+ }
-    ) => {
-        impl<$( $left_ty ),+, $( $right_ty ),+> ZipInput
-            for ($left_name<$( $left_ty ),+>, $right_name<$( $right_ty ),+>)
-        where
-            ($( $left_ty, )+ $( $right_ty ),+): ZipInput,
-        {
-            type Output = <($( $left_ty, )+ $( $right_ty ),+) as ZipInput>::Output;
-
-            fn zip(self) -> Self::Output {
-                let $left_name { $( $left_field: $left_var ),+ } = self.0;
-                let $right_name { $( $right_field: $right_var ),+ } = self.1;
-                ($( $left_var, )+ $( $right_var ),+).zip()
-            }
-        }
-    };
-}
-
-impl_zip_column_left!(SoA2<A, B> { left: a, right: b });
-impl_zip_column_left!(SoA3<A, B, C> { first: a, second: b, third: c });
-impl_zip_column_left!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d });
-impl_zip_column_left!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e });
-impl_zip_column_left!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f });
-impl_zip_column_left!(SoA7<A, B, C, D, E, F, G> { a: a, b: b, c: c, d: d, e: e, f: f, g: g });
-impl_zip_column_left!(SoA8<A, B, C, D, E, F, G, H> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h });
-impl_zip_column_left!(SoA9<A, B, C, D, E, F, G, H, I> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i });
-impl_zip_column_left!(SoA10<A, B, C, D, E, F, G, H, I, J> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i, j: j });
-impl_zip_column_left!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i, j: j, k: k });
-
-impl_zip_column_right!(SoA2<A, B> { left: a, right: b });
-impl_zip_column_right!(SoA3<A, B, C> { first: a, second: b, third: c });
-impl_zip_column_right!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d });
-impl_zip_column_right!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e });
-impl_zip_column_right!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f });
-impl_zip_column_right!(SoA7<A, B, C, D, E, F, G> { a: a, b: b, c: c, d: d, e: e, f: f, g: g });
-impl_zip_column_right!(SoA8<A, B, C, D, E, F, G, H> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h });
-impl_zip_column_right!(SoA9<A, B, C, D, E, F, G, H, I> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i });
-impl_zip_column_right!(SoA10<A, B, C, D, E, F, G, H, I, J> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i, j: j });
-impl_zip_column_right!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i, j: j, k: k });
-
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA2<C, D> { left: c, right: d });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA3<C, D, E> { first: c, second: d, third: e });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA4<C, D, E, F> { a: c, b: d, c: e, d: f });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA5<C, D, E, F, G> { a: c, b: d, c: e, d: f, e: g });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA6<C, D, E, F, G, H> { a: c, b: d, c: e, d: f, e: g, f: h });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA7<C, D, E, F, G, H, I> { a: c, b: d, c: e, d: f, e: g, f: h, g: i });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA8<C, D, E, F, G, H, I, J> { a: c, b: d, c: e, d: f, e: g, f: h, g: i, h: j });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA9<C, D, E, F, G, H, I, J, K> { a: c, b: d, c: e, d: f, e: g, f: h, g: i, h: j, i: k });
-impl_zip_concat!(SoA2<A, B> { left: a, right: b } + SoA10<C, D, E, F, G, H, I, J, K, L> { a: c, b: d, c: e, d: f, e: g, f: h, g: i, h: j, i: k, j: l });
-
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA2<D, E> { left: d, right: e });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA3<D, E, F> { first: d, second: e, third: f });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA4<D, E, F, G> { a: d, b: e, c: f, d: g });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA5<D, E, F, G, H> { a: d, b: e, c: f, d: g, e: h });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA6<D, E, F, G, H, I> { a: d, b: e, c: f, d: g, e: h, f: i });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA7<D, E, F, G, H, I, J> { a: d, b: e, c: f, d: g, e: h, f: i, g: j });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA8<D, E, F, G, H, I, J, K> { a: d, b: e, c: f, d: g, e: h, f: i, g: j, h: k });
-impl_zip_concat!(SoA3<A, B, C> { first: a, second: b, third: c } + SoA9<D, E, F, G, H, I, J, K, L> { a: d, b: e, c: f, d: g, e: h, f: i, g: j, h: k, i: l });
-
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA2<E, F> { left: e, right: f });
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA3<E, F, G> { first: e, second: f, third: g });
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA4<E, F, G, H> { a: e, b: f, c: g, d: h });
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA5<E, F, G, H, I> { a: e, b: f, c: g, d: h, e: i });
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA6<E, F, G, H, I, J> { a: e, b: f, c: g, d: h, e: i, f: j });
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA7<E, F, G, H, I, J, K> { a: e, b: f, c: g, d: h, e: i, f: j, g: k });
-impl_zip_concat!(SoA4<A, B, C, D> { a: a, b: b, c: c, d: d } + SoA8<E, F, G, H, I, J, K, L> { a: e, b: f, c: g, d: h, e: i, f: j, g: k, h: l });
-
-impl_zip_concat!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e } + SoA2<F, G> { left: f, right: g });
-impl_zip_concat!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e } + SoA3<F, G, H> { first: f, second: g, third: h });
-impl_zip_concat!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e } + SoA4<F, G, H, I> { a: f, b: g, c: h, d: i });
-impl_zip_concat!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e } + SoA5<F, G, H, I, J> { a: f, b: g, c: h, d: i, e: j });
-impl_zip_concat!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e } + SoA6<F, G, H, I, J, K> { a: f, b: g, c: h, d: i, e: j, f: k });
-impl_zip_concat!(SoA5<A, B, C, D, E> { a: a, b: b, c: c, d: d, e: e } + SoA7<F, G, H, I, J, K, L> { a: f, b: g, c: h, d: i, e: j, f: k, g: l });
-
-impl_zip_concat!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f } + SoA2<G, H> { left: g, right: h });
-impl_zip_concat!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f } + SoA3<G, H, I> { first: g, second: h, third: i });
-impl_zip_concat!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f } + SoA4<G, H, I, J> { a: g, b: h, c: i, d: j });
-impl_zip_concat!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f } + SoA5<G, H, I, J, K> { a: g, b: h, c: i, d: j, e: k });
-impl_zip_concat!(SoA6<A, B, C, D, E, F> { a: a, b: b, c: c, d: d, e: e, f: f } + SoA6<G, H, I, J, K, L> { a: g, b: h, c: i, d: j, e: k, f: l });
-
-impl_zip_concat!(SoA7<A, B, C, D, E, F, G> { a: a, b: b, c: c, d: d, e: e, f: f, g: g } + SoA2<H, I> { left: h, right: i });
-impl_zip_concat!(SoA7<A, B, C, D, E, F, G> { a: a, b: b, c: c, d: d, e: e, f: f, g: g } + SoA3<H, I, J> { first: h, second: i, third: j });
-impl_zip_concat!(SoA7<A, B, C, D, E, F, G> { a: a, b: b, c: c, d: d, e: e, f: f, g: g } + SoA4<H, I, J, K> { a: h, b: i, c: j, d: k });
-impl_zip_concat!(SoA7<A, B, C, D, E, F, G> { a: a, b: b, c: c, d: d, e: e, f: f, g: g } + SoA5<H, I, J, K, L> { a: h, b: i, c: j, d: k, e: l });
-
-impl_zip_concat!(SoA8<A, B, C, D, E, F, G, H> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h } + SoA2<I, J> { left: i, right: j });
-impl_zip_concat!(SoA8<A, B, C, D, E, F, G, H> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h } + SoA3<I, J, K> { first: i, second: j, third: k });
-impl_zip_concat!(SoA8<A, B, C, D, E, F, G, H> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h } + SoA4<I, J, K, L> { a: i, b: j, c: k, d: l });
-
-impl_zip_concat!(SoA9<A, B, C, D, E, F, G, H, I> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i } + SoA2<J, K> { left: j, right: k });
-impl_zip_concat!(SoA9<A, B, C, D, E, F, G, H, I> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i } + SoA3<J, K, L> { first: j, second: k, third: l });
-
-impl_zip_concat!(SoA10<A, B, C, D, E, F, G, H, I, J> { a: a, b: b, c: c, d: d, e: e, f: f, g: g, h: h, i: i, j: j } + SoA2<K, L> { left: k, right: l });
-
-/// Combines two owned SoA inputs into a wider owned SoA.
-///
-/// `zip` is an ownership boundary. It is for columns that may be consumed by
-/// algorithms such as [`sort`](crate::sort), [`reverse`](crate::reverse), or
-/// [`remove_if`](crate::remove_if). It does not allocate new device storage by
-/// itself; it groups existing owned columns.
-///
-/// Use [`vzip`] instead when an algorithm only needs to read borrowed columns.
-///
-/// ```no_run
-/// use massively::{CubeWgpu, sort, unzip, zip};
-///
-/// # struct Less;
-/// # #[cubecl::cube]
-/// # impl massively::op::BinaryPredicateOp<(f32, u32)> for Less {
-/// #     fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool { lhs.0 < rhs.0 }
-/// # }
-/// # fn main() -> Result<(), massively::Error> {
-/// let policy = CubeWgpu::new();
-/// let values = policy.to_device(&[3.0_f32, 1.0, 2.0])?;
-/// let tags = policy.to_device(&[30_u32, 10, 20])?;
-///
-/// let sorted = sort(zip(values, tags), Less)?;
-/// let (_values, _tags) = unzip(sorted)?;
-/// # Ok(())
-/// # }
-/// ```
-pub fn zip<Left, Right>(left: Left, right: Right) -> <(Left, Right) as ZipInput>::Output
-where
-    (Left, Right): ZipInput,
-{
-    (left, right).zip()
-}
-
-/// Convenience wrapper over binary [`zip`] for three owned SoA inputs.
-pub fn zip3<A, B, C>(a: A, b: B, c: C) -> <(A, B, C) as ZipInput>::Output
-where
-    (A, B, C): ZipInput,
-{
-    (a, b, c).zip()
-}
-
-macro_rules! define_zip_n {
-    ($func:ident < $( $ty:ident : $var:ident ),+ >) => {
-        /// Convenience wrapper over binary [`zip`] for owned SoA inputs.
-        pub fn $func<$( $ty ),+>($( $var: $ty ),+) -> <($( $ty ),+) as ZipInput>::Output
-        where
-            ($( $ty ),+): ZipInput,
-        {
-            ($( $var ),+).zip()
-        }
-    };
-}
-
-define_zip_n!(zip4<A: a, B: b, C: c, D: d>);
-define_zip_n!(zip5<A: a, B: b, C: c, D: d, E: e>);
-define_zip_n!(zip6<A: a, B: b, C: c, D: d, E: e, F: f>);
-define_zip_n!(zip7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>);
-define_zip_n!(zip8<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h>);
-define_zip_n!(zip9<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i>);
-define_zip_n!(zip10<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j>);
-define_zip_n!(zip11<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k>);
-define_zip_n!(zip12<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k, L: l>);
-
-/// Virtual-vector input accepted by [`vzip`].
-#[doc(hidden)]
-pub trait VzipInput {
-    /// Read-only SoVA returned for this tuple shape.
-    type Output;
-
-    /// Builds the read-only SoVA.
-    fn vzip(self) -> Self::Output;
-}
-
-pub(crate) trait VzipSource: KernelColumn {}
-
-impl<R, T> VzipSource for &DeviceVec<R, T>
+impl<R, T> BorrowedZipSource for &DeviceVec<R, T>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
 }
 
-impl<Left, Right> VzipInput for (Left, Right)
+impl<Left, Right> BorrowedZipInput for (Left, Right)
 where
-    Left: VzipSource + KernelColumnAt<S0>,
-    Right: VzipSource
+    Left: BorrowedZipSource + KernelColumnAt<S0>,
+    Right: BorrowedZipSource
         + KernelColumn<Runtime = <Left as KernelColumn>::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
     <Left as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Right as KernelColumn>::Item: CubePrimitive + CubeElement,
 {
-    type Output = SoVA2<Left, Right>;
+    type Output = SoA2<Left, Right>;
 
-    fn vzip(self) -> Self::Output {
-        SoVA2 {
+    fn borrowed_zip(self) -> Self::Output {
+        SoA2 {
             left: self.0,
             right: self.1,
         }
     }
 }
 
-impl<Left, Right> VzipInput for (SoVA1<Left>, SoVA1<Right>)
+impl<Left, Right> BorrowedZipInput for (SoVA1<Left>, SoVA1<Right>)
 where
-    Left: VzipSource + KernelColumnAt<S0>,
-    Right: VzipSource
+    Left: BorrowedZipSource + KernelColumnAt<S0>,
+    Right: BorrowedZipSource
         + KernelColumn<Runtime = <Left as KernelColumn>::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
     <Left as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Right as KernelColumn>::Item: CubePrimitive + CubeElement,
 {
-    type Output = SoVA2<Left, Right>;
+    type Output = SoA2<Left, Right>;
 
-    fn vzip(self) -> Self::Output {
-        SoVA2 {
+    fn borrowed_zip(self) -> Self::Output {
+        SoA2 {
             left: self.0.source,
             right: self.1.source,
         }
     }
 }
 
-impl<First, Second, Third> VzipInput for (First, Second, Third)
+impl<First, Second, Third> BorrowedZipInput for (First, Second, Third)
 where
-    First: VzipSource + KernelColumnAt<S0>,
-    Second: VzipSource
+    First: BorrowedZipSource + KernelColumnAt<S0>,
+    Second: BorrowedZipSource
         + KernelColumn<Runtime = <First as KernelColumn>::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<First as KernelColumnAt<S0>>::Next>,
-    Third: VzipSource
+    Third: BorrowedZipSource
         + KernelColumn<Runtime = <First as KernelColumn>::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
@@ -380,10 +85,10 @@ where
     <Second as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Third as KernelColumn>::Item: CubePrimitive + CubeElement,
 {
-    type Output = SoVA3<First, Second, Third>;
+    type Output = SoA3<First, Second, Third>;
 
-    fn vzip(self) -> Self::Output {
-        SoVA3 {
+    fn borrowed_zip(self) -> Self::Output {
+        SoA3 {
             first: self.0,
             second: self.1,
             third: self.2,
@@ -391,14 +96,14 @@ where
     }
 }
 
-impl<First, Second, Third> VzipInput for (SoVA1<First>, SoVA1<Second>, SoVA1<Third>)
+impl<First, Second, Third> BorrowedZipInput for (SoVA1<First>, SoVA1<Second>, SoVA1<Third>)
 where
-    First: VzipSource + KernelColumnAt<S0>,
-    Second: VzipSource
+    First: BorrowedZipSource + KernelColumnAt<S0>,
+    Second: BorrowedZipSource
         + KernelColumn<Runtime = <First as KernelColumn>::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<First as KernelColumnAt<S0>>::Next>,
-    Third: VzipSource
+    Third: BorrowedZipSource
         + KernelColumn<Runtime = <First as KernelColumn>::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
@@ -406,10 +111,10 @@ where
     <Second as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Third as KernelColumn>::Item: CubePrimitive + CubeElement,
 {
-    type Output = SoVA3<First, Second, Third>;
+    type Output = SoA3<First, Second, Third>;
 
-    fn vzip(self) -> Self::Output {
-        SoVA3 {
+    fn borrowed_zip(self) -> Self::Output {
+        SoA3 {
             first: self.0.source,
             second: self.1.source,
             third: self.2.source,
@@ -417,13 +122,13 @@ where
     }
 }
 
-macro_rules! impl_vzip_input {
+macro_rules! impl_borrowed_zip_input {
     ($name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+> VzipInput for ($first, $( $rest ),+)
+        impl<$first, $( $rest ),+> BorrowedZipInput for ($first, $( $rest ),+)
         where
-            $first: VzipSource + KernelColumnAt<S0>,
+            $first: BorrowedZipSource + KernelColumnAt<S0>,
             $(
-                $rest: VzipSource
+                $rest: BorrowedZipSource
                     + KernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
@@ -434,7 +139,7 @@ macro_rules! impl_vzip_input {
         {
             type Output = $name<$first, $( $rest ),+>;
 
-            fn vzip(self) -> Self::Output {
+            fn borrowed_zip(self) -> Self::Output {
                 let ($first_field, $( $field ),+) = self;
                 $name { $first_field, $( $field ),+ }
             }
@@ -442,23 +147,23 @@ macro_rules! impl_vzip_input {
     };
 }
 
-impl_vzip_input!(SoVA4<A, B, C, D> { a, b, c, d });
-impl_vzip_input!(SoVA5<A, B, C, D, E> { a, b, c, d, e });
-impl_vzip_input!(SoVA6<A, B, C, D, E, F> { a, b, c, d, e, f });
-impl_vzip_input!(SoVA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
-impl_vzip_input!(SoVA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
-impl_vzip_input!(SoVA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
-impl_vzip_input!(SoVA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
-impl_vzip_input!(SoVA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
-impl_vzip_input!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_borrowed_zip_input!(SoA4<A, B, C, D> { a, b, c, d });
+impl_borrowed_zip_input!(SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_borrowed_zip_input!(SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_borrowed_zip_input!(SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_borrowed_zip_input!(SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_borrowed_zip_input!(SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_borrowed_zip_input!(SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_borrowed_zip_input!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_borrowed_zip_input!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
-macro_rules! impl_vzip_soa1_input {
+macro_rules! impl_borrowed_zip_soa1_input {
     ($name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+> VzipInput for (SoVA1<$first>, $( SoVA1<$rest> ),+)
+        impl<$first, $( $rest ),+> BorrowedZipInput for (SoVA1<$first>, $( SoVA1<$rest> ),+)
         where
-            $first: VzipSource + KernelColumnAt<S0>,
+            $first: BorrowedZipSource + KernelColumnAt<S0>,
             $(
-                $rest: VzipSource
+                $rest: BorrowedZipSource
                     + KernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
@@ -469,7 +174,7 @@ macro_rules! impl_vzip_soa1_input {
         {
             type Output = $name<$first, $( $rest ),+>;
 
-            fn vzip(self) -> Self::Output {
+            fn borrowed_zip(self) -> Self::Output {
                 let ($first_field, $( $field ),+) = self;
                 $name {
                     $first_field: $first_field.source,
@@ -480,27 +185,24 @@ macro_rules! impl_vzip_soa1_input {
     };
 }
 
-impl_vzip_soa1_input!(SoVA4<A, B, C, D> { a, b, c, d });
-impl_vzip_soa1_input!(SoVA5<A, B, C, D, E> { a, b, c, d, e });
-impl_vzip_soa1_input!(SoVA6<A, B, C, D, E, F> { a, b, c, d, e, f });
-impl_vzip_soa1_input!(SoVA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
-impl_vzip_soa1_input!(SoVA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
-impl_vzip_soa1_input!(SoVA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
-impl_vzip_soa1_input!(SoVA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
-impl_vzip_soa1_input!(SoVA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
-impl_vzip_soa1_input!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_borrowed_zip_soa1_input!(SoA4<A, B, C, D> { a, b, c, d });
+impl_borrowed_zip_soa1_input!(SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_borrowed_zip_soa1_input!(SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_borrowed_zip_soa1_input!(SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_borrowed_zip_soa1_input!(SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_borrowed_zip_soa1_input!(SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_borrowed_zip_soa1_input!(SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_borrowed_zip_soa1_input!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_borrowed_zip_soa1_input!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
-/// Combines two read-only columns into a wider read-only SoVA input.
+/// Combines two borrowed columns into a wider read-only SoA input.
 ///
-/// `vzip` is for borrowing algorithms such as [`transform`], [`reduce`](crate::reduce), and
+/// `zip` is for borrowing algorithms such as [`transform`], [`reduce`](crate::reduce), and
 /// [`gather`](crate::gather). It does not allocate device storage; it creates a
 /// typed read-only view over existing device columns.
 ///
-/// Use [`zip`] instead when the grouped columns are owned storage passed to a
-/// consuming algorithm.
-///
 /// ```no_run
-/// use massively::{CubeWgpu, transform, unzip, vzip};
+/// use massively::{CubeWgpu, transform, zip};
 ///
 /// # struct Add;
 /// # #[cubecl::cube]
@@ -513,358 +215,47 @@ impl_vzip_soa1_input!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e
 /// let x = policy.to_device(&[1.0_f32, 2.0])?;
 /// let y = policy.to_device(&[10.0_f32, 20.0])?;
 ///
-/// let output = unzip(transform(vzip(&x, &y), Add)?)?;
+/// let output = transform(zip(&x, &y), Add)?;
 /// assert_eq!(output.to_vec()?, vec![11.0, 22.0]);
 /// # Ok(())
 /// # }
 /// ```
-pub fn vzip<Left, Right>(left: Left, right: Right) -> <(Left, Right) as VzipInput>::Output
+pub fn zip<Left, Right>(left: Left, right: Right) -> <(Left, Right) as BorrowedZipInput>::Output
 where
-    (Left, Right): VzipInput,
+    (Left, Right): BorrowedZipInput,
 {
-    (left, right).vzip()
+    (left, right).borrowed_zip()
 }
 
-/// Convenience wrapper over binary [`vzip`] for three read-only columns.
-pub fn vzip3<A, B, C>(a: A, b: B, c: C) -> <(A, B, C) as VzipInput>::Output
+/// Convenience wrapper over binary [`zip`] for three borrowed columns.
+pub fn zip3<A, B, C>(a: A, b: B, c: C) -> <(A, B, C) as BorrowedZipInput>::Output
 where
-    (A, B, C): VzipInput,
+    (A, B, C): BorrowedZipInput,
 {
-    (a, b, c).vzip()
+    (a, b, c).borrowed_zip()
 }
 
-macro_rules! define_vzip_n {
+macro_rules! define_borrowed_zip_n {
     ($func:ident < $( $ty:ident : $var:ident ),+ >) => {
-        /// Convenience wrapper over binary [`vzip`] for read-only columns.
-        pub fn $func<$( $ty ),+>($( $var: $ty ),+) -> <($( $ty ),+) as VzipInput>::Output
+        /// Convenience wrapper over binary [`zip`] for borrowed columns.
+        pub fn $func<$( $ty ),+>($( $var: $ty ),+) -> <($( $ty ),+) as BorrowedZipInput>::Output
         where
-            ($( $ty ),+): VzipInput,
+            ($( $ty ),+): BorrowedZipInput,
         {
-            ($( $var ),+).vzip()
+            ($( $var ),+).borrowed_zip()
         }
     };
 }
 
-define_vzip_n!(vzip4<A: a, B: b, C: c, D: d>);
-define_vzip_n!(vzip5<A: a, B: b, C: c, D: d, E: e>);
-define_vzip_n!(vzip6<A: a, B: b, C: c, D: d, E: e, F: f>);
-define_vzip_n!(vzip7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>);
-define_vzip_n!(vzip8<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h>);
-define_vzip_n!(vzip9<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i>);
-define_vzip_n!(vzip10<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j>);
-define_vzip_n!(vzip11<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k>);
-define_vzip_n!(vzip12<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k, L: l>);
-
-/// Input accepted by [`transform`].
-#[doc(hidden)]
-pub trait TransformWriteInput<Op, Output> {
-    /// Applies the transform in the same abstraction level as the input.
-    fn transform_write_input(self, op: GpuOp<Op>, output: &mut Output) -> Result<(), Error>;
-}
-
-impl<Source, R, T, Op> TransformWriteInput<Op, DeviceVec<R, T>> for SoVA1<Source>
-where
-    Self: SoVA<Item = Source::Item, Scalar = Source::Item>,
-    Source: KernelColumn<Runtime = R, Item = T> + KernelColumnAt<S0>,
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-    Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: DeviceGpuExpr<Source::Item>,
-    <Source as KernelColumnAt<S0>>::ExprAt: DeviceGpuExpr<Source::Item>,
-    Op: UnaryOp<Source::Item, Output = Source::Item>,
-{
-    fn transform_write_input(
-        self,
-        _op: GpuOp<Op>,
-        output: &mut DeviceVec<R, T>,
-    ) -> Result<(), Error> {
-        SoVA::validate(&self)?;
-        let mapped = DeviceMap {
-            source: self.source,
-            _op: PhantomData::<fn() -> Op>,
-        };
-        super::device_expr_collect_into(&mapped, output)
-    }
-}
-
-impl<Source, R, T, Op> TransformWriteInput<Op, DeviceVec<R, T>> for Source
-where
-    Source: KernelColumn<Runtime = R, Item = T> + KernelColumnAt<S0>,
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-    Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: DeviceGpuExpr<Source::Item>,
-    <Source as KernelColumnAt<S0>>::ExprAt: DeviceGpuExpr<Source::Item>,
-    Op: UnaryOp<Source::Item, Output = Source::Item>,
-{
-    fn transform_write_input(
-        self,
-        op: GpuOp<Op>,
-        output: &mut DeviceVec<R, T>,
-    ) -> Result<(), Error> {
-        <SoVA1<Source> as TransformWriteInput<Op, DeviceVec<R, T>>>::transform_write_input(
-            SoVA1 { source: self },
-            op,
-            output,
-        )
-    }
-}
-
-impl<Source, R, T, Op> TransformWriteInput<Op, SoA1<DeviceVec<R, T>>> for Source
-where
-    Source: TransformWriteInput<Op, DeviceVec<R, T>>,
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-{
-    fn transform_write_input(
-        self,
-        op: GpuOp<Op>,
-        output: &mut SoA1<DeviceVec<R, T>>,
-    ) -> Result<(), Error> {
-        <Self as TransformWriteInput<Op, DeviceVec<R, T>>>::transform_write_input(
-            self,
-            op,
-            &mut output.source,
-        )
-    }
-}
-
-impl<Left, Right, R, Out, Op> TransformWriteInput<Op, DeviceVec<R, Out>> for SoVA2<Left, Right>
-where
-    Self: SoVA<Item = (Left::Item, Right::Item), Scalar = Left::Item>,
-    Left: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-    Right: KernelColumn<Runtime = Left::Runtime>
-        + KernelColumnAt<S0>
-        + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    R: Runtime,
-    Out: CubePrimitive + CubeElement,
-    Left::Item: CubePrimitive + CubeElement,
-    Right::Item: CubePrimitive + CubeElement,
-    Left::Expr: DeviceGpuExpr<Left::Item>,
-    Right::Expr: DeviceGpuExpr<Right::Item>,
-    Op: UnaryOp<<Self as SoVA>::Item, Output = Out>,
-{
-    fn transform_write_input(
-        self,
-        _op: GpuOp<Op>,
-        output: &mut DeviceVec<R, Out>,
-    ) -> Result<(), Error> {
-        SoVA::validate(&self)?;
-        let left = super::device_expr_collect(&self.left)?;
-        let right = super::device_expr_collect(&self.right)?;
-        let len = left.len();
-        if len != output.len() {
-            return Err(Error::LengthMismatch {
-                input: len,
-                output: output.len(),
-            });
-        }
-        if len != 0 {
-            let client = left.policy().client();
-            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-            let block_size = 256_u32;
-            let block_count = len.div_ceil(block_size as usize);
-            let block_count_u32 = u32::try_from(block_count)
-                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
-            unsafe {
-                transform_tuple2_kernel::launch_unchecked::<Left::Item, Right::Item, Out, Op, R>(
-                    client,
-                    CubeCount::Static(block_count_u32, 1, 1),
-                    CubeDim::new_1d(block_size),
-                    ArrayArg::from_raw_parts::<Left::Item>(&left.handle, len, 1),
-                    ArrayArg::from_raw_parts::<Right::Item>(&right.handle, len, 1),
-                    ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
-                    ArrayArg::from_raw_parts::<Out>(&output.handle, len, 1),
-                )
-                .map_err(|err| Error::Launch {
-                    message: format!("{err:?}"),
-                })?;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl<First, Second, Third, R, Out, Op> TransformWriteInput<Op, DeviceVec<R, Out>>
-    for SoVA3<First, Second, Third>
-where
-    Self: SoVA<Item = (First::Item, Second::Item, Third::Item), Scalar = First::Item>,
-    First: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-    Second: KernelColumn<Runtime = First::Runtime>
-        + KernelColumnAt<S0>
-        + KernelColumnAt<<First as KernelColumnAt<S0>>::Next>,
-    Third: KernelColumn<Runtime = First::Runtime>
-        + KernelColumnAt<S0>
-        + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
-    R: Runtime,
-    Out: CubePrimitive + CubeElement,
-    First::Item: CubePrimitive + CubeElement,
-    Second::Item: CubePrimitive + CubeElement,
-    Third::Item: CubePrimitive + CubeElement,
-    First::Expr: DeviceGpuExpr<First::Item>,
-    Second::Expr: DeviceGpuExpr<Second::Item>,
-    Third::Expr: DeviceGpuExpr<Third::Item>,
-    Op: UnaryOp<<Self as SoVA>::Item, Output = Out>,
-{
-    fn transform_write_input(
-        self,
-        _op: GpuOp<Op>,
-        output: &mut DeviceVec<R, Out>,
-    ) -> Result<(), Error> {
-        SoVA::validate(&self)?;
-        let first = super::device_expr_collect(&self.first)?;
-        let second = super::device_expr_collect(&self.second)?;
-        let third = super::device_expr_collect(&self.third)?;
-        let len = first.len();
-        if len != output.len() {
-            return Err(Error::LengthMismatch {
-                input: len,
-                output: output.len(),
-            });
-        }
-        if len != 0 {
-            let client = first.policy().client();
-            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-            let block_size = 256_u32;
-            let block_count = len.div_ceil(block_size as usize);
-            let block_count_u32 = u32::try_from(block_count)
-                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
-            unsafe {
-                transform_tuple3_kernel::launch_unchecked::<
-                    First::Item,
-                    Second::Item,
-                    Third::Item,
-                    Out,
-                    Op,
-                    R,
-                >(
-                    client,
-                    CubeCount::Static(block_count_u32, 1, 1),
-                    CubeDim::new_1d(block_size),
-                    ArrayArg::from_raw_parts::<First::Item>(&first.handle, len, 1),
-                    ArrayArg::from_raw_parts::<Second::Item>(&second.handle, len, 1),
-                    ArrayArg::from_raw_parts::<Third::Item>(&third.handle, len, 1),
-                    ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
-                    ArrayArg::from_raw_parts::<Out>(&output.handle, len, 1),
-                )
-                .map_err(|err| Error::Launch {
-                    message: format!("{err:?}"),
-                })?;
-            }
-        }
-        Ok(())
-    }
-}
-
-macro_rules! impl_transform_write_input {
-    (@item_ty $field:ident) => {
-        <$field as KernelColumn>::Item
-    };
-
-    (
-        $name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ },
-        $kernel_name:ident
-    ) => {
-        impl<$first, $( $rest ),+, R, Out, Op> TransformWriteInput<Op, DeviceVec<R, Out>> for $name<$first, $( $rest ),+>
-        where
-            Self: SoVA<Scalar = <$first as KernelColumn>::Item>,
-            $first: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-            $(
-                $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            )+
-            R: Runtime,
-            Out: CubePrimitive + CubeElement,
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
-            $(
-                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
-            )+
-            $(
-                <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
-            )+
-            Op: UnaryOp<(
-                impl_transform_write_input!(@item_ty $first),
-                $( impl_transform_write_input!(@item_ty $rest) ),+
-            ), Output = Out>,
-        {
-            fn transform_write_input(self, _op: GpuOp<Op>, output: &mut DeviceVec<R, Out>) -> Result<(), Error> {
-                SoVA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $(
-                    let $field = super::device_expr_collect(&self.$field)?;
-                )+
-
-                let len = $first_field.len();
-                if len != output.len() {
-                    return Err(Error::LengthMismatch {
-                        input: len,
-                        output: output.len(),
-                    });
-                }
-                let client = $first_field.policy().client();
-                if len != 0 {
-                    let len_u32 =
-                        u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-                    let block_size = 256_u32;
-                    let block_count = len.div_ceil(block_size as usize);
-                    let block_count_u32 = u32::try_from(block_count)
-                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
-                    unsafe {
-                        $kernel_name::launch_unchecked::<
-                            <$first as KernelColumn>::Item,
-                            $(
-                                <$rest as KernelColumn>::Item,
-                            )+
-                            Out,
-                            Op,
-                            <$first as KernelColumn>::Runtime,
-                        >(
-                            client,
-                            CubeCount::Static(block_count_u32, 1, 1),
-                            CubeDim::new_1d(block_size),
-                            ArrayArg::from_raw_parts::<<$first as KernelColumn>::Item>(
-                                &$first_field.handle,
-                                len,
-                                1,
-                            ),
-                            $(
-                                ArrayArg::from_raw_parts::<<$rest as KernelColumn>::Item>(
-                                    &$field.handle,
-                                    len,
-                                    1,
-                                ),
-                            )+
-                            ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
-                            ArrayArg::from_raw_parts::<Out>(
-                                &output.handle,
-                                len,
-                                1,
-                            ),
-                        )
-                        .map_err(|err| Error::Launch {
-                            message: format!("{err:?}"),
-                        })?;
-                    }
-                }
-
-                Ok(())
-            }
-        }
-    };
-}
-
-impl_transform_write_input!(SoVA4<A, B, C, D> { a, b, c, d }, transform_tuple4_kernel);
-impl_transform_write_input!(SoVA5<A, B, C, D, E> { a, b, c, d, e }, transform_tuple5_kernel);
-impl_transform_write_input!(SoVA6<A, B, C, D, E, F> { a, b, c, d, e, f }, transform_tuple6_kernel);
-impl_transform_write_input!(SoVA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g }, transform_tuple7_kernel);
-impl_transform_write_input!(SoVA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h }, transform_tuple8_kernel);
-impl_transform_write_input!(SoVA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i }, transform_tuple9_kernel);
-impl_transform_write_input!(SoVA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j }, transform_tuple10_kernel);
-impl_transform_write_input!(SoVA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k }, transform_tuple11_kernel);
-impl_transform_write_input!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l }, transform_tuple12_kernel);
+define_borrowed_zip_n!(zip4<A: a, B: b, C: c, D: d>);
+define_borrowed_zip_n!(zip5<A: a, B: b, C: c, D: d, E: e>);
+define_borrowed_zip_n!(zip6<A: a, B: b, C: c, D: d, E: e, F: f>);
+define_borrowed_zip_n!(zip7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>);
+define_borrowed_zip_n!(zip8<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h>);
+define_borrowed_zip_n!(zip9<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i>);
+define_borrowed_zip_n!(zip10<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j>);
+define_borrowed_zip_n!(zip11<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k>);
+define_borrowed_zip_n!(zip12<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k, L: l>);
 
 /// Storage shape used for a transformed device value.
 #[doc(hidden)]
@@ -906,13 +297,39 @@ where
     type Storage = SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>;
 }
 
+macro_rules! impl_tuple_storage_output {
+    ($($soa:ident < $( $ty:ident ),+ >),+ $(,)?) => {
+        $(
+            impl<R, $( $ty ),+> StorageOutput<R> for ($( $ty, )+)
+            where
+                R: Runtime,
+                $( $ty: CubePrimitive + CubeElement, )+
+            {
+                type Storage = $soa<$( DeviceVec<R, $ty> ),+>;
+            }
+        )+
+    };
+}
+
+impl_tuple_storage_output!(
+    SoA4<A, B, C, D>,
+    SoA5<A, B, C, D, E>,
+    SoA6<A, B, C, D, E, F>,
+    SoA7<A, B, C, D, E, F, G>,
+    SoA8<A, B, C, D, E, F, G, H>,
+    SoA9<A, B, C, D, E, F, G, H, I>,
+    SoA10<A, B, C, D, E, F, G, H, I, J>,
+    SoA11<A, B, C, D, E, F, G, H, I, J, K>,
+    SoA12<A, B, C, D, E, F, G, H, I, J, K, L>,
+);
+
 trait TransformUnaryOutput<R, T, Op>: StorageOutput<R>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
     Op: UnaryOp<T, Output = Self>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<Self::Storage, Error>;
+    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
 macro_rules! impl_scalar_transform_unary_output {
@@ -924,7 +341,7 @@ macro_rules! impl_scalar_transform_unary_output {
                 T: CubePrimitive + CubeElement,
                 Op: UnaryOp<T, Output = $out>,
             {
-                fn run(input: &DeviceVec<R, T>) -> Result<Self::Storage, Error> {
+                fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
                     let len = input.len();
                     let client = input.policy().client();
                     let output_handle = client.empty(len * std::mem::size_of::<$out>());
@@ -968,7 +385,7 @@ where
     B: CubePrimitive + CubeElement,
     Op: UnaryOp<T, Output = (A, B)>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<Self::Storage, Error> {
+    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
         let client = input.policy().client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -1011,7 +428,7 @@ where
     C: CubePrimitive + CubeElement,
     Op: UnaryOp<T, Output = (A, B, C)>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<Self::Storage, Error> {
+    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
         let client = input.policy().client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -1047,6 +464,105 @@ where
         })
     }
 }
+
+macro_rules! impl_transform_unary_tuple_output {
+    (
+        $kernel:ident,
+        $soa:ident,
+        ($( $out_ty:ident : $out_handle:ident : $field:ident ),+)
+    ) => {
+        impl<R, T, $( $out_ty, )+ Op> TransformUnaryOutput<R, T, Op> for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            T: CubePrimitive + CubeElement,
+            $( $out_ty: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<T, Output = ($( $out_ty, )+)>,
+        {
+            fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+                let len = input.len();
+                let client = input.policy().client();
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out_ty>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len)
+                        .map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<T, $( $out_ty, )+ Op, R>(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            ArrayArg::from_raw_parts::<T>(&input.handle, len, 1),
+                            ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                            $(
+                                ArrayArg::from_raw_parts::<$out_ty>(&$out_handle, len, 1),
+                            )+
+                        )
+                        .map_err(|err| Error::Launch {
+                            message: format!("{err:?}"),
+                        })?;
+                    }
+                }
+                Ok($soa {
+                    $(
+                        $field: DeviceVec::from_handle(input.policy().clone(), $out_handle, len),
+                    )+
+                })
+            }
+        }
+    };
+}
+
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple4_kernel,
+    SoA4,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple5_kernel,
+    SoA5,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple6_kernel,
+    SoA6,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple7_kernel,
+    SoA7,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f, G: output_g: g)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple8_kernel,
+    SoA8,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f, G: output_g: g, H: output_h: h)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple9_kernel,
+    SoA9,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f, G: output_g: g, H: output_h: h, I: output_i: i)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple10_kernel,
+    SoA10,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f, G: output_g: g, H: output_h: h, I: output_i: i, J: output_j: j)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple11_kernel,
+    SoA11,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f, G: output_g: g, H: output_h: h, I: output_i: i, J: output_j: j, K: output_k: k)
+);
+impl_transform_unary_tuple_output!(
+    transform_unary_tuple12_kernel,
+    SoA12,
+    (A: output_a: a, B: output_b: b, C: output_c: c, D: output_d: d, E: output_e: e, F: output_f: f, G: output_g: g, H: output_h: h, I: output_i: i, J: output_j: j, K: output_k: k, L: output_l: l)
+);
 
 /// Input accepted by returning [`transform`].
 #[doc(hidden)]
@@ -1091,21 +607,201 @@ where
     }
 }
 
+macro_rules! impl_transform_tuple_output {
+    (
+        ($trait_name:ident < $first_in:ident : $first_arg:ident, $( $in_ty:ident : $arg:ident ),+ >),
+        $kernel:ident,
+        $soa:ident,
+        ($( $out_ty:ident : $out_handle:ident : $out_field:ident ),+)
+    ) => {
+        impl<R, $first_in, $( $in_ty, )+ $( $out_ty, )+ Op>
+            $trait_name<R, $first_in, $( $in_ty, )+ Op> for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            $first_in: CubePrimitive + CubeElement,
+            $( $in_ty: CubePrimitive + CubeElement, )+
+            $( $out_ty: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<($first_in, $( $in_ty, )+), Output = ($( $out_ty, )+)>,
+        {
+            fn run(
+                policy: &crate::policy::CubePolicy<R>,
+                $first_arg: &DeviceVec<R, $first_in>,
+                $( $arg: &DeviceVec<R, $in_ty>, )+
+            ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+                let len = $first_arg.len();
+                let client = policy.client();
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out_ty>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len)
+                        .map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<
+                            $first_in, $( $in_ty, )+ $( $out_ty, )+ Op, R,
+                        >(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            ArrayArg::from_raw_parts::<$first_in>(&$first_arg.handle, len, 1),
+                            $(
+                                ArrayArg::from_raw_parts::<$in_ty>(&$arg.handle, len, 1),
+                            )+
+                            ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                            $(
+                                ArrayArg::from_raw_parts::<$out_ty>(&$out_handle, len, 1),
+                            )+
+                        )
+                        .map_err(|err| Error::Launch {
+                            message: format!("{err:?}"),
+                        })?;
+                    }
+                }
+                Ok($soa {
+                    $(
+                        $out_field: DeviceVec::from_handle(policy.clone(), $out_handle, len),
+                    )+
+                })
+            }
+        }
+    };
+}
+
+macro_rules! impl_transform_tuple_output_arity {
+    ($input:tt, 2, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA2,
+            (OutA: out_a: left, OutB: out_b: right)
+        );
+    };
+    ($input:tt, 3, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA3,
+            (OutA: out_a: first, OutB: out_b: second, OutC: out_c: third)
+        );
+    };
+    ($input:tt, 4, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA4,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d)
+        );
+    };
+    ($input:tt, 5, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA5,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e)
+        );
+    };
+    ($input:tt, 6, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA6,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f)
+        );
+    };
+    ($input:tt, 7, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA7,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f, OutG: out_g: g)
+        );
+    };
+    ($input:tt, 8, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA8,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f, OutG: out_g: g, OutH: out_h: h)
+        );
+    };
+    ($input:tt, 9, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA9,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f, OutG: out_g: g, OutH: out_h: h, OutI: out_i: i)
+        );
+    };
+    ($input:tt, 10, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA10,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f, OutG: out_g: g, OutH: out_h: h, OutI: out_i: i, OutJ: out_j: j)
+        );
+    };
+    ($input:tt, 11, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA11,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f, OutG: out_g: g, OutH: out_h: h, OutI: out_i: i, OutJ: out_j: j, OutK: out_k: k)
+        );
+    };
+    ($input:tt, 12, $kernel:ident) => {
+        impl_transform_tuple_output!(
+            $input,
+            $kernel,
+            SoA12,
+            (OutA: out_a: a, OutB: out_b: b, OutC: out_c: c, OutD: out_d: d, OutE: out_e: e, OutF: out_f: f, OutG: out_g: g, OutH: out_h: h, OutI: out_i: i, OutJ: out_j: j, OutK: out_k: k, OutL: out_l: l)
+        );
+    };
+}
+
+macro_rules! impl_transform_tuple_outputs {
+    (
+        $trait_name:ident < $first_in:ident : $first_arg:ident, $( $in_ty:ident : $arg:ident ),+ >,
+        $( $arity:tt => $kernel:ident ),+ $(,)?
+    ) => {
+        impl_transform_tuple_outputs!(
+            @inner
+            ($trait_name < $first_in : $first_arg, $( $in_ty : $arg ),+ >),
+            $( $arity => $kernel ),+
+        );
+    };
+    (
+        @inner
+        $input:tt,
+        $( $arity:tt => $kernel:ident ),+ $(,)?
+    ) => {
+        $(
+            impl_transform_tuple_output_arity!(
+                $input,
+                $arity,
+                $kernel
+            );
+        )+
+    };
+}
+
 #[doc(hidden)]
-pub trait TransformSoA2Output<R, InA, InB, Op>: CubeType
+pub trait TransformSoA2Output<R, InA, InB, Op>: CubeType + StorageOutput<R>
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
     InB: CubePrimitive + CubeElement,
     Op: UnaryOp<(InA, InB), Output = Self>,
 {
-    type Storage;
-
     fn run(
         policy: &crate::policy::CubePolicy<R>,
         left: &DeviceVec<R, InA>,
         right: &DeviceVec<R, InB>,
-    ) -> Result<Self::Storage, Error>;
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
 macro_rules! impl_scalar_transform_soa2_output {
@@ -1118,13 +814,11 @@ macro_rules! impl_scalar_transform_soa2_output {
                 InB: CubePrimitive + CubeElement,
                 Op: UnaryOp<(InA, InB), Output = $out>,
             {
-                type Storage = SoA1<DeviceVec<R, $out>>;
-
                 fn run(
                     policy: &crate::policy::CubePolicy<R>,
                     left: &DeviceVec<R, InA>,
                     right: &DeviceVec<R, InB>,
-                ) -> Result<Self::Storage, Error> {
+                ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
                     let len = left.len();
                     let client = policy.client();
                     let output_handle = client.empty(len * std::mem::size_of::<$out>());
@@ -1170,13 +864,11 @@ where
     OutB: CubePrimitive + CubeElement,
     Op: UnaryOp<(InA, InB), Output = (OutA, OutB)>,
 {
-    type Storage = SoA2<DeviceVec<R, OutA>, DeviceVec<R, OutB>>;
-
     fn run(
         policy: &crate::policy::CubePolicy<R>,
         left: &DeviceVec<R, InA>,
         right: &DeviceVec<R, InB>,
-    ) -> Result<Self::Storage, Error> {
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -1224,8 +916,33 @@ where
     Op: UnaryOp<(Left::Item, Right::Item)>,
     Op::Output: TransformSoA2Output<Left::Runtime, Left::Item, Right::Item, Op>,
 {
-    type Output =
-        <Op::Output as TransformSoA2Output<Left::Runtime, Left::Item, Right::Item, Op>>::Storage;
+    type Output = <Op::Output as StorageOutput<Left::Runtime>>::Storage;
+
+    fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+        SoVA::validate(&self)?;
+        let policy = self.policy().clone();
+        let left = super::device_expr_collect(&self.left)?;
+        let right = super::device_expr_collect(&self.right)?;
+        <Op::Output as TransformSoA2Output<Left::Runtime, Left::Item, Right::Item, Op>>::run(
+            &policy, &left, &right,
+        )
+    }
+}
+
+impl<Left, Right, Op> TransformInput<Op> for SoA2<Left, Right>
+where
+    Self: SoVA<Runtime = Left::Runtime, Item = (Left::Item, Right::Item), Scalar = Left::Item>,
+    Left: KernelColumn + KernelColumnAt<S0>,
+    Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
+    Left::Runtime: Runtime,
+    Left::Item: CubePrimitive + CubeElement,
+    Right::Item: CubePrimitive + CubeElement,
+    Left::Expr: DeviceGpuExpr<Left::Item>,
+    Right::Expr: DeviceGpuExpr<Right::Item>,
+    Op: UnaryOp<(Left::Item, Right::Item)>,
+    Op::Output: TransformSoA2Output<Left::Runtime, Left::Item, Right::Item, Op>,
+{
+    type Output = <Op::Output as StorageOutput<Left::Runtime>>::Storage;
 
     fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
         SoVA::validate(&self)?;
@@ -1239,7 +956,7 @@ where
 }
 
 #[doc(hidden)]
-pub trait TransformSoA3Output<R, InA, InB, InC, Op>: CubeType
+pub trait TransformSoA3Output<R, InA, InB, InC, Op>: CubeType + StorageOutput<R>
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -1247,14 +964,12 @@ where
     InC: CubePrimitive + CubeElement,
     Op: UnaryOp<(InA, InB, InC), Output = Self>,
 {
-    type Storage;
-
     fn run(
         policy: &crate::policy::CubePolicy<R>,
         first: &DeviceVec<R, InA>,
         second: &DeviceVec<R, InB>,
         third: &DeviceVec<R, InC>,
-    ) -> Result<Self::Storage, Error>;
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
 macro_rules! impl_scalar_transform_soa3_output {
@@ -1268,14 +983,12 @@ macro_rules! impl_scalar_transform_soa3_output {
                 InC: CubePrimitive + CubeElement,
                 Op: UnaryOp<(InA, InB, InC), Output = $out>,
             {
-                type Storage = SoA1<DeviceVec<R, $out>>;
-
                 fn run(
                     policy: &crate::policy::CubePolicy<R>,
                     first: &DeviceVec<R, InA>,
                     second: &DeviceVec<R, InB>,
                     third: &DeviceVec<R, InC>,
-                ) -> Result<Self::Storage, Error> {
+                ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
                     let len = first.len();
                     let client = policy.client();
                     let output_handle = client.empty(len * std::mem::size_of::<$out>());
@@ -1332,14 +1045,12 @@ where
     OutC: CubePrimitive + CubeElement,
     Op: UnaryOp<(InA, InB, InC), Output = (OutA, OutB, OutC)>,
 {
-    type Storage = SoA3<DeviceVec<R, OutA>, DeviceVec<R, OutB>, DeviceVec<R, OutC>>;
-
     fn run(
         policy: &crate::policy::CubePolicy<R>,
         first: &DeviceVec<R, InA>,
         second: &DeviceVec<R, InB>,
         third: &DeviceVec<R, InC>,
-    ) -> Result<Self::Storage, Error> {
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -1407,13 +1118,7 @@ where
     Op: UnaryOp<(First::Item, Second::Item, Third::Item)>,
     Op::Output: TransformSoA3Output<First::Runtime, First::Item, Second::Item, Third::Item, Op>,
 {
-    type Output = <Op::Output as TransformSoA3Output<
-        First::Runtime,
-        First::Item,
-        Second::Item,
-        Third::Item,
-        Op,
-    >>::Storage;
+    type Output = <Op::Output as StorageOutput<First::Runtime>>::Storage;
 
     fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
         SoVA::validate(&self)?;
@@ -1431,75 +1136,1330 @@ where
     }
 }
 
-macro_rules! impl_transform_input {
-    (@item_ty $field:ident) => {
-        <$field as KernelColumn>::Item
-    };
+impl<First, Second, Third, Op> TransformInput<Op> for SoA3<First, Second, Third>
+where
+    Self: SoVA<
+            Runtime = First::Runtime,
+            Item = (First::Item, Second::Item, Third::Item),
+            Scalar = First::Item,
+        >,
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Runtime: Runtime,
+    First::Item: CubePrimitive + CubeElement,
+    Second::Item: CubePrimitive + CubeElement,
+    Third::Item: CubePrimitive + CubeElement,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Third::Expr: DeviceGpuExpr<Third::Item>,
+    Op: UnaryOp<(First::Item, Second::Item, Third::Item)>,
+    Op::Output: TransformSoA3Output<First::Runtime, First::Item, Second::Item, Third::Item, Op>,
+{
+    type Output = <Op::Output as StorageOutput<First::Runtime>>::Storage;
 
-    ($name:ident < $first:ident, $( $rest:ident ),+ >) => {
-        impl<$first, $( $rest ),+, Op> TransformInput<Op> for $name<$first, $( $rest ),+>
+    fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+        SoVA::validate(&self)?;
+        let policy = self.policy().clone();
+        let first = super::device_expr_collect(&self.first)?;
+        let second = super::device_expr_collect(&self.second)?;
+        let third = super::device_expr_collect(&self.third)?;
+        <Op::Output as TransformSoA3Output<
+            First::Runtime,
+            First::Item,
+            Second::Item,
+            Third::Item,
+            Op,
+        >>::run(&policy, &first, &second, &third)
+    }
+}
+
+#[doc(hidden)]
+pub trait TransformSoA4Output<R, InA, InB, InC, InD, Op>: CubeType + StorageOutput<R>
+where
+    R: Runtime,
+    InA: CubePrimitive + CubeElement,
+    InB: CubePrimitive + CubeElement,
+    InC: CubePrimitive + CubeElement,
+    InD: CubePrimitive + CubeElement,
+    Op: UnaryOp<(InA, InB, InC, InD), Output = Self>,
+{
+    fn run(
+        policy: &crate::policy::CubePolicy<R>,
+        a: &DeviceVec<R, InA>,
+        b: &DeviceVec<R, InB>,
+        c: &DeviceVec<R, InC>,
+        d: &DeviceVec<R, InD>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+}
+
+macro_rules! impl_scalar_transform_soa4_output {
+    ($($out:ty),+ $(,)?) => {
+        $(
+            impl<R, InA, InB, InC, InD, Op> TransformSoA4Output<R, InA, InB, InC, InD, Op> for $out
+            where
+                R: Runtime,
+                InA: CubePrimitive + CubeElement,
+                InB: CubePrimitive + CubeElement,
+                InC: CubePrimitive + CubeElement,
+                InD: CubePrimitive + CubeElement,
+                Op: UnaryOp<(InA, InB, InC, InD), Output = $out>,
+            {
+                fn run(
+                    policy: &crate::policy::CubePolicy<R>,
+                    a: &DeviceVec<R, InA>,
+                    b: &DeviceVec<R, InB>,
+                    c: &DeviceVec<R, InC>,
+                    d: &DeviceVec<R, InD>,
+                ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+                    let len = a.len();
+                    let client = policy.client();
+                    let output_handle = client.empty(len * std::mem::size_of::<$out>());
+                    if len != 0 {
+                        let len_u32 = u32::try_from(len)
+                            .map_err(|_| Error::LengthTooLarge { len })?;
+                        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                        let block_size = 256_u32;
+                        let block_count = len.div_ceil(block_size as usize);
+                        let block_count_u32 = u32::try_from(block_count)
+                            .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                        unsafe {
+                            transform_tuple4_kernel::launch_unchecked::<
+                                InA, InB, InC, InD, $out, Op, R,
+                            >(
+                                client,
+                                CubeCount::Static(block_count_u32, 1, 1),
+                                CubeDim::new_1d(block_size),
+                                ArrayArg::from_raw_parts::<InA>(&a.handle, len, 1),
+                                ArrayArg::from_raw_parts::<InB>(&b.handle, len, 1),
+                                ArrayArg::from_raw_parts::<InC>(&c.handle, len, 1),
+                                ArrayArg::from_raw_parts::<InD>(&d.handle, len, 1),
+                                ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                                ArrayArg::from_raw_parts::<$out>(&output_handle, len, 1),
+                            )
+                            .map_err(|err| Error::Launch {
+                                message: format!("{err:?}"),
+                            })?;
+                        }
+                    }
+                    Ok(SoA1 {
+                        source: DeviceVec::from_handle(policy.clone(), output_handle, len),
+                    })
+                }
+            }
+        )+
+    };
+}
+
+impl_scalar_transform_soa4_output!(f32, f64, u8, u16, u32, u64, i8, i16, i32, i64, bool);
+
+impl<R, InA, InB, InC, InD, OutA, OutB, OutC, OutD, Op>
+    TransformSoA4Output<R, InA, InB, InC, InD, Op> for (OutA, OutB, OutC, OutD)
+where
+    R: Runtime,
+    InA: CubePrimitive + CubeElement,
+    InB: CubePrimitive + CubeElement,
+    InC: CubePrimitive + CubeElement,
+    InD: CubePrimitive + CubeElement,
+    OutA: CubePrimitive + CubeElement,
+    OutB: CubePrimitive + CubeElement,
+    OutC: CubePrimitive + CubeElement,
+    OutD: CubePrimitive + CubeElement,
+    Op: UnaryOp<(InA, InB, InC, InD), Output = (OutA, OutB, OutC, OutD)>,
+{
+    fn run(
+        policy: &crate::policy::CubePolicy<R>,
+        a: &DeviceVec<R, InA>,
+        b: &DeviceVec<R, InB>,
+        c: &DeviceVec<R, InC>,
+        d: &DeviceVec<R, InD>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+        let len = a.len();
+        let client = policy.client();
+        let output_a = client.empty(len * std::mem::size_of::<OutA>());
+        let output_b = client.empty(len * std::mem::size_of::<OutB>());
+        let output_c = client.empty(len * std::mem::size_of::<OutC>());
+        let output_d = client.empty(len * std::mem::size_of::<OutD>());
+        if len != 0 {
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 = u32::try_from(block_count)
+                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                transform_tuple4_to_tuple4_kernel::launch_unchecked::<
+                    InA,
+                    InB,
+                    InC,
+                    InD,
+                    OutA,
+                    OutB,
+                    OutC,
+                    OutD,
+                    Op,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    ArrayArg::from_raw_parts::<InA>(&a.handle, len, 1),
+                    ArrayArg::from_raw_parts::<InB>(&b.handle, len, 1),
+                    ArrayArg::from_raw_parts::<InC>(&c.handle, len, 1),
+                    ArrayArg::from_raw_parts::<InD>(&d.handle, len, 1),
+                    ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                    ArrayArg::from_raw_parts::<OutA>(&output_a, len, 1),
+                    ArrayArg::from_raw_parts::<OutB>(&output_b, len, 1),
+                    ArrayArg::from_raw_parts::<OutC>(&output_c, len, 1),
+                    ArrayArg::from_raw_parts::<OutD>(&output_d, len, 1),
+                )
+                .map_err(|err| Error::Launch {
+                    message: format!("{err:?}"),
+                })?;
+            }
+        }
+        Ok(SoA4 {
+            a: DeviceVec::from_handle(policy.clone(), output_a, len),
+            b: DeviceVec::from_handle(policy.clone(), output_b, len),
+            c: DeviceVec::from_handle(policy.clone(), output_c, len),
+            d: DeviceVec::from_handle(policy.clone(), output_d, len),
+        })
+    }
+}
+
+impl<A, B, C, D, Op> TransformInput<Op> for SoVA4<A, B, C, D>
+where
+    Self: SoVA<Runtime = A::Runtime, Item = (A::Item, B::Item, C::Item, D::Item), Scalar = A::Item>,
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Runtime: Runtime,
+    A::Item: CubePrimitive + CubeElement,
+    B::Item: CubePrimitive + CubeElement,
+    C::Item: CubePrimitive + CubeElement,
+    D::Item: CubePrimitive + CubeElement,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    B::Expr: DeviceGpuExpr<B::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    Op: UnaryOp<(A::Item, B::Item, C::Item, D::Item)>,
+    Op::Output: TransformSoA4Output<A::Runtime, A::Item, B::Item, C::Item, D::Item, Op>,
+{
+    type Output = <Op::Output as StorageOutput<A::Runtime>>::Storage;
+
+    fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+        SoVA::validate(&self)?;
+        let policy = self.policy().clone();
+        let a = super::device_expr_collect(&self.a)?;
+        let b = super::device_expr_collect(&self.b)?;
+        let c = super::device_expr_collect(&self.c)?;
+        let d = super::device_expr_collect(&self.d)?;
+        <Op::Output as TransformSoA4Output<A::Runtime, A::Item, B::Item, C::Item, D::Item, Op>>::run(
+            &policy, &a, &b, &c, &d,
+        )
+    }
+}
+
+impl<A, B, C, D, Op> TransformInput<Op> for SoA4<A, B, C, D>
+where
+    Self: SoVA<Runtime = A::Runtime, Item = (A::Item, B::Item, C::Item, D::Item), Scalar = A::Item>,
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Runtime: Runtime,
+    A::Item: CubePrimitive + CubeElement,
+    B::Item: CubePrimitive + CubeElement,
+    C::Item: CubePrimitive + CubeElement,
+    D::Item: CubePrimitive + CubeElement,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    B::Expr: DeviceGpuExpr<B::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    Op: UnaryOp<(A::Item, B::Item, C::Item, D::Item)>,
+    Op::Output: TransformSoA4Output<A::Runtime, A::Item, B::Item, C::Item, D::Item, Op>,
+{
+    type Output = <Op::Output as StorageOutput<A::Runtime>>::Storage;
+
+    fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+        SoVA::validate(&self)?;
+        let policy = self.policy().clone();
+        let a = super::device_expr_collect(&self.a)?;
+        let b = super::device_expr_collect(&self.b)?;
+        let c = super::device_expr_collect(&self.c)?;
+        let d = super::device_expr_collect(&self.d)?;
+        <Op::Output as TransformSoA4Output<A::Runtime, A::Item, B::Item, C::Item, D::Item, Op>>::run(
+            &policy, &a, &b, &c, &d,
+        )
+    }
+}
+
+macro_rules! define_transform_soa_output {
+    (
+        $trait_name:ident,
+        $sova_name:ident < $first:ident : $first_field:ident, $( $col:ident : $field:ident ),+ >,
+        $soa_name:ident { $first_soa_field:ident, $( $soa_field:ident ),+ },
+        $scalar_kernel:ident,
+        $tuple_kernel:ident,
+        ($first_out:ident : $first_out_handle:ident, $( $out:ident : $out_handle:ident ),+)
+    ) => {
+        #[doc(hidden)]
+        pub trait $trait_name<R, $first, $( $col ),+, Op>: CubeType + StorageOutput<R>
         where
-            Self: SoVA<Runtime = <$first as KernelColumn>::Runtime>
-                + TransformWriteInput<Op, DeviceVec<<$first as KernelColumn>::Runtime, Op::Output>>,
+            R: Runtime,
+            $first: CubePrimitive + CubeElement,
+            $( $col: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<($first, $( $col, )+), Output = Self>,
+        {
+            fn run(
+                policy: &crate::policy::CubePolicy<R>,
+                $first_field: &DeviceVec<R, $first>,
+                $( $field: &DeviceVec<R, $col>, )+
+            ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+        }
+
+        macro_rules! impl_scalar_output {
+            ($scalar:ty) => {
+                impl<R, $first, $( $col ),+, Op> $trait_name<R, $first, $( $col ),+, Op>
+                    for $scalar
+                where
+                    R: Runtime,
+                    $first: CubePrimitive + CubeElement,
+                    $( $col: CubePrimitive + CubeElement, )+
+                    Op: UnaryOp<($first, $( $col, )+), Output = $scalar>,
+                {
+                    fn run(
+                        policy: &crate::policy::CubePolicy<R>,
+                        $first_field: &DeviceVec<R, $first>,
+                        $( $field: &DeviceVec<R, $col>, )+
+                    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+                        let len = $first_field.len();
+                        let client = policy.client();
+                        let output_handle = client.empty(len * std::mem::size_of::<$scalar>());
+                        if len != 0 {
+                            let len_u32 = u32::try_from(len)
+                                .map_err(|_| Error::LengthTooLarge { len })?;
+                            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                            let block_size = 256_u32;
+                            let block_count = len.div_ceil(block_size as usize);
+                            let block_count_u32 = u32::try_from(block_count)
+                                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                            unsafe {
+                                $scalar_kernel::launch_unchecked::<
+                                    $first, $( $col, )+ $scalar, Op, R,
+                                >(
+                                    client,
+                                    CubeCount::Static(block_count_u32, 1, 1),
+                                    CubeDim::new_1d(block_size),
+                                    ArrayArg::from_raw_parts::<$first>(
+                                        &$first_field.handle,
+                                        len,
+                                        1,
+                                    ),
+                                    $(
+                                        ArrayArg::from_raw_parts::<$col>(
+                                            &$field.handle,
+                                            len,
+                                            1,
+                                        ),
+                                    )+
+                                    ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                                    ArrayArg::from_raw_parts::<$scalar>(&output_handle, len, 1),
+                                )
+                                .map_err(|err| Error::Launch {
+                                    message: format!("{err:?}"),
+                                })?;
+                            }
+                        }
+                        Ok(SoA1 {
+                            source: DeviceVec::from_handle(policy.clone(), output_handle, len),
+                        })
+                    }
+                }
+            };
+        }
+
+        impl_scalar_output!(f32);
+        impl_scalar_output!(f64);
+        impl_scalar_output!(u8);
+        impl_scalar_output!(u16);
+        impl_scalar_output!(u32);
+        impl_scalar_output!(u64);
+        impl_scalar_output!(i8);
+        impl_scalar_output!(i16);
+        impl_scalar_output!(i32);
+        impl_scalar_output!(i64);
+        impl_scalar_output!(bool);
+
+        impl<R, $first, $( $col, )+ $first_out, $( $out, )+ Op>
+            $trait_name<R, $first, $( $col ),+, Op>
+            for ($first_out, $( $out, )+)
+        where
+            R: Runtime,
+            $first: CubePrimitive + CubeElement,
+            $( $col: CubePrimitive + CubeElement, )+
+            $first_out: CubePrimitive + CubeElement,
+            $( $out: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<($first, $( $col, )+), Output = ($first_out, $( $out, )+)>,
+        {
+            fn run(
+                policy: &crate::policy::CubePolicy<R>,
+                $first_field: &DeviceVec<R, $first>,
+                $( $field: &DeviceVec<R, $col>, )+
+            ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+                let len = $first_field.len();
+                let client = policy.client();
+                let $first_out_handle = client.empty(len * std::mem::size_of::<$first_out>());
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len)
+                        .map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $tuple_kernel::launch_unchecked::<
+                            $first, $( $col, )+ $first_out, $( $out, )+ Op, R,
+                        >(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            ArrayArg::from_raw_parts::<$first>(
+                                &$first_field.handle,
+                                len,
+                                1,
+                            ),
+                            $(
+                                ArrayArg::from_raw_parts::<$col>(
+                                    &$field.handle,
+                                    len,
+                                    1,
+                                ),
+                            )+
+                            ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                            ArrayArg::from_raw_parts::<$first_out>(
+                                &$first_out_handle,
+                                len,
+                                1,
+                            ),
+                            $(
+                                ArrayArg::from_raw_parts::<$out>(
+                                    &$out_handle,
+                                    len,
+                                    1,
+                                ),
+                            )+
+                        )
+                        .map_err(|err| Error::Launch {
+                            message: format!("{err:?}"),
+                        })?;
+                    }
+                }
+                Ok($soa_name {
+                    $first_soa_field: DeviceVec::from_handle(
+                        policy.clone(),
+                        $first_out_handle,
+                        len,
+                    ),
+                    $(
+                        $soa_field: DeviceVec::from_handle(policy.clone(), $out_handle, len),
+                    )+
+                })
+            }
+        }
+
+        impl<$first, $( $col ),+, Op> TransformInput<Op>
+            for $sova_name<$first, $( $col ),+>
+        where
+            Self: SoVA<
+                Runtime = <$first as KernelColumn>::Runtime,
+                Item = (
+                    <$first as KernelColumn>::Item,
+                    $( <$col as KernelColumn>::Item, )+
+                ),
+                Scalar = <$first as KernelColumn>::Item,
+            >,
             $first: KernelColumn + KernelColumnAt<S0>,
-            $(
-                $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime>,
-            )+
+            $( $col: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
             <$first as KernelColumn>::Runtime: Runtime,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $(
-                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
-            )+
+            $( <$col as KernelColumn>::Item: CubePrimitive + CubeElement, )+
+            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
+            $( <$col as KernelColumn>::Expr: DeviceGpuExpr<<$col as KernelColumn>::Item>, )+
             Op: UnaryOp<(
-                impl_transform_input!(@item_ty $first),
-                $( impl_transform_input!(@item_ty $rest) ),+
+                <$first as KernelColumn>::Item,
+                $( <$col as KernelColumn>::Item, )+
             )>,
-            Op::Output: CubePrimitive + CubeElement,
+            Op::Output: $trait_name<
+                <$first as KernelColumn>::Runtime,
+                <$first as KernelColumn>::Item,
+                $( <$col as KernelColumn>::Item, )+
+                Op,
+            >,
         {
-            type Output = SoA1<DeviceVec<<$first as KernelColumn>::Runtime, Op::Output>>;
+            type Output =
+                <Op::Output as StorageOutput<<$first as KernelColumn>::Runtime>>::Storage;
 
             fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
-                let len = SoVA::len(&self);
-                let output_handle = self
-                    .policy()
-                    .client()
-                    .empty(len * std::mem::size_of::<Op::Output>());
-                let mut output = DeviceVec::from_handle(self.policy().clone(), output_handle, len);
-                <Self as TransformWriteInput<
+                SoVA::validate(&self)?;
+                let policy = self.policy().clone();
+                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                $(
+                    let $field = super::device_expr_collect(&self.$field)?;
+                )+
+                <Op::Output as $trait_name<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                    $( <$col as KernelColumn>::Item, )+
                     Op,
-                    DeviceVec<<$first as KernelColumn>::Runtime, Op::Output>,
-                >>::transform_write_input(self, GpuOp::<Op>::new(), &mut output)?;
-                Ok(SoA1 { source: output })
+                >>::run(&policy, &$first_field, $( &$field, )+)
+            }
+        }
+
+        impl<$first, $( $col ),+, Op> TransformInput<Op>
+            for $soa_name<$first, $( $col ),+>
+        where
+            Self: SoVA<
+                Runtime = <$first as KernelColumn>::Runtime,
+                Item = (
+                    <$first as KernelColumn>::Item,
+                    $( <$col as KernelColumn>::Item, )+
+                ),
+                Scalar = <$first as KernelColumn>::Item,
+            >,
+            $first: KernelColumn + KernelColumnAt<S0>,
+            $( $col: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
+            <$first as KernelColumn>::Runtime: Runtime,
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            $( <$col as KernelColumn>::Item: CubePrimitive + CubeElement, )+
+            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
+            $( <$col as KernelColumn>::Expr: DeviceGpuExpr<<$col as KernelColumn>::Item>, )+
+            Op: UnaryOp<(
+                <$first as KernelColumn>::Item,
+                $( <$col as KernelColumn>::Item, )+
+            )>,
+            Op::Output: $trait_name<
+                <$first as KernelColumn>::Runtime,
+                <$first as KernelColumn>::Item,
+                $( <$col as KernelColumn>::Item, )+
+                Op,
+            >,
+        {
+            type Output =
+                <Op::Output as StorageOutput<<$first as KernelColumn>::Runtime>>::Storage;
+
+            fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+                SoVA::validate(&self)?;
+                let policy = self.policy().clone();
+                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                $(
+                    let $field = super::device_expr_collect(&self.$field)?;
+                )+
+                <Op::Output as $trait_name<
+                    <$first as KernelColumn>::Runtime,
+                    <$first as KernelColumn>::Item,
+                    $( <$col as KernelColumn>::Item, )+
+                    Op,
+                >>::run(&policy, &$first_field, $( &$field, )+)
             }
         }
     };
 }
 
-impl_transform_input!(SoVA4<A, B, C, D>);
-impl_transform_input!(SoVA5<A, B, C, D, E>);
-impl_transform_input!(SoVA6<A, B, C, D, E, F>);
-impl_transform_input!(SoVA7<A, B, C, D, E, F, G>);
-impl_transform_input!(SoVA8<A, B, C, D, E, F, G, H>);
-impl_transform_input!(SoVA9<A, B, C, D, E, F, G, H, I>);
-impl_transform_input!(SoVA10<A, B, C, D, E, F, G, H, I, J>);
-impl_transform_input!(SoVA11<A, B, C, D, E, F, G, H, I, J, K>);
-impl_transform_input!(SoVA12<A, B, C, D, E, F, G, H, I, J, K, L>);
+define_transform_soa_output!(
+    TransformSoA5Output,
+    SoVA5<A: a, B: b, C: c, D: d, E: e>,
+    SoA5 { a, b, c, d, e },
+    transform_tuple5_kernel,
+    transform_tuple5_to_tuple5_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e)
+);
+define_transform_soa_output!(
+    TransformSoA6Output,
+    SoVA6<A: a, B: b, C: c, D: d, E: e, F: f>,
+    SoA6 { a, b, c, d, e, f },
+    transform_tuple6_kernel,
+    transform_tuple6_to_tuple6_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e, OutF: out_f)
+);
+define_transform_soa_output!(
+    TransformSoA7Output,
+    SoVA7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>,
+    SoA7 { a, b, c, d, e, f, g },
+    transform_tuple7_kernel,
+    transform_tuple7_to_tuple7_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e, OutF: out_f, OutG: out_g)
+);
+define_transform_soa_output!(
+    TransformSoA8Output,
+    SoVA8<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h>,
+    SoA8 { a, b, c, d, e, f, g, h },
+    transform_tuple8_kernel,
+    transform_tuple8_to_tuple8_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e, OutF: out_f, OutG: out_g, OutH: out_h)
+);
+define_transform_soa_output!(
+    TransformSoA9Output,
+    SoVA9<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i>,
+    SoA9 { a, b, c, d, e, f, g, h, i },
+    transform_tuple9_kernel,
+    transform_tuple9_to_tuple9_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e, OutF: out_f, OutG: out_g, OutH: out_h, OutI: out_i)
+);
+define_transform_soa_output!(
+    TransformSoA10Output,
+    SoVA10<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j>,
+    SoA10 { a, b, c, d, e, f, g, h, i, j },
+    transform_tuple10_kernel,
+    transform_tuple10_to_tuple10_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e, OutF: out_f, OutG: out_g, OutH: out_h, OutI: out_i, OutJ: out_j)
+);
+define_transform_soa_output!(
+    TransformSoA11Output,
+    SoVA11<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k>,
+    SoA11 { a, b, c, d, e, f, g, h, i, j, k },
+    transform_tuple11_kernel,
+    transform_tuple11_to_tuple11_kernel,
+    (OutA: out_a, OutB: out_b, OutC: out_c, OutD: out_d, OutE: out_e, OutF: out_f, OutG: out_g, OutH: out_h, OutI: out_i, OutJ: out_j, OutK: out_k)
+);
 
-/// Input accepted by [`unzip`].
 #[doc(hidden)]
-pub trait UnzipInput {
-    /// Materialized output produced by unzipping this input.
-    type Output;
-
-    /// Materializes this input.
-    fn unzip_input(self) -> Result<Self::Output, Error>;
+pub trait TransformSoA12Output<R, A, B, C, D, E, F, G, H, I, J, K, L, Op>:
+    CubeType + StorageOutput<R>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    H: CubePrimitive + CubeElement,
+    I: CubePrimitive + CubeElement,
+    J: CubePrimitive + CubeElement,
+    K: CubePrimitive + CubeElement,
+    L: CubePrimitive + CubeElement,
+    Op: UnaryOp<(A, B, C, D, E, F, G, H, I, J, K, L), Output = Self>,
+{
+    // The output value chooses its storage shape through StorageOutput; this
+    // trait only selects the kernel needed for this input arity.
+    fn run(
+        policy: &crate::policy::CubePolicy<R>,
+        a: &DeviceVec<R, A>,
+        b: &DeviceVec<R, B>,
+        c: &DeviceVec<R, C>,
+        d: &DeviceVec<R, D>,
+        e: &DeviceVec<R, E>,
+        f: &DeviceVec<R, F>,
+        g: &DeviceVec<R, G>,
+        h: &DeviceVec<R, H>,
+        i: &DeviceVec<R, I>,
+        j: &DeviceVec<R, J>,
+        k: &DeviceVec<R, K>,
+        l: &DeviceVec<R, L>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
-impl<Left, Right> UnzipInput for SoA2<Left, Right>
+macro_rules! impl_scalar_transform_soa12_output {
+    ($($out:ty),+ $(,)?) => {
+        $(
+            impl<R, A, B, C, D, E, F, G, H, I, J, K, L, Op>
+                TransformSoA12Output<R, A, B, C, D, E, F, G, H, I, J, K, L, Op> for $out
+            where
+                R: Runtime,
+                A: CubePrimitive + CubeElement,
+                B: CubePrimitive + CubeElement,
+                C: CubePrimitive + CubeElement,
+                D: CubePrimitive + CubeElement,
+                E: CubePrimitive + CubeElement,
+                F: CubePrimitive + CubeElement,
+                G: CubePrimitive + CubeElement,
+                H: CubePrimitive + CubeElement,
+                I: CubePrimitive + CubeElement,
+                J: CubePrimitive + CubeElement,
+                K: CubePrimitive + CubeElement,
+                L: CubePrimitive + CubeElement,
+                Op: UnaryOp<(A, B, C, D, E, F, G, H, I, J, K, L), Output = $out>,
+            {
+                fn run(
+                    policy: &crate::policy::CubePolicy<R>,
+                    a: &DeviceVec<R, A>,
+                    b: &DeviceVec<R, B>,
+                    c: &DeviceVec<R, C>,
+                    d: &DeviceVec<R, D>,
+                    e: &DeviceVec<R, E>,
+                    f: &DeviceVec<R, F>,
+                    g: &DeviceVec<R, G>,
+                    h: &DeviceVec<R, H>,
+                    i: &DeviceVec<R, I>,
+                    j: &DeviceVec<R, J>,
+                    k: &DeviceVec<R, K>,
+                    l: &DeviceVec<R, L>,
+                ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+                    let len = a.len();
+                    let client = policy.client();
+                    let output_handle = client.empty(len * std::mem::size_of::<$out>());
+                    if len != 0 {
+                        let len_u32 = u32::try_from(len)
+                            .map_err(|_| Error::LengthTooLarge { len })?;
+                        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                        let block_size = 256_u32;
+                        let block_count = len.div_ceil(block_size as usize);
+                        let block_count_u32 = u32::try_from(block_count)
+                            .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                        unsafe {
+                            transform_tuple12_kernel::launch_unchecked::<
+                                A, B, C, D, E, F, G, H, I, J, K, L, $out, Op, R,
+                            >(
+                                client,
+                                CubeCount::Static(block_count_u32, 1, 1),
+                                CubeDim::new_1d(block_size),
+                                ArrayArg::from_raw_parts::<A>(&a.handle, len, 1),
+                                ArrayArg::from_raw_parts::<B>(&b.handle, len, 1),
+                                ArrayArg::from_raw_parts::<C>(&c.handle, len, 1),
+                                ArrayArg::from_raw_parts::<D>(&d.handle, len, 1),
+                                ArrayArg::from_raw_parts::<E>(&e.handle, len, 1),
+                                ArrayArg::from_raw_parts::<F>(&f.handle, len, 1),
+                                ArrayArg::from_raw_parts::<G>(&g.handle, len, 1),
+                                ArrayArg::from_raw_parts::<H>(&h.handle, len, 1),
+                                ArrayArg::from_raw_parts::<I>(&i.handle, len, 1),
+                                ArrayArg::from_raw_parts::<J>(&j.handle, len, 1),
+                                ArrayArg::from_raw_parts::<K>(&k.handle, len, 1),
+                                ArrayArg::from_raw_parts::<L>(&l.handle, len, 1),
+                                ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                                ArrayArg::from_raw_parts::<$out>(&output_handle, len, 1),
+                            )
+                            .map_err(|err| Error::Launch {
+                                message: format!("{err:?}"),
+                            })?;
+                        }
+                    }
+                    Ok(SoA1 {
+                        source: DeviceVec::from_handle(policy.clone(), output_handle, len),
+                    })
+                }
+            }
+        )+
+    };
+}
+
+impl_scalar_transform_soa12_output!(f32, f64, u8, u16, u32, u64, i8, i16, i32, i64, bool);
+
+impl_transform_tuple_outputs!(
+    TransformSoA2Output<A: a, B: b>,
+    3 => transform_tuple2_to_tuple3_kernel,
+    4 => transform_tuple2_to_tuple4_kernel,
+    5 => transform_tuple2_to_tuple5_kernel,
+    6 => transform_tuple2_to_tuple6_kernel,
+    7 => transform_tuple2_to_tuple7_kernel,
+    8 => transform_tuple2_to_tuple8_kernel,
+    9 => transform_tuple2_to_tuple9_kernel,
+    10 => transform_tuple2_to_tuple10_kernel,
+    11 => transform_tuple2_to_tuple11_kernel,
+    12 => transform_tuple2_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA3Output<A: a, B: b, C: c>,
+    2 => transform_tuple3_to_tuple2_kernel,
+    4 => transform_tuple3_to_tuple4_kernel,
+    5 => transform_tuple3_to_tuple5_kernel,
+    6 => transform_tuple3_to_tuple6_kernel,
+    7 => transform_tuple3_to_tuple7_kernel,
+    8 => transform_tuple3_to_tuple8_kernel,
+    9 => transform_tuple3_to_tuple9_kernel,
+    10 => transform_tuple3_to_tuple10_kernel,
+    11 => transform_tuple3_to_tuple11_kernel,
+    12 => transform_tuple3_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    2 => transform_tuple4_to_tuple2_kernel,
+    3 => transform_tuple4_to_tuple3_kernel,
+    5 => transform_tuple4_to_tuple5_kernel,
+    6 => transform_tuple4_to_tuple6_kernel,
+    7 => transform_tuple4_to_tuple7_kernel,
+    8 => transform_tuple4_to_tuple8_kernel,
+    9 => transform_tuple4_to_tuple9_kernel,
+    10 => transform_tuple4_to_tuple10_kernel,
+    11 => transform_tuple4_to_tuple11_kernel,
+    12 => transform_tuple4_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    2 => transform_tuple5_to_tuple2_kernel,
+    3 => transform_tuple5_to_tuple3_kernel,
+    4 => transform_tuple5_to_tuple4_kernel,
+    6 => transform_tuple5_to_tuple6_kernel,
+    7 => transform_tuple5_to_tuple7_kernel,
+    8 => transform_tuple5_to_tuple8_kernel,
+    9 => transform_tuple5_to_tuple9_kernel,
+    10 => transform_tuple5_to_tuple10_kernel,
+    11 => transform_tuple5_to_tuple11_kernel,
+    12 => transform_tuple5_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    2 => transform_tuple6_to_tuple2_kernel,
+    3 => transform_tuple6_to_tuple3_kernel,
+    4 => transform_tuple6_to_tuple4_kernel,
+    5 => transform_tuple6_to_tuple5_kernel,
+    7 => transform_tuple6_to_tuple7_kernel,
+    8 => transform_tuple6_to_tuple8_kernel,
+    9 => transform_tuple6_to_tuple9_kernel,
+    10 => transform_tuple6_to_tuple10_kernel,
+    11 => transform_tuple6_to_tuple11_kernel,
+    12 => transform_tuple6_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA7Output<A: a, B: b, C: c, D: d, E: e, F: f, G: g>,
+    2 => transform_tuple7_to_tuple2_kernel,
+    3 => transform_tuple7_to_tuple3_kernel,
+    4 => transform_tuple7_to_tuple4_kernel,
+    5 => transform_tuple7_to_tuple5_kernel,
+    6 => transform_tuple7_to_tuple6_kernel,
+    8 => transform_tuple7_to_tuple8_kernel,
+    9 => transform_tuple7_to_tuple9_kernel,
+    10 => transform_tuple7_to_tuple10_kernel,
+    11 => transform_tuple7_to_tuple11_kernel,
+    12 => transform_tuple7_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA8Output<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h>,
+    2 => transform_tuple8_to_tuple2_kernel,
+    3 => transform_tuple8_to_tuple3_kernel,
+    4 => transform_tuple8_to_tuple4_kernel,
+    5 => transform_tuple8_to_tuple5_kernel,
+    6 => transform_tuple8_to_tuple6_kernel,
+    7 => transform_tuple8_to_tuple7_kernel,
+    9 => transform_tuple8_to_tuple9_kernel,
+    10 => transform_tuple8_to_tuple10_kernel,
+    11 => transform_tuple8_to_tuple11_kernel,
+    12 => transform_tuple8_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA9Output<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i>,
+    2 => transform_tuple9_to_tuple2_kernel,
+    3 => transform_tuple9_to_tuple3_kernel,
+    4 => transform_tuple9_to_tuple4_kernel,
+    5 => transform_tuple9_to_tuple5_kernel,
+    6 => transform_tuple9_to_tuple6_kernel,
+    7 => transform_tuple9_to_tuple7_kernel,
+    8 => transform_tuple9_to_tuple8_kernel,
+    10 => transform_tuple9_to_tuple10_kernel,
+    11 => transform_tuple9_to_tuple11_kernel,
+    12 => transform_tuple9_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA10Output<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j>,
+    2 => transform_tuple10_to_tuple2_kernel,
+    3 => transform_tuple10_to_tuple3_kernel,
+    4 => transform_tuple10_to_tuple4_kernel,
+    5 => transform_tuple10_to_tuple5_kernel,
+    6 => transform_tuple10_to_tuple6_kernel,
+    7 => transform_tuple10_to_tuple7_kernel,
+    8 => transform_tuple10_to_tuple8_kernel,
+    9 => transform_tuple10_to_tuple9_kernel,
+    11 => transform_tuple10_to_tuple11_kernel,
+    12 => transform_tuple10_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA11Output<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k>,
+    2 => transform_tuple11_to_tuple2_kernel,
+    3 => transform_tuple11_to_tuple3_kernel,
+    4 => transform_tuple11_to_tuple4_kernel,
+    5 => transform_tuple11_to_tuple5_kernel,
+    6 => transform_tuple11_to_tuple6_kernel,
+    7 => transform_tuple11_to_tuple7_kernel,
+    8 => transform_tuple11_to_tuple8_kernel,
+    9 => transform_tuple11_to_tuple9_kernel,
+    10 => transform_tuple11_to_tuple10_kernel,
+    12 => transform_tuple11_to_tuple12_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA12Output<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k, L: l>,
+    2 => transform_tuple12_to_tuple2_kernel,
+    3 => transform_tuple12_to_tuple3_kernel,
+    4 => transform_tuple12_to_tuple4_kernel,
+    5 => transform_tuple12_to_tuple5_kernel,
+    6 => transform_tuple12_to_tuple6_kernel,
+    7 => transform_tuple12_to_tuple7_kernel,
+    8 => transform_tuple12_to_tuple8_kernel,
+    9 => transform_tuple12_to_tuple9_kernel,
+    10 => transform_tuple12_to_tuple10_kernel,
+    11 => transform_tuple12_to_tuple11_kernel,
+);
+
+impl<
+    R,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    OutA,
+    OutB,
+    OutC,
+    OutD,
+    OutE,
+    OutF,
+    OutG,
+    OutH,
+    OutI,
+    OutJ,
+    OutK,
+    OutL,
+    Op,
+> TransformSoA12Output<R, A, B, C, D, E, F, G, H, I, J, K, L, Op>
+    for (
+        OutA,
+        OutB,
+        OutC,
+        OutD,
+        OutE,
+        OutF,
+        OutG,
+        OutH,
+        OutI,
+        OutJ,
+        OutK,
+        OutL,
+    )
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    H: CubePrimitive + CubeElement,
+    I: CubePrimitive + CubeElement,
+    J: CubePrimitive + CubeElement,
+    K: CubePrimitive + CubeElement,
+    L: CubePrimitive + CubeElement,
+    OutA: CubePrimitive + CubeElement,
+    OutB: CubePrimitive + CubeElement,
+    OutC: CubePrimitive + CubeElement,
+    OutD: CubePrimitive + CubeElement,
+    OutE: CubePrimitive + CubeElement,
+    OutF: CubePrimitive + CubeElement,
+    OutG: CubePrimitive + CubeElement,
+    OutH: CubePrimitive + CubeElement,
+    OutI: CubePrimitive + CubeElement,
+    OutJ: CubePrimitive + CubeElement,
+    OutK: CubePrimitive + CubeElement,
+    OutL: CubePrimitive + CubeElement,
+    Op: UnaryOp<
+            (A, B, C, D, E, F, G, H, I, J, K, L),
+            Output = (
+                OutA,
+                OutB,
+                OutC,
+                OutD,
+                OutE,
+                OutF,
+                OutG,
+                OutH,
+                OutI,
+                OutJ,
+                OutK,
+                OutL,
+            ),
+        >,
+{
+    fn run(
+        policy: &crate::policy::CubePolicy<R>,
+        a: &DeviceVec<R, A>,
+        b: &DeviceVec<R, B>,
+        c: &DeviceVec<R, C>,
+        d: &DeviceVec<R, D>,
+        e: &DeviceVec<R, E>,
+        f: &DeviceVec<R, F>,
+        g: &DeviceVec<R, G>,
+        h: &DeviceVec<R, H>,
+        i: &DeviceVec<R, I>,
+        j: &DeviceVec<R, J>,
+        k: &DeviceVec<R, K>,
+        l: &DeviceVec<R, L>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+        let len = a.len();
+        let client = policy.client();
+        let out_a = client.empty(len * std::mem::size_of::<OutA>());
+        let out_b = client.empty(len * std::mem::size_of::<OutB>());
+        let out_c = client.empty(len * std::mem::size_of::<OutC>());
+        let out_d = client.empty(len * std::mem::size_of::<OutD>());
+        let out_e = client.empty(len * std::mem::size_of::<OutE>());
+        let out_f = client.empty(len * std::mem::size_of::<OutF>());
+        let out_g = client.empty(len * std::mem::size_of::<OutG>());
+        let out_h = client.empty(len * std::mem::size_of::<OutH>());
+        let out_i = client.empty(len * std::mem::size_of::<OutI>());
+        let out_j = client.empty(len * std::mem::size_of::<OutJ>());
+        let out_k = client.empty(len * std::mem::size_of::<OutK>());
+        let out_l = client.empty(len * std::mem::size_of::<OutL>());
+        if len != 0 {
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 = u32::try_from(block_count)
+                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                transform_tuple12_to_tuple12_kernel::launch_unchecked::<
+                    A,
+                    B,
+                    C,
+                    D,
+                    E,
+                    F,
+                    G,
+                    H,
+                    I,
+                    J,
+                    K,
+                    L,
+                    OutA,
+                    OutB,
+                    OutC,
+                    OutD,
+                    OutE,
+                    OutF,
+                    OutG,
+                    OutH,
+                    OutI,
+                    OutJ,
+                    OutK,
+                    OutL,
+                    Op,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    ArrayArg::from_raw_parts::<A>(&a.handle, len, 1),
+                    ArrayArg::from_raw_parts::<B>(&b.handle, len, 1),
+                    ArrayArg::from_raw_parts::<C>(&c.handle, len, 1),
+                    ArrayArg::from_raw_parts::<D>(&d.handle, len, 1),
+                    ArrayArg::from_raw_parts::<E>(&e.handle, len, 1),
+                    ArrayArg::from_raw_parts::<F>(&f.handle, len, 1),
+                    ArrayArg::from_raw_parts::<G>(&g.handle, len, 1),
+                    ArrayArg::from_raw_parts::<H>(&h.handle, len, 1),
+                    ArrayArg::from_raw_parts::<I>(&i.handle, len, 1),
+                    ArrayArg::from_raw_parts::<J>(&j.handle, len, 1),
+                    ArrayArg::from_raw_parts::<K>(&k.handle, len, 1),
+                    ArrayArg::from_raw_parts::<L>(&l.handle, len, 1),
+                    ArrayArg::from_raw_parts::<u32>(&len_handle, 1, 1),
+                    ArrayArg::from_raw_parts::<OutA>(&out_a, len, 1),
+                    ArrayArg::from_raw_parts::<OutB>(&out_b, len, 1),
+                    ArrayArg::from_raw_parts::<OutC>(&out_c, len, 1),
+                    ArrayArg::from_raw_parts::<OutD>(&out_d, len, 1),
+                    ArrayArg::from_raw_parts::<OutE>(&out_e, len, 1),
+                    ArrayArg::from_raw_parts::<OutF>(&out_f, len, 1),
+                    ArrayArg::from_raw_parts::<OutG>(&out_g, len, 1),
+                    ArrayArg::from_raw_parts::<OutH>(&out_h, len, 1),
+                    ArrayArg::from_raw_parts::<OutI>(&out_i, len, 1),
+                    ArrayArg::from_raw_parts::<OutJ>(&out_j, len, 1),
+                    ArrayArg::from_raw_parts::<OutK>(&out_k, len, 1),
+                    ArrayArg::from_raw_parts::<OutL>(&out_l, len, 1),
+                )
+                .map_err(|err| Error::Launch {
+                    message: format!("{err:?}"),
+                })?;
+            }
+        }
+        Ok(SoA12 {
+            a: DeviceVec::from_handle(policy.clone(), out_a, len),
+            b: DeviceVec::from_handle(policy.clone(), out_b, len),
+            c: DeviceVec::from_handle(policy.clone(), out_c, len),
+            d: DeviceVec::from_handle(policy.clone(), out_d, len),
+            e: DeviceVec::from_handle(policy.clone(), out_e, len),
+            f: DeviceVec::from_handle(policy.clone(), out_f, len),
+            g: DeviceVec::from_handle(policy.clone(), out_g, len),
+            h: DeviceVec::from_handle(policy.clone(), out_h, len),
+            i: DeviceVec::from_handle(policy.clone(), out_i, len),
+            j: DeviceVec::from_handle(policy.clone(), out_j, len),
+            k: DeviceVec::from_handle(policy.clone(), out_k, len),
+            l: DeviceVec::from_handle(policy.clone(), out_l, len),
+        })
+    }
+}
+
+impl<A, B, C, D, E, F, G, H, I, J, K, L, Op> TransformInput<Op>
+    for SoVA12<A, B, C, D, E, F, G, H, I, J, K, L>
+where
+    Self: SoVA<
+            Runtime = A::Runtime,
+            Item = (
+                A::Item,
+                B::Item,
+                C::Item,
+                D::Item,
+                E::Item,
+                F::Item,
+                G::Item,
+                H::Item,
+                I::Item,
+                J::Item,
+                K::Item,
+                L::Item,
+            ),
+            Scalar = A::Item,
+        >,
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    H: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    I: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    J: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    K: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    L: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: CubePrimitive + CubeElement,
+    B::Item: CubePrimitive + CubeElement,
+    C::Item: CubePrimitive + CubeElement,
+    D::Item: CubePrimitive + CubeElement,
+    E::Item: CubePrimitive + CubeElement,
+    F::Item: CubePrimitive + CubeElement,
+    G::Item: CubePrimitive + CubeElement,
+    H::Item: CubePrimitive + CubeElement,
+    I::Item: CubePrimitive + CubeElement,
+    J::Item: CubePrimitive + CubeElement,
+    K::Item: CubePrimitive + CubeElement,
+    L::Item: CubePrimitive + CubeElement,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    B::Expr: DeviceGpuExpr<B::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    E::Expr: DeviceGpuExpr<E::Item>,
+    F::Expr: DeviceGpuExpr<F::Item>,
+    G::Expr: DeviceGpuExpr<G::Item>,
+    H::Expr: DeviceGpuExpr<H::Item>,
+    I::Expr: DeviceGpuExpr<I::Item>,
+    J::Expr: DeviceGpuExpr<J::Item>,
+    K::Expr: DeviceGpuExpr<K::Item>,
+    L::Expr: DeviceGpuExpr<L::Item>,
+    Op: UnaryOp<(
+        A::Item,
+        B::Item,
+        C::Item,
+        D::Item,
+        E::Item,
+        F::Item,
+        G::Item,
+        H::Item,
+        I::Item,
+        J::Item,
+        K::Item,
+        L::Item,
+    )>,
+    Op::Output: TransformSoA12Output<
+            A::Runtime,
+            A::Item,
+            B::Item,
+            C::Item,
+            D::Item,
+            E::Item,
+            F::Item,
+            G::Item,
+            H::Item,
+            I::Item,
+            J::Item,
+            K::Item,
+            L::Item,
+            Op,
+        >,
+{
+    type Output = <Op::Output as StorageOutput<A::Runtime>>::Storage;
+
+    fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+        SoVA::validate(&self)?;
+        let policy = self.policy().clone();
+        let a = super::device_expr_collect(&self.a)?;
+        let b = super::device_expr_collect(&self.b)?;
+        let c = super::device_expr_collect(&self.c)?;
+        let d = super::device_expr_collect(&self.d)?;
+        let e = super::device_expr_collect(&self.e)?;
+        let f = super::device_expr_collect(&self.f)?;
+        let g = super::device_expr_collect(&self.g)?;
+        let h = super::device_expr_collect(&self.h)?;
+        let i = super::device_expr_collect(&self.i)?;
+        let j = super::device_expr_collect(&self.j)?;
+        let k = super::device_expr_collect(&self.k)?;
+        let l = super::device_expr_collect(&self.l)?;
+        <Op::Output as TransformSoA12Output<
+            A::Runtime,
+            A::Item,
+            B::Item,
+            C::Item,
+            D::Item,
+            E::Item,
+            F::Item,
+            G::Item,
+            H::Item,
+            I::Item,
+            J::Item,
+            K::Item,
+            L::Item,
+            Op,
+        >>::run(&policy, &a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l)
+    }
+}
+
+impl<A, B, C, D, E, F, G, H, I, J, K, L, Op> TransformInput<Op>
+    for SoA12<A, B, C, D, E, F, G, H, I, J, K, L>
+where
+    Self: SoVA<
+            Runtime = A::Runtime,
+            Item = (
+                A::Item,
+                B::Item,
+                C::Item,
+                D::Item,
+                E::Item,
+                F::Item,
+                G::Item,
+                H::Item,
+                I::Item,
+                J::Item,
+                K::Item,
+                L::Item,
+            ),
+            Scalar = A::Item,
+        >,
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    H: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    I: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    J: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    K: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    L: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: CubePrimitive + CubeElement,
+    B::Item: CubePrimitive + CubeElement,
+    C::Item: CubePrimitive + CubeElement,
+    D::Item: CubePrimitive + CubeElement,
+    E::Item: CubePrimitive + CubeElement,
+    F::Item: CubePrimitive + CubeElement,
+    G::Item: CubePrimitive + CubeElement,
+    H::Item: CubePrimitive + CubeElement,
+    I::Item: CubePrimitive + CubeElement,
+    J::Item: CubePrimitive + CubeElement,
+    K::Item: CubePrimitive + CubeElement,
+    L::Item: CubePrimitive + CubeElement,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    B::Expr: DeviceGpuExpr<B::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    E::Expr: DeviceGpuExpr<E::Item>,
+    F::Expr: DeviceGpuExpr<F::Item>,
+    G::Expr: DeviceGpuExpr<G::Item>,
+    H::Expr: DeviceGpuExpr<H::Item>,
+    I::Expr: DeviceGpuExpr<I::Item>,
+    J::Expr: DeviceGpuExpr<J::Item>,
+    K::Expr: DeviceGpuExpr<K::Item>,
+    L::Expr: DeviceGpuExpr<L::Item>,
+    Op: UnaryOp<(
+        A::Item,
+        B::Item,
+        C::Item,
+        D::Item,
+        E::Item,
+        F::Item,
+        G::Item,
+        H::Item,
+        I::Item,
+        J::Item,
+        K::Item,
+        L::Item,
+    )>,
+    Op::Output: TransformSoA12Output<
+            A::Runtime,
+            A::Item,
+            B::Item,
+            C::Item,
+            D::Item,
+            E::Item,
+            F::Item,
+            G::Item,
+            H::Item,
+            I::Item,
+            J::Item,
+            K::Item,
+            L::Item,
+            Op,
+        >,
+{
+    type Output = <Op::Output as StorageOutput<A::Runtime>>::Storage;
+
+    fn transform_input(self, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+        SoVA::validate(&self)?;
+        let policy = self.policy().clone();
+        let a = super::device_expr_collect(&self.a)?;
+        let b = super::device_expr_collect(&self.b)?;
+        let c = super::device_expr_collect(&self.c)?;
+        let d = super::device_expr_collect(&self.d)?;
+        let e = super::device_expr_collect(&self.e)?;
+        let f = super::device_expr_collect(&self.f)?;
+        let g = super::device_expr_collect(&self.g)?;
+        let h = super::device_expr_collect(&self.h)?;
+        let i = super::device_expr_collect(&self.i)?;
+        let j = super::device_expr_collect(&self.j)?;
+        let k = super::device_expr_collect(&self.k)?;
+        let l = super::device_expr_collect(&self.l)?;
+        <Op::Output as TransformSoA12Output<
+            A::Runtime,
+            A::Item,
+            B::Item,
+            C::Item,
+            D::Item,
+            E::Item,
+            F::Item,
+            G::Item,
+            H::Item,
+            I::Item,
+            J::Item,
+            K::Item,
+            L::Item,
+            Op,
+        >>::run(&policy, &a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l)
+    }
+}
+
+/// Internal output that can be materialized into public owned device values.
+#[doc(hidden)]
+pub trait MaterializeOutput {
+    /// Public output produced by materializing this internal output.
+    type Output;
+
+    /// Materializes this internal output.
+    fn materialize_output(self) -> Result<Self::Output, Error>;
+}
+
+impl<Left, Right> MaterializeOutput for SoA2<Left, Right>
 where
     Self: SoA<Item = (Left::Item, Right::Item), Scalar = Left::Item>,
-    Left: OwnedKernelColumn + KernelColumnAt<S0>,
-    Right: OwnedKernelColumn<Runtime = Left::Runtime>
+    Left: StorageKernelColumn + KernelColumnAt<S0>,
+    Right: StorageKernelColumn<Runtime = Left::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
     Left::Item: CubePrimitive + CubeElement,
@@ -1512,7 +2472,7 @@ where
         DeviceVec<Left::Runtime, Right::Item>,
     );
 
-    fn unzip_input(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         let left = super::device_expr_collect(&self.left)?;
         let right = super::device_expr_collect(&self.right)?;
@@ -1520,42 +2480,42 @@ where
     }
 }
 
-impl<Source> UnzipInput for SoA1<Source>
+impl<Source> MaterializeOutput for SoA1<Source>
 where
     Self: SoA<Item = Source::Item, Scalar = Source::Item>,
-    Source: OwnedKernelColumn + KernelColumnAt<S0>,
+    Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
     type Output = DeviceVec<Source::Runtime, Source::Item>;
 
-    fn unzip_input(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         let source = super::device_expr_collect(&self.source)?;
         Ok(source)
     }
 }
 
-impl<R, T> UnzipInput for DeviceVec<R, T>
+impl<R, T> MaterializeOutput for DeviceVec<R, T>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
     type Output = Self;
 
-    fn unzip_input(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self) -> Result<Self::Output, Error> {
         Ok(self)
     }
 }
 
-impl<First, Second, Third> UnzipInput for SoA3<First, Second, Third>
+impl<First, Second, Third> MaterializeOutput for SoA3<First, Second, Third>
 where
     Self: SoA<Item = (First::Item, Second::Item, Third::Item), Scalar = First::Item>,
-    First: OwnedKernelColumn + KernelColumnAt<S0>,
-    Second: OwnedKernelColumn<Runtime = First::Runtime>
+    First: StorageKernelColumn + KernelColumnAt<S0>,
+    Second: StorageKernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<First as KernelColumnAt<S0>>::Next>,
-    Third: OwnedKernelColumn<Runtime = First::Runtime>
+    Third: StorageKernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
     First::Item: CubePrimitive + CubeElement,
@@ -1571,7 +2531,7 @@ where
         DeviceVec<First::Runtime, Third::Item>,
     );
 
-    fn unzip_input(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         let first = super::device_expr_collect(&self.first)?;
         let second = super::device_expr_collect(&self.second)?;
@@ -1580,14 +2540,14 @@ where
     }
 }
 
-macro_rules! impl_zip_unzip_input {
+macro_rules! impl_materialize_output {
     ($name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+> UnzipInput for $name<$first, $( $rest ),+>
+        impl<$first, $( $rest ),+> MaterializeOutput for $name<$first, $( $rest ),+>
         where
             Self: SoA,
-            $first: OwnedKernelColumn + KernelColumnAt<S0>,
+            $first: StorageKernelColumn + KernelColumnAt<S0>,
             $(
-                $rest: OwnedKernelColumn<Runtime = <$first as KernelColumn>::Runtime>
+                $rest: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
@@ -1604,7 +2564,7 @@ macro_rules! impl_zip_unzip_input {
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             );
 
-            fn unzip_input(self) -> Result<Self::Output, Error> {
+            fn materialize_output(self) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
                 let $first_field = super::device_expr_collect(&self.$first_field)?;
                 $(
@@ -1616,41 +2576,49 @@ macro_rules! impl_zip_unzip_input {
     };
 }
 
-impl_zip_unzip_input!(SoA4<A, B, C, D> { a, b, c, d });
-impl_zip_unzip_input!(SoA5<A, B, C, D, E> { a, b, c, d, e });
-impl_zip_unzip_input!(SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
-impl_zip_unzip_input!(SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
-impl_zip_unzip_input!(SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
-impl_zip_unzip_input!(SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
-impl_zip_unzip_input!(SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
-impl_zip_unzip_input!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
-impl_zip_unzip_input!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
+impl_materialize_output!(SoA4<A, B, C, D> { a, b, c, d });
+impl_materialize_output!(SoA5<A, B, C, D, E> { a, b, c, d, e });
+impl_materialize_output!(SoA6<A, B, C, D, E, F> { a, b, c, d, e, f });
+impl_materialize_output!(SoA7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g });
+impl_materialize_output!(SoA8<A, B, C, D, E, F, G, H> { a, b, c, d, e, f, g, h });
+impl_materialize_output!(SoA9<A, B, C, D, E, F, G, H, I> { a, b, c, d, e, f, g, h, i });
+impl_materialize_output!(SoA10<A, B, C, D, E, F, G, H, I, J> { a, b, c, d, e, f, g, h, i, j });
+impl_materialize_output!(SoA11<A, B, C, D, E, F, G, H, I, J, K> { a, b, c, d, e, f, g, h, i, j, k });
+impl_materialize_output!(SoA12<A, B, C, D, E, F, G, H, I, J, K, L> { a, b, c, d, e, f, g, h, i, j, k, l });
 
-/// Recovers owned device columns from an owned SoA.
-///
-/// `unzip` consumes owned SoA storage created by [`zip`], returned by
-/// algorithms, or represented by a one-column [`DeviceVec`](crate::DeviceVec).
-/// It does not accept read-only [`vzip`] outputs, because that would hide a
-/// materializing copy behind an ownership-recovery name.
-pub fn unzip<Source>(source: Source) -> Result<<Source as UnzipInput>::Output, Error>
+impl<Left, Right> MaterializeOutput for (Left, Right)
 where
-    Source: UnzipInput,
+    Left: MaterializeOutput,
+    Right: MaterializeOutput,
 {
-    source.unzip_input()
+    type Output = (Left::Output, Right::Output);
+
+    fn materialize_output(self) -> Result<Self::Output, Error> {
+        Ok((self.0.materialize_output()?, self.1.materialize_output()?))
+    }
+}
+
+pub(crate) fn materialize<Source>(
+    source: Source,
+) -> Result<<Source as MaterializeOutput>::Output, Error>
+where
+    Source: MaterializeOutput,
+{
+    source.materialize_output()
 }
 
 /// Applies a read-only transform and returns owned device storage.
 ///
-/// The input may be a borrowed [`DeviceVec`](crate::DeviceVec) or a read-only
-/// SoVA built with [`vzip`]. The returned value is owned SoA storage, so call
-/// [`unzip`] to recover the output [`DeviceVec`](crate::DeviceVec) column or
-/// columns.
+/// The input may be a borrowed [`DeviceVec`](crate::DeviceVec) or an SoA built
+/// with [`zip`]. The returned value is owned device storage: `DeviceVec` for one
+/// column or a tuple of `DeviceVec`s for multiple columns.
 pub fn transform<Source, Op>(
     source: Source,
     _op: Op,
-) -> Result<<Source as TransformInput<Op>>::Output, Error>
+) -> Result<<<Source as TransformInput<Op>>::Output as MaterializeOutput>::Output, Error>
 where
     Source: TransformInput<Op>,
+    <Source as TransformInput<Op>>::Output: MaterializeOutput,
 {
-    source.transform_input(GpuOp::<Op>::new())
+    materialize(source.transform_input(GpuOp::<Op>::new())?)
 }

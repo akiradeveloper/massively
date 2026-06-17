@@ -22,6 +22,22 @@ pub(crate) fn copy_kernel<T: CubePrimitive>(input: &Array<T>, output: &mut Array
 }
 
 #[cube(launch_unchecked)]
+pub(crate) fn concat_kernel<T: CubePrimitive>(
+    left: &Array<T>,
+    right: &Array<T>,
+    output: &mut Array<T>,
+) {
+    let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    if unit < output.len() {
+        if unit < left.len() {
+            output[unit] = left[unit];
+        } else {
+            output[unit] = right[unit - left.len()];
+        }
+    }
+}
+
+#[cube(launch_unchecked)]
 pub(crate) fn indices_u32_kernel(output: &mut Array<u32>) {
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {

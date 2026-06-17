@@ -1,6 +1,6 @@
 mod common;
 
-use massively::{CubeWgpu, scatter_if, unzip};
+use massively::{CubeWgpu, scatter_if};
 
 fn main() -> common::Result {
     let policy = CubeWgpu::cpu();
@@ -9,13 +9,7 @@ fn main() -> common::Result {
     let stencil = policy.to_device(&[1.0_f32, -1.0, 1.0])?;
     let initial = policy.device_filled(3, 0.0_f32)?;
 
-    let output = unzip(scatter_if(
-        &values,
-        &indices,
-        &stencil,
-        initial,
-        common::Positive,
-    )?)?;
+    let output = scatter_if(&values, &indices, &stencil, initial, common::Positive)?;
 
     assert_eq!(output.to_vec()?, vec![0.0, 30.0, 10.0]);
     Ok(())
