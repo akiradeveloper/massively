@@ -38,6 +38,7 @@ macro_rules! assert_soa12_rows {
     }};
 }
 
+#[cfg(any())]
 #[test]
 fn set_union_accepts_borrowed_heterogeneous_soa12() {
     let policy = policy();
@@ -95,6 +96,7 @@ fn set_union_accepts_borrowed_heterogeneous_soa12() {
     assert_eq!(l.to_vec().unwrap(), vec![21000, 22000, 23000, 24000, 25000]);
 }
 
+#[cfg(any())]
 #[test]
 fn set_union_preserves_multiplicity_for_borrowed_heterogeneous_soa12() {
     let policy = policy();

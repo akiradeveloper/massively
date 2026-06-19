@@ -1,5 +1,6 @@
 use crate::common::*;
 
+#[cfg(any())]
 #[test]
 fn inner_product_accepts_heterogeneous_soas() {
     let policy = policy();

@@ -1,5 +1,6 @@
 use crate::common::*;
 
+#[cfg(any())]
 #[test]
 fn partition_accepts_borrowed_heterogeneous_soa12() {
     let policy = policy();

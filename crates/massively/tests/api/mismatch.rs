@@ -1,7 +1,7 @@
 use crate::common::*;
 
 #[test]
-fn mismatch_accepts_borrowed_heterogeneous_soa12() {
+fn mismatch_accepts_borrowed_tuple_columns() {
     let policy = policy();
     let a = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
@@ -9,7 +9,7 @@ fn mismatch_accepts_borrowed_heterogeneous_soa12() {
     let d = policy.to_device(&[10_u32, 20, 40]).unwrap();
 
     assert_eq!(
-        mismatch(zip(&a, &b), zip(&c, &d), MixedTupleEqual).unwrap(),
+        mismatch((&a, &b), (&c, &d), MixedTupleEqual).unwrap(),
         Some(2)
     );
 }

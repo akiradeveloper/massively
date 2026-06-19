@@ -1,5 +1,6 @@
 #![allow(dead_code, unused_imports)]
 
+pub(crate) use cubecl::prelude::*;
 pub(crate) use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
 pub(crate) use massively::{
     CubeWgpu, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
@@ -8,8 +9,7 @@ pub(crate) use massively::{
     is_sorted_until, lexicographical_compare, lower_bound, max_element, merge_by_key, min_element,
     minmax_element, mismatch, partition, reduce, reduce_by_key, remove_if, replace_if, reverse,
     scatter, scatter_if, set_difference, set_intersection, set_union, sort, sort_by_key, transform,
-    unique, unique_by_key, upper_bound, zip, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10,
-    zip11, zip12,
+    unique, unique_by_key, upper_bound, zip, zip3,
 };
 
 pub(crate) fn policy() -> CubeWgpu {
@@ -29,6 +29,29 @@ impl BinaryOp<f32> for Sum {
 impl BinaryOp<u32> for Sum {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         lhs + rhs
+    }
+}
+
+pub(crate) struct TupleSum;
+
+#[cubecl::cube]
+impl BinaryOp<(f32,)> for TupleSum {
+    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
+        (lhs.0 + rhs.0,)
+    }
+}
+
+#[cubecl::cube]
+impl BinaryOp<(f32, u32)> for TupleSum {
+    fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> (f32, u32) {
+        (lhs.0 + rhs.0, lhs.1 + rhs.1)
+    }
+}
+
+#[cubecl::cube]
+impl BinaryOp<(f32, u32, f32)> for TupleSum {
+    fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> (f32, u32, f32) {
+        (lhs.0 + rhs.0, lhs.1 + rhs.1, lhs.2 + rhs.2)
     }
 }
 
@@ -208,27 +231,27 @@ impl BinaryPredicateOp<(f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u
 pub(crate) struct Double;
 
 #[cubecl::cube]
-impl UnaryOp<f32> for Double {
-    type Output = f32;
+impl UnaryOp<(f32,)> for Double {
+    type Output = (f32,);
 
-    fn apply(input: f32) -> f32 {
-        input * 2.0
+    fn apply(input: (f32,)) -> (f32,) {
+        (input.0 * 2.0,)
     }
 }
 
 pub(crate) struct ScalarToTuple5Mixed;
 
 #[cubecl::cube]
-impl UnaryOp<f32> for ScalarToTuple5Mixed {
+impl UnaryOp<(f32,)> for ScalarToTuple5Mixed {
     type Output = (f32, u32, f32, u32, f32);
 
-    fn apply(input: f32) -> (f32, u32, f32, u32, f32) {
+    fn apply(input: (f32,)) -> (f32, u32, f32, u32, f32) {
         (
-            input + 1.0,
-            input as u32 + 2,
-            input + 3.0,
-            input as u32 + 4,
-            input + 5.0,
+            input.0 + 1.0,
+            input.0 as u32 + 2,
+            input.0 + 3.0,
+            input.0 as u32 + 4,
+            input.0 + 5.0,
         )
     }
 }
@@ -236,23 +259,23 @@ impl UnaryOp<f32> for ScalarToTuple5Mixed {
 pub(crate) struct ScalarToTuple12Mixed;
 
 #[cubecl::cube]
-impl UnaryOp<u32> for ScalarToTuple12Mixed {
+impl UnaryOp<(u32,)> for ScalarToTuple12Mixed {
     type Output = (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32);
 
-    fn apply(input: u32) -> (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32) {
+    fn apply(input: (u32,)) -> (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32) {
         (
-            input as f32 + 1.0,
-            input + 2,
-            input as f32 + 3.0,
-            input + 4,
-            input as f32 + 5.0,
-            input + 6,
-            input as f32 + 7.0,
-            input + 8,
-            input as f32 + 9.0,
-            input + 10,
-            input as f32 + 11.0,
-            input + 12,
+            input.0 as f32 + 1.0,
+            input.0 + 2,
+            input.0 as f32 + 3.0,
+            input.0 + 4,
+            input.0 as f32 + 5.0,
+            input.0 + 6,
+            input.0 as f32 + 7.0,
+            input.0 + 8,
+            input.0 as f32 + 9.0,
+            input.0 + 10,
+            input.0 as f32 + 11.0,
+            input.0 + 12,
         )
     }
 }
@@ -275,12 +298,26 @@ impl PredicateOp<f32> for F32GreaterThanOne {
     }
 }
 
+#[cubecl::cube]
+impl PredicateOp<(f32,)> for F32GreaterThanOne {
+    fn apply(input: (f32,)) -> bool {
+        input.0 > 1.0
+    }
+}
+
 pub(crate) struct NonZero;
 
 #[cubecl::cube]
 impl PredicateOp<u32> for NonZero {
     fn apply(input: u32) -> bool {
         input != 0
+    }
+}
+
+#[cubecl::cube]
+impl PredicateOp<(u32,)> for NonZero {
+    fn apply(input: (u32,)) -> bool {
+        input.0 != 0
     }
 }
 
@@ -297,6 +334,13 @@ pub(crate) struct U32IsTwenty;
 impl PredicateOp<u32> for U32IsTwenty {
     fn apply(input: u32) -> bool {
         input == 20
+    }
+}
+
+#[cubecl::cube]
+impl PredicateOp<(u32,)> for U32IsTwenty {
+    fn apply(input: (u32,)) -> bool {
+        input.0 == 20
     }
 }
 
@@ -590,10 +634,10 @@ pub(crate) struct Tuple12MixedChecksum;
 impl UnaryOp<(f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedChecksum
 {
-    type Output = f32;
+    type Output = (f32,);
 
-    fn apply(input: (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)) -> f32 {
-        input.0
+    fn apply(input: (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)) -> (f32,) {
+        (input.0
             + input.1 as f32
             + input.2
             + input.3 as f32
@@ -604,7 +648,7 @@ impl UnaryOp<(f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
             + input.8
             + input.9 as f32
             + input.10
-            + input.11 as f32
+            + input.11 as f32,)
     }
 }
 

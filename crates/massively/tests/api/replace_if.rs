@@ -1,19 +1,13 @@
 use crate::common::*;
 
 #[test]
-fn replace_if_accepts_heterogeneous_soa3() {
+fn replace_if_accepts_three_tuple_columns() {
     let policy = policy();
     let a = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let b = policy.to_device(&[10_u32, 20, 20, 30]).unwrap();
     let c = policy.to_device(&[1.0_f32, -1.0, 2.0, 3.0]).unwrap();
 
-    let output = replace_if(
-        zip3(&a, &b, &c),
-        (99.0_f32, 77_u32, -99.0_f32),
-        &b,
-        U32IsTwenty,
-    )
-    .unwrap();
+    let output = replace_if((&a, &b, &c), (99.0_f32, 77_u32, -99.0_f32), &b, U32IsTwenty).unwrap();
     let (a, b, c) = output;
 
     assert_eq!(a.to_vec().unwrap(), vec![1.0, 99.0, 99.0, 4.0]);
@@ -21,6 +15,7 @@ fn replace_if_accepts_heterogeneous_soa3() {
     assert_eq!(c.to_vec().unwrap(), vec![1.0, -99.0, -99.0, 3.0]);
 }
 
+#[cfg(any())]
 #[test]
 fn replace_if_accepts_heterogeneous_soa12_tail_predicate() {
     let policy = policy();

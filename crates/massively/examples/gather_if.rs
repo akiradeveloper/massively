@@ -8,7 +8,7 @@ fn main() -> common::Result {
     let indices = policy.to_device(&[2_u32, 0, 1])?;
     let stencil = policy.to_device(&[30.0_f32, 10.0, -20.0])?;
 
-    let output = gather_if(&values, &indices, &stencil, common::Positive)?;
+    let (output,) = gather_if(&values, &indices, &stencil, common::Positive)?;
 
     assert_eq!(output.to_vec()?, vec![30.0, 10.0, 0.0]);
     Ok(())

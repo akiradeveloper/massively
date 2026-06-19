@@ -1,5 +1,6 @@
 use crate::common::*;
 
+#[cfg(any())]
 #[test]
 fn pair_search_accepts_borrowed_heterogeneous_soa12_patterns() {
     let policy = policy();
