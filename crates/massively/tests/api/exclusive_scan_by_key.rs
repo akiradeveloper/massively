@@ -8,7 +8,8 @@ fn exclusive_scan_by_key_accepts_tuple_keys() {
     let values = policy.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
 
     let output =
-        exclusive_scan_by_key(zip(&key_a, &key_b), &values, MixedTupleEqual, 0_u32, Sum).unwrap();
+        exclusive_scan_by_key((&key_a, &key_b), &values, MixedTupleEqual, (0_u32,), Sum).unwrap();
+    let (output,) = output;
     assert_eq!(output.to_vec().unwrap(), vec![0, 1, 0, 3, 0]);
 }
 
@@ -21,7 +22,7 @@ fn exclusive_scan_by_key_uses_supplied_key_equality() {
 
     let output = exclusive_scan_by_key(
         &keys,
-        zip(&values, &ids),
+        (&values, &ids),
         NeverEqualU32,
         (100.0_f32, 1000_u32),
         Sum,

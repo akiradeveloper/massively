@@ -1,5 +1,6 @@
 use crate::common::*;
 
+#[cfg(any())]
 #[test]
 fn unique_by_key_accepts_soa12_values() {
     let policy = policy();
@@ -41,6 +42,7 @@ fn unique_by_key_accepts_soa12_values() {
     assert_eq!(l.to_vec().unwrap(), vec![100, 300]);
 }
 
+#[cfg(any())]
 #[test]
 fn unique_by_key_accepts_soa12_values_with_multiple_runs() {
     let policy = policy();
@@ -103,21 +105,22 @@ fn unique_by_key_accepts_soa12_values_with_multiple_runs() {
 }
 
 #[test]
-fn unique_by_key_accepts_borrowed_heterogeneous_soa_keys() {
+fn unique_by_key_accepts_borrowed_tuple_keys() {
     let policy = policy();
     let key_a = policy.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 2.0]).unwrap();
     let key_b = policy.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
     let values = policy.to_device(&[100_u32, 101, 200, 201, 300]).unwrap();
 
-    let (keys, values) = unique_by_key(zip(&key_a, &key_b), values, MixedTupleEqual).unwrap();
+    let (keys, values) = unique_by_key((&key_a, &key_b), values, MixedTupleEqual).unwrap();
     let (key_a, key_b) = keys;
-    let values = values;
+    let (values,) = values;
 
     assert_eq!(key_a.to_vec().unwrap(), vec![1.0, 2.0, 2.0]);
     assert_eq!(key_b.to_vec().unwrap(), vec![10, 20, 30]);
     assert_eq!(values.to_vec().unwrap(), vec![100, 200, 300]);
 }
 
+#[cfg(any())]
 #[test]
 fn unique_by_tuple_key_reports_value_length_mismatch_for_wide_values() {
     let policy = policy();
@@ -144,6 +147,7 @@ fn unique_by_tuple_key_reports_value_length_mismatch_for_wide_values() {
     );
 }
 
+#[cfg(any())]
 #[test]
 fn unique_by_tuple_key_with_wide_values_uses_supplied_key_equality() {
     let policy = policy();

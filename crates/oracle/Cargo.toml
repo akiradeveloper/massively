@@ -10,6 +10,6 @@ version = "0.1.0"
 [dependencies]
 
 [dev-dependencies]
-cubecl = { version = "0.9.0", default-features = true }
+cubecl.workspace = true
 massively = { path = "../massively" }
 proptest = "1"

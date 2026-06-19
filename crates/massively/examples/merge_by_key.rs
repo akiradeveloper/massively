@@ -9,7 +9,7 @@ fn main() -> common::Result {
     let right_keys = policy.to_device(&[1_u32, 3])?;
     let right_values = policy.to_device(&[10.0_f32, 30.0])?;
 
-    let (keys, values) = merge_by_key(
+    let ((keys,), (values,)) = merge_by_key(
         &left_keys,
         &left_values,
         &right_keys,

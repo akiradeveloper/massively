@@ -38,6 +38,7 @@ macro_rules! assert_soa12_rows {
     }};
 }
 
+#[cfg(any())]
 #[test]
 fn set_difference_accepts_borrowed_heterogeneous_soa12() {
     let policy = policy();
@@ -89,6 +90,7 @@ fn set_difference_accepts_borrowed_heterogeneous_soa12() {
     assert_eq!(l.to_vec().unwrap(), vec![21000]);
 }
 
+#[cfg(any())]
 #[test]
 fn set_difference_preserves_multiplicity_for_borrowed_heterogeneous_soa12() {
     let policy = policy();

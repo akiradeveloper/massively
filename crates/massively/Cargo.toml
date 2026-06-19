@@ -9,14 +9,14 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.3.0"
+version = "0.4.0"
 
 [dependencies]
-cubecl = { version = "0.9.0", default-features = true }
+cubecl.workspace = true
+futures-lite = "2.6"
 
 [dev-dependencies]
 criterion = "0.5"
-futures-lite = "2.6"
 
 [[bench]]
 name = "transform"

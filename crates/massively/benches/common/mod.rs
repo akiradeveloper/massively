@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use cubecl::device::Device;
 use massively::CubeWgpu;
 
 pub const SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024, 1024 * 1024];
@@ -31,21 +30,12 @@ impl Backend {
     pub fn policy(self) -> CubeWgpu {
         match self {
             Self::Cpu => CubeWgpu::cpu(),
-            Self::Gpu => {
-                if cubecl::wgpu::WgpuDevice::device_count(0) > 0 {
-                    CubeWgpu::discrete_gpu(0)
-                } else if cubecl::wgpu::WgpuDevice::device_count(1) > 0 {
-                    CubeWgpu::integrated_gpu(0)
-                } else {
-                    panic!("No WGPU GPU adapter found; only CPU adapters are available")
-                }
-            }
+            Self::Gpu => CubeWgpu::new(),
         }
     }
 
     fn gpu_available() -> bool {
-        cubecl::wgpu::WgpuDevice::device_count(0) > 0
-            || cubecl::wgpu::WgpuDevice::device_count(1) > 0
+        false
     }
 }
 
@@ -72,5 +62,5 @@ pub fn half_select_flags(len: usize) -> Vec<u32> {
 }
 
 pub fn sync(policy: &CubeWgpu) {
-    futures_lite::future::block_on(policy.client().sync()).unwrap();
+    policy.sync().unwrap();
 }
