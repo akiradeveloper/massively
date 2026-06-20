@@ -45,47 +45,50 @@ which improves coalesced memory access and lets algorithms reuse or move columns
 independently.
 
 - `DeviceVec<T>` is a one-column device vector.
-- `&DeviceVec<T>` is a one-column SoA input.
-- `zip(&a, &b)` combines borrowed SoA inputs into a wider SoA input.
+- `&DeviceVec<T>` is a one-column input whose logical item is `(T,)`.
+- `(&a, &b)` combines borrowed columns into a wider SoA input whose logical
+  item is `(A, B)`.
 - Algorithms return owned device storage directly: `DeviceVec<T>` for one
   output column, or a tuple of `DeviceVec` columns for multi-column output.
+- By-key algorithms currently use a single key column. Their values may be
+  multi-column SoA inputs.
 
 ## Example
 
 ```rust
-use massively::{CubeWgpu, reduce, transform, zip3};
+use cubecl::prelude::*;
+use massively::{CubeWgpu, reduce, transform};
 
 struct Sum;
 #[cubecl::cube]
-impl massively::op::BinaryOp<f32> for Sum {
-    fn apply(lhs: f32, rhs: f32) -> f32 {
-        lhs + rhs
+impl massively::op::BinaryOp<(f32,)> for Sum {
+    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
+        (lhs.0 + rhs.0,)
     }
 }
 
 struct KineticEnergy;
 #[cubecl::cube]
 impl massively::op::UnaryOp<(f32, f32, f32)> for KineticEnergy {
-    type Output = f32;
+    type Output = (f32,);
 
-    fn apply(input: (f32, f32, f32)) -> f32 {
-        0.5 * (input.0 * input.0 + input.1 * input.1 + input.2 * input.2)
+    fn apply(input: (f32, f32, f32)) -> (f32,) {
+        (0.5 * (input.0 * input.0 + input.1 * input.1 + input.2 * input.2),)
     }
 }
 
 fn main() -> Result<(), massively::Error> {
-    let policy = CubeWgpu::new();
+    let policy = CubeWgpu::cpu();
 
     let vx = policy.to_device(&[1.0_f32, 0.0, 2.0])?;
     let vy = policy.to_device(&[0.0_f32, 2.0, 0.0])?;
     let vz = policy.to_device(&[0.0_f32, 0.0, 2.0])?;
 
-    let velocity = zip3(&vx, &vy, &vz);
-    let energy = transform(velocity, KineticEnergy)?;
-    let sum = reduce(&energy, 0.0, Sum)?;
+    let (energy,) = transform((&vx, &vy, &vz), KineticEnergy)?;
+    let sum = reduce((&energy,), (0.0,), Sum)?;
 
     assert_eq!(energy.to_vec()?, vec![0.5, 2.0, 4.0]);
-    assert_eq!(sum, 6.5);
+    assert_eq!(sum, (6.5,));
 
     Ok(())
 }

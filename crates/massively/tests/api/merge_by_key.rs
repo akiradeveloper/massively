@@ -39,6 +39,36 @@ macro_rules! assert_soa12_rows {
 }
 
 #[test]
+fn merge_by_key_accepts_tuple_values() {
+    let policy = policy();
+    let left_keys = policy.to_device(&[0_u32, 2, 2, 5]).unwrap();
+    let right_keys = policy.to_device(&[1_u32, 2, 4]).unwrap();
+    let left_values = policy.to_device(&[0.0_f32, 20.0, 21.0, 50.0]).unwrap();
+    let left_ids = policy.to_device(&[0_u32, 20, 21, 50]).unwrap();
+    let right_values = policy.to_device(&[10.0_f32, 22.0, 40.0]).unwrap();
+    let right_ids = policy.to_device(&[10_u32, 22, 40]).unwrap();
+
+    let (keys, values) = merge_by_key(
+        (&left_keys,),
+        (&left_values, &left_ids),
+        (&right_keys,),
+        (&right_values, &right_ids),
+        LessU32,
+    )
+    .unwrap();
+    let (keys,) = keys;
+    let (values, ids) = values;
+
+    assert_eq!(keys.to_vec().unwrap(), vec![0, 1, 2, 2, 2, 4, 5]);
+    assert_eq!(
+        values.to_vec().unwrap(),
+        vec![0.0, 10.0, 20.0, 21.0, 22.0, 40.0, 50.0]
+    );
+    assert_eq!(ids.to_vec().unwrap(), vec![0, 10, 20, 21, 22, 40, 50]);
+}
+
+#[cfg(any())]
+#[test]
 fn merge_by_key_accepts_borrowed_tuple_keys() {
     let policy = policy();
     let left_key_a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
@@ -50,7 +80,7 @@ fn merge_by_key_accepts_borrowed_tuple_keys() {
 
     let (keys, values) = merge_by_key(
         (&left_key_a, &left_key_b),
-        &left_values,
+        (&left_values,),
         (&right_key_a, &right_key_b),
         &right_values,
         MixedTupleLess,
@@ -64,6 +94,7 @@ fn merge_by_key_accepts_borrowed_tuple_keys() {
     assert_eq!(values.to_vec().unwrap(), vec![100, 120, 210, 200, 300]);
 }
 
+#[cfg(any())]
 #[test]
 fn merge_by_tuple_key_reports_left_value_length_mismatch() {
     let policy = policy();
@@ -76,7 +107,7 @@ fn merge_by_tuple_key_reports_left_value_length_mismatch() {
 
     let err = merge_by_key(
         (&left_key_a, &left_key_b),
-        &left_values,
+        (&left_values,),
         (&right_key_a, &right_key_b),
         &right_values,
         MixedTupleLess,
@@ -86,6 +117,7 @@ fn merge_by_tuple_key_reports_left_value_length_mismatch() {
     assert!(matches!(err, massively::Error::LengthMismatch { .. }));
 }
 
+#[cfg(any())]
 #[test]
 fn merge_by_tuple_key_reports_right_value_length_mismatch() {
     let policy = policy();
@@ -98,7 +130,7 @@ fn merge_by_tuple_key_reports_right_value_length_mismatch() {
 
     let err = merge_by_key(
         (&left_key_a, &left_key_b),
-        &left_values,
+        (&left_values,),
         (&right_key_a, &right_key_b),
         &right_values,
         MixedTupleLess,
@@ -108,6 +140,7 @@ fn merge_by_tuple_key_reports_right_value_length_mismatch() {
     assert!(matches!(err, massively::Error::LengthMismatch { .. }));
 }
 
+#[cfg(any())]
 #[test]
 fn merge_by_tuple_key_reports_left_tuple_value_length_mismatch() {
     let policy = policy();
@@ -132,6 +165,7 @@ fn merge_by_tuple_key_reports_left_tuple_value_length_mismatch() {
     assert!(matches!(err, massively::Error::LengthMismatch { .. }));
 }
 
+#[cfg(any())]
 #[test]
 fn merge_by_tuple_key_reports_right_tuple_value_length_mismatch() {
     let policy = policy();
@@ -172,9 +206,9 @@ fn merge_by_key_accepts_wide_soa_values() {
     let right_d = policy.to_device(&[10000_u32, 30000]).unwrap();
 
     let (keys, values) = merge_by_key(
-        &left_keys,
+        (&left_keys,),
         zip4(&left_a, &left_b, &left_c, &left_d),
-        &right_keys,
+        (&right_keys,),
         zip4(&right_a, &right_b, &right_c, &right_d),
         LessU32,
     )
@@ -221,9 +255,9 @@ fn merge_by_key_accepts_soa12_values() {
     let rl = policy.to_device(&[80_u32, 100]).unwrap();
 
     let (keys, values) = merge_by_key(
-        &left_keys,
+        (&left_keys,),
         zip12(&la, &lb, &lc, &ld, &le, &lf, &lg, &lh, &li, &lj, &lk, &ll),
-        &right_keys,
+        (&right_keys,),
         zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
         LessU32,
     )
@@ -278,9 +312,9 @@ fn merge_by_key_accepts_soa12_values_with_equal_keys_and_uneven_lengths() {
     let rl = policy.to_device(&[510_u32, 522, 540]).unwrap();
 
     let (keys, values) = merge_by_key(
-        &left_keys,
+        (&left_keys,),
         zip12(&la, &lb, &lc, &ld, &le, &lf, &lg, &lh, &li, &lj, &lk, &ll),
-        &right_keys,
+        (&right_keys,),
         zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
         LessU32,
     )

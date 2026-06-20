@@ -691,7 +691,7 @@ impl<Source, K, KeyEq, Op> InclusiveScanByKeyInput<K, KeyEq, Op> for SoAView1<So
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
-    K: CubePrimitive + CubeElement + PartialEq,
+    K: CubePrimitive + CubeElement,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
     KeyEq: BinaryPredicateOp<K>,
@@ -747,14 +747,13 @@ where
     Right: KernelColumn<Runtime = Left::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    K: CubePrimitive + CubeElement + PartialEq,
+    K: CubePrimitive + CubeElement,
     Left::Item: CubePrimitive + CubeElement,
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
     KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<Left::Item>,
-    Op: BinaryOp<Right::Item>,
+    Op: BinaryOp<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
@@ -766,14 +765,15 @@ where
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first =
-            super::device_expr_inclusive_scan_by_key::<Left, K, KeyEq, Op>(&self.left, keys)?;
-        let second =
-            super::device_expr_inclusive_scan_by_key::<Right, K, KeyEq, Op>(&self.right, keys)?;
-        Ok(SoA2 {
-            left: first,
-            right: second,
-        })
+        let left = super::device_expr_collect(&self.left)?;
+        let right = super::device_expr_collect(&self.right)?;
+        primitive_scan::inclusive_scan_tuple2_by_key_values_device_vec(
+            keys,
+            &left,
+            &right,
+            GpuOp::<KeyEq>::new(),
+            GpuOp::<Op>::new(),
+        )
     }
 }
 
@@ -788,7 +788,7 @@ where
     Third: KernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
-    K: CubePrimitive + CubeElement + PartialEq,
+    K: CubePrimitive + CubeElement,
     First::Item: CubePrimitive + CubeElement,
     Second::Item: CubePrimitive + CubeElement,
     Third::Item: CubePrimitive + CubeElement,
@@ -796,9 +796,7 @@ where
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
     KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<First::Item>,
-    Op: BinaryOp<Second::Item>,
-    Op: BinaryOp<Third::Item>,
+    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Output = SoA3<
@@ -814,17 +812,17 @@ where
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first =
-            super::device_expr_inclusive_scan_by_key::<First, K, KeyEq, Op>(&self.first, keys)?;
-        let second =
-            super::device_expr_inclusive_scan_by_key::<Second, K, KeyEq, Op>(&self.second, keys)?;
-        let third =
-            super::device_expr_inclusive_scan_by_key::<Third, K, KeyEq, Op>(&self.third, keys)?;
-        Ok(SoA3 {
-            first,
-            second,
-            third,
-        })
+        let first = super::device_expr_collect(&self.first)?;
+        let second = super::device_expr_collect(&self.second)?;
+        let third = super::device_expr_collect(&self.third)?;
+        primitive_scan::inclusive_scan_tuple3_by_key_values_device_vec(
+            keys,
+            &first,
+            &second,
+            &third,
+            GpuOp::<KeyEq>::new(),
+            GpuOp::<Op>::new(),
+        )
     }
 }
 
@@ -839,7 +837,7 @@ macro_rules! impl_inclusive_scan_by_key_soa_input {
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
-            Key: CubePrimitive + CubeElement + PartialEq,
+            Key: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
@@ -1567,7 +1565,7 @@ impl<Source, K, KeyEq, Op> ExclusiveScanByKeyInput<K, KeyEq, Op> for SoAView1<So
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
-    K: CubePrimitive + CubeElement + PartialEq,
+    K: CubePrimitive + CubeElement,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
     KeyEq: BinaryPredicateOp<K>,
@@ -1629,14 +1627,13 @@ where
     Right: KernelColumn<Runtime = Left::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    K: CubePrimitive + CubeElement + PartialEq,
+    K: CubePrimitive + CubeElement,
     Left::Item: CubePrimitive + CubeElement,
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
     KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<Left::Item>,
-    Op: BinaryOp<Right::Item>,
+    Op: BinaryOp<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Init = (Left::Item, Right::Item);
@@ -1650,18 +1647,16 @@ where
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_exclusive_scan_by_key::<Left, K, KeyEq, Op>(
-            &self.left, keys, init.0,
-        )?;
-        let second = super::device_expr_exclusive_scan_by_key::<Right, K, KeyEq, Op>(
-            &self.right,
+        let left = super::device_expr_collect(&self.left)?;
+        let right = super::device_expr_collect(&self.right)?;
+        primitive_scan::exclusive_scan_tuple2_by_key_values_device_vec(
             keys,
-            init.1,
-        )?;
-        Ok(SoA2 {
-            left: first,
-            right: second,
-        })
+            &left,
+            &right,
+            init,
+            GpuOp::<KeyEq>::new(),
+            GpuOp::<Op>::new(),
+        )
     }
 }
 
@@ -1676,7 +1671,7 @@ where
     Third: KernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
-    K: CubePrimitive + CubeElement + PartialEq,
+    K: CubePrimitive + CubeElement,
     First::Item: CubePrimitive + CubeElement,
     Second::Item: CubePrimitive + CubeElement,
     Third::Item: CubePrimitive + CubeElement,
@@ -1684,9 +1679,7 @@ where
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
     KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<First::Item>,
-    Op: BinaryOp<Second::Item>,
-    Op: BinaryOp<Third::Item>,
+    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Init = (First::Item, Second::Item, Third::Item);
@@ -1704,26 +1697,18 @@ where
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_exclusive_scan_by_key::<First, K, KeyEq, Op>(
-            &self.first,
+        let first = super::device_expr_collect(&self.first)?;
+        let second = super::device_expr_collect(&self.second)?;
+        let third = super::device_expr_collect(&self.third)?;
+        primitive_scan::exclusive_scan_tuple3_by_key_values_device_vec(
             keys,
-            init.0,
-        )?;
-        let second = super::device_expr_exclusive_scan_by_key::<Second, K, KeyEq, Op>(
-            &self.second,
-            keys,
-            init.1,
-        )?;
-        let third = super::device_expr_exclusive_scan_by_key::<Third, K, KeyEq, Op>(
-            &self.third,
-            keys,
-            init.2,
-        )?;
-        Ok(SoA3 {
-            first,
-            second,
-            third,
-        })
+            &first,
+            &second,
+            &third,
+            init,
+            GpuOp::<KeyEq>::new(),
+            GpuOp::<Op>::new(),
+        )
     }
 }
 
@@ -1738,7 +1723,7 @@ macro_rules! impl_exclusive_scan_by_key_soa_input {
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
-            Key: CubePrimitive + CubeElement + PartialEq,
+            Key: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(

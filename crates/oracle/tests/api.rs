@@ -32,15 +32,6 @@ impl UnaryOp<(u32,)> for TransformMap {
     }
 }
 
-struct MaxOp;
-
-#[cubecl::cube]
-impl BinaryOp<u32> for MaxOp {
-    fn apply(lhs: u32, rhs: u32) -> u32 {
-        if lhs > rhs { lhs } else { rhs }
-    }
-}
-
 struct TupleMaxOp;
 
 #[cubecl::cube]
@@ -292,7 +283,9 @@ proptest! {
         let stencil_g = policy.to_device(&stencil).unwrap();
         prop_assert_eq!(
             {
-                let (output_g,) = gather_if((&input_g,), (&indices_g,), (&stencil_g,), TupleKeep).unwrap();
+                let (output_g,) =
+                    gather_if((&input_g,), (&indices_g,), (0_u32,), (&stencil_g,), TupleKeep)
+                        .unwrap();
                 output_g.to_vec().unwrap()
             },
             oracle::gather_if(&input, &indices, &stencil)
@@ -521,7 +514,10 @@ proptest! {
         let policy = policy();
         let left_g = policy.to_device(&input).unwrap();
         let right_g = policy.to_device(&right).unwrap();
-        prop_assert_eq!(inner_product((&left_g,), (&right_g,), MaxOp, init, MaxOp).unwrap(), oracle::inner_product(&input, &right, init));
+        prop_assert_eq!(
+            inner_product((&left_g,), (&right_g,), TupleMaxOp, (init,), TupleMaxOp).unwrap(),
+            (oracle::inner_product(&input, &right, init),)
+        );
     }
 
     #[test]

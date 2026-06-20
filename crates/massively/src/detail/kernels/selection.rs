@@ -678,6 +678,23 @@ pub(crate) fn unique_by_key_flags_kernel<K: CubePrimitive, Pred: BinaryPredicate
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn key_run_end_flags_kernel<K: CubePrimitive, Pred: BinaryPredicateOp<K>>(
+    keys: &[K],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < keys.len() {
+        if global + 1usize == keys.len() || !Pred::apply(keys[global], keys[global + 1usize]) {
+            flags[global] = 1u32;
+        } else {
+            flags[global] = 0u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn gather_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
     input: &[T],
     indices: &[u32],

@@ -13,6 +13,106 @@ pub(crate) const BLOCK_REDUCE_SIZE: u32 = 256;
 
 pub(crate) type ReduceByKeyControl = segmented::SegmentControl;
 
+pub(crate) fn apply_tuple2_init<R, A, B, Op>(
+    left: &DeviceVec<R, A>,
+    right: &DeviceVec<R, B>,
+    init: (A, B),
+) -> Result<(DeviceVec<R, A>, DeviceVec<R, B>), Error>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B)>,
+{
+    super::ensure_same_len(right.len(), left.len())?;
+    let len = left.len();
+    if len == 0 {
+        return Ok((
+            DeviceVec::empty(left.policy().clone()),
+            DeviceVec::empty(right.policy().clone()),
+        ));
+    }
+    let client = left.policy().client();
+    let out_left = client.empty(len * std::mem::size_of::<A>());
+    let out_right = client.empty(len * std::mem::size_of::<B>());
+    let init_left = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_right = client.create_from_slice(B::as_bytes(&[init.1]));
+    let blocks = len.div_ceil(BLOCK_REDUCE_SIZE as usize);
+    let blocks_u32 = u32::try_from(blocks).map_err(|_| Error::LengthTooLarge { len: blocks })?;
+    unsafe {
+        tuple2_apply_init_kernel::launch_unchecked::<A, B, Op, R>(
+            client,
+            CubeCount::Static(blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_REDUCE_SIZE),
+            unsafe { BufferArg::from_raw_parts(left.handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(right.handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(init_left.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_right.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(out_left.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(out_right.clone(), len) },
+        );
+    }
+    Ok((
+        DeviceVec::from_handle(left.policy().clone(), out_left, len),
+        DeviceVec::from_handle(right.policy().clone(), out_right, len),
+    ))
+}
+
+pub(crate) fn apply_tuple3_init<R, A, B, C, Op>(
+    first: &DeviceVec<R, A>,
+    second: &DeviceVec<R, B>,
+    third: &DeviceVec<R, C>,
+    init: (A, B, C),
+) -> Result<(DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>), Error>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C)>,
+{
+    super::ensure_same_len(second.len(), first.len())?;
+    super::ensure_same_len(third.len(), first.len())?;
+    let len = first.len();
+    if len == 0 {
+        return Ok((
+            DeviceVec::empty(first.policy().clone()),
+            DeviceVec::empty(second.policy().clone()),
+            DeviceVec::empty(third.policy().clone()),
+        ));
+    }
+    let client = first.policy().client();
+    let out_first = client.empty(len * std::mem::size_of::<A>());
+    let out_second = client.empty(len * std::mem::size_of::<B>());
+    let out_third = client.empty(len * std::mem::size_of::<C>());
+    let init_first = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_second = client.create_from_slice(B::as_bytes(&[init.1]));
+    let init_third = client.create_from_slice(C::as_bytes(&[init.2]));
+    let blocks = len.div_ceil(BLOCK_REDUCE_SIZE as usize);
+    let blocks_u32 = u32::try_from(blocks).map_err(|_| Error::LengthTooLarge { len: blocks })?;
+    unsafe {
+        tuple3_apply_init_kernel::launch_unchecked::<A, B, C, Op, R>(
+            client,
+            CubeCount::Static(blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_REDUCE_SIZE),
+            unsafe { BufferArg::from_raw_parts(first.handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(second.handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(third.handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(init_first.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_second.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_third.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(out_first.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(out_second.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(out_third.clone(), len) },
+        );
+    }
+    Ok((
+        DeviceVec::from_handle(first.policy().clone(), out_first, len),
+        DeviceVec::from_handle(second.policy().clone(), out_second, len),
+        DeviceVec::from_handle(third.policy().clone(), out_third, len),
+    ))
+}
+
 pub(crate) fn reduce_input_handle<R, T, Op>(
     policy: &CubePolicy<R>,
     input_handle: cubecl::server::Handle,

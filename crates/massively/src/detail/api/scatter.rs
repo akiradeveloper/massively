@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
-    op::{GpuOp, PredicateOp},
+    op::GpuOp,
     primitives::range,
 };
 use cubecl::prelude::*;
@@ -45,24 +45,18 @@ where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     ValueSource::Runtime: Runtime,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = ValueSource::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
     ValueSource::Item: CubePrimitive + CubeElement,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     values.validate()?;
     indices.validate()?;
-    stencil.validate()?;
     super::ensure_same_len(values.len(), indices.len())?;
     super::ensure_same_len(values.len(), stencil.len())?;
     let values = super::device_expr_collect(values)?;
     let indices = super::device_expr_collect(indices)?;
-    let flags = super::device_expr_selection_handles::<Stencil, super::Tuple1PredicateOp<Pred>>(
-        stencil, false,
-    )?;
+    let flags = stencil.selection_handles(false)?;
     let initial = range::filled(values.policy(), len, default)?;
     let block_count = values.len.div_ceil(256);
     let block_count_u32 =
@@ -352,13 +346,10 @@ where
     SoAView1<IndexSource>: ReadOnlySoA<Item = (u32,), Scalar = u32>,
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = ValueSource::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
     ValueSource::Item: CubePrimitive + CubeElement,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
@@ -390,13 +381,10 @@ impl<ValueSource, IndexSource, Stencil, Pred> ScatterIfInput<IndexSource, Stenci
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = ValueSource::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
     ValueSource::Item: CubePrimitive + CubeElement,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
@@ -534,7 +522,7 @@ macro_rules! impl_scatter_if_input {
                     + KernelColumnAt<S0>,
             )+
             IndexSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = u32> + KernelColumnAt<S0>,
-            Stencil: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            Stencil: super::SelectionStencil<Pred, Runtime = <$first as KernelColumn>::Runtime>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             $(
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
@@ -544,9 +532,6 @@ macro_rules! impl_scatter_if_input {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
             IndexSource::Expr: DeviceGpuExpr<u32>,
-            Stencil::Item: CubePrimitive + CubeElement,
-            Stencil::Expr: GpuExpr<Stencil::Item>,
-            Pred: PredicateOp<(Stencil::Item,)>,
         {
             type Default = (
                 <$first as KernelColumn>::Item,

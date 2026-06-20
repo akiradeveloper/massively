@@ -5,9 +5,9 @@ use crate::{
         SoA2, SoA3, SoAView1, SoAView2, SoAView3, StorageKernelColumn,
     },
     error::Error,
-    expr::{DeviceGpuExpr, GpuExpr},
+    expr::DeviceGpuExpr,
     kernels::*,
-    op::{BinaryPredicateOp, GpuOp, PredicateOp},
+    op::{BinaryPredicateOp, GpuOp},
     primitives::{segmented, select},
 };
 use cubecl::prelude::*;
@@ -36,12 +36,9 @@ impl<Source, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for SoA1<Source>
 where
     Self: SoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: StorageKernelColumn + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<Stencil::Item>,
 {
     type Item = Source::Item;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -53,10 +50,9 @@ where
         _pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        stencil.validate()?;
         super::ensure_same_len(self.source.len(), stencil.len())?;
         let input = super::device_expr_collect(&self.source)?;
-        let flags = super::device_expr_selection_handles::<Stencil, Pred>(&stencil, false)?;
+        let flags = stencil.selection_handles(false)?;
         Ok(SoA1 {
             source: replace_with_flags_device_vec(&input, replacement, &flags.flag)?,
         })
@@ -66,12 +62,9 @@ where
 impl<Source, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for Source
 where
     Source: StorageKernelColumn + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<Stencil::Item>,
 {
     type Item = Source::Item;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -91,15 +84,12 @@ where
     }
 }
 
-impl<Source, Stencil, Pred> ReplaceIfInput<(Stencil,), Pred> for (Source,)
+impl<Source, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for (Source,)
 where
     Source: StorageKernelColumn + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Item = (Source::Item,);
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -107,14 +97,14 @@ where
     fn replace_if_input(
         self,
         replacement: Self::Item,
-        stencil: (Stencil,),
-        _pred: GpuOp<Pred>,
+        stencil: Stencil,
+        pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <Source as ReplaceIfInput<Stencil, super::Tuple1PredicateOp<Pred>>>::replace_if_input(
+        <Source as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
             self.0,
             replacement.0,
-            stencil.0,
-            GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
+            stencil,
+            pred,
         )
     }
 }
@@ -135,7 +125,7 @@ macro_rules! impl_replace_if_tuple {
             $(
                 $rest: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
             )+
-            Stencil: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            Stencil: super::SelectionStencil<Pred, Runtime = <$first as KernelColumn>::Runtime>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
@@ -144,9 +134,6 @@ macro_rules! impl_replace_if_tuple {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Stencil::Item: CubePrimitive + CubeElement,
-            Stencil::Expr: GpuExpr<Stencil::Item>,
-            Pred: PredicateOp<(Stencil::Item,)>,
         {
             type Item = (
                 impl_replace_if_tuple!(@item_ty $first),
@@ -164,16 +151,12 @@ macro_rules! impl_replace_if_tuple {
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
-                stencil.validate()?;
                 super::ensure_same_len(self.$first_field.len(), stencil.len())?;
                 let $first_field = super::device_expr_collect(&self.$first_field)?;
                 $(
                     let $field = super::device_expr_collect(&self.$field)?;
                 )+
-                let flags = super::device_expr_selection_handles::<
-                    Stencil,
-                    super::Tuple1PredicateOp<Pred>,
-                >(&stencil, false)?;
+                let flags = stencil.selection_handles(false)?;
                 Ok($name {
                     $first_field: replace_with_flags_device_vec(
                         &$first_field,
@@ -212,7 +195,7 @@ macro_rules! impl_readonly_replace_if_tuple {
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
             )+
-            Stencil: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            Stencil: super::SelectionStencil<Pred, Runtime = <$first as KernelColumn>::Runtime>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
@@ -221,9 +204,6 @@ macro_rules! impl_readonly_replace_if_tuple {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Stencil::Item: CubePrimitive + CubeElement,
-            Stencil::Expr: GpuExpr<Stencil::Item>,
-            Pred: PredicateOp<(Stencil::Item,)>,
         {
             type Item = (
                 impl_readonly_replace_if_tuple!(@item_ty $first),
@@ -241,16 +221,12 @@ macro_rules! impl_readonly_replace_if_tuple {
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
-                stencil.validate()?;
                 super::ensure_same_len(ReadOnlySoA::len(&self), stencil.len())?;
                 let $first_field = super::device_expr_collect(&self.$first_field)?;
                 $(
                     let $field = super::device_expr_collect(&self.$field)?;
                 )+
-                let flags = super::device_expr_selection_handles::<
-                    Stencil,
-                    super::Tuple1PredicateOp<Pred>,
-                >(&stencil, false)?;
+                let flags = stencil.selection_handles(false)?;
                 Ok($output {
                     $first_field: replace_with_flags_device_vec(
                         &$first_field,
@@ -369,6 +345,66 @@ where
         )
     }
 }
+
+macro_rules! impl_unique_by_key_view_values {
+    ($view:ident -> $out:ident < $( $value:ident: $field:ident ),+ >) => {
+        impl<KeySource, $( $value ),+, Eq> UniqueByKeyInput<$view<$( $value ),+>, Eq>
+            for KeySource
+        where
+            KeySource: ReadOnlyKernelColumn + KernelColumnAt<S0>,
+            $( $value: ReadOnlyKernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>, )+
+            $view<$( $value ),+>: ReadOnlySoA,
+            KeySource::Item: CubePrimitive + CubeElement,
+            $( <$value as KernelColumn>::Item: CubePrimitive + CubeElement, )+
+            KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+            $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
+            Eq: BinaryPredicateOp<KeySource::Item>,
+        {
+            type Output = (
+                SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
+                $out<$( DeviceVec<KeySource::Runtime, <$value as KernelColumn>::Item> ),+>,
+            );
+
+            fn unique_by_key_input(
+                self,
+                values: $view<$( $value ),+>,
+                _eq: GpuOp<Eq>,
+            ) -> Result<Self::Output, Error> {
+                self.validate()?;
+                ReadOnlySoA::validate(&values)?;
+                let keys = super::device_expr_collect(&self)?;
+                $(
+                    let $field = super::device_expr_collect(&values.$field)?;
+                    super::ensure_same_len($field.len, keys.len)?;
+                )+
+                if keys.len == 0 {
+                    return Ok((
+                        SoA1 {
+                            source: DeviceVec::empty(keys.policy.clone()),
+                        },
+                        $out {
+                            $( $field: DeviceVec::empty($field.policy.clone()), )+
+                        },
+                    ));
+                }
+
+                let control = segmented::key_run_control::<KeySource::Runtime, KeySource::Item, Eq>(&keys)?;
+                let out_keys = control.compact_first::<KeySource::Runtime, KeySource::Item>(keys.policy())?;
+                $(
+                    let $field = control.compact_value::<KeySource::Runtime, <$value as KernelColumn>::Item>(
+                        $field.policy(),
+                        $field.handle.clone(),
+                    )?;
+                )+
+
+                Ok((SoA1 { source: out_keys }, $out { $( $field ),+ }))
+            }
+        }
+    };
+}
+
+impl_unique_by_key_view_values!(SoAView2 -> SoA2<A: left, B: right>);
+impl_unique_by_key_view_values!(SoAView3 -> SoA3<A: first, B: second, C: third>);
 
 impl<KeySource, ValueSource, Eq> UniqueByKeyInput<(ValueSource,), Eq> for (KeySource,)
 where

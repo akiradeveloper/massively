@@ -2031,7 +2031,7 @@ pub(crate) fn inclusive_scan_by_key_expr_keys_expr_kernel<
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn exclusive_scan_by_key_expr_kernel<
-    K: CubePartialEq,
+    K: CubePrimitive,
     T: CubePrimitive,
     Expr: GpuExpr<T>,
     KeyEq: crate::op::BinaryPredicateOp<K>,
@@ -2069,7 +2069,7 @@ pub(crate) fn exclusive_scan_by_key_expr_kernel<
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
-    K: CubePartialEq,
+    K: CubePrimitive,
     T: CubePrimitive,
     KeyExpr: GpuExpr<K>,
     ValueExpr: GpuExpr<T>,

@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     expr::{DeviceGpuExpr, GpuExpr},
     op::{BinaryOp, BinaryPredicateOp, GpuOp},
-    primitives::reduce as primitive_reduce,
+    primitives::{reduce as primitive_reduce, scan as primitive_scan, segmented},
 };
 use cubecl::prelude::*;
 use std::marker::PhantomData;
@@ -690,10 +690,9 @@ where
     KeyEq: BinaryPredicateOp<K>,
     Left::Item: CubePrimitive + CubeElement,
     Right::Item: CubePrimitive + CubeElement,
-    Left::Expr: GpuExpr<Left::Item>,
-    Right::Expr: GpuExpr<Right::Item>,
-    Op: BinaryOp<Left::Item>,
-    Op: BinaryOp<Right::Item>,
+    Left::Expr: DeviceGpuExpr<Left::Item>,
+    Right::Expr: DeviceGpuExpr<Right::Item>,
+    Op: BinaryOp<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Init = (Left::Item, Right::Item);
@@ -708,16 +707,29 @@ where
         self.left.validate()?;
         self.right.validate()?;
         super::ensure_same_len(self.right.len(), self.left.len())?;
-        let (out_keys, left, control) =
-            super::device_expr_reduce_by_key_with_control::<Left, K, KeyEq, Op>(
-                &self.left, keys, init.0,
-            )?;
-        let right = super::device_expr_reduce_by_key_with_existing_control::<Right, K, KeyEq, Op>(
-            &self.right,
+        let left = super::device_expr_collect(&self.left)?;
+        let right = super::device_expr_collect(&self.right)?;
+        let scanned = primitive_scan::inclusive_scan_tuple2_by_key_values_device_vec(
             keys,
-            init.1,
-            &control,
+            &left,
+            &right,
+            GpuOp::<KeyEq>::new(),
+            GpuOp::<Op>::new(),
         )?;
+        let control = segmented::key_run_end_control::<Self::Runtime, K, KeyEq>(keys)?;
+        let out_keys = control.compact_first::<Self::Runtime, K>(keys.policy())?;
+        let left = control.compact_value::<Self::Runtime, Left::Item>(
+            left.policy(),
+            scanned.left.handle.clone(),
+        )?;
+        let right = control.compact_value::<Self::Runtime, Right::Item>(
+            right.policy(),
+            scanned.right.handle.clone(),
+        )?;
+        let (left, right) =
+            primitive_reduce::apply_tuple2_init::<Self::Runtime, Left::Item, Right::Item, Op>(
+                &left, &right, init,
+            )?;
         Ok((out_keys, SoA2 { left, right }))
     }
 }
@@ -737,12 +749,10 @@ where
     First::Item: CubePrimitive + CubeElement,
     Second::Item: CubePrimitive + CubeElement,
     Third::Item: CubePrimitive + CubeElement,
-    First::Expr: GpuExpr<First::Item>,
-    Second::Expr: GpuExpr<Second::Item>,
-    Third::Expr: GpuExpr<Third::Item>,
-    Op: BinaryOp<First::Item>,
-    Op: BinaryOp<Second::Item>,
-    Op: BinaryOp<Third::Item>,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Third::Expr: DeviceGpuExpr<Third::Item>,
+    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Init = (First::Item, Second::Item, Third::Item);
@@ -763,24 +773,38 @@ where
         self.third.validate()?;
         super::ensure_same_len(self.second.len(), self.first.len())?;
         super::ensure_same_len(self.third.len(), self.first.len())?;
-        let (out_keys, first, control) = super::device_expr_reduce_by_key_with_control::<
-            First,
-            K,
-            KeyEq,
+        let first = super::device_expr_collect(&self.first)?;
+        let second = super::device_expr_collect(&self.second)?;
+        let third = super::device_expr_collect(&self.third)?;
+        let scanned = primitive_scan::inclusive_scan_tuple3_by_key_values_device_vec(
+            keys,
+            &first,
+            &second,
+            &third,
+            GpuOp::<KeyEq>::new(),
+            GpuOp::<Op>::new(),
+        )?;
+        let control = segmented::key_run_end_control::<Self::Runtime, K, KeyEq>(keys)?;
+        let out_keys = control.compact_first::<Self::Runtime, K>(keys.policy())?;
+        let first = control.compact_value::<Self::Runtime, First::Item>(
+            first.policy(),
+            scanned.first.handle.clone(),
+        )?;
+        let second = control.compact_value::<Self::Runtime, Second::Item>(
+            second.policy(),
+            scanned.second.handle.clone(),
+        )?;
+        let third = control.compact_value::<Self::Runtime, Third::Item>(
+            third.policy(),
+            scanned.third.handle.clone(),
+        )?;
+        let (first, second, third) = primitive_reduce::apply_tuple3_init::<
+            Self::Runtime,
+            First::Item,
+            Second::Item,
+            Third::Item,
             Op,
-        >(&self.first, keys, init.0)?;
-        let second = super::device_expr_reduce_by_key_with_existing_control::<Second, K, KeyEq, Op>(
-            &self.second,
-            keys,
-            init.1,
-            &control,
-        )?;
-        let third = super::device_expr_reduce_by_key_with_existing_control::<Third, K, KeyEq, Op>(
-            &self.third,
-            keys,
-            init.2,
-            &control,
-        )?;
+        >(&first, &second, &third, init)?;
         Ok((
             out_keys,
             SoA3 {
@@ -938,8 +962,6 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyA::Item: PartialEq,
-    KeyB::Item: PartialEq,
     KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
     Op: BinaryOp<ValueSource::Item>,
 {
@@ -988,8 +1010,6 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyA::Item: PartialEq,
-    KeyB::Item: PartialEq,
     KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
     Op: BinaryOp<ValueA::Item>,
     Op: BinaryOp<ValueB::Item>,
@@ -1042,8 +1062,8 @@ where
     ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyB::Item: CubePrimitive + CubeElement + PartialEq,
+    KeyA::Item: CubePrimitive + CubeElement,
+    KeyB::Item: CubePrimitive + CubeElement,
     ValueA::Item: CubePrimitive + CubeElement,
     ValueB::Item: CubePrimitive + CubeElement,
     ValueC::Item: CubePrimitive + CubeElement,
@@ -1112,9 +1132,9 @@ where
     KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueSource: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyB::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyC::Item: CubePrimitive + CubeElement + PartialEq,
+    KeyA::Item: CubePrimitive + CubeElement,
+    KeyB::Item: CubePrimitive + CubeElement,
+    KeyC::Item: CubePrimitive + CubeElement,
     ValueSource::Item: CubePrimitive + CubeElement,
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
@@ -1173,9 +1193,9 @@ where
     KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyB::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyC::Item: CubePrimitive + CubeElement + PartialEq,
+    KeyA::Item: CubePrimitive + CubeElement,
+    KeyB::Item: CubePrimitive + CubeElement,
+    KeyC::Item: CubePrimitive + CubeElement,
     ValueA::Item: CubePrimitive + CubeElement,
     ValueB::Item: CubePrimitive + CubeElement,
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
@@ -1245,9 +1265,9 @@ where
     ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
     ValueC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyB::Item: CubePrimitive + CubeElement + PartialEq,
-    KeyC::Item: CubePrimitive + CubeElement + PartialEq,
+    KeyA::Item: CubePrimitive + CubeElement,
+    KeyB::Item: CubePrimitive + CubeElement,
+    KeyC::Item: CubePrimitive + CubeElement,
     ValueA::Item: CubePrimitive + CubeElement,
     ValueB::Item: CubePrimitive + CubeElement,
     ValueC::Item: CubePrimitive + CubeElement,
@@ -1332,8 +1352,8 @@ macro_rules! impl_reduce_by_tuple_key_scalar_value {
             $first: KernelColumn + KernelColumnAt<S0>,
             $( $key: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
             ValueSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement + PartialEq,
-            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement + PartialEq, )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement, )+
             ValueSource::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
@@ -1445,8 +1465,8 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
             $( $key: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
             $first_value: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
             $( $value: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement + PartialEq,
-            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement + PartialEq, )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement, )+
             <$first_value as KernelColumn>::Item: CubePrimitive + CubeElement,
             $( <$value as KernelColumn>::Item: CubePrimitive + CubeElement, )+
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,

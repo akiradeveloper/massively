@@ -112,21 +112,17 @@ impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<Stencil::Item>,
 {
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn copy_if_input(self, stencil: Stencil, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        stencil.validate()?;
         super::ensure_same_len(self.source.len(), stencil.len())?;
         let values = super::device_expr_collect(&self.source)?;
-        let handles = super::device_expr_selection_handles::<Stencil, Pred>(&stencil, false)?;
+        let handles = stencil.selection_handles(false)?;
         let count = select::selected_count(values.policy(), &handles)?;
         Ok(SoA1 {
             source: select::compact_with_count(
@@ -141,12 +137,9 @@ where
 impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<Stencil::Item>,
 {
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
@@ -159,24 +152,17 @@ where
     }
 }
 
-impl<Source, Stencil, Pred> CopyIfInput<(Stencil,), Pred> for (Source,)
+impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(self, stencil: (Stencil,), _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
-        <Source as CopyIfInput<Stencil, super::Tuple1PredicateOp<Pred>>>::copy_if_input(
-            self.0,
-            stencil.0,
-            GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
-        )
+    fn copy_if_input(self, stencil: Stencil, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+        <Source as CopyIfInput<Stencil, Pred>>::copy_if_input(self.0, stencil, pred)
     }
 }
 
@@ -600,16 +586,13 @@ macro_rules! impl_tuple_copy_if {
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
             )+
-            Stencil: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            Stencil: super::SelectionStencil<Pred, Runtime = <$first as KernelColumn>::Runtime>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Stencil::Item: CubePrimitive + CubeElement,
-            Stencil::Expr: GpuExpr<Stencil::Item>,
-            Pred: PredicateOp<(Stencil::Item,)>,
         {
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -622,16 +605,12 @@ macro_rules! impl_tuple_copy_if {
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
-                stencil.validate()?;
                 super::ensure_same_len(stencil.len(), ReadOnlySoA::len(&self))?;
                 let $first_field = super::device_expr_collect(&self.$first_field)?;
                 $(
                     let $field = super::device_expr_collect(&self.$field)?;
                 )+
-                let handles = super::device_expr_selection_handles::<
-                    Stencil,
-                    super::Tuple1PredicateOp<Pred>,
-                >(&stencil, false)?;
+                let handles = stencil.selection_handles(false)?;
                 let count = select::selected_count($first_field.policy(), &handles)?;
                 let control = handles.clone();
                 Ok($output {

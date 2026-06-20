@@ -177,6 +177,49 @@ where
     massively::sort(source, less)
 }
 
+fn minmax_element2<B, S1, Less>(
+    source: S1,
+    less: Less,
+) -> Result<Option<(usize, usize)>, massively::Error>
+where
+    B: Backend,
+    S1: MIter<B>,
+    Less: BinaryPredicateOp<S1::Item>,
+{
+    massively::minmax_element(source, less)
+}
+
+fn adjacent_find2<B, S1, Pred>(source: S1, pred: Pred) -> Result<Option<usize>, massively::Error>
+where
+    B: Backend,
+    S1: MIter<B>,
+    Pred: BinaryPredicateOp<S1::Item>,
+{
+    massively::adjacent_find(source, pred)
+}
+
+fn lower_bound2<B, S1, Less>(
+    source: S1,
+    value: S1::Item,
+    less: Less,
+) -> Result<usize, massively::Error>
+where
+    B: Backend,
+    S1: MIter<B>,
+    Less: BinaryPredicateOp<S1::Item>,
+{
+    massively::lower_bound(source, value, less)
+}
+
+fn is_sorted2<B, S1, Less>(source: S1, less: Less) -> Result<bool, massively::Error>
+where
+    B: Backend,
+    S1: MIter<B>,
+    Less: BinaryPredicateOp<S1::Item>,
+{
+    massively::is_sorted(source, less)
+}
+
 fn gather2<B, S1, Indices, S2>(source: S1, indices: Indices) -> Result<S2, massively::Error>
 where
     B: Backend,
@@ -398,6 +441,41 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
     assert_eq!(out_first.to_vec().unwrap(), vec![1, 2, 3]);
     assert_eq!(out_second.to_vec().unwrap(), vec![10, 20, 30]);
     assert_eq!(out_third.to_vec().unwrap(), vec![100, 200, 300]);
+}
+
+#[test]
+fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
+    let policy = Policy::<Wgpu>::cpu();
+    let values = policy.to_device(&[2_u32, 1, 2, 3]).unwrap();
+    let tags = policy.to_device(&[20_u32, 30, 10, 40]).unwrap();
+
+    assert_eq!(
+        minmax_element2((&values, &tags), PairU32Less).unwrap(),
+        Some((1, 3))
+    );
+
+    let first = policy.to_device(&[2_u32, 1, 4, 3]).unwrap();
+    let second = policy.to_device(&[20_u32, 10, 20, 10]).unwrap();
+    let third = policy.to_device(&[200_u32, 100, 400, 300]).unwrap();
+
+    assert_eq!(
+        minmax_element2((&first, &second, &third), TripleU32Less).unwrap(),
+        Some((1, 2))
+    );
+}
+
+#[test]
+fn search_queries_wrap_two_column_tuple_inputs() {
+    let policy = Policy::<Wgpu>::cpu();
+    let left = policy.to_device(&[1_u32, 2, 2, 4]).unwrap();
+    let right = policy.to_device(&[10_u32, 20, 20, 40]).unwrap();
+
+    assert_eq!(adjacent_find2((&left, &right), PairEqual).unwrap(), Some(1));
+    assert_eq!(
+        lower_bound2((&left, &right), (2_u32, 0_u32), PairU32Less).unwrap(),
+        1
+    );
+    assert!(is_sorted2((&left, &right), PairU32Less).unwrap());
 }
 
 #[test]

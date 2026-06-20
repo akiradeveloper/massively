@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
-    op::{GpuOp, PredicateOp},
+    op::GpuOp,
     primitives::range as primitive_range,
 };
 use cubecl::prelude::*;
@@ -18,31 +18,25 @@ fn gather_if_one<InputSource, IndexSource, Stencil, Pred>(
     input: &InputSource,
     indices: &IndexSource,
     stencil: &Stencil,
+    default: InputSource::Item,
 ) -> Result<DeviceVec<InputSource::Runtime, InputSource::Item>, Error>
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = InputSource::Runtime> + KernelColumnAt<S0>,
-    InputSource::Item: CubePrimitive + CubeElement + Default,
+    Stencil: super::SelectionStencil<Pred, Runtime = InputSource::Runtime>,
+    InputSource::Item: CubePrimitive + CubeElement,
     InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     input.validate()?;
     indices.validate()?;
-    stencil.validate()?;
 
     let input = super::device_expr_collect(input)?;
     let indices = super::device_expr_collect(indices)?;
     super::ensure_same_len(indices.len, stencil.len())?;
-    let flags = super::device_expr_selection_handles::<Stencil, super::Tuple1PredicateOp<Pred>>(
-        stencil, false,
-    )?;
+    let flags = stencil.selection_handles(false)?;
 
-    let output =
-        primitive_range::filled(input.policy(), indices.len, InputSource::Item::default())?;
+    let output = primitive_range::filled(input.policy(), indices.len, default)?;
     let num_blocks = indices.len.div_ceil(BLOCK_API_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
@@ -286,12 +280,15 @@ impl_gather_input_index_source!(SoA3<A, B, C>);
 pub trait GatherIfInput<Indices, Stencil, Pred> {
     /// Output produced by gather-if.
     type Output;
+    /// Default value used for positions that are not selected.
+    type Default;
 
     /// Gathers selected elements into default-initialized output.
     fn gather_if_input(
         self,
         indices: Indices,
         stencil: Stencil,
+        default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error>;
 }
@@ -303,20 +300,19 @@ where
     SoAView1<IndexSource>: ReadOnlySoA<Item = (u32,), Scalar = u32>,
     InputSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = InputSource::Runtime> + KernelColumnAt<S0>,
-    InputSource::Item: CubePrimitive + CubeElement + Default,
+    Stencil: super::SelectionStencil<Pred, Runtime = InputSource::Runtime>,
+    InputSource::Item: CubePrimitive + CubeElement,
     InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Output = SoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
+    type Default = (InputSource::Item,);
 
     fn gather_if_input(
         self,
         indices: SoAView1<IndexSource>,
         stencil: Stencil,
+        default: Self::Default,
         _pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         Ok(SoA1 {
@@ -324,6 +320,7 @@ where
                 &self.source,
                 &indices.source,
                 &stencil,
+                default.0,
             )?,
         })
     }
@@ -334,26 +331,26 @@ impl<InputSource, IndexSource, Stencil, Pred> GatherIfInput<IndexSource, Stencil
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: KernelColumn<Runtime = InputSource::Runtime> + KernelColumnAt<S0>,
-    InputSource::Item: CubePrimitive + CubeElement + Default,
+    Stencil: super::SelectionStencil<Pred, Runtime = InputSource::Runtime>,
+    InputSource::Item: CubePrimitive + CubeElement,
     InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
-    Stencil::Item: CubePrimitive + CubeElement,
-    Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Output = SoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
+    type Default = InputSource::Item;
 
     fn gather_if_input(
         self,
         indices: IndexSource,
         stencil: Stencil,
+        default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
             SoAView1 { source: self },
             SoAView1 { source: indices },
             stencil,
+            (default,),
             pred,
         )
     }
@@ -366,17 +363,21 @@ where
 {
     type Output =
         <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+    type Default =
+        <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
 
     fn gather_if_input(
         self,
         indices: (IndexSource,),
         stencil: Stencil,
+        default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
             SoAView1 { source: self.0 },
             SoAView1 { source: indices.0 },
             stencil,
+            default,
             pred,
         )
     }
@@ -389,11 +390,14 @@ where
 {
     type Output =
         <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+    type Default =
+        <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
 
     fn gather_if_input(
         self,
         indices: (IndexSource,),
         stencil: Stencil,
+        default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
@@ -403,6 +407,7 @@ where
             },
             SoAView1 { source: indices.0 },
             stencil,
+            default,
             pred,
         )
     }
@@ -418,11 +423,17 @@ where
         Stencil,
         Pred,
     >>::Output;
+    type Default = <SoAView3<First, Second, Third> as GatherIfInput<
+        SoAView1<IndexSource>,
+        Stencil,
+        Pred,
+    >>::Default;
 
     fn gather_if_input(
         self,
         indices: (IndexSource,),
         stencil: Stencil,
+        default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         <SoAView3<First, Second, Third> as GatherIfInput<
@@ -437,6 +448,7 @@ where
             },
             SoAView1 { source: indices.0 },
             stencil,
+            default,
             pred,
         )
     }
@@ -456,43 +468,48 @@ macro_rules! impl_gather_if_input {
                     + KernelColumnAt<S0>,
             )+
             IndexSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = u32> + KernelColumnAt<S0>,
-            Stencil: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement + Default,
+            Stencil: super::SelectionStencil<Pred, Runtime = <$first as KernelColumn>::Runtime>,
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             $(
-                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement + Default,
+                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
             )+
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
             IndexSource::Expr: DeviceGpuExpr<u32>,
-            Stencil::Item: CubePrimitive + CubeElement,
-            Stencil::Expr: GpuExpr<Stencil::Item>,
-            Pred: PredicateOp<(Stencil::Item,)>,
         {
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
+            type Default = (
+                <$first as KernelColumn>::Item,
+                $( <$rest as KernelColumn>::Item ),+
+            );
 
             fn gather_if_input(
                 self,
                 indices: SoAView1<IndexSource>,
                 stencil: Stencil,
+                default: Self::Default,
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&indices)?;
+                let ($first_field, $( $field ),+) = default;
                 let $first_field = gather_if_one::<$first, IndexSource, Stencil, Pred>(
                     &self.$first_field,
                     &indices.source,
                     &stencil,
+                    $first_field,
                 )?;
                 $(
                     let $field = gather_if_one::<$rest, IndexSource, Stencil, Pred>(
                         &self.$field,
                         &indices.source,
                         &stencil,
+                        $field,
                     )?;
                 )+
                 Ok($output { $first_field, $( $field ),+ })
@@ -516,17 +533,20 @@ macro_rules! impl_gather_if_input_sources {
             Self: GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>,
         {
             type Output = <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+            type Default = <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
 
             fn gather_if_input(
                 self,
                 indices: IndexSource,
                 stencil: Stencil,
+                default: Self::Default,
                 pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
                     self,
                     SoAView1 { source: indices },
                     stencil,
+                    default,
                     pred,
                 )
             }
@@ -556,13 +576,14 @@ where
     materialize(input.gather_input(indices)?)
 }
 
-/// Gathers selected elements into default-initialized output.
+/// Gathers selected elements into an output initialized with `default`.
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only.
 pub fn gather_if<Input, Indices, Stencil, Pred>(
     input: Input,
     indices: Indices,
     stencil: Stencil,
+    default: <Input as GatherIfInput<Indices, Stencil, Pred>>::Default,
     _pred: Pred,
 ) -> Result<
     <<Input as GatherIfInput<Indices, Stencil, Pred>>::Output as MaterializeOutput>::Output,
@@ -572,5 +593,5 @@ where
     Input: GatherIfInput<Indices, Stencil, Pred>,
     <Input as GatherIfInput<Indices, Stencil, Pred>>::Output: MaterializeOutput,
 {
-    materialize(input.gather_if_input(indices, stencil, GpuOp::<Pred>::new())?)
+    materialize(input.gather_if_input(indices, stencil, default, GpuOp::<Pred>::new())?)
 }
