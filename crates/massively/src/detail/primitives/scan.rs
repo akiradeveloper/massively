@@ -273,6 +273,252 @@ where
     ))
 }
 
+macro_rules! define_scan_tuple_value_by_key_device_vec {
+    (
+        $inclusive_fn:ident,
+        $exclusive_fn:ident,
+        $handle_fn:ident,
+        $exclusive_handle_fn:ident,
+        $output:ident,
+        $handles:ty,
+        $block_kernel:ident,
+        $add_prefix_kernel:ident,
+        $exclusive_kernel:ident,
+        ( $( $ty:ident: $value:ident: $out:ident: $tail:ident: $tail_vec:ident: $prefix:ident: $init:tt ),+ )
+    ) => {
+        pub(crate) fn $inclusive_fn<R, K, $( $ty ),+, KeyEq, Op>(
+            keys: &DeviceVec<R, K>,
+            $( $value: &DeviceVec<R, $ty>, )+
+            _key_eq: GpuOp<KeyEq>,
+            _op: GpuOp<Op>,
+        ) -> Result<$output<$( DeviceVec<R, $ty> ),+>, Error>
+        where
+            R: Runtime,
+            K: CubePrimitive + CubeElement,
+            $( $ty: CubePrimitive + CubeElement, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        {
+            $(
+                super::ensure_same_len($value.len(), keys.len())?;
+            )+
+            let ($( $out, )+) = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
+                keys.policy(),
+                keys,
+                $( &$value.handle, )+
+            )?;
+            Ok($output {
+                $( $value: DeviceVec::from_handle($value.policy().clone(), $out, $value.len()), )+
+            })
+        }
+
+        pub(crate) fn $exclusive_fn<R, K, $( $ty ),+, KeyEq, Op>(
+            keys: &DeviceVec<R, K>,
+            $( $value: &DeviceVec<R, $ty>, )+
+            init: ($( $ty ),+),
+            _key_eq: GpuOp<KeyEq>,
+            _op: GpuOp<Op>,
+        ) -> Result<$output<$( DeviceVec<R, $ty> ),+>, Error>
+        where
+            R: Runtime,
+            K: CubePrimitive + CubeElement,
+            $( $ty: CubePrimitive + CubeElement, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        {
+            $(
+                super::ensure_same_len($value.len(), keys.len())?;
+            )+
+            let inclusive = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
+                keys.policy(),
+                keys,
+                $( &$value.handle, )+
+            )?;
+            let ($( $out, )+) = $exclusive_handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
+                keys.policy(),
+                keys,
+                inclusive,
+                init,
+            )?;
+            Ok($output {
+                $( $value: DeviceVec::from_handle($value.policy().clone(), $out, $value.len()), )+
+            })
+        }
+
+        fn $handle_fn<R, K, $( $ty ),+, KeyEq, Op>(
+            policy: &CubePolicy<R>,
+            keys: &DeviceVec<R, K>,
+            $( $value: &cubecl::server::Handle, )+
+        ) -> Result<$handles, Error>
+        where
+            R: Runtime,
+            K: CubePrimitive + CubeElement,
+            $( $ty: CubePrimitive + CubeElement, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        {
+            let len = keys.len();
+            let client = policy.client();
+            if len == 0 {
+                return Ok(($( {
+                    let _ = core::mem::size_of::<$ty>();
+                    policy.empty_handle()
+                }, )+));
+            }
+            if len == 1 {
+                return Ok(($( range::copy_handle::<R, $ty>(policy, $value, len)?, )+));
+            }
+
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+            let num_blocks_u32 =
+                u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+            let workspace = Workspace::new(policy);
+            $(
+                let $out = workspace.alloc::<$ty>(len);
+                let $tail = workspace.alloc::<$ty>(num_blocks);
+            )+
+            let block_tail_keys = workspace.alloc::<K>(num_blocks);
+
+            unsafe {
+                $block_kernel::launch_unchecked::<K, $( $ty, )+ KeyEq, Op, R>(
+                    client,
+                    CubeCount::Static(num_blocks_u32, 1, 1),
+                    CubeDim::new_1d(BLOCK_SCAN_SIZE),
+                    unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
+                    $(
+                        unsafe { BufferArg::from_raw_parts($value.clone(), len) },
+                    )+
+                    unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                    $(
+                        unsafe { BufferArg::from_raw_parts($out.clone(), len) },
+                    )+
+                    unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+                    $(
+                        unsafe { BufferArg::from_raw_parts($tail.clone(), num_blocks) },
+                    )+
+                );
+            }
+
+            if num_blocks > 1 {
+                let tail_keys = DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+                $(
+                    let $tail_vec = DeviceVec::<R, $ty>::from_handle(
+                        policy.clone(),
+                        $tail.clone(),
+                        num_blocks,
+                    );
+                )+
+                let ($( $prefix, )+) = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
+                    policy,
+                    &tail_keys,
+                    $( &$tail_vec.handle, )+
+                )?;
+                unsafe {
+                    $add_prefix_kernel::launch_unchecked::<K, $( $ty, )+ KeyEq, Op, R>(
+                        client,
+                        CubeCount::Static(num_blocks_u32, 1, 1),
+                        CubeDim::new_1d(BLOCK_SCAN_SIZE),
+                        unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+                        $(
+                            unsafe { BufferArg::from_raw_parts($prefix.clone(), num_blocks) },
+                        )+
+                        unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                        $(
+                            unsafe { BufferArg::from_raw_parts($out.clone(), len) },
+                        )+
+                    );
+                }
+            }
+
+            Ok(($( $out, )+))
+        }
+
+        fn $exclusive_handle_fn<R, K, $( $ty ),+, KeyEq, Op>(
+            policy: &CubePolicy<R>,
+            keys: &DeviceVec<R, K>,
+            inclusive: $handles,
+            init: ($( $ty ),+),
+        ) -> Result<$handles, Error>
+        where
+            R: Runtime,
+            K: CubePrimitive + CubeElement,
+            $( $ty: CubePrimitive + CubeElement, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        {
+            let len = keys.len();
+            if len == 0 {
+                return Ok(($( {
+                    let _ = core::mem::size_of::<$ty>();
+                    policy.empty_handle()
+                }, )+));
+            }
+
+            let client = policy.client();
+            $(
+                let $out = client.empty(len * std::mem::size_of::<$ty>());
+            )+
+            let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+            let num_blocks_u32 =
+                u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+            $(
+                let $value = client.create_from_slice($ty::as_bytes(&[init.$init]));
+            )+
+            unsafe {
+                $exclusive_kernel::launch_unchecked::<K, $( $ty, )+ KeyEq, Op, R>(
+                    client,
+                    CubeCount::Static(num_blocks_u32, 1, 1),
+                    CubeDim::new_1d(BLOCK_SCAN_SIZE),
+                    unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
+                    $(
+                        unsafe { BufferArg::from_raw_parts(inclusive.$init.clone(), len) },
+                    )+
+                    $(
+                        unsafe { BufferArg::from_raw_parts($value.clone(), 1) },
+                    )+
+                    $(
+                        unsafe { BufferArg::from_raw_parts($out.clone(), len) },
+                    )+
+                );
+            }
+
+            Ok(($( $out, )+))
+        }
+    };
+}
+
+define_scan_tuple_value_by_key_device_vec!(
+    inclusive_scan_tuple2_by_key_values_device_vec,
+    exclusive_scan_tuple2_by_key_values_device_vec,
+    inclusive_scan_tuple2_by_key_values_handle,
+    make_scan_tuple2_by_key_values_exclusive,
+    SoA2,
+    (cubecl::server::Handle, cubecl::server::Handle),
+    scan_by_key_tuple2_block_kernel,
+    scan_by_key_tuple2_add_block_prefix_kernel,
+    scan_by_key_tuple2_make_exclusive_kernel,
+    (A: left: output_a: block_tail_a: block_tail_a_vec: prefix_a: 0, B: right: output_b: block_tail_b: block_tail_b_vec: prefix_b: 1)
+);
+define_scan_tuple_value_by_key_device_vec!(
+    inclusive_scan_tuple3_by_key_values_device_vec,
+    exclusive_scan_tuple3_by_key_values_device_vec,
+    inclusive_scan_tuple3_by_key_values_handle,
+    make_scan_tuple3_by_key_values_exclusive,
+    SoA3,
+    (
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+    ),
+    scan_by_key_tuple3_block_kernel,
+    scan_by_key_tuple3_add_block_prefix_kernel,
+    scan_by_key_tuple3_make_exclusive_kernel,
+    (A: first: output_a: block_tail_a: block_tail_a_vec: prefix_a: 0, B: second: output_b: block_tail_b: block_tail_b_vec: prefix_b: 1, C: third: output_c: block_tail_c: block_tail_c_vec: prefix_c: 2)
+);
+
 macro_rules! define_scan_tuple_by_key_device_vec {
     (
         $inclusive_fn:ident,

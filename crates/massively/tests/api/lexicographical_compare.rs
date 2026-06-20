@@ -1,5 +1,21 @@
 use crate::common::*;
 
+#[test]
+fn lexicographical_compare_accepts_borrowed_tuple_columns() {
+    let policy = policy();
+    let left_a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
+    let left_b = policy.to_device(&[10_u32, 20]).unwrap();
+    let right_a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
+    let right_b = policy.to_device(&[10_u32, 25]).unwrap();
+
+    assert!(
+        lexicographical_compare((&left_a, &left_b), (&right_a, &right_b), MixedTupleLess).unwrap()
+    );
+    assert!(
+        !lexicographical_compare((&right_a, &right_b), (&left_a, &left_b), MixedTupleLess).unwrap()
+    );
+}
+
 #[cfg(any())]
 #[test]
 fn lexicographical_compare_accepts_borrowed_heterogeneous_soa12() {

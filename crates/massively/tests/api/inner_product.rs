@@ -1,5 +1,37 @@
 use crate::common::*;
 
+#[test]
+fn inner_product_accepts_scalar_column() {
+    let policy = policy();
+    let left = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let right = policy.to_device(&[4.0_f32, 5.0, 6.0]).unwrap();
+
+    let result = inner_product((&left,), (&right,), Sum, (0.0_f32,), Sum).unwrap();
+
+    assert_eq!(result, (21.0,));
+}
+
+#[cfg(any())]
+#[test]
+fn inner_product_accepts_tuple_columns() {
+    let policy = policy();
+    let left_values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let left_ids = policy.to_device(&[10_u32, 20, 30]).unwrap();
+    let right_values = policy.to_device(&[4.0_f32, 5.0, 6.0]).unwrap();
+    let right_ids = policy.to_device(&[40_u32, 50, 60]).unwrap();
+
+    let result = inner_product(
+        (&left_values, &left_ids),
+        (&right_values, &right_ids),
+        Sum,
+        (0.0_f32, 0_u32),
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(result, (21.0, 210));
+}
+
 #[cfg(any())]
 #[test]
 fn inner_product_accepts_heterogeneous_soas() {

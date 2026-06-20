@@ -132,3 +132,38 @@ where
         keys.handle.clone(),
     )
 }
+
+pub(crate) fn key_run_end_control<R, K, Eq>(keys: &DeviceVec<R, K>) -> Result<SegmentControl, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    Eq: BinaryPredicateOp<K>,
+{
+    if keys.len() == 0 {
+        return SegmentControl::empty(keys.policy());
+    }
+
+    let len = keys.len();
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let client = keys.policy().client();
+    let block_count_u32 = segmented_block_count(len)?;
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+
+    unsafe {
+        key_run_end_flags_kernel::launch_unchecked::<K, Eq, R>(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEGMENTED_SIZE),
+            unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    SegmentControl::from_end_flags(
+        keys.policy(),
+        len,
+        len_u32,
+        flag_handle,
+        keys.handle.clone(),
+    )
+}

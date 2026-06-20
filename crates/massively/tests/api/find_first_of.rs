@@ -1,5 +1,19 @@
 use crate::common::*;
 
+#[test]
+fn find_first_of_accepts_borrowed_tuple_columns() {
+    let policy = policy();
+    let a = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
+    let b = policy.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let needle_a = policy.to_device(&[9.0_f32, 3.0]).unwrap();
+    let needle_b = policy.to_device(&[90_u32, 30]).unwrap();
+
+    assert_eq!(
+        find_first_of((&a, &b), (&needle_a, &needle_b), MixedTupleEqual).unwrap(),
+        Some(2)
+    );
+}
+
 #[cfg(any())]
 #[test]
 fn pair_search_accepts_borrowed_heterogeneous_soa12_patterns() {

@@ -6,10 +6,10 @@ pub(crate) use massively::{
     CubeWgpu, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_if,
     inclusive_scan, inclusive_scan_by_key, inner_product, is_partitioned, is_sorted,
-    is_sorted_until, lexicographical_compare, lower_bound, max_element, merge_by_key, min_element,
-    minmax_element, mismatch, partition, reduce, reduce_by_key, remove_if, replace_if, reverse,
-    scatter, scatter_if, set_difference, set_intersection, set_union, sort, sort_by_key, transform,
-    unique, unique_by_key, upper_bound, zip, zip3,
+    is_sorted_until, lexicographical_compare, lower_bound, max_element, merge, merge_by_key,
+    min_element, minmax_element, mismatch, partition, reduce, reduce_by_key, remove_if, replace_if,
+    reverse, scatter, scatter_if, set_difference, set_intersection, set_union, sort, sort_by_key,
+    transform, unique, unique_by_key, upper_bound,
 };
 
 pub(crate) fn policy() -> CubeWgpu {
@@ -26,9 +26,23 @@ impl BinaryOp<f32> for Sum {
 }
 
 #[cubecl::cube]
+impl BinaryOp<(f32,)> for Sum {
+    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
+        (lhs.0 + rhs.0,)
+    }
+}
+
+#[cubecl::cube]
 impl BinaryOp<u32> for Sum {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         lhs + rhs
+    }
+}
+
+#[cubecl::cube]
+impl BinaryOp<(u32,)> for Sum {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
+        (lhs.0 + rhs.0,)
     }
 }
 
@@ -64,12 +78,26 @@ impl BinaryPredicateOp<f32> for Less {
     }
 }
 
+#[cubecl::cube]
+impl BinaryPredicateOp<(f32,)> for Less {
+    fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
+        lhs.0 < rhs.0
+    }
+}
+
 pub(crate) struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for LessU32 {
     fn apply(lhs: u32, rhs: u32) -> bool {
         lhs < rhs
+    }
+}
+
+#[cubecl::cube]
+impl BinaryPredicateOp<(u32,)> for LessU32 {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
+        lhs.0 < rhs.0
     }
 }
 
@@ -196,6 +224,13 @@ impl BinaryPredicateOp<u32> for EqualU32 {
     }
 }
 
+#[cubecl::cube]
+impl BinaryPredicateOp<(u32,)> for EqualU32 {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
+        lhs.0 == rhs.0
+    }
+}
+
 pub(crate) struct SameParityU32;
 
 #[cubecl::cube]
@@ -205,12 +240,26 @@ impl BinaryPredicateOp<u32> for SameParityU32 {
     }
 }
 
+#[cubecl::cube]
+impl BinaryPredicateOp<(u32,)> for SameParityU32 {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
+        lhs.0 % 2 == rhs.0 % 2
+    }
+}
+
 pub(crate) struct NeverEqualU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<u32> for NeverEqualU32 {
     fn apply(lhs: u32, _rhs: u32) -> bool {
         lhs != lhs
+    }
+}
+
+#[cubecl::cube]
+impl BinaryPredicateOp<(u32,)> for NeverEqualU32 {
+    fn apply(lhs: (u32,), _rhs: (u32,)) -> bool {
+        lhs.0 != lhs.0
     }
 }
 
@@ -341,6 +390,15 @@ impl PredicateOp<u32> for U32IsTwenty {
 impl PredicateOp<(u32,)> for U32IsTwenty {
     fn apply(input: (u32,)) -> bool {
         input.0 == 20
+    }
+}
+
+pub(crate) struct MixedStencilKeep;
+
+#[cubecl::cube]
+impl PredicateOp<(f32, u32)> for MixedStencilKeep {
+    fn apply(input: (f32, u32)) -> bool {
+        input.0 > 1.0 && input.1 != 0
     }
 }
 

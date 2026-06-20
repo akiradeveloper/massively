@@ -379,7 +379,7 @@ fn transform_zip_flattens_soa1_columns() {
     let left = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = policy.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let split = transform(zip(&left, &right), PairMixedSplit).unwrap();
+    let split = transform((&left, &right), PairMixedSplit).unwrap();
     let (values, tags) = split;
 
     assert_eq!(values.to_vec().unwrap(), vec![11.0, 12.0, 13.0]);

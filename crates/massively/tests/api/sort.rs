@@ -43,7 +43,7 @@ fn sort_returns_device_storage() {
     let policy = policy();
     let x = policy.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
 
-    let sorted = sort(&x, Less).unwrap();
+    let sorted = sort((&x,), Less).unwrap();
     let (sorted,) = sorted;
 
     assert_eq!(sorted.to_vec().unwrap(), vec![1.0, 2.0, 3.0]);

@@ -317,6 +317,210 @@ pub(crate) fn scan_by_key_make_exclusive_kernel<
     }
 }
 
+macro_rules! define_tuple_value_by_key_scan_kernels {
+    (
+        $block_name:ident,
+        $add_prefix_name:ident,
+        $exclusive_name:ident,
+        ( $( $ty:ident: $input:ident: $output:ident: $shared:ident: $tail:ident: $prefix:ident: $init:tt: $init_arg:ident: $addend:ident ),+ )
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $block_name<
+            K: CubePrimitive,
+            $( $ty: CubePrimitive, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        >(
+            keys: &[K],
+            $( $input: &[$ty], )+
+            len: &[u32],
+            $( $output: &mut [$ty], )+
+            block_tail_keys: &mut [K],
+            $( $tail: &mut [$ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let block = CUBE_POS as usize;
+            let global = block * cube_dim + unit;
+            let logical_len = len[0] as usize;
+            $(
+                let mut $shared = Shared::<[$ty]>::new_slice(cube_dim);
+            )+
+            let mut heads = Shared::<[u32]>::new_slice(cube_dim);
+            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+            if global < logical_len {
+                $(
+                    $shared[unit] = $input[global];
+                )+
+                valid[unit] = 1u32;
+                if unit == 0usize || !KeyEq::apply(keys[global - 1usize], keys[global]) {
+                    heads[unit] = 1u32;
+                } else {
+                    heads[unit] = 0u32;
+                }
+            } else {
+                valid[unit] = 0u32;
+                heads[unit] = 1u32;
+                if logical_len > 0usize {
+                    $(
+                        $shared[unit] = $input[0];
+                    )+
+                }
+            }
+            sync_cube();
+
+            let stride = RuntimeCell::<usize>::new(1usize);
+            while stride.read() < cube_dim {
+                $(
+                    let $addend = RuntimeCell::<$ty>::new($shared[unit]);
+                )+
+                let addend_head = RuntimeCell::<u32>::new(0u32);
+                let addend_valid = RuntimeCell::<u32>::new(0u32);
+                if unit >= stride.read() {
+                    $(
+                        $addend.store($shared[unit - stride.read()]);
+                    )+
+                    addend_head.store(heads[unit - stride.read()]);
+                    addend_valid.store(valid[unit - stride.read()]);
+                }
+                sync_cube();
+                if unit >= stride.read() && valid[unit] != 0u32 && addend_valid.read() != 0u32 {
+                    if heads[unit] == 0u32 {
+                        let reduced = Op::apply(
+                            ($( $addend.read() ),+),
+                            ($( $shared[unit] ),+),
+                        );
+                        $(
+                            $shared[unit] = reduced.$init;
+                        )+
+                    }
+                    heads[unit] = heads[unit] | addend_head.read();
+                }
+                sync_cube();
+                stride.store(stride.read() * 2usize);
+            }
+
+            if global < logical_len {
+                $(
+                    $output[global] = $shared[unit];
+                )+
+                if unit == cube_dim - 1usize || global == logical_len - 1usize {
+                    block_tail_keys[block] = keys[global];
+                    $(
+                        $tail[block] = $shared[unit];
+                    )+
+                }
+            }
+        }
+
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $add_prefix_name<
+            K: CubePrimitive,
+            $( $ty: CubePrimitive, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        >(
+            keys: &[K],
+            block_tail_keys: &[K],
+            $( $prefix: &[$ty], )+
+            len: &[u32],
+            $( $output: &mut [$ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let block = CUBE_POS as usize;
+            let global = block * cube_dim + unit;
+            let logical_len = len[0] as usize;
+            let mut first_segment = Shared::<[u32]>::new_slice(cube_dim);
+
+            if global < logical_len {
+                if unit == 0usize || KeyEq::apply(keys[global - 1usize], keys[global]) {
+                    first_segment[unit] = 1u32;
+                } else {
+                    first_segment[unit] = 0u32;
+                }
+            } else {
+                first_segment[unit] = 0u32;
+            }
+            sync_cube();
+
+            let stride = RuntimeCell::<usize>::new(1usize);
+            while stride.read() < cube_dim {
+                let previous = RuntimeCell::<u32>::new(first_segment[unit]);
+                if unit >= stride.read() {
+                    previous.store(first_segment[unit - stride.read()]);
+                }
+                sync_cube();
+                if unit >= stride.read() {
+                    first_segment[unit] = first_segment[unit] & previous.read();
+                }
+                sync_cube();
+                stride.store(stride.read() * 2usize);
+            }
+
+            if block > 0usize
+                && global < logical_len
+                && first_segment[unit] != 0u32
+                && KeyEq::apply(block_tail_keys[block - 1usize], keys[block * cube_dim])
+            {
+                let reduced = Op::apply(
+                    ($( $prefix[block - 1usize] ),+),
+                    ($( $output[global] ),+),
+                );
+                $(
+                    $output[global] = reduced.$init;
+                )+
+            }
+        }
+
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $exclusive_name<
+            K: CubePrimitive,
+            $( $ty: CubePrimitive, )+
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
+        >(
+            keys: &[K],
+            $( $input: &[$ty], )+
+            $( $init_arg: &[$ty], )+
+            $( $output: &mut [$ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < keys.len() {
+                if global == 0usize || !KeyEq::apply(keys[global - 1usize], keys[global]) {
+                    $(
+                        $output[global] = $init_arg[0];
+                    )+
+                } else {
+                    let reduced = Op::apply(
+                        ($( $init_arg[0] ),+),
+                        ($( $input[global - 1usize] ),+),
+                    );
+                    $(
+                        $output[global] = reduced.$init;
+                    )+
+                }
+            }
+        }
+    };
+}
+
+define_tuple_value_by_key_scan_kernels!(
+    scan_by_key_tuple2_block_kernel,
+    scan_by_key_tuple2_add_block_prefix_kernel,
+    scan_by_key_tuple2_make_exclusive_kernel,
+    (A: input_a: output_a: shared_a: block_tail_a: prefix_a: 0: init_a: addend_a, B: input_b: output_b: shared_b: block_tail_b: prefix_b: 1: init_b: addend_b)
+);
+define_tuple_value_by_key_scan_kernels!(
+    scan_by_key_tuple3_block_kernel,
+    scan_by_key_tuple3_add_block_prefix_kernel,
+    scan_by_key_tuple3_make_exclusive_kernel,
+    (A: input_a: output_a: shared_a: block_tail_a: prefix_a: 0: init_a: addend_a, B: input_b: output_b: shared_b: block_tail_b: prefix_b: 1: init_b: addend_b, C: input_c: output_c: shared_c: block_tail_c: prefix_c: 2: init_c: addend_c)
+);
+
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn reduce_by_key_end_flags_kernel<
     K: CubePrimitive,
@@ -596,6 +800,56 @@ pub(crate) fn reduce_by_key_values_at_ends_kernel<
         } else {
             values[global] = inclusive[global];
         }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple2_apply_init_kernel<A: CubePrimitive, B: CubePrimitive, Op: BinaryOp<(A, B)>>(
+    a: &[A],
+    b: &[B],
+    init_a: &[A],
+    init_b: &[B],
+    out_a: &mut [A],
+    out_b: &mut [B],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < a.len() {
+        let reduced = Op::apply((init_a[0], init_b[0]), (a[global], b[global]));
+        out_a[global] = reduced.0;
+        out_b[global] = reduced.1;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple3_apply_init_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    Op: BinaryOp<(A, B, C)>,
+>(
+    a: &[A],
+    b: &[B],
+    c: &[C],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
+    out_a: &mut [A],
+    out_b: &mut [B],
+    out_c: &mut [C],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < a.len() {
+        let reduced = Op::apply(
+            (init_a[0], init_b[0], init_c[0]),
+            (a[global], b[global], c[global]),
+        );
+        out_a[global] = reduced.0;
+        out_b[global] = reduced.1;
+        out_c[global] = reduced.2;
     }
 }
 

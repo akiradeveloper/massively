@@ -21,7 +21,6 @@ GPU上のデータ領域を表す。
 
 - 不変スライス: DeviceVec::slice<R: RangeBounds>(range: R) -> DeviceVecSlice
 - 可変スライス: DeviceVec::slice_mut<R: RangeBounds>(range: R) -> DeviceVecSliceMut
-- コピー: DeviceVecSliceMut::copy(self, DeviceVecSlice)
 
 ### SoA (Structure of Array)
 
@@ -59,7 +58,7 @@ MIterMut<n> = (DeviceVecSliceMut, DeviceVecSliceMut, ...)
 - find_first_of(xs: &[]n, needles: &[]n, eq: n->n->bool) -> int?
 - find_if(xs: &[]n, p: n->bool) -> int?
 - gather(xs: &[]n, indices: &[int]) -> []n
-- gather_if(xs: &[]n, indices: &[int], stencil: &[]k, p: k->bool) -> []n
+- gather_if(xs: &[]n, indices: &[int], default: n, stencil: &[]k, p: k->bool) -> []n
 - inclusive_scan(xs: &[]n, op: n->n->n) -> []n
 - inclusive_scan_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, sum: n->n->n) -> []n
 - inner_product(xs: &[]n, ys: &[]m, zipper: n->m->l, zero: l, sum: l->l->l) -> l

@@ -938,6 +938,71 @@ macro_rules! impl_sort_by_key_input_key_source {
 impl_sort_by_key_input_key_source!(SoA2<A, B>);
 impl_sort_by_key_input_key_source!(SoA3<A, B, C>);
 
+macro_rules! impl_sort_by_key_view_values {
+    ($view:ident -> $out:ident < $( $value:ident: $field:ident ),+ >) => {
+        impl<KeySource, $( $value ),+, Less> SortByKeyInput<$view<$( $value ),+>, Less>
+            for SoAView1<KeySource>
+        where
+            Self: ReadOnlySoA<Item = (KeySource::Item,), Scalar = KeySource::Item>,
+            $view<$( $value ),+>: ReadOnlySoA,
+            KeySource: KernelColumn + KernelColumnAt<S0>,
+            $( $value: ReadOnlyKernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>, )+
+            KeySource::Item: CubePrimitive + CubeElement,
+            $( <$value as KernelColumn>::Item: CubePrimitive + CubeElement, )+
+            KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+            $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
+            Less: BinaryPredicateOp<KeySource::Item>,
+        {
+            type Output = (
+                SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
+                $out<$( DeviceVec<KeySource::Runtime, <$value as KernelColumn>::Item> ),+>,
+            );
+
+            fn sort_by_key_input(
+                self,
+                values: $view<$( $value ),+>,
+                _less: GpuOp<Less>,
+            ) -> Result<Self::Output, Error> {
+                ReadOnlySoA::validate(&self)?;
+                ReadOnlySoA::validate(&values)?;
+                let keys = super::device_expr_collect(&self.source)?;
+                let (out_keys, permutation) =
+                    ordering::sort_by_key_permutation(&keys, GpuOp::<Less>::new())?;
+                $(
+                    let $field = super::device_expr_collect(&values.$field)?;
+                    let $field = primitive_range::gather_device(&$field, permutation.indices())?;
+                )+
+                Ok((SoA1 { source: out_keys }, $out { $( $field ),+ }))
+            }
+        }
+
+        impl<KeySource, $( $value ),+, Less> SortByKeyInput<$view<$( $value ),+>, Less>
+            for KeySource
+        where
+            KeySource: KernelColumn + KernelColumnAt<S0>,
+            SoAView1<KeySource>: SortByKeyInput<$view<$( $value ),+>, Less>,
+        {
+            type Output =
+                <SoAView1<KeySource> as SortByKeyInput<$view<$( $value ),+>, Less>>::Output;
+
+            fn sort_by_key_input(
+                self,
+                values: $view<$( $value ),+>,
+                less: GpuOp<Less>,
+            ) -> Result<Self::Output, Error> {
+                <SoAView1<KeySource> as SortByKeyInput<$view<$( $value ),+>, Less>>::sort_by_key_input(
+                    SoAView1 { source: self },
+                    values,
+                    less,
+                )
+            }
+        }
+    };
+}
+
+impl_sort_by_key_view_values!(SoAView2 -> SoA2<A: left, B: right>);
+impl_sort_by_key_view_values!(SoAView3 -> SoA3<A: first, B: second, C: third>);
+
 impl<KeyA, KeyB, ValueSource, Less> SortByKeyInput<ValueSource, Less> for SoAView2<KeyA, KeyB>
 where
     Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
