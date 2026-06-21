@@ -7,7 +7,7 @@ use massively::{CubeWgpu, DeviceVec, Wgpu, gather};
 fn check_gather(policy: &CubeWgpu) {
     let values = policy.to_device(&[10.0_f32, 20.0, 30.0, 40.0]).unwrap();
     let indices = policy.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let (output,) = gather((&values,), (&indices,)).unwrap();
+    let (output,) = gather((values.slice(..),), (indices.slice(..),)).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
 }
 
@@ -23,8 +23,11 @@ fn bench_gather(c: &mut Criterion) {
             sync(&policy);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) =
-                        gather(black_box((&values,)), black_box((&indices,))).unwrap();
+                    let output: (DeviceVec<Wgpu, f32>,) = gather(
+                        (black_box(values.slice(..)),),
+                        (black_box(indices.slice(..)),),
+                    )
+                    .unwrap();
                     sync(&policy);
                     black_box(output)
                 })

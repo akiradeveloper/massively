@@ -19,7 +19,7 @@ impl UnaryOp<(f32,)> for MulTwo {
 
 fn check_transform(policy: &CubeWgpu) {
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let (output,) = transform((&values,), MulTwo).unwrap();
+    let (output,) = transform((values.slice(..),), MulTwo).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
@@ -35,7 +35,7 @@ fn bench_transform(c: &mut Criterion) {
             transform_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) =
-                        transform(black_box((&values,)), MulTwo).unwrap();
+                        transform((black_box(values.slice(..)),), MulTwo).unwrap();
                     sync(&policy);
                     black_box(output)
                 })

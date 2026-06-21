@@ -7,7 +7,13 @@ fn scatter_accepts_heterogeneous_columns() {
     let ids = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = policy.to_device(&[2_u32, 0, 3]).unwrap();
 
-    let scattered = scatter((&values, &ids), (&indices,), 4, (0.0_f32, 0_u32)).unwrap();
+    let scattered = scatter(
+        (values.slice(..), ids.slice(..)),
+        (indices.slice(..),),
+        4,
+        (0.0_f32, 0_u32),
+    )
+    .unwrap();
     let (values, ids) = scattered;
 
     assert_eq!(values.to_vec().unwrap(), vec![2.0, 0.0, 1.0, 3.0]);
@@ -33,8 +39,21 @@ fn scatter_accepts_soa12_values() {
     let l = policy.to_device(&[7000_u32, 8000, 9000]).unwrap();
 
     let scattered = scatter(
-        zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
-        &indices,
+        zip12(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+            h.slice(..),
+            i.slice(..),
+            j.slice(..),
+            k.slice(..),
+            l.slice(..),
+        ),
+        (indices.slice(..),),
         3,
         (
             0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32,

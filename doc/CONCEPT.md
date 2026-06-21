@@ -17,18 +17,18 @@ GPU上のデータ領域を表す。
 - to_device: CPU->GPU転送
 - to_vec: GPU->CPU転送
 
-### DeviceVecSlice / DeviceVecSliceMut
+### DeviceSlice / DeviceSliceMut
 
-- 不変スライス: DeviceVec::slice<R: RangeBounds>(range: R) -> DeviceVecSlice
-- 可変スライス: DeviceVec::slice_mut<R: RangeBounds>(range: R) -> DeviceVecSliceMut
+- 不変スライス: DeviceVec::slice<R: RangeBounds>(range: R) -> DeviceSlice
+- 可変スライス: DeviceVec::slice_mut<R: RangeBounds>(range: R) -> DeviceSliceMut
 
 ### SoA (Structure of Array)
 
 GPUで計算を行うに当たって、AoSよりSoAの方が性能上有利。
-DeviceVecSliceをTupleでまとめ、MIterにした上で計算に使う。
+DeviceSliceをTupleでまとめ、MIterにした上で計算に使う。
 
-MIter<n> = (DeviceVecSlice, DeviceVecSlice, ...)
-MIterMut<n> = (DeviceVecSliceMut, DeviceVecSliceMut, ...)
+MIter<n> = (DeviceSlice, DeviceSlice, ...)
+MIterMut<n> = (DeviceSliceMut, DeviceSliceMut, ...)
 
 ## アルゴリズム
 
@@ -37,7 +37,7 @@ MIterMut<n> = (DeviceVecSliceMut, DeviceVecSliceMut, ...)
 ### 記法
 
 - &[]nはMIter<n>を表す。
-- &[T]はMIter<1>を表す。&[int]は特に要素がintのものを表す。
+- &[T]はMIter<1>を表す。
 - &mut[T]はMIterMut<n>を表す。
 - T?は、Option<T>を表す。
 - []nはOwnedなDeviceVecのTupleを表す。MVec<n>と呼ぶ。
@@ -49,7 +49,7 @@ MIterMut<n> = (DeviceVecSliceMut, DeviceVecSliceMut, ...)
 - adjacent_find: (xs: &[]n, eq: n->n->bool) -> int?
 - all_of(xs: &[]n, p: n->bool) -> bool
 - any_of(xs: &[]n, p: n->bool) -> bool
-- copy_if(xs: &[]n, stencil: &[]k, p: k->bool) -> []n
+- copy_if(xs: &[]n, stencil: &[u32]) -> []n
 - count_if(xs: &[]n, p: n->bool) -> int
 - equal(xs: &[]n, ys: &[]n, eq: n->n->bool) -> bool
 - equal_range(xs: &[]n, v: n, cmp: n->n->bool) -> int
@@ -57,8 +57,8 @@ MIterMut<n> = (DeviceVecSliceMut, DeviceVecSliceMut, ...)
 - exclusive_scan_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, zero: n, sum: n->n->n) -> []n
 - find_first_of(xs: &[]n, needles: &[]n, eq: n->n->bool) -> int?
 - find_if(xs: &[]n, p: n->bool) -> int?
-- gather(xs: &[]n, indices: &[int]) -> []n
-- gather_if(xs: &[]n, indices: &[int], default: n, stencil: &[]k, p: k->bool) -> []n
+- gather(xs: &[]n, indices: &[u32]) -> []n
+- gather_if(xs: &[]n, indices: &[u32], default: n, stencil: &[u32]) -> []n
 - inclusive_scan(xs: &[]n, op: n->n->n) -> []n
 - inclusive_scan_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, sum: n->n->n) -> []n
 - inner_product(xs: &[]n, ys: &[]m, zipper: n->m->l, zero: l, sum: l->l->l) -> l
@@ -78,10 +78,10 @@ MIterMut<n> = (DeviceVecSliceMut, DeviceVecSliceMut, ...)
 - reduce(xs: &[]n, zero: n, sum: n->n->n) -> n
 - reduce_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, zero: n, sum: n->n->n) -> ([]m, []n)
 - remove_if(xs: &[]n, p: n->bool) -> []n
-- replace_if(xs: &[]n, v: n, stencil: &[]k, p: k->bool) -> []n
+- replace_if(xs: &[]n, v: n, stencil: &[u32]) -> []n
 - reverse(xs: &[]n) -> []n
-- scatter(xs: &[]n, indices: &[int], len: int, default: n) -> []n
-- scatter_if(xs: &[]n, indices: &[int], len: int, default: n, stencil: &[]k, p: k->bool) -> []n
+- scatter(xs: &[]n, indices: &[u32], len: int, default: n) -> []n
+- scatter_if(xs: &[]n, indices: &[u32], len: int, default: n, stencil: &[u32]) -> []n
 - set_difference(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n
 - set_intersection(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n
 - set_union(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n

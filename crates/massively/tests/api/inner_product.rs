@@ -6,7 +6,8 @@ fn inner_product_accepts_scalar_column() {
     let left = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = policy.to_device(&[4.0_f32, 5.0, 6.0]).unwrap();
 
-    let result = inner_product((&left,), (&right,), Sum, (0.0_f32,), Sum).unwrap();
+    let result =
+        inner_product((left.slice(..),), (right.slice(..),), Sum, (0.0_f32,), Sum).unwrap();
 
     assert_eq!(result, (21.0,));
 }
@@ -21,8 +22,8 @@ fn inner_product_accepts_tuple_columns() {
     let right_ids = policy.to_device(&[40_u32, 50, 60]).unwrap();
 
     let result = inner_product(
-        (&left_values, &left_ids),
-        (&right_values, &right_ids),
+        (left_values.slice(..), left_ids.slice(..)),
+        (right_values.slice(..), right_ids.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -42,8 +43,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let right_b = policy.to_device(&[40_u32, 50, 60]).unwrap();
 
     let pair = inner_product(
-        zip(&left_a, &left_b),
-        zip(&right_a, &right_b),
+        zip(left_a.slice(..), left_b.slice(..)),
+        zip(right_a.slice(..), right_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -77,8 +78,34 @@ fn inner_product_accepts_heterogeneous_soas() {
     let rl = policy.to_device(&[12_u32, 13]).unwrap();
 
     let wide = inner_product(
-        zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
-        zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
+        zip12(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+            h.slice(..),
+            i.slice(..),
+            j.slice(..),
+            k.slice(..),
+            l.slice(..),
+        ),
+        zip12(
+            ra.slice(..),
+            rb.slice(..),
+            rc.slice(..),
+            rd.slice(..),
+            re.slice(..),
+            rf.slice(..),
+            rg.slice(..),
+            rh.slice(..),
+            ri.slice(..),
+            rj.slice(..),
+            rk.slice(..),
+            rl.slice(..),
+        ),
         Sum,
         (
             0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32,
@@ -97,8 +124,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let rhs_a = policy.to_device(&[4.0_f32, 5.0, 6.0]).unwrap();
     let rhs_b = policy.to_device(&[40_u32, 50, 60]).unwrap();
     let zipped = inner_product(
-        zip(&lhs_a, &lhs_b),
-        zip(&rhs_a, &rhs_b),
+        zip(lhs_a.slice(..), lhs_b.slice(..)),
+        zip(rhs_a.slice(..), rhs_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -111,8 +138,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let mixed_right_a = policy.to_device(&[4.0_f32, 5.0, 6.0]).unwrap();
     let mixed_right_b = policy.to_device(&[40_u32, 50, 60]).unwrap();
     let mixed = inner_product(
-        zip(&mixed_left_a, &mixed_left_b),
-        zip(&mixed_right_a, &mixed_right_b),
+        zip(mixed_left_a.slice(..), mixed_left_b.slice(..)),
+        zip(mixed_right_a.slice(..), mixed_right_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -125,8 +152,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let mixed_right_a = policy.to_device(&[4.0_f32, 5.0, 6.0]).unwrap();
     let mixed_right_b = policy.to_device(&[40_u32, 50, 60]).unwrap();
     let mixed = inner_product(
-        zip(&mixed_left_a, &mixed_left_b),
-        zip(&mixed_right_a, &mixed_right_b),
+        zip(mixed_left_a.slice(..), mixed_left_b.slice(..)),
+        zip(mixed_right_a.slice(..), mixed_right_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,

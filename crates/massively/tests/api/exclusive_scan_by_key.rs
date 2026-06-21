@@ -8,8 +8,14 @@ fn exclusive_scan_by_key_accepts_tuple_keys() {
     let key_b = policy.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
     let values = policy.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
 
-    let output =
-        exclusive_scan_by_key((&key_a, &key_b), &values, MixedTupleEqual, (0_u32,), Sum).unwrap();
+    let output = exclusive_scan_by_key(
+        (key_a.slice(..), key_b.slice(..)),
+        (values.slice(..),),
+        MixedTupleEqual,
+        (0_u32,),
+        Sum,
+    )
+    .unwrap();
     let (output,) = output;
     assert_eq!(output.to_vec().unwrap(), vec![0, 1, 0, 3, 0]);
 }
@@ -22,8 +28,8 @@ fn exclusive_scan_by_key_uses_supplied_key_equality() {
     let ids = policy.to_device(&[10_u32, 20, 30]).unwrap();
 
     let output = exclusive_scan_by_key(
-        (&keys,),
-        (&values, &ids),
+        (keys.slice(..),),
+        (values.slice(..), ids.slice(..)),
         NeverEqualU32,
         (100.0_f32, 1000_u32),
         TupleSum,
@@ -47,8 +53,8 @@ fn exclusive_scan_by_key_accepts_tuple_values() {
         .unwrap();
 
     let output = exclusive_scan_by_key(
-        (&keys,),
-        (&a, &b, &c),
+        (keys.slice(..),),
+        (a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
         (0.0_f32, 0_u32, 0.0_f32),
         TupleSum,

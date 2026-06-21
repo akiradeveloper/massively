@@ -18,7 +18,7 @@ impl BinaryPredicateOp<(u32,)> for Less {
 fn check_sort_by_key(policy: &CubeWgpu) {
     let keys = policy.to_device(&[2_u32, 0, 1]).unwrap();
     let values = policy.to_device(&[20.0_f32, 0.0, 10.0]).unwrap();
-    let ((keys,), (values,)) = sort_by_key((&keys,), (&values,), Less).unwrap();
+    let ((keys,), (values,)) = sort_by_key((keys.slice(..),), (values.slice(..),), Less).unwrap();
     assert_eq!(keys.to_vec().unwrap(), vec![0, 1, 2]);
     assert_eq!(values.to_vec().unwrap(), vec![0.0, 10.0, 20.0]);
 }
@@ -44,7 +44,7 @@ fn bench_sort(c: &mut Criterion) {
                     },
                     |(keys, values)| {
                         let output: ((DeviceVec<Wgpu, u32>,), (DeviceVec<Wgpu, f32>,)) =
-                            sort_by_key((&keys,), (&values,), Less).unwrap();
+                            sort_by_key((keys.slice(..),), (values.slice(..),), Less).unwrap();
                         sync(&policy);
                         black_box(output)
                     },

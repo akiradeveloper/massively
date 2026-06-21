@@ -45,13 +45,78 @@ which improves coalesced memory access and lets algorithms reuse or move columns
 independently.
 
 - `DeviceVec<T>` is a one-column device vector.
-- `&DeviceVec<T>` is a one-column input whose logical item is `(T,)`.
-- `(&a, &b)` combines borrowed columns into a wider SoA input whose logical
-  item is `(A, B)`.
+- `DeviceVec::slice(..)` creates a borrowed `DeviceSlice` input whose logical
+  item is `(T,)`.
+- `(a.slice(..), b.slice(..))` combines borrowed slices into a wider SoA input
+  whose logical item is `(A, B)`.
+- `DeviceSlice` is lowered as a logical view of the original device buffer.
+  Core input paths such as transform, scan, reduce, gather/scatter, search,
+  sort, and single-key sort-by-key avoid copying the slice into a temporary
+  `DeviceVec` before launching kernels.
 - Algorithms return owned device storage directly: `DeviceVec<T>` for one
   output column, or a tuple of `DeviceVec` columns for multi-column output.
 - By-key algorithms currently use a single key column. Their values may be
-  multi-column SoA inputs.
+  multi-column SoA inputs. Compound keys should be normalized into one key
+  column before calling by-key algorithms.
+- Stencil-style algorithms use one `u32` flag column, where `0` is false and any
+  non-zero value is true. One stencil column may select or flag multi-column
+  values.
+
+## v0.6 API Shapes
+
+Most algorithms read borrowed `DeviceSlice` inputs and return newly owned
+`DeviceVec` outputs. Stencil algorithms take a single `u32` flag column rather
+than a predicate marker:
+
+```rust
+use massively::{CubeWgpu, copy_if};
+
+fn main() -> Result<(), massively::Error> {
+    let policy = CubeWgpu::cpu();
+    let x = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0])?;
+    let tag = policy.to_device(&[10_u32, 20, 30, 40])?;
+    let keep = policy.to_device(&[1_u32, 0, 1, 0])?;
+
+    let (x, tag) = copy_if((x.slice(..), tag.slice(..)), (keep.slice(..),))?;
+
+    assert_eq!(x.to_vec()?, vec![1.0, 3.0]);
+    assert_eq!(tag.to_vec()?, vec![10, 30]);
+    Ok(())
+}
+```
+
+Predicate markers are still used by predicate-query and partition-style
+algorithms such as `remove_if`, `count_if`, `find_if`, and `partition`.
+
+By-key algorithms take one key column and may carry multiple value columns:
+
+```rust
+use cubecl::prelude::*;
+use massively::{CubeWgpu, sort_by_key};
+
+struct Less;
+#[cubecl::cube]
+impl massively::op::BinaryPredicateOp<(u32,)> for Less {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
+        lhs.0 < rhs.0
+    }
+}
+
+fn main() -> Result<(), massively::Error> {
+    let policy = CubeWgpu::cpu();
+    let key = policy.to_device(&[2_u32, 0, 1])?;
+    let x = policy.to_device(&[20.0_f32, 0.0, 10.0])?;
+    let tag = policy.to_device(&[200_u32, 0, 100])?;
+
+    let ((key,), (x, tag)) =
+        sort_by_key((key.slice(..),), (x.slice(..), tag.slice(..)), Less)?;
+
+    assert_eq!(key.to_vec()?, vec![0, 1, 2]);
+    assert_eq!(x.to_vec()?, vec![0.0, 10.0, 20.0]);
+    assert_eq!(tag.to_vec()?, vec![0, 100, 200]);
+    Ok(())
+}
+```
 
 ## Example
 
@@ -84,8 +149,8 @@ fn main() -> Result<(), massively::Error> {
     let vy = policy.to_device(&[0.0_f32, 2.0, 0.0])?;
     let vz = policy.to_device(&[0.0_f32, 0.0, 2.0])?;
 
-    let (energy,) = transform((&vx, &vy, &vz), KineticEnergy)?;
-    let sum = reduce((&energy,), (0.0,), Sum)?;
+    let (energy,) = transform((vx.slice(..), vy.slice(..), vz.slice(..)), KineticEnergy)?;
+    let sum = reduce((energy.slice(..),), (0.0,), Sum)?;
 
     assert_eq!(energy.to_vec()?, vec![0.5, 2.0, 4.0]);
     assert_eq!(sum, (6.5,));

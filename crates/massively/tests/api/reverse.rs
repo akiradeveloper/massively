@@ -6,7 +6,7 @@ fn reverse_accepts_borrowed_tuple_columns() {
     let a = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let reversed = reverse((&a, &b)).unwrap();
+    let reversed = reverse((a.slice(..), b.slice(..))).unwrap();
     let (a, b) = reversed;
 
     assert_eq!(a.to_vec().unwrap(), vec![3.0, 2.0, 1.0]);
@@ -20,7 +20,7 @@ fn reverse_accepts_borrowed_three_tuple_columns() {
     let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let c = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let reversed = reverse((&a, &b, &c)).unwrap();
+    let reversed = reverse((a.slice(..), b.slice(..), c.slice(..))).unwrap();
     let (a, b, c) = reversed;
 
     assert_eq!(a.to_vec().unwrap(), vec![3.0, 2.0, 1.0]);

@@ -91,15 +91,6 @@ impl BinaryPredicateOp<(u32, u32, u32)> for TripleU32Less {
     }
 }
 
-struct KeepOdd;
-
-#[cubecl::cube]
-impl PredicateOp<(u32,)> for KeepOdd {
-    fn apply(input: (u32,)) -> bool {
-        input.0 % 2 == 1
-    }
-}
-
 struct PairFirstOdd;
 
 #[cubecl::cube]
@@ -230,35 +221,28 @@ where
     massively::gather(source, indices)
 }
 
-fn copy_if2<B, S1, Stencil, S2, Pred>(
-    source: S1,
-    stencil: Stencil,
-    pred: Pred,
-) -> Result<S2, massively::Error>
+fn copy_if2<B, S1, Stencil, S2>(source: S1, stencil: Stencil) -> Result<S2, massively::Error>
 where
     B: Backend,
     S1: MIter<B>,
     Stencil: MIter<B, Item = (u32,)>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp<(u32,)>,
 {
-    massively::copy_if(source, stencil, pred)
+    massively::copy_if(source, stencil)
 }
 
-fn replace_if2<B, S1, Stencil, S2, Pred>(
+fn replace_if2<B, S1, Stencil, S2>(
     source: S1,
     replacement: S1::Item,
     stencil: Stencil,
-    pred: Pred,
 ) -> Result<S2, massively::Error>
 where
     B: Backend,
     S1: MIter<B>,
     Stencil: MIter<B, Item = (u32,)>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp<(u32,)>,
 {
-    massively::replace_if(source, replacement, stencil, pred)
+    massively::replace_if(source, replacement, stencil)
 }
 
 fn count_if2<B, S1, Pred>(source: S1, pred: Pred) -> Result<usize, massively::Error>
@@ -333,7 +317,7 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
     let policy = Policy::<Wgpu>::cpu();
     let input = policy.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform2((&input,), AddOne).unwrap();
+    let (output,) = transform2((input.slice(..),), AddOne).unwrap();
 
     assert_eq!(output.to_vec().unwrap(), vec![2, 3, 4]);
 }
@@ -343,7 +327,7 @@ fn reverse2_wraps_reverse_with_slice_array_signature() {
     let policy = Policy::<Wgpu>::cpu();
     let input = policy.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = reverse2((&input,)).unwrap();
+    let (output,) = reverse2((input.slice(..),)).unwrap();
 
     assert_eq!(output.to_vec().unwrap(), vec![3, 2, 1]);
 }
@@ -353,7 +337,7 @@ fn sort2_wraps_sort_with_slice_array_signature() {
     let policy = Policy::<Wgpu>::cpu();
     let input = policy.to_device(&[3_u32, 1, 2]).unwrap();
 
-    let (output,) = sort2((&input,), TupleU32Less).unwrap();
+    let (output,) = sort2((input.slice(..),), TupleU32Less).unwrap();
 
     assert_eq!(output.to_vec().unwrap(), vec![1, 2, 3]);
 }
@@ -364,7 +348,7 @@ fn gather2_wraps_gather_with_slice_array_signature() {
     let input = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = policy.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let (output,) = gather2((&input,), (&indices,)).unwrap();
+    let (output,) = gather2((input.slice(..),), (indices.slice(..),)).unwrap();
 
     assert_eq!(output.to_vec().unwrap(), vec![30, 10, 20]);
 }
@@ -374,7 +358,7 @@ fn transform3_can_fix_concrete_input_and_output_types() {
     let policy = Policy::<Wgpu>::cpu();
     let input = policy.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform3((&input,), AddOne).unwrap();
+    let (output,) = transform3((input.slice(..),), AddOne).unwrap();
 
     assert_eq!(output.to_vec().unwrap(), vec![2, 3, 4]);
 }
@@ -384,7 +368,7 @@ fn transform_can_hide_op_inside_wrapper() {
     let policy = Policy::<Wgpu>::cpu();
     let input = policy.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform_without_op((&input,)).unwrap();
+    let (output,) = transform_without_op((input.slice(..),)).unwrap();
 
     assert_eq!(output.to_vec().unwrap(), vec![2, 3, 4]);
 }
@@ -395,7 +379,7 @@ fn transform4_can_fix_concrete_two_column_input_and_output_types() {
     let left = policy.to_device(&[1_u32, 2, 3]).unwrap();
     let right = policy.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let (out_left, out_right) = transform4((&left, &right), PairShift).unwrap();
+    let (out_left, out_right) = transform4((left.slice(..), right.slice(..)), PairShift).unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![11, 22, 33]);
     assert_eq!(out_right.to_vec().unwrap(), vec![110, 120, 130]);
@@ -407,7 +391,7 @@ fn sort2_wraps_two_column_sort_with_slice_array_signature() {
     let left = policy.to_device(&[3_u32, 1, 2]).unwrap();
     let right = policy.to_device(&[30_u32, 10, 20]).unwrap();
 
-    let (out_left, out_right) = sort2((&left, &right), PairU32Less).unwrap();
+    let (out_left, out_right) = sort2((left.slice(..), right.slice(..)), PairU32Less).unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![1, 2, 3]);
     assert_eq!(out_right.to_vec().unwrap(), vec![10, 20, 30]);
@@ -420,8 +404,11 @@ fn transform5_can_fix_concrete_three_column_input_and_output_types() {
     let second = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let third = policy.to_device(&[100_u32, 200, 300]).unwrap();
 
-    let (out_first, out_second, out_third) =
-        transform5((&first, &second, &third), TripleShift).unwrap();
+    let (out_first, out_second, out_third) = transform5(
+        (first.slice(..), second.slice(..), third.slice(..)),
+        TripleShift,
+    )
+    .unwrap();
 
     assert_eq!(out_first.to_vec().unwrap(), vec![11, 22, 33]);
     assert_eq!(out_second.to_vec().unwrap(), vec![110, 220, 330]);
@@ -435,8 +422,11 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
     let second = policy.to_device(&[30_u32, 10, 20]).unwrap();
     let third = policy.to_device(&[300_u32, 100, 200]).unwrap();
 
-    let (out_first, out_second, out_third) =
-        sort2((&first, &second, &third), TripleU32Less).unwrap();
+    let (out_first, out_second, out_third) = sort2(
+        (first.slice(..), second.slice(..), third.slice(..)),
+        TripleU32Less,
+    )
+    .unwrap();
 
     assert_eq!(out_first.to_vec().unwrap(), vec![1, 2, 3]);
     assert_eq!(out_second.to_vec().unwrap(), vec![10, 20, 30]);
@@ -450,7 +440,7 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
     let tags = policy.to_device(&[20_u32, 30, 10, 40]).unwrap();
 
     assert_eq!(
-        minmax_element2((&values, &tags), PairU32Less).unwrap(),
+        minmax_element2((values.slice(..), tags.slice(..)), PairU32Less).unwrap(),
         Some((1, 3))
     );
 
@@ -459,7 +449,11 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
     let third = policy.to_device(&[200_u32, 100, 400, 300]).unwrap();
 
     assert_eq!(
-        minmax_element2((&first, &second, &third), TripleU32Less).unwrap(),
+        minmax_element2(
+            (first.slice(..), second.slice(..), third.slice(..)),
+            TripleU32Less
+        )
+        .unwrap(),
         Some((1, 2))
     );
 }
@@ -470,12 +464,20 @@ fn search_queries_wrap_two_column_tuple_inputs() {
     let left = policy.to_device(&[1_u32, 2, 2, 4]).unwrap();
     let right = policy.to_device(&[10_u32, 20, 20, 40]).unwrap();
 
-    assert_eq!(adjacent_find2((&left, &right), PairEqual).unwrap(), Some(1));
     assert_eq!(
-        lower_bound2((&left, &right), (2_u32, 0_u32), PairU32Less).unwrap(),
+        adjacent_find2((left.slice(..), right.slice(..)), PairEqual).unwrap(),
+        Some(1)
+    );
+    assert_eq!(
+        lower_bound2(
+            (left.slice(..), right.slice(..)),
+            (2_u32, 0_u32),
+            PairU32Less
+        )
+        .unwrap(),
         1
     );
-    assert!(is_sorted2((&left, &right), PairU32Less).unwrap());
+    assert!(is_sorted2((left.slice(..), right.slice(..)), PairU32Less).unwrap());
 }
 
 #[test]
@@ -486,8 +488,11 @@ fn gather2_wraps_three_column_gather_with_slice_array_signature() {
     let third = policy.to_device(&[1000_u32, 2000, 3000]).unwrap();
     let indices = policy.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let (out_first, out_second, out_third) =
-        gather2((&first, &second, &third), (&indices,)).unwrap();
+    let (out_first, out_second, out_third) = gather2(
+        (first.slice(..), second.slice(..), third.slice(..)),
+        (indices.slice(..),),
+    )
+    .unwrap();
 
     assert_eq!(out_first.to_vec().unwrap(), vec![30, 10, 20]);
     assert_eq!(out_second.to_vec().unwrap(), vec![300, 100, 200]);
@@ -499,7 +504,7 @@ fn transform2_wraps_tuple_output() {
     let policy = Policy::<Wgpu>::cpu();
     let input = policy.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (left, right) = transform2((&input,), Split).unwrap();
+    let (left, right) = transform2((input.slice(..),), Split).unwrap();
 
     assert_eq!(left.to_vec().unwrap(), vec![1, 2, 3]);
     assert_eq!(right.to_vec().unwrap(), vec![11, 12, 13]);
@@ -510,9 +515,10 @@ fn copy_if2_wraps_two_column_copy_if_with_tuple_source() {
     let policy = Policy::<Wgpu>::cpu();
     let left = policy.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = policy.to_device(&[100_u32, 200, 300, 400]).unwrap();
-    let stencil = policy.to_device(&[1_u32, 2, 3, 4]).unwrap();
+    let stencil = policy.to_device(&[1_u32, 0, 1, 0]).unwrap();
 
-    let (out_left, out_right) = copy_if2((&left, &right), (&stencil,), KeepOdd).unwrap();
+    let (out_left, out_right) =
+        copy_if2((left.slice(..), right.slice(..)), (stencil.slice(..),)).unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![10, 30]);
     assert_eq!(out_right.to_vec().unwrap(), vec![100, 300]);
@@ -523,10 +529,14 @@ fn replace_if2_wraps_two_column_replace_if_with_tuple_replacement() {
     let policy = Policy::<Wgpu>::cpu();
     let left = policy.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = policy.to_device(&[100_u32, 200, 300, 400]).unwrap();
-    let stencil = policy.to_device(&[1_u32, 2, 3, 4]).unwrap();
+    let stencil = policy.to_device(&[1_u32, 0, 1, 0]).unwrap();
 
-    let (out_left, out_right) =
-        replace_if2((&left, &right), (7_u32, 70_u32), (&stencil,), KeepOdd).unwrap();
+    let (out_left, out_right) = replace_if2(
+        (left.slice(..), right.slice(..)),
+        (7_u32, 70_u32),
+        (stencil.slice(..),),
+    )
+    .unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![7, 20, 7, 40]);
     assert_eq!(out_right.to_vec().unwrap(), vec![70, 200, 70, 400]);
@@ -538,8 +548,8 @@ fn predicate_queries_wrap_two_column_tuple_predicates() {
     let left = policy.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = policy.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
-    let count = count_if2((&left, &right), PairFirstOdd).unwrap();
-    let found = find_if2((&left, &right), PairFirstOdd).unwrap();
+    let count = count_if2((left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let found = find_if2((left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(count, 2);
     assert_eq!(found, Some(1));
@@ -551,7 +561,8 @@ fn remove_if2_wraps_two_column_remove_if_with_tuple_predicate() {
     let left = policy.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = policy.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
-    let (out_left, out_right) = remove_if2((&left, &right), PairFirstOdd).unwrap();
+    let (out_left, out_right) =
+        remove_if2((left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![10, 30]);
     assert_eq!(out_right.to_vec().unwrap(), vec![100, 300]);
@@ -564,7 +575,7 @@ fn partition2_wraps_two_column_partition_with_tuple_predicate() {
     let right = policy.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
     let ((true_left, true_right), (false_left, false_right)) =
-        partition2((&left, &right), PairFirstOdd).unwrap();
+        partition2((left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(true_left.to_vec().unwrap(), vec![21, 43]);
     assert_eq!(true_right.to_vec().unwrap(), vec![200, 400]);
@@ -580,8 +591,14 @@ fn is_partitioned2_wraps_two_column_partition_query() {
     let mixed_left = policy.to_device(&[21_u32, 10, 43, 30]).unwrap();
     let mixed_right = policy.to_device(&[200_u32, 100, 400, 300]).unwrap();
 
-    assert!(is_partitioned2((&partitioned_left, &partitioned_right), PairFirstOdd).unwrap());
-    assert!(!is_partitioned2((&mixed_left, &mixed_right), PairFirstOdd).unwrap());
+    assert!(
+        is_partitioned2(
+            (partitioned_left.slice(..), partitioned_right.slice(..)),
+            PairFirstOdd
+        )
+        .unwrap()
+    );
+    assert!(!is_partitioned2((mixed_left.slice(..), mixed_right.slice(..)), PairFirstOdd).unwrap());
 }
 
 #[test]
@@ -590,7 +607,7 @@ fn unique2_wraps_two_column_unique_with_tuple_predicate() {
     let left = policy.to_device(&[1_u32, 1, 2, 2, 2, 3]).unwrap();
     let right = policy.to_device(&[10_u32, 10, 20, 21, 21, 30]).unwrap();
 
-    let (out_left, out_right) = unique2((&left, &right), PairEqual).unwrap();
+    let (out_left, out_right) = unique2((left.slice(..), right.slice(..)), PairEqual).unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![1, 2, 2, 3]);
     assert_eq!(out_right.to_vec().unwrap(), vec![10, 20, 21, 30]);
@@ -602,7 +619,8 @@ fn adjacent_difference2_wraps_two_column_tuple_op() {
     let left = policy.to_device(&[10_u32, 13, 20]).unwrap();
     let right = policy.to_device(&[100_u32, 107, 120]).unwrap();
 
-    let (out_left, out_right) = adjacent_difference2((&left, &right), PairDifference).unwrap();
+    let (out_left, out_right) =
+        adjacent_difference2((left.slice(..), right.slice(..)), PairDifference).unwrap();
 
     assert_eq!(out_left.to_vec().unwrap(), vec![10, 3, 7]);
     assert_eq!(out_right.to_vec().unwrap(), vec![100, 7, 13]);

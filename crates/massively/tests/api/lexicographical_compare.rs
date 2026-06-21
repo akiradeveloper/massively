@@ -9,10 +9,20 @@ fn lexicographical_compare_accepts_borrowed_tuple_columns() {
     let right_b = policy.to_device(&[10_u32, 25]).unwrap();
 
     assert!(
-        lexicographical_compare((&left_a, &left_b), (&right_a, &right_b), MixedTupleLess).unwrap()
+        lexicographical_compare(
+            (left_a.slice(..), left_b.slice(..)),
+            (right_a.slice(..), right_b.slice(..)),
+            MixedTupleLess
+        )
+        .unwrap()
     );
     assert!(
-        !lexicographical_compare((&right_a, &right_b), (&left_a, &left_b), MixedTupleLess).unwrap()
+        !lexicographical_compare(
+            (right_a.slice(..), right_b.slice(..)),
+            (left_a.slice(..), left_b.slice(..)),
+            MixedTupleLess
+        )
+        .unwrap()
     );
 }
 
@@ -48,16 +58,68 @@ fn lexicographical_compare_accepts_borrowed_heterogeneous_soa12() {
 
     assert!(
         lexicographical_compare(
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
-            zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
+            zip12(
+                ra.slice(..),
+                rb.slice(..),
+                rc.slice(..),
+                rd.slice(..),
+                re.slice(..),
+                rf.slice(..),
+                rg.slice(..),
+                rh.slice(..),
+                ri.slice(..),
+                rj.slice(..),
+                rk.slice(..),
+                rl.slice(..)
+            ),
             Tuple12MixedTailLess,
         )
         .unwrap()
     );
     assert!(
         !lexicographical_compare(
-            zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+            zip12(
+                ra.slice(..),
+                rb.slice(..),
+                rc.slice(..),
+                rd.slice(..),
+                re.slice(..),
+                rf.slice(..),
+                rg.slice(..),
+                rh.slice(..),
+                ri.slice(..),
+                rj.slice(..),
+                rk.slice(..),
+                rl.slice(..)
+            ),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
             Tuple12MixedTailLess,
         )
         .unwrap()
@@ -79,10 +141,33 @@ fn lexicographical_compare_accepts_borrowed_heterogeneous_soa12() {
     assert!(
         lexicographical_compare(
             zip12(
-                &a_short, &b_short, &c_short, &d_short, &e_short, &f_short, &g_short, &h_short,
-                &i_short, &j_short, &k_short, &l_short
+                a_short.slice(..),
+                b_short.slice(..),
+                c_short.slice(..),
+                d_short.slice(..),
+                e_short.slice(..),
+                f_short.slice(..),
+                g_short.slice(..),
+                h_short.slice(..),
+                i_short.slice(..),
+                j_short.slice(..),
+                k_short.slice(..),
+                l_short.slice(..)
             ),
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
             Tuple12MixedTailLess,
         )
         .unwrap()

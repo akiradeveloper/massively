@@ -9,7 +9,12 @@ fn find_first_of_accepts_borrowed_tuple_columns() {
     let needle_b = policy.to_device(&[90_u32, 30]).unwrap();
 
     assert_eq!(
-        find_first_of((&a, &b), (&needle_a, &needle_b), MixedTupleEqual).unwrap(),
+        find_first_of(
+            (a.slice(..), b.slice(..)),
+            (needle_a.slice(..), needle_b.slice(..)),
+            MixedTupleEqual
+        )
+        .unwrap(),
         Some(2)
     );
 }
@@ -52,8 +57,34 @@ fn pair_search_accepts_borrowed_heterogeneous_soa12_patterns() {
 
     assert_eq!(
         find_first_of(
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
-            zip12(&na, &nb, &nc, &nd, &ne, &nf, &ng, &nh, &ni, &nj, &nk, &nl),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
+            zip12(
+                na.slice(..),
+                nb.slice(..),
+                nc.slice(..),
+                nd.slice(..),
+                ne.slice(..),
+                nf.slice(..),
+                ng.slice(..),
+                nh.slice(..),
+                ni.slice(..),
+                nj.slice(..),
+                nk.slice(..),
+                nl.slice(..)
+            ),
             Tuple12MixedEqual,
         )
         .unwrap(),

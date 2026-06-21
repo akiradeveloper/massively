@@ -5,9 +5,10 @@ use crate::{
         SoA3, SoAView1, SoAView2, SoAView3,
     },
     error::Error,
-    expr::{DeviceGpuExpr, GpuExpr},
+    expr::DeviceGpuExpr,
+    kernels::*,
     op::{BinaryOp, BinaryPredicateOp, GpuOp},
-    primitives::{reduce as primitive_reduce, scan as primitive_scan, segmented},
+    primitives::{reduce as primitive_reduce, scan as primitive_scan, segmented, select},
 };
 use cubecl::prelude::*;
 use std::marker::PhantomData;
@@ -634,7 +635,7 @@ where
     K: CubePrimitive + CubeElement,
     KeyEq: BinaryPredicateOp<K>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
@@ -829,10 +830,10 @@ macro_rules! impl_reduce_by_key_soa_input {
             Key: CubePrimitive + CubeElement,
             KeyEq: BinaryPredicateOp<Key>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            <$first as KernelColumn>::Expr: GpuExpr<<$first as KernelColumn>::Item>,
+            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
-                <$rest as KernelColumn>::Expr: GpuExpr<<$rest as KernelColumn>::Item>,
+                <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
             Op: BinaryOp<<$first as KernelColumn>::Item>,
             $(
@@ -1574,30 +1575,19 @@ impl_reduce_by_key_tuple_keys!(SoAView3<A, B, C> { first: 0, second: 1, third: 2
 
 impl<KeySource, ValueSource, KeyEq, Op> ReduceByKeyCall<(ValueSource,), KeyEq, Op> for (KeySource,)
 where
-    KeySource: KeyInput,
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueSource: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
     KeySource::Item: CubePrimitive + CubeElement,
-    ValueSource: ReduceByKeyInput<
-            KeySource::Item,
-            super::Tuple1Less<KeyEq>,
-            super::Tuple1BinaryOp<Op>,
-            Runtime = KeySource::Runtime,
-        >,
+    ValueSource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueSource::Item,)>,
 {
-    type Init = (
-        <ValueSource as ReduceByKeyInput<
-            KeySource::Item,
-            super::Tuple1Less<KeyEq>,
-            super::Tuple1BinaryOp<Op>,
-        >>::Init,
-    );
+    type Init = (ValueSource::Item,);
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
-        <ValueSource as ReduceByKeyInput<
-            KeySource::Item,
-            super::Tuple1Less<KeyEq>,
-            super::Tuple1BinaryOp<Op>,
-        >>::Values,
+        SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>,
     );
 
     fn reduce_by_key_call(
@@ -1607,13 +1597,399 @@ where
         init: Self::Init,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        let keys = self.0.key_input()?;
-        let (keys, values) = values.0.reduce_by_key_input(
-            &keys,
-            init.0,
-            GpuOp::<super::Tuple1BinaryOp<Op>>::new(),
+        self.0.validate()?;
+        values.0.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        let len = self.0.len();
+        if len == 0 {
+            return Ok((
+                SoA1 {
+                    source: DeviceVec::empty(self.0.policy().clone()),
+                },
+                SoA1 {
+                    source: DeviceVec::empty(values.0.policy().clone()),
+                },
+            ));
+        }
+
+        let client = self.0.policy().client();
+        let key_bindings = self.0.stage()?;
+        let value_bindings = values.0.stage()?;
+        let inclusive_handle = primitive_scan::inclusive_scan_by_key_device_expr_handle::<
+            KeySource::Runtime,
+            KeySource::Item,
+            ValueSource::Item,
+            KeySource::Expr,
+            ValueSource::Expr,
+            super::Tuple1Less<KeyEq>,
+            super::Tuple1BinaryOp<Op>,
+        >(self.0.policy(), &key_bindings, &value_bindings, len)?;
+
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+        let init_handle = client.create_from_slice(ValueSource::Item::as_bytes(&[init.0]));
+        let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+        let reduced_value_handle = client.empty(len * std::mem::size_of::<ValueSource::Item>());
+        let key_slot0 = key_bindings.slots.first().unwrap();
+        let key_slot1 = key_bindings.slots.get(1).unwrap_or(key_slot0);
+        let key_slot2 = key_bindings.slots.get(2).unwrap_or(key_slot0);
+        let key_slot3 = key_bindings.slots.get(3).unwrap_or(key_slot0);
+        let key_offsets = key_bindings.slot_offsets_handle(client)?;
+        let num_blocks = len.div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_device_expr_end_flags_kernel::launch_unchecked::<
+                KeySource::Item,
+                ValueSource::Item,
+                KeySource::Expr,
+                super::Tuple1Less<KeyEq>,
+                super::Tuple1BinaryOp<Op>,
+                KeySource::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(inclusive_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(init_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(reduced_value_handle.clone(), len) },
+            );
+        }
+
+        let out_keys = super::device_expr_compact_with_flags(&self.0, flag_handle.clone())?;
+        let handles = select::handles_from_flags(
+            values.0.policy(),
+            len,
+            len_u32,
+            flag_handle,
+            reduced_value_handle,
         )?;
-        Ok((SoA1 { source: keys }, values))
+        let out_values =
+            select::compact::<KeySource::Runtime, ValueSource::Item>(values.0.policy(), handles)?;
+        Ok((SoA1 { source: out_keys }, SoA1 { source: out_values }))
+    }
+}
+
+impl<KeySource, ValueA, ValueB, KeyEq, Op> ReduceByKeyCall<(ValueA, ValueB), KeyEq, Op>
+    for (KeySource,)
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    ValueA::Item: CubePrimitive + CubeElement,
+    ValueB::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+{
+    type Init = (ValueA::Item, ValueB::Item);
+    type Output = (
+        SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
+        SoA2<
+            DeviceVec<KeySource::Runtime, ValueA::Item>,
+            DeviceVec<KeySource::Runtime, ValueB::Item>,
+        >,
+    );
+
+    fn reduce_by_key_call(
+        self,
+        values: (ValueA, ValueB),
+        _key_eq: GpuOp<KeyEq>,
+        init: Self::Init,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        self.0.validate()?;
+        values.0.validate()?;
+        values.1.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        super::ensure_same_len(values.1.len(), self.0.len())?;
+        let len = self.0.len();
+        if len == 0 {
+            return Ok((
+                SoA1 {
+                    source: DeviceVec::empty(self.0.policy().clone()),
+                },
+                SoA2 {
+                    left: DeviceVec::empty(values.0.policy().clone()),
+                    right: DeviceVec::empty(values.1.policy().clone()),
+                },
+            ));
+        }
+
+        let client = self.0.policy().client();
+        let key_bindings = self.0.stage()?;
+        let a_bindings = values.0.stage()?;
+        let b_bindings = values.1.stage()?;
+        let (inclusive_a, inclusive_b) =
+            primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr_handle::<
+                KeySource::Runtime,
+                KeySource::Item,
+                ValueA::Item,
+                ValueB::Item,
+                KeySource::Expr,
+                ValueA::Expr,
+                ValueB::Expr,
+                super::Tuple1Less<KeyEq>,
+                Op,
+            >(
+                self.0.policy(),
+                &key_bindings,
+                &a_bindings,
+                &b_bindings,
+                len,
+            )?;
+
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
+        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
+        let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+        let reduced_a_handle = client.empty(len * std::mem::size_of::<ValueA::Item>());
+        let reduced_b_handle = client.empty(len * std::mem::size_of::<ValueB::Item>());
+        let key_slot0 = key_bindings.slots.first().unwrap();
+        let key_slot1 = key_bindings.slots.get(1).unwrap_or(key_slot0);
+        let key_slot2 = key_bindings.slots.get(2).unwrap_or(key_slot0);
+        let key_slot3 = key_bindings.slots.get(3).unwrap_or(key_slot0);
+        let key_offsets = key_bindings.slot_offsets_handle(client)?;
+        let num_blocks = len.div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_tuple2_device_expr_end_flags_kernel::launch_unchecked::<
+                KeySource::Item,
+                ValueA::Item,
+                ValueB::Item,
+                KeySource::Expr,
+                super::Tuple1Less<KeyEq>,
+                Op,
+                KeySource::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(inclusive_a.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(inclusive_b.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(init_b.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(reduced_a_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(reduced_b_handle.clone(), len) },
+            );
+        }
+
+        let out_keys = super::device_expr_compact_with_flags(&self.0, flag_handle.clone())?;
+        let left_handles = select::handles_from_flags(
+            values.0.policy(),
+            len,
+            len_u32,
+            flag_handle.clone(),
+            reduced_a_handle,
+        )?;
+        let right_handles = select::handles_from_flags(
+            values.1.policy(),
+            len,
+            len_u32,
+            flag_handle,
+            reduced_b_handle,
+        )?;
+        let left =
+            select::compact::<KeySource::Runtime, ValueA::Item>(values.0.policy(), left_handles)?;
+        let right =
+            select::compact::<KeySource::Runtime, ValueB::Item>(values.1.policy(), right_handles)?;
+
+        Ok((SoA1 { source: out_keys }, SoA2 { left, right }))
+    }
+}
+
+impl<KeySource, ValueA, ValueB, ValueC, KeyEq, Op>
+    ReduceByKeyCall<(ValueA, ValueB, ValueC), KeyEq, Op> for (KeySource,)
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueC: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    ValueA::Item: CubePrimitive + CubeElement,
+    ValueB::Item: CubePrimitive + CubeElement,
+    ValueC::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
+    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+{
+    type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
+    type Output = (
+        SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
+        SoA3<
+            DeviceVec<KeySource::Runtime, ValueA::Item>,
+            DeviceVec<KeySource::Runtime, ValueB::Item>,
+            DeviceVec<KeySource::Runtime, ValueC::Item>,
+        >,
+    );
+
+    fn reduce_by_key_call(
+        self,
+        values: (ValueA, ValueB, ValueC),
+        _key_eq: GpuOp<KeyEq>,
+        init: Self::Init,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        self.0.validate()?;
+        values.0.validate()?;
+        values.1.validate()?;
+        values.2.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        super::ensure_same_len(values.1.len(), self.0.len())?;
+        super::ensure_same_len(values.2.len(), self.0.len())?;
+        let len = self.0.len();
+        if len == 0 {
+            return Ok((
+                SoA1 {
+                    source: DeviceVec::empty(self.0.policy().clone()),
+                },
+                SoA3 {
+                    first: DeviceVec::empty(values.0.policy().clone()),
+                    second: DeviceVec::empty(values.1.policy().clone()),
+                    third: DeviceVec::empty(values.2.policy().clone()),
+                },
+            ));
+        }
+
+        let client = self.0.policy().client();
+        let key_bindings = self.0.stage()?;
+        let a_bindings = values.0.stage()?;
+        let b_bindings = values.1.stage()?;
+        let c_bindings = values.2.stage()?;
+        let (inclusive_a, inclusive_b, inclusive_c) =
+            primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr_handle::<
+                KeySource::Runtime,
+                KeySource::Item,
+                ValueA::Item,
+                ValueB::Item,
+                ValueC::Item,
+                KeySource::Expr,
+                ValueA::Expr,
+                ValueB::Expr,
+                ValueC::Expr,
+                super::Tuple1Less<KeyEq>,
+                Op,
+            >(
+                self.0.policy(),
+                &key_bindings,
+                &a_bindings,
+                &b_bindings,
+                &c_bindings,
+                len,
+            )?;
+
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
+        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
+        let init_c = client.create_from_slice(ValueC::Item::as_bytes(&[init.2]));
+        let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+        let reduced_a_handle = client.empty(len * std::mem::size_of::<ValueA::Item>());
+        let reduced_b_handle = client.empty(len * std::mem::size_of::<ValueB::Item>());
+        let reduced_c_handle = client.empty(len * std::mem::size_of::<ValueC::Item>());
+        let key_slot0 = key_bindings.slots.first().unwrap();
+        let key_slot1 = key_bindings.slots.get(1).unwrap_or(key_slot0);
+        let key_slot2 = key_bindings.slots.get(2).unwrap_or(key_slot0);
+        let key_slot3 = key_bindings.slots.get(3).unwrap_or(key_slot0);
+        let key_offsets = key_bindings.slot_offsets_handle(client)?;
+        let num_blocks = len.div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_tuple3_device_expr_end_flags_kernel::launch_unchecked::<
+                KeySource::Item,
+                ValueA::Item,
+                ValueB::Item,
+                ValueC::Item,
+                KeySource::Expr,
+                super::Tuple1Less<KeyEq>,
+                Op,
+                KeySource::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(inclusive_a.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(inclusive_b.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(inclusive_c.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(init_b.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(init_c.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(reduced_a_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(reduced_b_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(reduced_c_handle.clone(), len) },
+            );
+        }
+
+        let out_keys = super::device_expr_compact_with_flags(&self.0, flag_handle.clone())?;
+        let first_handles = select::handles_from_flags(
+            values.0.policy(),
+            len,
+            len_u32,
+            flag_handle.clone(),
+            reduced_a_handle,
+        )?;
+        let second_handles = select::handles_from_flags(
+            values.1.policy(),
+            len,
+            len_u32,
+            flag_handle.clone(),
+            reduced_b_handle,
+        )?;
+        let third_handles = select::handles_from_flags(
+            values.2.policy(),
+            len,
+            len_u32,
+            flag_handle,
+            reduced_c_handle,
+        )?;
+        let first =
+            select::compact::<KeySource::Runtime, ValueA::Item>(values.0.policy(), first_handles)?;
+        let second =
+            select::compact::<KeySource::Runtime, ValueB::Item>(values.1.policy(), second_handles)?;
+        let third =
+            select::compact::<KeySource::Runtime, ValueC::Item>(values.2.policy(), third_handles)?;
+
+        Ok((
+            SoA1 { source: out_keys },
+            SoA3 {
+                first,
+                second,
+                third,
+            },
+        ))
     }
 }
 

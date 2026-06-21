@@ -10,10 +10,10 @@ fn main() -> common::Result {
     let right_values = policy.to_device(&[10.0_f32, 30.0])?;
 
     let ((keys,), (values,)) = merge_by_key(
-        (&left_keys,),
-        (&left_values,),
-        (&right_keys,),
-        (&right_values,),
+        (left_keys.slice(..),),
+        (left_values.slice(..),),
+        (right_keys.slice(..),),
+        (right_values.slice(..),),
         common::LessU32,
     )?;
 

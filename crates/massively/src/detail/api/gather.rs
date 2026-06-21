@@ -563,8 +563,8 @@ impl_gather_if_input_sources!(SoA3<A, B, C>);
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only. For
 /// multiple value columns, pass borrowed columns as a tuple, such as
-/// `(&values, &tags)`. Indices may also be passed as a one-column tuple,
-/// such as `(&indices,)`.
+/// `(values.slice(..), tags.slice(..))`. Indices may also be passed as a
+/// one-column tuple, such as `(indices.slice(..),)`.
 pub fn gather<Input, Indices>(
     input: Input,
     indices: Indices,
@@ -576,7 +576,7 @@ where
     materialize(input.gather_input(indices)?)
 }
 
-/// Gathers selected elements into an output initialized with `default`.
+/// Gathers elements whose staged stencil flag satisfies `Pred`.
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only.
 pub fn gather_if<Input, Indices, Stencil, Pred>(

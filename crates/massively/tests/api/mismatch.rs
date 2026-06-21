@@ -9,7 +9,12 @@ fn mismatch_accepts_borrowed_tuple_columns() {
     let d = policy.to_device(&[10_u32, 20, 40]).unwrap();
 
     assert_eq!(
-        mismatch((&a, &b), (&c, &d), MixedTupleEqual).unwrap(),
+        mismatch(
+            (a.slice(..), b.slice(..)),
+            (c.slice(..), d.slice(..)),
+            MixedTupleEqual
+        )
+        .unwrap(),
         Some(2)
     );
 }

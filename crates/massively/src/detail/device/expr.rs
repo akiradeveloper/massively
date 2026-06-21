@@ -104,6 +104,79 @@ pub(crate) trait StorageKernelColumn: KernelColumn {}
 /// Internal shorthand for public algorithm inputs that must be borrowed.
 pub(crate) trait ReadOnlyKernelColumn: StorageKernelColumn {}
 
+/// Read-only view over one storage-backed device column.
+///
+/// This is the internal counterpart of public `DeviceSlice`. It carries
+/// storage-local lowering metadata; the common iterator abstraction remains
+/// logical `i -> T`.
+#[doc(hidden)]
+pub struct DeviceColumnView<R: Runtime, T> {
+    pub(crate) source: DeviceVec<R, T>,
+    pub(crate) offset: usize,
+    pub(crate) len: usize,
+}
+
+impl<R, T> DeviceColumnView<R, T>
+where
+    R: Runtime,
+{
+    pub(crate) fn from_column(source: &DeviceVec<R, T>) -> Self {
+        Self {
+            source: DeviceVec::from_handle(
+                source.policy().clone(),
+                source.handle.clone(),
+                source.len(),
+            ),
+            offset: 0,
+            len: source.len(),
+        }
+    }
+
+    pub(crate) fn from_slice(source: &DeviceVec<R, T>, offset: usize, len: usize) -> Self {
+        Self {
+            source: DeviceVec::from_handle(
+                source.policy().clone(),
+                source.handle.clone(),
+                source.len(),
+            ),
+            offset,
+            len,
+        }
+    }
+}
+
+impl<R, T> DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    pub(crate) fn materialize(self) -> Result<DeviceVec<R, T>, Error> {
+        if self.offset == 0 && self.len == self.source.len() {
+            Ok(self.source)
+        } else {
+            crate::primitives::range::copy_slice(&self.source, self.offset, self.len)
+        }
+    }
+}
+
+impl<R, T> ReadOnlySoA for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type Runtime = R;
+    type Item = (T,);
+    type Scalar = T;
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+}
+
 /// Internal read-only SoA compatibility layer.
 ///
 /// Public API terminology is `SoA`; this trait remains as an implementation
@@ -189,9 +262,12 @@ where
 pub struct KernelColumnBindings {
     pub(crate) input: cubecl::server::Handle,
     pub(crate) input_len: usize,
+    pub(crate) input_offset: usize,
     pub(crate) rhs: cubecl::server::Handle,
     pub(crate) rhs_len: usize,
+    pub(crate) rhs_offset: usize,
     pub(crate) slots: Vec<(cubecl::server::Handle, usize)>,
+    pub(crate) slot_offsets: Vec<usize>,
 }
 
 impl<Left, Right> ReadOnlySoA for SoAView2<Left, Right>
@@ -437,28 +513,51 @@ impl KernelColumnBindings {
         Self {
             input: crate::policy::empty_handle(client),
             input_len: 0,
+            input_offset: 0,
             rhs: crate::policy::empty_handle(client),
             rhs_len: 0,
+            rhs_offset: 0,
             slots: Vec::new(),
+            slot_offsets: Vec::new(),
         }
     }
 
     fn push(&mut self, handle: cubecl::server::Handle, len: usize) {
+        self.push_with_offset(handle, len, 0);
+    }
+
+    fn push_with_offset(&mut self, handle: cubecl::server::Handle, len: usize, offset: usize) {
         self.slots.push((handle, len));
+        self.slot_offsets.push(offset);
     }
 
     fn finish(&mut self) {
         if let Some((handle, len)) = self.slots.first() {
             self.input = handle.clone();
             self.input_len = *len;
+            self.input_offset = self.slot_offsets[0];
         }
         if let Some((handle, len)) = self.slots.get(1) {
             self.rhs = handle.clone();
             self.rhs_len = *len;
+            self.rhs_offset = self.slot_offsets[1];
         } else {
             self.rhs = self.input.clone();
             self.rhs_len = self.input_len;
+            self.rhs_offset = self.input_offset;
         }
+    }
+
+    pub(crate) fn slot_offsets_handle<R: Runtime>(
+        &self,
+        client: &ComputeClient<R>,
+    ) -> Result<cubecl::server::Handle, Error> {
+        let mut offsets = [0_u32; 4];
+        for (index, offset) in self.slot_offsets.iter().take(4).enumerate() {
+            offsets[index] =
+                u32::try_from(*offset).map_err(|_| Error::LengthTooLarge { len: *offset })?;
+        }
+        Ok(client.create_from_slice(u32::as_bytes(&offsets)))
     }
 }
 
@@ -549,6 +648,109 @@ where
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
         bindings.push(self.handle.clone(), self.len);
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumn for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type Runtime = R;
+    type Item = T;
+    type Expr = Slot0<T>;
+
+    fn policy(&self) -> &CubePolicy<Self::Runtime> {
+        self.source.policy()
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn staged_value_handle(
+        &self,
+        bindings: &KernelColumnBindings,
+    ) -> Option<cubecl::server::Handle> {
+        if self.offset == 0 {
+            Some(bindings.input.clone())
+        } else {
+            None
+        }
+    }
+}
+
+impl<R, T> ReadOnlyKernelColumn for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+}
+
+impl<R, T> StorageKernelColumn for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+}
+
+impl<R, T> KernelColumnAt<S0> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot0<T>;
+    type Next = S1;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S1> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot1<T>;
+    type Next = S2;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S2> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot2<T>;
+    type Next = S3;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S3> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot3<T>;
+    type Next = S4;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
         Ok(())
     }
 }

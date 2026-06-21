@@ -103,6 +103,8 @@ where
     let b_slot1 = binding_slot_or_first(b_bindings, 1);
     let b_slot2 = binding_slot_or_first(b_bindings, 2);
     let b_slot3 = binding_slot_or_first(b_bindings, 3);
+    let a_slot_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_slot_offsets = b_bindings.slot_offsets_handle(client)?;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
@@ -118,10 +120,12 @@ where
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
             unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
             unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(b_slot0.0.clone(), b_slot0.1) },
             unsafe { BufferArg::from_raw_parts(b_slot1.0.clone(), b_slot1.1) },
             unsafe { BufferArg::from_raw_parts(b_slot2.0.clone(), b_slot2.1) },
             unsafe { BufferArg::from_raw_parts(b_slot3.0.clone(), b_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -175,6 +179,9 @@ where
     let c_slot1 = binding_slot_or_first(c_bindings, 1);
     let c_slot2 = binding_slot_or_first(c_bindings, 2);
     let c_slot3 = binding_slot_or_first(c_bindings, 3);
+    let a_slot_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_slot_offsets = b_bindings.slot_offsets_handle(client)?;
+    let c_slot_offsets = c_bindings.slot_offsets_handle(client)?;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
@@ -199,14 +206,17 @@ where
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
             unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
             unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(b_slot0.0.clone(), b_slot0.1) },
             unsafe { BufferArg::from_raw_parts(b_slot1.0.clone(), b_slot1.1) },
             unsafe { BufferArg::from_raw_parts(b_slot2.0.clone(), b_slot2.1) },
             unsafe { BufferArg::from_raw_parts(b_slot3.0.clone(), b_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(c_slot0.0.clone(), c_slot0.1) },
             unsafe { BufferArg::from_raw_parts(c_slot1.0.clone(), c_slot1.1) },
             unsafe { BufferArg::from_raw_parts(c_slot2.0.clone(), c_slot2.1) },
             unsafe { BufferArg::from_raw_parts(c_slot3.0.clone(), c_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(c_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -271,6 +281,293 @@ where
         output_handle,
         values.len(),
     ))
+}
+
+pub(crate) fn inclusive_scan_by_key_device_expr<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    value_bindings: &KernelColumnBindings,
+    len: usize,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    T: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ValueExpr: DeviceGpuExpr<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
+{
+    let output_handle =
+        inclusive_scan_by_key_device_expr_handle::<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
+            policy,
+            key_bindings,
+            value_bindings,
+            len,
+        )?;
+    Ok(DeviceVec::from_handle(policy.clone(), output_handle, len))
+}
+
+pub(crate) fn exclusive_scan_by_key_device_expr<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    value_bindings: &KernelColumnBindings,
+    len: usize,
+    init: T,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    T: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ValueExpr: DeviceGpuExpr<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
+{
+    let client = policy.client();
+    let inclusive_handle =
+        inclusive_scan_by_key_device_expr_handle::<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
+            policy,
+            key_bindings,
+            value_bindings,
+            len,
+        )?;
+    let output_handle = make_scan_by_key_device_expr_exclusive::<R, K, T, KeyExpr, KeyEq, Op>(
+        client,
+        key_bindings,
+        len,
+        &inclusive_handle,
+        init,
+    )?;
+    Ok(DeviceVec::from_handle(policy.clone(), output_handle, len))
+}
+
+pub(crate) fn inclusive_scan_tuple2_by_key_values_device_expr<
+    R,
+    K,
+    A,
+    B,
+    KeyExpr,
+    ExprA,
+    ExprB,
+    KeyEq,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    a_bindings: &KernelColumnBindings,
+    b_bindings: &KernelColumnBindings,
+    len: usize,
+) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
+{
+    let (left, right) = inclusive_scan_tuple2_by_key_values_device_expr_handle::<
+        R,
+        K,
+        A,
+        B,
+        KeyExpr,
+        ExprA,
+        ExprB,
+        KeyEq,
+        Op,
+    >(policy, key_bindings, a_bindings, b_bindings, len)?;
+    Ok(SoA2 {
+        left: DeviceVec::from_handle(policy.clone(), left, len),
+        right: DeviceVec::from_handle(policy.clone(), right, len),
+    })
+}
+
+pub(crate) fn exclusive_scan_tuple2_by_key_values_device_expr<
+    R,
+    K,
+    A,
+    B,
+    KeyExpr,
+    ExprA,
+    ExprB,
+    KeyEq,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    a_bindings: &KernelColumnBindings,
+    b_bindings: &KernelColumnBindings,
+    len: usize,
+    init: (A, B),
+) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
+{
+    let inclusive = inclusive_scan_tuple2_by_key_values_device_expr_handle::<
+        R,
+        K,
+        A,
+        B,
+        KeyExpr,
+        ExprA,
+        ExprB,
+        KeyEq,
+        Op,
+    >(policy, key_bindings, a_bindings, b_bindings, len)?;
+    let (left, right) =
+        make_scan_tuple2_by_key_values_device_expr_exclusive::<R, K, A, B, KeyExpr, KeyEq, Op>(
+            policy,
+            key_bindings,
+            len,
+            inclusive,
+            init,
+        )?;
+    Ok(SoA2 {
+        left: DeviceVec::from_handle(policy.clone(), left, len),
+        right: DeviceVec::from_handle(policy.clone(), right, len),
+    })
+}
+
+pub(crate) fn inclusive_scan_tuple3_by_key_values_device_expr<
+    R,
+    K,
+    A,
+    B,
+    C,
+    KeyExpr,
+    ExprA,
+    ExprB,
+    ExprC,
+    KeyEq,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    a_bindings: &KernelColumnBindings,
+    b_bindings: &KernelColumnBindings,
+    c_bindings: &KernelColumnBindings,
+    len: usize,
+) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
+{
+    let (first, second, third) = inclusive_scan_tuple3_by_key_values_device_expr_handle::<
+        R,
+        K,
+        A,
+        B,
+        C,
+        KeyExpr,
+        ExprA,
+        ExprB,
+        ExprC,
+        KeyEq,
+        Op,
+    >(
+        policy,
+        key_bindings,
+        a_bindings,
+        b_bindings,
+        c_bindings,
+        len,
+    )?;
+    Ok(SoA3 {
+        first: DeviceVec::from_handle(policy.clone(), first, len),
+        second: DeviceVec::from_handle(policy.clone(), second, len),
+        third: DeviceVec::from_handle(policy.clone(), third, len),
+    })
+}
+
+pub(crate) fn exclusive_scan_tuple3_by_key_values_device_expr<
+    R,
+    K,
+    A,
+    B,
+    C,
+    KeyExpr,
+    ExprA,
+    ExprB,
+    ExprC,
+    KeyEq,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    a_bindings: &KernelColumnBindings,
+    b_bindings: &KernelColumnBindings,
+    c_bindings: &KernelColumnBindings,
+    len: usize,
+    init: (A, B, C),
+) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
+{
+    let inclusive = inclusive_scan_tuple3_by_key_values_device_expr_handle::<
+        R,
+        K,
+        A,
+        B,
+        C,
+        KeyExpr,
+        ExprA,
+        ExprB,
+        ExprC,
+        KeyEq,
+        Op,
+    >(
+        policy,
+        key_bindings,
+        a_bindings,
+        b_bindings,
+        c_bindings,
+        len,
+    )?;
+    let (first, second, third) =
+        make_scan_tuple3_by_key_values_device_expr_exclusive::<R, K, A, B, C, KeyExpr, KeyEq, Op>(
+            policy,
+            key_bindings,
+            len,
+            inclusive,
+            init,
+        )?;
+    Ok(SoA3 {
+        first: DeviceVec::from_handle(policy.clone(), first, len),
+        second: DeviceVec::from_handle(policy.clone(), second, len),
+        third: DeviceVec::from_handle(policy.clone(), third, len),
+    })
 }
 
 macro_rules! define_scan_tuple_value_by_key_device_vec {
@@ -790,6 +1087,7 @@ where
     let a_slot1 = a_bindings.slots.get(1).unwrap_or(a_slot0);
     let a_slot2 = a_bindings.slots.get(2).unwrap_or(a_slot0);
     let a_slot3 = a_bindings.slots.get(3).unwrap_or(a_slot0);
+    let a_slot_offsets = a_bindings.slot_offsets_handle(client)?;
     let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
@@ -806,6 +1104,7 @@ where
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
             unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
             unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(block_sums_a.clone(), num_blocks) },
@@ -974,6 +1273,8 @@ where
     let b_slot1 = b_bindings.slots.get(1).unwrap_or(b_slot0);
     let b_slot2 = b_bindings.slots.get(2).unwrap_or(b_slot0);
     let b_slot3 = b_bindings.slots.get(3).unwrap_or(b_slot0);
+    let a_slot_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_slot_offsets = b_bindings.slot_offsets_handle(client)?;
     let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
@@ -991,10 +1292,12 @@ where
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
             unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
             unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(b_slot0.0.clone(), b_slot0.1) },
             unsafe { BufferArg::from_raw_parts(b_slot1.0.clone(), b_slot1.1) },
             unsafe { BufferArg::from_raw_parts(b_slot2.0.clone(), b_slot2.1) },
             unsafe { BufferArg::from_raw_parts(b_slot3.0.clone(), b_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -1212,6 +1515,9 @@ where
     let c_slot1 = c_bindings.slots.get(1).unwrap_or(c_slot0);
     let c_slot2 = c_bindings.slots.get(2).unwrap_or(c_slot0);
     let c_slot3 = c_bindings.slots.get(3).unwrap_or(c_slot0);
+    let a_slot_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_slot_offsets = b_bindings.slot_offsets_handle(client)?;
+    let c_slot_offsets = c_bindings.slot_offsets_handle(client)?;
     let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
@@ -1239,14 +1545,17 @@ where
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
             unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
             unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(b_slot0.0.clone(), b_slot0.1) },
             unsafe { BufferArg::from_raw_parts(b_slot1.0.clone(), b_slot1.1) },
             unsafe { BufferArg::from_raw_parts(b_slot2.0.clone(), b_slot2.1) },
             unsafe { BufferArg::from_raw_parts(b_slot3.0.clone(), b_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(c_slot0.0.clone(), c_slot0.1) },
             unsafe { BufferArg::from_raw_parts(c_slot1.0.clone(), c_slot1.1) },
             unsafe { BufferArg::from_raw_parts(c_slot2.0.clone(), c_slot2.1) },
             unsafe { BufferArg::from_raw_parts(c_slot3.0.clone(), c_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(c_slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -1544,6 +1853,112 @@ where
     Ok(output_handle)
 }
 
+pub(crate) fn inclusive_scan_by_key_device_expr_handle<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    value_bindings: &KernelColumnBindings,
+    len: usize,
+) -> Result<cubecl::server::Handle, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    T: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ValueExpr: DeviceGpuExpr<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
+{
+    let client = policy.client();
+    if len == 0 {
+        return Ok(policy.empty_handle());
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let workspace = Workspace::new(policy);
+    let output_handle = workspace.alloc::<T>(len);
+    let block_tail_keys = workspace.alloc::<K>(num_blocks);
+    let block_tail_values = workspace.alloc::<T>(num_blocks);
+    let key_slot0 = binding_slot_or_first(key_bindings, 0);
+    let key_slot1 = binding_slot_or_first(key_bindings, 1);
+    let key_slot2 = binding_slot_or_first(key_bindings, 2);
+    let key_slot3 = binding_slot_or_first(key_bindings, 3);
+    let value_slot0 = binding_slot_or_first(value_bindings, 0);
+    let value_slot1 = binding_slot_or_first(value_bindings, 1);
+    let value_slot2 = binding_slot_or_first(value_bindings, 2);
+    let value_slot3 = binding_slot_or_first(value_bindings, 3);
+    let key_slot_offsets = key_bindings.slot_offsets_handle(client)?;
+    let value_slot_offsets = value_bindings.slot_offsets_handle(client)?;
+
+    unsafe {
+        scan_by_key_device_expr_block_kernel::launch_unchecked::<
+            K,
+            T,
+            KeyExpr,
+            ValueExpr,
+            KeyEq,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot2.0.clone(), value_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot3.0.clone(), value_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+            unsafe { BufferArg::from_raw_parts(block_tail_values.clone(), num_blocks) },
+        );
+    }
+
+    if num_blocks > 1 {
+        let block_tail_keys_vec =
+            DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+        let block_prefixes = inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(
+            policy,
+            &block_tail_keys_vec,
+            &block_tail_values,
+        )?;
+        unsafe {
+            scan_by_key_device_expr_add_block_prefix_kernel::launch_unchecked::<
+                K,
+                T,
+                KeyExpr,
+                KeyEq,
+                Op,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_SCAN_SIZE),
+                unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(block_prefixes.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
+            );
+        }
+    }
+
+    Ok(output_handle)
+}
+
 fn make_scan_by_key_exclusive<R, K, T, KeyEq, Op>(
     client: &ComputeClient<R>,
     keys: &DeviceVec<R, K>,
@@ -1581,6 +1996,534 @@ where
     }
 
     Ok(output_handle)
+}
+
+fn make_scan_by_key_device_expr_exclusive<R, K, T, KeyExpr, KeyEq, Op>(
+    client: &ComputeClient<R>,
+    key_bindings: &KernelColumnBindings,
+    len: usize,
+    inclusive_handle: &cubecl::server::Handle,
+    init: T,
+) -> Result<cubecl::server::Handle, Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    T: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
+{
+    if len == 0 {
+        return Ok(crate::policy::empty_handle(client));
+    }
+
+    let output_handle = client.empty(len * std::mem::size_of::<T>());
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let init_handle = client.create_from_slice(T::as_bytes(&[init]));
+    let key_slot0 = binding_slot_or_first(key_bindings, 0);
+    let key_slot1 = binding_slot_or_first(key_bindings, 1);
+    let key_slot2 = binding_slot_or_first(key_bindings, 2);
+    let key_slot3 = binding_slot_or_first(key_bindings, 3);
+    let key_slot_offsets = key_bindings.slot_offsets_handle(client)?;
+
+    unsafe {
+        scan_by_key_device_expr_make_exclusive_kernel::launch_unchecked::<
+            K,
+            T,
+            KeyExpr,
+            KeyEq,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(inclusive_handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(init_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
+        );
+    }
+
+    Ok(output_handle)
+}
+
+pub(crate) fn inclusive_scan_tuple2_by_key_values_device_expr_handle<
+    R,
+    K,
+    A,
+    B,
+    KeyExpr,
+    ExprA,
+    ExprB,
+    KeyEq,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    a_bindings: &KernelColumnBindings,
+    b_bindings: &KernelColumnBindings,
+    len: usize,
+) -> Result<(cubecl::server::Handle, cubecl::server::Handle), Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
+{
+    let client = policy.client();
+    if len == 0 {
+        return Ok((policy.empty_handle(), policy.empty_handle()));
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let workspace = Workspace::new(policy);
+    let output_a = workspace.alloc::<A>(len);
+    let output_b = workspace.alloc::<B>(len);
+    let block_tail_keys = workspace.alloc::<K>(num_blocks);
+    let tail_a = workspace.alloc::<A>(num_blocks);
+    let tail_b = workspace.alloc::<B>(num_blocks);
+    let key_slot0 = binding_slot_or_first(key_bindings, 0);
+    let key_slot1 = binding_slot_or_first(key_bindings, 1);
+    let key_slot2 = binding_slot_or_first(key_bindings, 2);
+    let key_slot3 = binding_slot_or_first(key_bindings, 3);
+    let a_slot0 = binding_slot_or_first(a_bindings, 0);
+    let a_slot1 = binding_slot_or_first(a_bindings, 1);
+    let a_slot2 = binding_slot_or_first(a_bindings, 2);
+    let a_slot3 = binding_slot_or_first(a_bindings, 3);
+    let b_slot0 = binding_slot_or_first(b_bindings, 0);
+    let b_slot1 = binding_slot_or_first(b_bindings, 1);
+    let b_slot2 = binding_slot_or_first(b_bindings, 2);
+    let b_slot3 = binding_slot_or_first(b_bindings, 3);
+    let key_offsets = key_bindings.slot_offsets_handle(client)?;
+    let a_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_offsets = b_bindings.slot_offsets_handle(client)?;
+
+    unsafe {
+        scan_by_key_tuple2_device_expr_block_kernel::launch_unchecked::<
+            K,
+            A,
+            B,
+            KeyExpr,
+            ExprA,
+            ExprB,
+            KeyEq,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(b_slot0.0.clone(), b_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot1.0.clone(), b_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot2.0.clone(), b_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot3.0.clone(), b_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+            unsafe { BufferArg::from_raw_parts(tail_a.clone(), num_blocks) },
+            unsafe { BufferArg::from_raw_parts(tail_b.clone(), num_blocks) },
+        );
+    }
+
+    if num_blocks > 1 {
+        let tail_keys = DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+        let tail_a_vec: DeviceVec<R, A> =
+            DeviceVec::from_handle(policy.clone(), tail_a.clone(), num_blocks);
+        let tail_b_vec: DeviceVec<R, B> =
+            DeviceVec::from_handle(policy.clone(), tail_b.clone(), num_blocks);
+        let (prefix_a, prefix_b) =
+            inclusive_scan_tuple2_by_key_values_handle::<R, K, A, B, KeyEq, Op>(
+                policy,
+                &tail_keys,
+                &tail_a_vec.handle,
+                &tail_b_vec.handle,
+            )?;
+        unsafe {
+            scan_by_key_tuple2_device_expr_add_block_prefix_kernel::launch_unchecked::<
+                K,
+                A,
+                B,
+                KeyExpr,
+                KeyEq,
+                Op,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_SCAN_SIZE),
+                unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(prefix_a.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(prefix_b.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
+            );
+        }
+    }
+
+    Ok((output_a, output_b))
+}
+
+fn make_scan_tuple2_by_key_values_device_expr_exclusive<R, K, A, B, KeyExpr, KeyEq, Op>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    len: usize,
+    inclusive: (cubecl::server::Handle, cubecl::server::Handle),
+    init: (A, B),
+) -> Result<(cubecl::server::Handle, cubecl::server::Handle), Error>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
+{
+    if len == 0 {
+        return Ok((policy.empty_handle(), policy.empty_handle()));
+    }
+    let client = policy.client();
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
+    let key_slot0 = binding_slot_or_first(key_bindings, 0);
+    let key_slot1 = binding_slot_or_first(key_bindings, 1);
+    let key_slot2 = binding_slot_or_first(key_bindings, 2);
+    let key_slot3 = binding_slot_or_first(key_bindings, 3);
+    let key_offsets = key_bindings.slot_offsets_handle(client)?;
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        scan_by_key_tuple2_device_expr_make_exclusive_kernel::launch_unchecked::<
+            K,
+            A,
+            B,
+            KeyExpr,
+            KeyEq,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(inclusive.0.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(inclusive.1.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_b.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
+        );
+    }
+
+    Ok((output_a, output_b))
+}
+
+pub(crate) fn inclusive_scan_tuple3_by_key_values_device_expr_handle<
+    R,
+    K,
+    A,
+    B,
+    C,
+    KeyExpr,
+    ExprA,
+    ExprB,
+    ExprC,
+    KeyEq,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    a_bindings: &KernelColumnBindings,
+    b_bindings: &KernelColumnBindings,
+    c_bindings: &KernelColumnBindings,
+    len: usize,
+) -> Result<
+    (
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
+{
+    let client = policy.client();
+    if len == 0 {
+        return Ok((
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+        ));
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let workspace = Workspace::new(policy);
+    let output_a = workspace.alloc::<A>(len);
+    let output_b = workspace.alloc::<B>(len);
+    let output_c = workspace.alloc::<C>(len);
+    let block_tail_keys = workspace.alloc::<K>(num_blocks);
+    let tail_a = workspace.alloc::<A>(num_blocks);
+    let tail_b = workspace.alloc::<B>(num_blocks);
+    let tail_c = workspace.alloc::<C>(num_blocks);
+    let key_slot0 = binding_slot_or_first(key_bindings, 0);
+    let key_slot1 = binding_slot_or_first(key_bindings, 1);
+    let key_slot2 = binding_slot_or_first(key_bindings, 2);
+    let key_slot3 = binding_slot_or_first(key_bindings, 3);
+    let a_slot0 = binding_slot_or_first(a_bindings, 0);
+    let a_slot1 = binding_slot_or_first(a_bindings, 1);
+    let a_slot2 = binding_slot_or_first(a_bindings, 2);
+    let a_slot3 = binding_slot_or_first(a_bindings, 3);
+    let b_slot0 = binding_slot_or_first(b_bindings, 0);
+    let b_slot1 = binding_slot_or_first(b_bindings, 1);
+    let b_slot2 = binding_slot_or_first(b_bindings, 2);
+    let b_slot3 = binding_slot_or_first(b_bindings, 3);
+    let c_slot0 = binding_slot_or_first(c_bindings, 0);
+    let c_slot1 = binding_slot_or_first(c_bindings, 1);
+    let c_slot2 = binding_slot_or_first(c_bindings, 2);
+    let c_slot3 = binding_slot_or_first(c_bindings, 3);
+    let key_offsets = key_bindings.slot_offsets_handle(client)?;
+    let a_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_offsets = b_bindings.slot_offsets_handle(client)?;
+    let c_offsets = c_bindings.slot_offsets_handle(client)?;
+
+    unsafe {
+        scan_by_key_tuple3_device_expr_block_kernel::launch_unchecked::<
+            K,
+            A,
+            B,
+            C,
+            KeyExpr,
+            ExprA,
+            ExprB,
+            ExprC,
+            KeyEq,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot2.0.clone(), a_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(a_slot3.0.clone(), a_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(b_slot0.0.clone(), b_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot1.0.clone(), b_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot2.0.clone(), b_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(b_slot3.0.clone(), b_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(c_slot0.0.clone(), c_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(c_slot1.0.clone(), c_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(c_slot2.0.clone(), c_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(c_slot3.0.clone(), c_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(c_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(output_c.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+            unsafe { BufferArg::from_raw_parts(tail_a.clone(), num_blocks) },
+            unsafe { BufferArg::from_raw_parts(tail_b.clone(), num_blocks) },
+            unsafe { BufferArg::from_raw_parts(tail_c.clone(), num_blocks) },
+        );
+    }
+
+    if num_blocks > 1 {
+        let tail_keys = DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+        let tail_a_vec: DeviceVec<R, A> =
+            DeviceVec::from_handle(policy.clone(), tail_a.clone(), num_blocks);
+        let tail_b_vec: DeviceVec<R, B> =
+            DeviceVec::from_handle(policy.clone(), tail_b.clone(), num_blocks);
+        let tail_c_vec: DeviceVec<R, C> =
+            DeviceVec::from_handle(policy.clone(), tail_c.clone(), num_blocks);
+        let (prefix_a, prefix_b, prefix_c) =
+            inclusive_scan_tuple3_by_key_values_handle::<R, K, A, B, C, KeyEq, Op>(
+                policy,
+                &tail_keys,
+                &tail_a_vec.handle,
+                &tail_b_vec.handle,
+                &tail_c_vec.handle,
+            )?;
+        unsafe {
+            scan_by_key_tuple3_device_expr_add_block_prefix_kernel::launch_unchecked::<
+                K,
+                A,
+                B,
+                C,
+                KeyExpr,
+                KeyEq,
+                Op,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_SCAN_SIZE),
+                unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(prefix_a.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(prefix_b.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(prefix_c.clone(), num_blocks) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(output_c.clone(), len) },
+            );
+        }
+    }
+
+    Ok((output_a, output_b, output_c))
+}
+
+fn make_scan_tuple3_by_key_values_device_expr_exclusive<R, K, A, B, C, KeyExpr, KeyEq, Op>(
+    policy: &CubePolicy<R>,
+    key_bindings: &KernelColumnBindings,
+    len: usize,
+    inclusive: (
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+    ),
+    init: (A, B, C),
+) -> Result<
+    (
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+        cubecl::server::Handle,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    K: CubePrimitive + CubeElement,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    KeyExpr: DeviceGpuExpr<K>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
+{
+    if len == 0 {
+        return Ok((
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+        ));
+    }
+    let client = policy.client();
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let output_c = client.empty(len * std::mem::size_of::<C>());
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
+    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
+    let key_slot0 = binding_slot_or_first(key_bindings, 0);
+    let key_slot1 = binding_slot_or_first(key_bindings, 1);
+    let key_slot2 = binding_slot_or_first(key_bindings, 2);
+    let key_slot3 = binding_slot_or_first(key_bindings, 3);
+    let key_offsets = key_bindings.slot_offsets_handle(client)?;
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        scan_by_key_tuple3_device_expr_make_exclusive_kernel::launch_unchecked::<
+            K,
+            A,
+            B,
+            C,
+            KeyExpr,
+            KeyEq,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot2.0.clone(), key_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(key_slot3.0.clone(), key_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(key_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(inclusive.0.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(inclusive.1.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(inclusive.2.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_b.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_c.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(output_c.clone(), len) },
+        );
+    }
+
+    Ok((output_a, output_b, output_c))
 }
 
 pub(crate) fn read_u32_scalar<R: Runtime>(

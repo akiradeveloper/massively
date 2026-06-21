@@ -8,7 +8,7 @@ use std::marker::PhantomData;
 /// multiple algorithm calls. Host transfer happens explicitly through
 /// [`CubePolicy::to_device`] and [`DeviceVec::to_vec`].
 ///
-/// Algorithms take `&DeviceVec<T>` as a one-column SoA input and return
+/// Algorithms take `DeviceSlice<T>` as a one-column SoA input and return
 /// `DeviceVec<T>` as one-column owned output storage.
 pub struct DeviceVec<R: Runtime, T> {
     pub(crate) policy: CubePolicy<R>,

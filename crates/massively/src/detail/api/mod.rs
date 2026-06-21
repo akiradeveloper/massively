@@ -120,6 +120,14 @@ fn api_expr_block_count(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
+fn offset_handle<R: Runtime>(
+    client: &ComputeClient<R>,
+    offset: usize,
+) -> Result<cubecl::server::Handle, Error> {
+    let offset = u32::try_from(offset).map_err(|_| Error::LengthTooLarge { len: offset })?;
+    Ok(client.create_from_slice(u32::as_bytes(&[offset])))
+}
+
 pub(super) fn device_expr_collect<ExprSource>(
     expr: &ExprSource,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
@@ -146,6 +154,7 @@ where
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
     let block_count_u32 = api_expr_block_count(len)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
 
     unsafe {
         device_collect_expr_block_kernel::launch_unchecked::<
@@ -161,6 +170,61 @@ where
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
             unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(
+        expr.policy().clone(),
+        output_handle,
+        len,
+    ))
+}
+
+pub(super) fn device_expr_reverse_collect<ExprSource>(
+    expr: &ExprSource,
+) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
+{
+    expr.validate()?;
+    let len = expr.len();
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    if len == 0 {
+        return Ok(DeviceVec::empty(expr.policy().clone()));
+    }
+
+    let client = expr.policy().client();
+    let output_handle = client.empty(len * std::mem::size_of::<ExprSource::Item>());
+
+    let bindings = expr.stage()?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let block_count_u32 = api_expr_block_count(len)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+
+    unsafe {
+        device_collect_expr_reverse_block_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
         );
     }
@@ -198,8 +262,10 @@ where
     let block_count_u32 = api_expr_block_count(len)?;
     let input_bindings = input.stage()?;
     let index_bindings = indices.stage()?;
-    let dummy_indices = [0_u32];
-    let dummy_index_handle = client.create_from_slice(u32::as_bytes(&dummy_indices));
+    let input_offset = offset_handle(client, input_bindings.input_offset)?;
+    let input_rhs_offset = offset_handle(client, input_bindings.rhs_offset)?;
+    let index_offset = offset_handle(client, index_bindings.input_offset)?;
+    let index_rhs_offset = offset_handle(client, index_bindings.rhs_offset)?;
 
     unsafe {
         gather_device_expr_kernel::launch_unchecked::<
@@ -215,19 +281,19 @@ where
             unsafe {
                 BufferArg::from_raw_parts(input_bindings.input.clone(), input_bindings.input_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
             unsafe {
                 BufferArg::from_raw_parts(input_bindings.rhs.clone(), input_bindings.rhs_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(input_rhs_offset.clone(), 1) },
             unsafe {
                 BufferArg::from_raw_parts(index_bindings.input.clone(), index_bindings.input_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(index_offset.clone(), 1) },
             unsafe {
                 BufferArg::from_raw_parts(index_bindings.rhs.clone(), index_bindings.rhs_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(index_rhs_offset.clone(), 1) },
         );
     }
 
@@ -271,8 +337,10 @@ where
     let index_bindings = indices.stage()?;
     let len_values = [len_u32];
     let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
-    let dummy_indices = [0_u32];
-    let dummy_index_handle = client.create_from_slice(u32::as_bytes(&dummy_indices));
+    let value_offset = offset_handle(client, value_bindings.input_offset)?;
+    let value_rhs_offset = offset_handle(client, value_bindings.rhs_offset)?;
+    let index_offset = offset_handle(client, index_bindings.input_offset)?;
+    let index_rhs_offset = offset_handle(client, index_bindings.rhs_offset)?;
 
     unsafe {
         scatter_expr_kernel::launch_unchecked::<
@@ -287,19 +355,19 @@ where
             unsafe {
                 BufferArg::from_raw_parts(value_bindings.input.clone(), value_bindings.input_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(value_offset.clone(), 1) },
             unsafe {
                 BufferArg::from_raw_parts(value_bindings.rhs.clone(), value_bindings.rhs_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(value_rhs_offset.clone(), 1) },
             unsafe {
                 BufferArg::from_raw_parts(index_bindings.input.clone(), index_bindings.input_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(index_offset.clone(), 1) },
             unsafe {
                 BufferArg::from_raw_parts(index_bindings.rhs.clone(), index_bindings.rhs_len)
             },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
+            unsafe { BufferArg::from_raw_parts(index_rhs_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.handle.clone(), output.len) },
         );
@@ -321,6 +389,72 @@ where
 {
     let handles = device_expr_selection_handles::<ExprSource, Pred>(expr, invert)?;
     select::compact::<ExprSource::Runtime, ExprSource::Item>(expr.policy(), handles)
+}
+
+pub(super) fn device_expr_compact_with_flags<ExprSource>(
+    expr: &ExprSource,
+    flag_handle: cubecl::server::Handle,
+) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
+{
+    expr.validate()?;
+    let len = expr.len();
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    if len == 0 {
+        return Ok(DeviceVec::empty(expr.policy().clone()));
+    }
+
+    let handles = select::handles_from_flags(
+        expr.policy(),
+        len,
+        len_u32,
+        flag_handle,
+        expr.policy().empty_handle(),
+    )?;
+    let count = select::selected_count(expr.policy(), &handles)?;
+    if count == 0 {
+        return Ok(DeviceVec::empty(expr.policy().clone()));
+    }
+
+    let client = expr.policy().client();
+    let output_handle = client.empty(count * std::mem::size_of::<ExprSource::Item>());
+    let bindings = expr.stage()?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let block_count_u32 = api_expr_block_count(len)?;
+
+    unsafe {
+        compact_scatter_device_expr_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(handles.flag.clone(), handles.len) },
+            unsafe { BufferArg::from_raw_parts(handles.position.clone(), handles.len) },
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), count) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(
+        expr.policy().clone(),
+        output_handle,
+        count,
+    ))
 }
 
 pub(super) fn device_expr_count_if<ExprSource, Pred>(
@@ -382,14 +516,14 @@ where
         );
     }
 
-    let dummy_indices = [0_u32];
     let len_values = [len_u32];
     let invert_values = [if invert { 1_u32 } else { 0_u32 }];
-    let dummy_index_handle = client.create_from_slice(u32::as_bytes(&dummy_indices));
     let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
     let invert_handle = client.create_from_slice(u32::as_bytes(&invert_values));
     let flag_handle = client.empty(len * std::mem::size_of::<u32>());
     let bindings = expr.stage()?;
+    let input_offset = offset_handle(client, bindings.input_offset)?;
+    let rhs_offset = offset_handle(client, bindings.rhs_offset)?;
     let value_handle = expr.staged_value_handle(&bindings);
     let block_count_u32 = api_expr_block_count(len)?;
 
@@ -405,13 +539,9 @@ where
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                 unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
-                unsafe {
-                    BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len())
-                },
+                unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
-                unsafe {
-                    BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len())
-                },
+                unsafe { BufferArg::from_raw_parts(rhs_offset.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
@@ -431,13 +561,9 @@ where
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                 unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
-                unsafe {
-                    BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len())
-                },
+                unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
-                unsafe {
-                    BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len())
-                },
+                unsafe { BufferArg::from_raw_parts(rhs_offset.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
@@ -710,7 +836,7 @@ where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     Op: BinaryOp<ExprSource::Item>,
 {
     expr.validate()?;
@@ -721,10 +847,13 @@ where
 
     if len != 0 {
         let block_count_u32 = api_expr_block_count(len)?;
-        let dummy_indices = [0_u32];
         let len_values = [len_u32];
         let bindings = expr.stage()?;
-        let dummy_index_handle = client.create_from_slice(u32::as_bytes(&dummy_indices));
+        let slot0 = bindings.slots.first().unwrap();
+        let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+        let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+        let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+        let slot_offsets = bindings.slot_offsets_handle(client)?;
         let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
         unsafe {
             adjacent_difference_expr_kernel::launch_unchecked::<
@@ -736,14 +865,11 @@ where
                 client,
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-                unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
-                unsafe {
-                    BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len())
-                },
-                unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
-                unsafe {
-                    BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len())
-                },
+                unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+                unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+                unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+                unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+                unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
                 unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
             );
@@ -839,7 +965,7 @@ where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
     KeyEq: BinaryPredicateOp<K>,
     Op: BinaryOp<ExprSource::Item>,
@@ -847,21 +973,11 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let bindings = expr.stage()?;
-    primitive_reduce::reduce_by_key_expr_handle::<
-        ExprSource::Runtime,
-        K,
-        ExprSource::Item,
-        ExprSource::Expr,
-        KeyEq,
-        Op,
-    >(
+    let values = device_expr_collect(expr)?;
+    primitive_reduce::reduce_by_key_handle::<ExprSource::Runtime, K, ExprSource::Item, KeyEq, Op>(
         expr.policy(),
         keys,
-        bindings.input,
-        bindings.input_len,
-        bindings.rhs,
-        bindings.rhs_len,
+        values.handle.clone(),
         init,
     )
 }
@@ -882,7 +998,7 @@ where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
     KeyEq: BinaryPredicateOp<K>,
     Op: BinaryOp<ExprSource::Item>,
@@ -890,23 +1006,14 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let bindings = expr.stage()?;
-    primitive_reduce::reduce_by_key_expr_handle_with_control::<
+    let values = device_expr_collect(expr)?;
+    primitive_reduce::reduce_by_key_handle_with_control::<
         ExprSource::Runtime,
         K,
         ExprSource::Item,
-        ExprSource::Expr,
         KeyEq,
         Op,
-    >(
-        expr.policy(),
-        keys,
-        bindings.input,
-        bindings.input_len,
-        bindings.rhs,
-        bindings.rhs_len,
-        init,
-    )
+    >(expr.policy(), keys, values.handle.clone(), init)
 }
 
 pub(super) fn device_expr_reduce_by_key_with_existing_control<ExprSource, K, KeyEq, Op>(
@@ -919,7 +1026,7 @@ where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
     KeyEq: BinaryPredicateOp<K>,
     Op: BinaryOp<ExprSource::Item>,
@@ -927,22 +1034,12 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let bindings = expr.stage()?;
-    primitive_reduce::reduce_by_key_expr_handle_with_existing_control::<
+    let values = device_expr_collect(expr)?;
+    primitive_reduce::reduce_by_key_handle_with_existing_control::<
         ExprSource::Runtime,
         K,
         ExprSource::Item,
-        ExprSource::Expr,
         KeyEq,
         Op,
-    >(
-        expr.policy(),
-        keys,
-        bindings.input,
-        bindings.input_len,
-        bindings.rhs,
-        bindings.rhs_len,
-        init,
-        control,
-    )
+    >(expr.policy(), keys, values.handle.clone(), init, control)
 }

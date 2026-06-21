@@ -25,6 +25,19 @@ fn is_partitioned_accepts_borrowed_heterogeneous_soa12() {
         .unwrap();
     let l = policy.to_device(&[6000_u32, 8000, 4000, 2000, 0]).unwrap();
 
-    let input = zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l);
+    let input = zip12(
+        a.slice(..),
+        b.slice(..),
+        c.slice(..),
+        d.slice(..),
+        e.slice(..),
+        f.slice(..),
+        g.slice(..),
+        h.slice(..),
+        i.slice(..),
+        j.slice(..),
+        k.slice(..),
+        l.slice(..),
+    );
     assert!(is_partitioned(input, Tuple12MixedFirstGreaterThanOne).unwrap());
 }

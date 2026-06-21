@@ -7,7 +7,7 @@ fn main() -> common::Result {
     let left = policy.to_device(&[1.0_f32, 2.0, 3.0])?;
     let right = policy.to_device(&[1.0_f32, 2.0, 3.0])?;
 
-    let result = equal((&left,), (&right,), common::EqualF32)?;
+    let result = equal((left.slice(..),), (right.slice(..),), common::EqualF32)?;
 
     assert!(result);
     Ok(())

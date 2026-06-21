@@ -8,7 +8,7 @@ pub fn scatter_if(
     let mut output = vec![default; len];
     for i in 0..values.len() {
         let value = values[i];
-        if crate::keep(stencil[i]) {
+        if stencil[i] != 0 {
             output[indices[i] as usize] = value;
         }
     }

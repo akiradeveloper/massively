@@ -49,10 +49,10 @@ fn merge_by_key_accepts_tuple_values() {
     let right_ids = policy.to_device(&[10_u32, 22, 40]).unwrap();
 
     let (keys, values) = merge_by_key(
-        (&left_keys,),
-        (&left_values, &left_ids),
-        (&right_keys,),
-        (&right_values, &right_ids),
+        (left_keys.slice(..),),
+        (left_values.slice(..), left_ids.slice(..)),
+        (right_keys.slice(..),),
+        (right_values.slice(..), right_ids.slice(..)),
         LessU32,
     )
     .unwrap();
@@ -79,10 +79,10 @@ fn merge_by_key_accepts_borrowed_tuple_keys() {
     let right_values = policy.to_device(&[120_u32, 210, 300]).unwrap();
 
     let (keys, values) = merge_by_key(
-        (&left_key_a, &left_key_b),
-        (&left_values,),
-        (&right_key_a, &right_key_b),
-        &right_values,
+        (left_key_a.slice(..), left_key_b.slice(..)),
+        (left_values.slice(..),),
+        (right_key_a.slice(..), right_key_b.slice(..)),
+        (right_values.slice(..),),
         MixedTupleLess,
     )
     .unwrap();
@@ -106,10 +106,10 @@ fn merge_by_tuple_key_reports_left_value_length_mismatch() {
     let right_values = policy.to_device(&[300_u32]).unwrap();
 
     let err = merge_by_key(
-        (&left_key_a, &left_key_b),
-        (&left_values,),
-        (&right_key_a, &right_key_b),
-        &right_values,
+        (left_key_a.slice(..), left_key_b.slice(..)),
+        (left_values.slice(..),),
+        (right_key_a.slice(..), right_key_b.slice(..)),
+        (right_values.slice(..),),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -129,10 +129,10 @@ fn merge_by_tuple_key_reports_right_value_length_mismatch() {
     let right_values = policy.to_device(&[200_u32]).unwrap();
 
     let err = merge_by_key(
-        (&left_key_a, &left_key_b),
-        (&left_values,),
-        (&right_key_a, &right_key_b),
-        &right_values,
+        (left_key_a.slice(..), left_key_b.slice(..)),
+        (left_values.slice(..),),
+        (right_key_a.slice(..), right_key_b.slice(..)),
+        (right_values.slice(..),),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -154,10 +154,10 @@ fn merge_by_tuple_key_reports_left_tuple_value_length_mismatch() {
     let right_value_b = policy.to_device(&[3000.0_f32]).unwrap();
 
     let err = merge_by_key(
-        (&left_key_a, &left_key_b),
-        (&left_value_a, &left_value_b),
-        (&right_key_a, &right_key_b),
-        (&right_value_a, &right_value_b),
+        (left_key_a.slice(..), left_key_b.slice(..)),
+        (left_value_a.slice(..), left_value_b.slice(..)),
+        (right_key_a.slice(..), right_key_b.slice(..)),
+        (right_value_a.slice(..), right_value_b.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -179,10 +179,10 @@ fn merge_by_tuple_key_reports_right_tuple_value_length_mismatch() {
     let right_value_b = policy.to_device(&[2000.0_f32]).unwrap();
 
     let err = merge_by_key(
-        (&left_key_a, &left_key_b),
-        (&left_value_a, &left_value_b),
-        (&right_key_a, &right_key_b),
-        (&right_value_a, &right_value_b),
+        (left_key_a.slice(..), left_key_b.slice(..)),
+        (left_value_a.slice(..), left_value_b.slice(..)),
+        (right_key_a.slice(..), right_key_b.slice(..)),
+        (right_value_a.slice(..), right_value_b.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -206,10 +206,20 @@ fn merge_by_key_accepts_wide_soa_values() {
     let right_d = policy.to_device(&[10000_u32, 30000]).unwrap();
 
     let (keys, values) = merge_by_key(
-        (&left_keys,),
-        zip4(&left_a, &left_b, &left_c, &left_d),
-        (&right_keys,),
-        zip4(&right_a, &right_b, &right_c, &right_d),
+        (left_keys.slice(..),),
+        zip4(
+            left_a.slice(..),
+            left_b.slice(..),
+            left_c.slice(..),
+            left_d.slice(..),
+        ),
+        (right_keys.slice(..),),
+        zip4(
+            right_a.slice(..),
+            right_b.slice(..),
+            right_c.slice(..),
+            right_d.slice(..),
+        ),
         LessU32,
     )
     .unwrap();
@@ -255,10 +265,36 @@ fn merge_by_key_accepts_soa12_values() {
     let rl = policy.to_device(&[80_u32, 100]).unwrap();
 
     let (keys, values) = merge_by_key(
-        (&left_keys,),
-        zip12(&la, &lb, &lc, &ld, &le, &lf, &lg, &lh, &li, &lj, &lk, &ll),
-        (&right_keys,),
-        zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
+        (left_keys.slice(..),),
+        zip12(
+            la.slice(..),
+            lb.slice(..),
+            lc.slice(..),
+            ld.slice(..),
+            le.slice(..),
+            lf.slice(..),
+            lg.slice(..),
+            lh.slice(..),
+            li.slice(..),
+            lj.slice(..),
+            lk.slice(..),
+            ll.slice(..),
+        ),
+        (right_keys.slice(..),),
+        zip12(
+            ra.slice(..),
+            rb.slice(..),
+            rc.slice(..),
+            rd.slice(..),
+            re.slice(..),
+            rf.slice(..),
+            rg.slice(..),
+            rh.slice(..),
+            ri.slice(..),
+            rj.slice(..),
+            rk.slice(..),
+            rl.slice(..),
+        ),
         LessU32,
     )
     .unwrap();
@@ -312,10 +348,36 @@ fn merge_by_key_accepts_soa12_values_with_equal_keys_and_uneven_lengths() {
     let rl = policy.to_device(&[510_u32, 522, 540]).unwrap();
 
     let (keys, values) = merge_by_key(
-        (&left_keys,),
-        zip12(&la, &lb, &lc, &ld, &le, &lf, &lg, &lh, &li, &lj, &lk, &ll),
-        (&right_keys,),
-        zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
+        (left_keys.slice(..),),
+        zip12(
+            la.slice(..),
+            lb.slice(..),
+            lc.slice(..),
+            ld.slice(..),
+            le.slice(..),
+            lf.slice(..),
+            lg.slice(..),
+            lh.slice(..),
+            li.slice(..),
+            lj.slice(..),
+            lk.slice(..),
+            ll.slice(..),
+        ),
+        (right_keys.slice(..),),
+        zip12(
+            ra.slice(..),
+            rb.slice(..),
+            rc.slice(..),
+            rd.slice(..),
+            re.slice(..),
+            rf.slice(..),
+            rg.slice(..),
+            rh.slice(..),
+            ri.slice(..),
+            rj.slice(..),
+            rk.slice(..),
+            rl.slice(..),
+        ),
         LessU32,
     )
     .unwrap();

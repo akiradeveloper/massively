@@ -126,6 +126,55 @@ where
     Ok(output_handle)
 }
 
+pub(crate) fn copy_slice<R, T>(
+    input: &DeviceVec<R, T>,
+    offset: usize,
+    len: usize,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    let end = offset
+        .checked_add(len)
+        .ok_or(Error::LengthTooLarge { len })?;
+    if end > input.len() {
+        return Err(Error::LengthMismatch {
+            input: end,
+            output: input.len(),
+        });
+    }
+    let offset_u32 = u32::try_from(offset).map_err(|_| Error::LengthTooLarge { len: offset })?;
+    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    if len == 0 {
+        return Ok(DeviceVec::empty(input.policy().clone()));
+    }
+
+    let client = input.policy().client();
+    let output_handle = client.empty(len * std::mem::size_of::<T>());
+    let offset_handle = client.create_from_slice(u32::as_bytes(&[offset_u32]));
+
+    let block_count = len.div_ceil(BLOCK_RANGE_SIZE as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+    unsafe {
+        copy_slice_kernel::launch_unchecked::<T, R>(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_RANGE_SIZE),
+            unsafe { BufferArg::from_raw_parts(input.handle.clone(), input.len()) },
+            unsafe { BufferArg::from_raw_parts(offset_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(
+        input.policy().clone(),
+        output_handle,
+        len,
+    ))
+}
+
 pub(crate) fn indices_u32<R>(policy: &CubePolicy<R>, len: usize) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,

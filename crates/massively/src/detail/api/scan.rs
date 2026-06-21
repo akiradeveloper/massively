@@ -5,7 +5,7 @@ use crate::{
         SoAView2, SoAView3,
     },
     error::Error,
-    expr::{DeviceGpuExpr, GpuExpr},
+    expr::DeviceGpuExpr,
     op::{BinaryOp, BinaryPredicateOp, GpuOp},
     primitives::scan as primitive_scan,
 };
@@ -476,7 +476,7 @@ impl<Source, Op> AdjacentDifferenceInput<Op> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<Source::Item>,
 {
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -492,7 +492,7 @@ where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<Source::Item>,
 {
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -560,7 +560,7 @@ impl<Source, Op> AdjacentDifferenceInput<Op> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<(Source::Item,)>,
 {
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -1489,21 +1489,16 @@ impl_inclusive_scan_by_key_tuple_keys!(SoAView3<A, B, C> { first: 0, second: 1, 
 impl<KeySource, ValueSource, KeyEq, Op> InclusiveScanByKeyCall<(ValueSource,), KeyEq, Op>
     for (KeySource,)
 where
-    KeySource: KeyInput,
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueSource: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
     KeySource::Item: CubePrimitive + CubeElement,
-    ValueSource: InclusiveScanByKeyInput<
-            KeySource::Item,
-            super::Tuple1Less<KeyEq>,
-            super::Tuple1BinaryOp<Op>,
-            Runtime = KeySource::Runtime,
-        >,
+    ValueSource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueSource::Item,)>,
 {
-    type Output = <ValueSource as InclusiveScanByKeyInput<
-        KeySource::Item,
-        super::Tuple1Less<KeyEq>,
-        super::Tuple1BinaryOp<Op>,
-    >>::Output;
+    type Output = SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>;
 
     fn inclusive_scan_by_key_call(
         self,
@@ -1511,11 +1506,144 @@ where
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        let keys = self.0.key_input()?;
-        values.0.inclusive_scan_by_key_input(
-            &keys,
-            GpuOp::<super::Tuple1Less<KeyEq>>::new(),
-            GpuOp::<super::Tuple1BinaryOp<Op>>::new(),
+        self.0.validate()?;
+        values.0.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        let key_bindings = self.0.stage()?;
+        let value_bindings = values.0.stage()?;
+        Ok(SoA1 {
+            source: primitive_scan::inclusive_scan_by_key_device_expr::<
+                KeySource::Runtime,
+                KeySource::Item,
+                ValueSource::Item,
+                KeySource::Expr,
+                ValueSource::Expr,
+                super::Tuple1Less<KeyEq>,
+                super::Tuple1BinaryOp<Op>,
+            >(
+                self.0.policy(),
+                &key_bindings,
+                &value_bindings,
+                self.0.len(),
+            )?,
+        })
+    }
+}
+
+impl<KeySource, ValueA, ValueB, KeyEq, Op> InclusiveScanByKeyCall<(ValueA, ValueB), KeyEq, Op>
+    for (KeySource,)
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    ValueA::Item: CubePrimitive + CubeElement,
+    ValueB::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+{
+    type Output = SoA2<
+        DeviceVec<KeySource::Runtime, ValueA::Item>,
+        DeviceVec<KeySource::Runtime, ValueB::Item>,
+    >;
+
+    fn inclusive_scan_by_key_call(
+        self,
+        values: (ValueA, ValueB),
+        _key_eq: GpuOp<KeyEq>,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        self.0.validate()?;
+        values.0.validate()?;
+        values.1.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        super::ensure_same_len(values.1.len(), self.0.len())?;
+        let key_bindings = self.0.stage()?;
+        let a_bindings = values.0.stage()?;
+        let b_bindings = values.1.stage()?;
+        primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr::<
+            KeySource::Runtime,
+            KeySource::Item,
+            ValueA::Item,
+            ValueB::Item,
+            KeySource::Expr,
+            ValueA::Expr,
+            ValueB::Expr,
+            super::Tuple1Less<KeyEq>,
+            Op,
+        >(
+            self.0.policy(),
+            &key_bindings,
+            &a_bindings,
+            &b_bindings,
+            self.0.len(),
+        )
+    }
+}
+
+impl<KeySource, ValueA, ValueB, ValueC, KeyEq, Op>
+    InclusiveScanByKeyCall<(ValueA, ValueB, ValueC), KeyEq, Op> for (KeySource,)
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueC: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    ValueA::Item: CubePrimitive + CubeElement,
+    ValueB::Item: CubePrimitive + CubeElement,
+    ValueC::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
+    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+{
+    type Output = SoA3<
+        DeviceVec<KeySource::Runtime, ValueA::Item>,
+        DeviceVec<KeySource::Runtime, ValueB::Item>,
+        DeviceVec<KeySource::Runtime, ValueC::Item>,
+    >;
+
+    fn inclusive_scan_by_key_call(
+        self,
+        values: (ValueA, ValueB, ValueC),
+        _key_eq: GpuOp<KeyEq>,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        self.0.validate()?;
+        values.0.validate()?;
+        values.1.validate()?;
+        values.2.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        super::ensure_same_len(values.1.len(), self.0.len())?;
+        super::ensure_same_len(values.2.len(), self.0.len())?;
+        let key_bindings = self.0.stage()?;
+        let a_bindings = values.0.stage()?;
+        let b_bindings = values.1.stage()?;
+        let c_bindings = values.2.stage()?;
+        primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr::<
+            KeySource::Runtime,
+            KeySource::Item,
+            ValueA::Item,
+            ValueB::Item,
+            ValueC::Item,
+            KeySource::Expr,
+            ValueA::Expr,
+            ValueB::Expr,
+            ValueC::Expr,
+            super::Tuple1Less<KeyEq>,
+            Op,
+        >(
+            self.0.policy(),
+            &key_bindings,
+            &a_bindings,
+            &b_bindings,
+            &c_bindings,
+            self.0.len(),
         )
     }
 }
@@ -2425,28 +2553,17 @@ impl_exclusive_scan_by_key_tuple_keys!(SoAView3<A, B, C> { first: 0, second: 1, 
 impl<KeySource, ValueSource, KeyEq, Op> ExclusiveScanByKeyCall<(ValueSource,), KeyEq, Op>
     for (KeySource,)
 where
-    KeySource: KeyInput,
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueSource: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
     KeySource::Item: CubePrimitive + CubeElement,
-    ValueSource: ExclusiveScanByKeyInput<
-            KeySource::Item,
-            super::Tuple1Less<KeyEq>,
-            super::Tuple1BinaryOp<Op>,
-            Runtime = KeySource::Runtime,
-        >,
+    ValueSource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueSource::Item,)>,
 {
-    type Init = (
-        <ValueSource as ExclusiveScanByKeyInput<
-            KeySource::Item,
-            super::Tuple1Less<KeyEq>,
-            super::Tuple1BinaryOp<Op>,
-        >>::Init,
-    );
-    type Output = <ValueSource as ExclusiveScanByKeyInput<
-        KeySource::Item,
-        super::Tuple1Less<KeyEq>,
-        super::Tuple1BinaryOp<Op>,
-    >>::Output;
+    type Init = (ValueSource::Item,);
+    type Output = SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>;
 
     fn exclusive_scan_by_key_call(
         self,
@@ -2455,12 +2572,151 @@ where
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        let keys = self.0.key_input()?;
-        values.0.exclusive_scan_by_key_input(
-            &keys,
-            init.0,
-            GpuOp::<super::Tuple1Less<KeyEq>>::new(),
-            GpuOp::<super::Tuple1BinaryOp<Op>>::new(),
+        self.0.validate()?;
+        values.0.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        let key_bindings = self.0.stage()?;
+        let value_bindings = values.0.stage()?;
+        Ok(SoA1 {
+            source: primitive_scan::exclusive_scan_by_key_device_expr::<
+                KeySource::Runtime,
+                KeySource::Item,
+                ValueSource::Item,
+                KeySource::Expr,
+                ValueSource::Expr,
+                super::Tuple1Less<KeyEq>,
+                super::Tuple1BinaryOp<Op>,
+            >(
+                self.0.policy(),
+                &key_bindings,
+                &value_bindings,
+                self.0.len(),
+                init.0,
+            )?,
+        })
+    }
+}
+
+impl<KeySource, ValueA, ValueB, KeyEq, Op> ExclusiveScanByKeyCall<(ValueA, ValueB), KeyEq, Op>
+    for (KeySource,)
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    ValueA::Item: CubePrimitive + CubeElement,
+    ValueB::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+{
+    type Init = (ValueA::Item, ValueB::Item);
+    type Output = SoA2<
+        DeviceVec<KeySource::Runtime, ValueA::Item>,
+        DeviceVec<KeySource::Runtime, ValueB::Item>,
+    >;
+
+    fn exclusive_scan_by_key_call(
+        self,
+        values: (ValueA, ValueB),
+        init: Self::Init,
+        _key_eq: GpuOp<KeyEq>,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        self.0.validate()?;
+        values.0.validate()?;
+        values.1.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        super::ensure_same_len(values.1.len(), self.0.len())?;
+        let key_bindings = self.0.stage()?;
+        let a_bindings = values.0.stage()?;
+        let b_bindings = values.1.stage()?;
+        primitive_scan::exclusive_scan_tuple2_by_key_values_device_expr::<
+            KeySource::Runtime,
+            KeySource::Item,
+            ValueA::Item,
+            ValueB::Item,
+            KeySource::Expr,
+            ValueA::Expr,
+            ValueB::Expr,
+            super::Tuple1Less<KeyEq>,
+            Op,
+        >(
+            self.0.policy(),
+            &key_bindings,
+            &a_bindings,
+            &b_bindings,
+            self.0.len(),
+            init,
+        )
+    }
+}
+
+impl<KeySource, ValueA, ValueB, ValueC, KeyEq, Op>
+    ExclusiveScanByKeyCall<(ValueA, ValueB, ValueC), KeyEq, Op> for (KeySource,)
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    ValueC: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    ValueA::Item: CubePrimitive + CubeElement,
+    ValueB::Item: CubePrimitive + CubeElement,
+    ValueC::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
+    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
+    Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+{
+    type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
+    type Output = SoA3<
+        DeviceVec<KeySource::Runtime, ValueA::Item>,
+        DeviceVec<KeySource::Runtime, ValueB::Item>,
+        DeviceVec<KeySource::Runtime, ValueC::Item>,
+    >;
+
+    fn exclusive_scan_by_key_call(
+        self,
+        values: (ValueA, ValueB, ValueC),
+        init: Self::Init,
+        _key_eq: GpuOp<KeyEq>,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        self.0.validate()?;
+        values.0.validate()?;
+        values.1.validate()?;
+        values.2.validate()?;
+        super::ensure_same_len(values.0.len(), self.0.len())?;
+        super::ensure_same_len(values.1.len(), self.0.len())?;
+        super::ensure_same_len(values.2.len(), self.0.len())?;
+        let key_bindings = self.0.stage()?;
+        let a_bindings = values.0.stage()?;
+        let b_bindings = values.1.stage()?;
+        let c_bindings = values.2.stage()?;
+        primitive_scan::exclusive_scan_tuple3_by_key_values_device_expr::<
+            KeySource::Runtime,
+            KeySource::Item,
+            ValueA::Item,
+            ValueB::Item,
+            ValueC::Item,
+            KeySource::Expr,
+            ValueA::Expr,
+            ValueB::Expr,
+            ValueC::Expr,
+            super::Tuple1Less<KeyEq>,
+            Op,
+        >(
+            self.0.policy(),
+            &key_bindings,
+            &a_bindings,
+            &b_bindings,
+            &c_bindings,
+            self.0.len(),
+            init,
         )
     }
 }
