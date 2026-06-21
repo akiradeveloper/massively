@@ -3,12 +3,13 @@ use crate::common::*;
 #[cfg(any())]
 #[test]
 fn inclusive_scan_by_key_accepts_tuple_keys() {
-    let policy = policy();
-    let key_a = policy.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 2.0]).unwrap();
-    let key_b = policy.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
-    let values = policy.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
+    let exec = exec();
+    let key_a = exec.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 2.0]).unwrap();
+    let key_b = exec.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
 
     let output = inclusive_scan_by_key(
+        &exec,
         (key_a.slice(..), key_b.slice(..)),
         (values.slice(..),),
         MixedTupleEqual,
@@ -16,12 +17,12 @@ fn inclusive_scan_by_key_accepts_tuple_keys() {
     )
     .unwrap();
     let (output,) = output;
-    assert_eq!(output.to_vec().unwrap(), vec![1, 3, 3, 7, 5]);
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 3, 7, 5]);
 }
 
 #[test]
 fn inclusive_scan_by_key_handles_block_boundary_runs() {
-    let policy = policy();
+    let exec = exec();
     let mut keys = vec![0_u32; 300];
     keys.extend(vec![1_u32; 20]);
     keys.extend(vec![0_u32; 10]);
@@ -30,28 +31,28 @@ fn inclusive_scan_by_key_handles_block_boundary_runs() {
     expected.extend(1..=20);
     expected.extend(1..=10);
 
-    let keys = policy.to_device(&keys).unwrap();
-    let values = policy.to_device(&values).unwrap();
+    let keys = exec.to_device(&keys).unwrap();
+    let values = exec.to_device(&values).unwrap();
     let output =
-        inclusive_scan_by_key((keys.slice(..),), (values.slice(..),), EqualU32, Sum).unwrap();
+        inclusive_scan_by_key(&exec, (keys.slice(..),), (values.slice(..),), EqualU32, Sum)
+            .unwrap();
     let (output,) = output;
 
-    assert_eq!(output.to_vec().unwrap(), expected);
+    assert_eq!(exec.to_host(&output).unwrap(), expected);
 }
 
 #[test]
 fn inclusive_scan_by_key_accepts_tuple_values() {
-    let policy = policy();
-    let keys = policy.to_device(&[0_u32, 0, 1, 1, 1, 2]).unwrap();
-    let a = policy
-        .to_device(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0])
-        .unwrap();
-    let b = policy.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
-    let c = policy
+    let exec = exec();
+    let keys = exec.to_device(&[0_u32, 0, 1, 1, 1, 2]).unwrap();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
+    let c = exec
         .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
         .unwrap();
 
     let output = inclusive_scan_by_key(
+        &exec,
         (keys.slice(..),),
         (a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
@@ -59,10 +60,13 @@ fn inclusive_scan_by_key_accepts_tuple_values() {
     )
     .unwrap();
     let (a, b, c) = output;
-    assert_eq!(a.to_vec().unwrap(), vec![1.0, 3.0, 3.0, 7.0, 12.0, 6.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![10, 30, 30, 70, 120, 60]);
     assert_eq!(
-        c.to_vec().unwrap(),
+        exec.to_host(&a).unwrap(),
+        vec![1.0, 3.0, 3.0, 7.0, 12.0, 6.0]
+    );
+    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30, 30, 70, 120, 60]);
+    assert_eq!(
+        exec.to_host(&c).unwrap(),
         vec![100.0, 300.0, 300.0, 700.0, 1200.0, 600.0]
     );
 }

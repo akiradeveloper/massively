@@ -73,7 +73,6 @@ pub trait KernelColumn {
     type Item;
     type Expr;
 
-    fn policy(&self) -> &CubePolicy<Self::Runtime>;
     fn len(&self) -> usize;
     fn validate(&self) -> Result<(), Error>;
 
@@ -84,11 +83,11 @@ pub trait KernelColumn {
         None
     }
 
-    fn stage(&self) -> Result<KernelColumnBindings, Error>
+    fn stage(&self, policy: &CubePolicy<Self::Runtime>) -> Result<KernelColumnBindings, Error>
     where
         Self: KernelColumnAt<S0>,
     {
-        let mut bindings = KernelColumnBindings::empty(KernelColumn::policy(self).client());
+        let mut bindings = KernelColumnBindings::empty(policy.client());
         <Self as KernelColumnAt<S0>>::stage_at(self, &mut bindings)?;
         bindings.finish();
         Ok(bindings)
@@ -122,11 +121,7 @@ where
 {
     pub(crate) fn from_column(source: &DeviceVec<R, T>) -> Self {
         Self {
-            source: DeviceVec::from_handle(
-                source.policy().clone(),
-                source.handle.clone(),
-                source.len(),
-            ),
+            source: DeviceVec::from_handle(source.policy_id(), source.handle.clone(), source.len()),
             offset: 0,
             len: source.len(),
         }
@@ -134,11 +129,7 @@ where
 
     pub(crate) fn from_slice(source: &DeviceVec<R, T>, offset: usize, len: usize) -> Self {
         Self {
-            source: DeviceVec::from_handle(
-                source.policy().clone(),
-                source.handle.clone(),
-                source.len(),
-            ),
+            source: DeviceVec::from_handle(source.policy_id(), source.handle.clone(), source.len()),
             offset,
             len,
         }
@@ -150,11 +141,16 @@ where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
-    pub(crate) fn materialize(self) -> Result<DeviceVec<R, T>, Error> {
+    pub(crate) fn materialize(self, policy: &CubePolicy<R>) -> Result<DeviceVec<R, T>, Error> {
         if self.offset == 0 && self.len == self.source.len() {
             Ok(self.source)
         } else {
-            crate::primitives::range::copy_slice(&self.source, self.offset, self.len)
+            crate::primitives::range::copy_slice_with_policy(
+                policy,
+                &self.source,
+                self.offset,
+                self.len,
+            )
         }
     }
 }
@@ -196,7 +192,6 @@ pub trait SoA {
     type Item;
     type Scalar;
 
-    fn policy(&self) -> &CubePolicy<Self::Runtime>;
     fn len(&self) -> usize;
     fn validate(&self) -> Result<(), Error>;
 }
@@ -226,10 +221,6 @@ where
     type Runtime = R;
     type Item = (T,);
     type Scalar = T;
-
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        DeviceVec::policy(self)
-    }
 
     fn len(&self) -> usize {
         DeviceVec::len(self)
@@ -313,10 +304,6 @@ where
     type Item = (<Left as KernelColumn>::Item, <Right as KernelColumn>::Item);
     type Scalar = Left::Scalar;
 
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        SoA::policy(&self.left)
-    }
-
     fn len(&self) -> usize {
         SoA::len(&self.left)
     }
@@ -354,10 +341,6 @@ where
     type Runtime = Source::Runtime;
     type Item = (Source::Item,);
     type Scalar = Source::Item;
-
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        KernelColumn::policy(&self.source)
-    }
 
     fn len(&self) -> usize {
         KernelColumn::len(&self.source)
@@ -453,10 +436,6 @@ where
         <Third as KernelColumn>::Item,
     );
     type Scalar = First::Scalar;
-
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        SoA::policy(&self.first)
-    }
 
     fn len(&self) -> usize {
         SoA::len(&self.first)
@@ -577,10 +556,6 @@ where
     type Item = T;
     type Expr = Slot0<T>;
 
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        &self.policy
-    }
-
     fn len(&self) -> usize {
         self.len
     }
@@ -660,10 +635,6 @@ where
     type Runtime = R;
     type Item = T;
     type Expr = Slot0<T>;
-
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        self.source.policy()
-    }
 
     fn len(&self) -> usize {
         self.len
@@ -763,10 +734,6 @@ where
     type Item = T;
     type Expr = Slot0<T>;
 
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        &self.policy
-    }
-
     fn len(&self) -> usize {
         self.len
     }
@@ -852,10 +819,6 @@ where
         Op,
     >;
 
-    fn policy(&self) -> &CubePolicy<Self::Runtime> {
-        self.left.policy()
-    }
-
     fn len(&self) -> usize {
         self.left.len()
     }
@@ -867,8 +830,8 @@ where
         Ok(())
     }
 
-    fn stage(&self) -> Result<KernelColumnBindings, Error> {
-        let mut bindings = KernelColumnBindings::empty(KernelColumn::policy(self).client());
+    fn stage(&self, policy: &CubePolicy<Self::Runtime>) -> Result<KernelColumnBindings, Error> {
+        let mut bindings = KernelColumnBindings::empty(policy.client());
         <Self as KernelColumnAt<S0>>::stage_at(self, &mut bindings)?;
         bindings.finish();
         Ok(bindings)

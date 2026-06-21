@@ -2,35 +2,36 @@ use crate::common::*;
 
 #[test]
 fn inclusive_scan_accepts_tuple_columns() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let output = inclusive_scan((a.slice(..), b.slice(..)), TupleSum).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let output = inclusive_scan(&exec, (a.slice(..), b.slice(..)), TupleSum).unwrap();
     let (a, b) = output;
-    assert_eq!(a.to_vec().unwrap(), vec![1.0, 3.0, 6.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![10, 30, 60]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0, 6.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30, 60]);
 }
 
 #[test]
 fn inclusive_scan_accepts_single_column_as_tuple_item() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let (a,) = inclusive_scan((a.slice(..),), TupleSum).unwrap();
+    let (a,) = inclusive_scan(&exec, (a.slice(..),), TupleSum).unwrap();
 
-    assert_eq!(a.to_vec().unwrap(), vec![1.0, 3.0, 6.0]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0, 6.0]);
 }
 
 #[test]
 fn inclusive_scan_accepts_three_column_tuple_item_op() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let c = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let (a, b, c) = inclusive_scan((a.slice(..), b.slice(..), c.slice(..)), TupleSum).unwrap();
+    let (a, b, c) =
+        inclusive_scan(&exec, (a.slice(..), b.slice(..), c.slice(..)), TupleSum).unwrap();
 
-    assert_eq!(a.to_vec().unwrap(), vec![1.0, 3.0, 6.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![10, 30, 60]);
-    assert_eq!(c.to_vec().unwrap(), vec![100.0, 300.0, 600.0]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0, 6.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30, 60]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![100.0, 300.0, 600.0]);
 }

@@ -14,6 +14,7 @@ pub(crate) const BLOCK_REDUCE_SIZE: u32 = 256;
 pub(crate) type ReduceByKeyControl = segmented::SegmentControl;
 
 pub(crate) fn apply_tuple2_init<R, A, B, Op>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, A>,
     right: &DeviceVec<R, B>,
     init: (A, B),
@@ -27,12 +28,9 @@ where
     super::ensure_same_len(right.len(), left.len())?;
     let len = left.len();
     if len == 0 {
-        return Ok((
-            DeviceVec::empty(left.policy().clone()),
-            DeviceVec::empty(right.policy().clone()),
-        ));
+        return Ok((policy.empty_device_vec(), policy.empty_device_vec()));
     }
-    let client = left.policy().client();
+    let client = policy.client();
     let out_left = client.empty(len * std::mem::size_of::<A>());
     let out_right = client.empty(len * std::mem::size_of::<B>());
     let init_left = client.create_from_slice(A::as_bytes(&[init.0]));
@@ -53,12 +51,13 @@ where
         );
     }
     Ok((
-        DeviceVec::from_handle(left.policy().clone(), out_left, len),
-        DeviceVec::from_handle(right.policy().clone(), out_right, len),
+        DeviceVec::from_handle(policy.id(), out_left, len),
+        DeviceVec::from_handle(policy.id(), out_right, len),
     ))
 }
 
 pub(crate) fn apply_tuple3_init<R, A, B, C, Op>(
+    policy: &CubePolicy<R>,
     first: &DeviceVec<R, A>,
     second: &DeviceVec<R, B>,
     third: &DeviceVec<R, C>,
@@ -76,12 +75,12 @@ where
     let len = first.len();
     if len == 0 {
         return Ok((
-            DeviceVec::empty(first.policy().clone()),
-            DeviceVec::empty(second.policy().clone()),
-            DeviceVec::empty(third.policy().clone()),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
         ));
     }
-    let client = first.policy().client();
+    let client = policy.client();
     let out_first = client.empty(len * std::mem::size_of::<A>());
     let out_second = client.empty(len * std::mem::size_of::<B>());
     let out_third = client.empty(len * std::mem::size_of::<C>());
@@ -107,9 +106,9 @@ where
         );
     }
     Ok((
-        DeviceVec::from_handle(first.policy().clone(), out_first, len),
-        DeviceVec::from_handle(second.policy().clone(), out_second, len),
-        DeviceVec::from_handle(third.policy().clone(), out_third, len),
+        DeviceVec::from_handle(policy.id(), out_first, len),
+        DeviceVec::from_handle(policy.id(), out_second, len),
+        DeviceVec::from_handle(policy.id(), out_third, len),
     ))
 }
 
@@ -549,8 +548,8 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok((
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
             ReduceByKeyControl::empty(policy)?,
         ));
     }
@@ -586,7 +585,7 @@ where
 
     if scan_blocks > 1 {
         let block_tail_keys_vec =
-            DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), scan_blocks);
+            DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), scan_blocks);
         let block_prefixes = scan::inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(
             policy,
             &block_tail_keys_vec,
@@ -630,6 +629,7 @@ where
 }
 
 pub(crate) fn reduce_tuple2_by_key_device_vec<R, A, B, T, KeyEq, Op>(
+    policy: &CubePolicy<R>,
     key_a: &DeviceVec<R, A>,
     key_b: &DeviceVec<R, B>,
     values: &DeviceVec<R, T>,
@@ -646,15 +646,14 @@ where
     super::ensure_same_len(key_b.len(), key_a.len())?;
     super::ensure_same_len(values.len(), key_a.len())?;
 
-    let policy = values.policy();
     let len = key_a.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let client = policy.client();
     if len == 0 {
         return Ok((
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
         ));
     }
 
@@ -700,6 +699,7 @@ where
 }
 
 pub(crate) fn reduce_tuple3_by_key_device_vec<R, A, B, C, T, KeyEq, Op>(
+    policy: &CubePolicy<R>,
     key_a: &DeviceVec<R, A>,
     key_b: &DeviceVec<R, B>,
     key_c: &DeviceVec<R, C>,
@@ -727,16 +727,15 @@ where
     super::ensure_same_len(key_c.len(), key_a.len())?;
     super::ensure_same_len(values.len(), key_a.len())?;
 
-    let policy = values.policy();
     let len = key_a.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let client = policy.client();
     if len == 0 {
         return Ok((
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
         ));
     }
 
@@ -800,7 +799,7 @@ where
 {
     let len = keys.len();
     if len == 0 {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
 
     let reduced_value_handle = reduce_by_key_values_at_ends_from_input::<R, K, T, KeyEq, Op>(
@@ -862,7 +861,7 @@ where
 
     if scan_blocks > 1 {
         let block_tail_keys_vec =
-            DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), scan_blocks);
+            DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), scan_blocks);
         let block_prefixes = scan::inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(
             policy,
             &block_tail_keys_vec,

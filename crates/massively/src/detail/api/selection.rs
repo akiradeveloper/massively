@@ -8,6 +8,7 @@ use crate::{
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
     op::{GpuOp, PredicateOp},
+    policy::CubePolicy,
     primitives::{scan, search, select},
 };
 use cubecl::prelude::*;
@@ -20,6 +21,7 @@ fn selection_block_count(len: usize) -> Result<u32, Error> {
 }
 
 fn materialize_one<Source>(
+    policy: &CubePolicy<Source::Runtime>,
     input: SoAView1<Source>,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
@@ -29,7 +31,7 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
     ReadOnlySoA::validate(&input)?;
-    super::device_expr_collect(&input.source)
+    super::device_expr_collect_with_policy(policy, &input.source)
 }
 
 struct TupleSelectionHandles {
@@ -41,6 +43,7 @@ struct TupleSelectionHandles {
 macro_rules! tuple_selection_handles {
     (
         $self:expr,
+        $policy:expr,
         $invert:expr,
         $kernel_name:ident,
         ($first_item_ty:ty, $( $item_ty:ty ),+),
@@ -54,13 +57,13 @@ macro_rules! tuple_selection_handles {
             $self.$field.validate()?;
             super::ensure_same_len($self.$field.len(), $self.$first_field.len())?;
         )+
-        let $first_field = super::device_expr_collect(&$self.$first_field)?;
+        let $first_field = super::device_expr_collect_with_policy($policy, &$self.$first_field)?;
         $(
-            let $field = super::device_expr_collect(&$self.$field)?;
+            let $field = super::device_expr_collect_with_policy($policy, &$self.$field)?;
         )+
         let len = $first_field.len();
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-        let client = $first_field.policy().client();
+        let client = $policy.client();
         let flag = client.empty(len * std::mem::size_of::<u32>());
         if len != 0 {
             let block_count_u32 = selection_block_count(len)?;
@@ -93,9 +96,15 @@ macro_rules! tuple_selection_handles {
 
 #[doc(hidden)]
 pub trait SelectInput<Pred> {
+    type Runtime: Runtime;
     type Output;
 
-    fn select_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<Self::Output, Error>;
+    fn select_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error>;
 }
 
 #[doc(hidden)]
@@ -103,9 +112,15 @@ pub trait OwnedSelectionInput {}
 
 #[doc(hidden)]
 pub trait CopyIfInput<Stencil, Pred> {
+    type Runtime: Runtime;
     type Output;
 
-    fn copy_if_input(self, stencil: Stencil, pred: GpuOp<Pred>) -> Result<Self::Output, Error>;
+    fn copy_if_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        stencil: Stencil,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error>;
 }
 
 impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for SoAView1<Source>
@@ -116,17 +131,23 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(self, stencil: Stencil, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn copy_if_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        stencil: Stencil,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         super::ensure_same_len(self.source.len(), stencil.len())?;
-        let values = super::device_expr_collect(&self.source)?;
-        let handles = stencil.selection_handles(false)?;
-        let count = select::selected_count(values.policy(), &handles)?;
+        let values = super::device_expr_collect_with_policy(policy, &self.source)?;
+        let handles = stencil.selection_handles_with_policy(policy, false)?;
+        let count = select::selected_count(policy, &handles)?;
         Ok(SoA1 {
             source: select::compact_with_count(
-                values.policy(),
+                policy,
                 select::handles_for_value(&handles, values.handle.clone()),
                 count,
             )?,
@@ -141,11 +162,18 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(self, stencil: Stencil, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn copy_if_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        stencil: Stencil,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         <SoAView1<Source> as CopyIfInput<Stencil, Pred>>::copy_if_input(
             SoAView1 { source: self },
+            policy,
             stencil,
             pred,
         )
@@ -159,10 +187,16 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(self, stencil: Stencil, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
-        <Source as CopyIfInput<Stencil, Pred>>::copy_if_input(self.0, stencil, pred)
+    fn copy_if_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        stencil: Stencil,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
+        <Source as CopyIfInput<Stencil, Pred>>::copy_if_input(self.0, policy, stencil, pred)
     }
 }
 
@@ -173,12 +207,22 @@ where
     Source::Expr: GpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn select_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn select_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         self.source.validate()?;
         Ok(SoA1 {
-            source: super::device_expr_copy_if::<Source, Pred>(&self.source, invert)?,
+            source: super::device_expr_copy_if_with_policy::<Source, Pred>(
+                policy,
+                &self.source,
+                invert,
+            )?,
         })
     }
 }
@@ -190,11 +234,18 @@ where
     Source::Expr: GpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn select_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn select_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         <SoAView1<Source> as SelectInput<Pred>>::select_input(
             SoAView1 { source: self },
+            policy,
             invert,
             pred,
         )
@@ -208,11 +259,18 @@ where
     Source::Expr: GpuExpr<Source::Item>,
     Pred: PredicateOp<(Source::Item,)>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn select_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn select_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         <Source as SelectInput<super::Tuple1PredicateOp<Pred>>>::select_input(
             self.0,
+            policy,
             invert,
             GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
         )
@@ -247,11 +305,18 @@ macro_rules! impl_selection_tuple_input {
         where
             $view<$( $ty ),+>: SelectInput<Pred>,
         {
+            type Runtime = <$view<$( $ty ),+> as SelectInput<Pred>>::Runtime;
             type Output = <$view<$( $ty ),+> as SelectInput<Pred>>::Output;
 
-            fn select_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn select_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as SelectInput<Pred>>::select_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     invert,
                     pred,
                 )
@@ -268,11 +333,18 @@ macro_rules! impl_selection_tuple_input {
         where
             $view<$( $ty ),+>: CopyIfInput<Stencil, Pred>,
         {
+            type Runtime = <$view<$( $ty ),+> as CopyIfInput<Stencil, Pred>>::Runtime;
             type Output = <$view<$( $ty ),+> as CopyIfInput<Stencil, Pred>>::Output;
 
-            fn copy_if_input(self, stencil: Stencil, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn copy_if_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                stencil: Stencil,
+                pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as CopyIfInput<Stencil, Pred>>::copy_if_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     stencil,
                     pred,
                 )
@@ -312,15 +384,22 @@ macro_rules! impl_tuple_selection {
                 $( impl_tuple_selection!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $name<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn select_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn select_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         invert,
                         $kernel_name,
                         (
@@ -333,24 +412,24 @@ macro_rules! impl_tuple_selection {
                         $( $field ),+
                     )?;
                 let first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag,
                     $first_field.handle.clone(),
                 )?;
-                let count = select::selected_count($first_field.policy(), &first_handles)?;
+                let count = select::selected_count(policy, &first_handles)?;
                 let control_handles = first_handles.clone();
                 let $first_field = select::compact_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), first_handles, count)?;
+                >(policy, first_handles, count)?;
                 $(
                     let $field = select::compact_with_count::<
                         <$rest as KernelColumn>::Runtime,
                         <$rest as KernelColumn>::Item,
                     >(
-                        $field.policy(),
+                        policy,
                         select::handles_for_value(&control_handles, $field.handle.clone()),
                         count,
                     )?;
@@ -393,10 +472,18 @@ macro_rules! impl_tuple_selection {
                 $( impl_tuple_selection!(@item_ty $rest) ),+
             )>,
         {
-            fn count_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<usize, Error> {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
+            fn count_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                _pred: GpuOp<Pred>,
+            ) -> Result<usize, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         invert,
                         $kernel_name,
                         (
@@ -413,22 +500,28 @@ macro_rules! impl_tuple_selection {
                     return Ok(0);
                 }
                 let first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag,
                     $first_field.handle.clone(),
                 )?;
                 Ok(scan::read_u32_scalar::<<$first as KernelColumn>::Runtime>(
-                    $first_field.policy().client(),
+                    policy.client(),
                     first_handles.count,
                 )? as usize)
             }
 
-            fn find_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+            fn find_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Option<usize>, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         invert,
                         $kernel_name,
                         (
@@ -439,9 +532,10 @@ macro_rules! impl_tuple_selection {
                         Pred,
                         $first_field,
                         $( $field ),+
-                    )?;
+                )?;
+                let _ = &$first_field;
                 $( let _ = &$field; )+
-                search::first_flag($first_field.policy(), handles.flag, handles.len, handles.len)
+                search::first_flag(policy, handles.flag, handles.len, handles.len)
             }
         }
 
@@ -465,16 +559,22 @@ macro_rules! impl_tuple_selection {
                 $( impl_tuple_selection!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $name<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
             type SplitOutput = (Self::Output, Self::Output);
 
-            fn is_partitioned_input(self, _pred: GpuOp<Pred>) -> Result<bool, Error> {
+            fn is_partitioned_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<bool, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         false,
                         $kernel_name,
                         (
@@ -488,15 +588,15 @@ macro_rules! impl_tuple_selection {
                     )?;
                 $( let _ = &$field; )+
                 let first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag.clone(),
                     $first_field.handle.clone(),
                 )?;
-                let selected_count = select::selected_count($first_field.policy(), &first_handles)?;
+                let selected_count = select::selected_count(policy, &first_handles)?;
                 let first_rejected = search::first_unset_flag(
-                    $first_field.policy(),
+                    policy,
                     handles.flag,
                     handles.len,
                     handles.len,
@@ -505,10 +605,15 @@ macro_rules! impl_tuple_selection {
                 Ok(selected_count == first_rejected)
             }
 
-            fn partition_copy_input(self, _pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+            fn partition_copy_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Self::SplitOutput, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         false,
                         $kernel_name,
                         (
@@ -521,25 +626,25 @@ macro_rules! impl_tuple_selection {
                         $( $field ),+
                     )?;
                 let selected_first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag.clone(),
                     $first_field.handle.clone(),
                 )?;
                 let selected_count =
-                    select::selected_count($first_field.policy(), &selected_first_handles)?;
+                    select::selected_count(policy, &selected_first_handles)?;
                 let rejected_count = handles.len - selected_count;
                 let selected_control = selected_first_handles.clone();
                 let selected_first = select::compact_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), selected_first_handles, selected_count)?;
+                >(policy, selected_first_handles, selected_count)?;
                 let rejected_first = select::compact_rejected_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
                 >(
-                    $first_field.policy(),
+                    policy,
                     select::handles_for_value(&selected_control, $first_field.handle.clone()),
                     rejected_count,
                 )?;
@@ -551,7 +656,7 @@ macro_rules! impl_tuple_selection {
                                 <$rest as KernelColumn>::Runtime,
                                 <$rest as KernelColumn>::Item,
                             >(
-                                $field.policy(),
+                                policy,
                                 select::handles_for_value(&selected_control, $field.handle.clone()),
                                 selected_count,
                             )?,
@@ -564,7 +669,7 @@ macro_rules! impl_tuple_selection {
                                 <$rest as KernelColumn>::Runtime,
                                 <$rest as KernelColumn>::Item,
                             >(
-                                $field.policy(),
+                                policy,
                                 select::handles_for_value(&selected_control, $field.handle.clone()),
                                 rejected_count,
                             )?,
@@ -594,6 +699,7 @@ macro_rules! impl_tuple_copy_if {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
@@ -601,27 +707,28 @@ macro_rules! impl_tuple_copy_if {
 
             fn copy_if_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 stencil: Stencil,
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 super::ensure_same_len(stencil.len(), ReadOnlySoA::len(&self))?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let handles = stencil.selection_handles(false)?;
-                let count = select::selected_count($first_field.policy(), &handles)?;
+                let handles = stencil.selection_handles_with_policy(policy, false)?;
+                let count = select::selected_count(policy, &handles)?;
                 let control = handles.clone();
                 Ok($output {
                     $first_field: select::compact_with_count(
-                        $first_field.policy(),
+                        policy,
                         select::handles_for_value(&handles, $first_field.handle.clone()),
                         count,
                     )?,
                     $(
                         $field: select::compact_with_count(
-                            $field.policy(),
+                            policy,
                             select::handles_for_value(&control, $field.handle.clone()),
                             count,
                         )?,
@@ -669,15 +776,22 @@ macro_rules! impl_readonly_tuple_selection {
                 $( impl_readonly_tuple_selection!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn select_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn select_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         invert,
                         $kernel_name,
                         (
@@ -690,24 +804,24 @@ macro_rules! impl_readonly_tuple_selection {
                         $( $field ),+
                     )?;
                 let first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag,
                     $first_field.handle.clone(),
                 )?;
-                let count = select::selected_count($first_field.policy(), &first_handles)?;
+                let count = select::selected_count(policy, &first_handles)?;
                 let control_handles = first_handles.clone();
                 let $first_field = select::compact_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), first_handles, count)?;
+                >(policy, first_handles, count)?;
                 $(
                     let $field = select::compact_with_count::<
                         <$rest as KernelColumn>::Runtime,
                         <$rest as KernelColumn>::Item,
                     >(
-                        $field.policy(),
+                        policy,
                         select::handles_for_value(&control_handles, $field.handle.clone()),
                         count,
                     )?;
@@ -736,10 +850,18 @@ macro_rules! impl_readonly_tuple_selection {
                 $( impl_readonly_tuple_selection!(@item_ty $rest) ),+
             )>,
         {
-            fn count_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<usize, Error> {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
+            fn count_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                _pred: GpuOp<Pred>,
+            ) -> Result<usize, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         invert,
                         $kernel_name,
                         (
@@ -756,22 +878,28 @@ macro_rules! impl_readonly_tuple_selection {
                     return Ok(0);
                 }
                 let first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag,
                     $first_field.handle.clone(),
                 )?;
                 Ok(scan::read_u32_scalar::<<$first as KernelColumn>::Runtime>(
-                    $first_field.policy().client(),
+                    policy.client(),
                     first_handles.count,
                 )? as usize)
             }
 
-            fn find_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+            fn find_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Option<usize>, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         invert,
                         $kernel_name,
                         (
@@ -782,9 +910,10 @@ macro_rules! impl_readonly_tuple_selection {
                         Pred,
                         $first_field,
                         $( $field ),+
-                    )?;
+                )?;
+                let _ = &$first_field;
                 $( let _ = &$field; )+
-                search::first_flag($first_field.policy(), handles.flag, handles.len, handles.len)
+                search::first_flag(policy, handles.flag, handles.len, handles.len)
             }
         }
     };
@@ -844,16 +973,22 @@ macro_rules! impl_readonly_tuple_partition {
                 $( impl_readonly_tuple_partition!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
             type SplitOutput = (Self::Output, Self::Output);
 
-            fn is_partitioned_input(self, _pred: GpuOp<Pred>) -> Result<bool, Error> {
+            fn is_partitioned_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<bool, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         false,
                         $kernel_name,
                         (
@@ -867,15 +1002,15 @@ macro_rules! impl_readonly_tuple_partition {
                     )?;
                 $( let _ = &$field; )+
                 let first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag.clone(),
                     $first_field.handle.clone(),
                 )?;
-                let selected_count = select::selected_count($first_field.policy(), &first_handles)?;
+                let selected_count = select::selected_count(policy, &first_handles)?;
                 let first_rejected = search::first_unset_flag(
-                    $first_field.policy(),
+                    policy,
                     handles.flag,
                     handles.len,
                     handles.len,
@@ -884,10 +1019,15 @@ macro_rules! impl_readonly_tuple_partition {
                 Ok(selected_count == first_rejected)
             }
 
-            fn partition_copy_input(self, _pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+            fn partition_copy_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Self::SplitOutput, Error> {
                 let (handles, $first_field, $( $field ),+) =
                     tuple_selection_handles!(
                         self,
+                        policy,
                         false,
                         $kernel_name,
                         (
@@ -900,25 +1040,25 @@ macro_rules! impl_readonly_tuple_partition {
                         $( $field ),+
                     )?;
                 let selected_first_handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     handles.len,
                     handles.len_u32,
                     handles.flag.clone(),
                     $first_field.handle.clone(),
                 )?;
                 let selected_count =
-                    select::selected_count($first_field.policy(), &selected_first_handles)?;
+                    select::selected_count(policy, &selected_first_handles)?;
                 let rejected_count = handles.len - selected_count;
                 let selected_control = selected_first_handles.clone();
                 let selected_first = select::compact_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), selected_first_handles, selected_count)?;
+                >(policy, selected_first_handles, selected_count)?;
                 let rejected_first = select::compact_rejected_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
                 >(
-                    $first_field.policy(),
+                    policy,
                     select::handles_for_value(&selected_control, $first_field.handle.clone()),
                     rejected_count,
                 )?;
@@ -930,7 +1070,7 @@ macro_rules! impl_readonly_tuple_partition {
                                 <$rest as KernelColumn>::Runtime,
                                 <$rest as KernelColumn>::Item,
                             >(
-                                $field.policy(),
+                                policy,
                                 select::handles_for_value(&selected_control, $field.handle.clone()),
                                 selected_count,
                             )?,
@@ -943,7 +1083,7 @@ macro_rules! impl_readonly_tuple_partition {
                                 <$rest as KernelColumn>::Runtime,
                                 <$rest as KernelColumn>::Item,
                             >(
-                                $field.policy(),
+                                policy,
                                 select::handles_for_value(&selected_control, $field.handle.clone()),
                                 rejected_count,
                             )?,
@@ -964,19 +1104,30 @@ macro_rules! impl_partition_tuple_input {
         where
             $view<$( $ty ),+>: PartitionInput<Pred>,
         {
+            type Runtime = <$view<$( $ty ),+> as PartitionInput<Pred>>::Runtime;
             type Output = <$view<$( $ty ),+> as PartitionInput<Pred>>::Output;
             type SplitOutput = <$view<$( $ty ),+> as PartitionInput<Pred>>::SplitOutput;
 
-            fn is_partitioned_input(self, pred: GpuOp<Pred>) -> Result<bool, Error> {
+            fn is_partitioned_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                pred: GpuOp<Pred>,
+            ) -> Result<bool, Error> {
                 <$view<$( $ty ),+> as PartitionInput<Pred>>::is_partitioned_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     pred,
                 )
             }
 
-            fn partition_copy_input(self, pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+            fn partition_copy_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                pred: GpuOp<Pred>,
+            ) -> Result<Self::SplitOutput, Error> {
                 <$view<$( $ty ),+> as PartitionInput<Pred>>::partition_copy_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     pred,
                 )
             }
@@ -992,15 +1143,20 @@ impl_partition_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 })
 /// This is a borrowing algorithm. It reads the input and returns newly owned SoA
 /// storage containing the selected values.
 pub fn copy_if<Source, Stencil, Pred>(
+    policy: &CubePolicy<<Source as CopyIfInput<Stencil, Pred>>::Runtime>,
     source: Source,
     stencil: Stencil,
     _pred: Pred,
 ) -> Result<<<Source as CopyIfInput<Stencil, Pred>>::Output as MaterializeOutput>::Output, Error>
 where
     Source: CopyIfInput<Stencil, Pred>,
-    <Source as CopyIfInput<Stencil, Pred>>::Output: MaterializeOutput,
+    <Source as CopyIfInput<Stencil, Pred>>::Output:
+        MaterializeOutput<Runtime = <Source as CopyIfInput<Stencil, Pred>>::Runtime>,
 {
-    materialize(source.copy_if_input(stencil, GpuOp::<Pred>::new())?)
+    materialize(
+        policy,
+        source.copy_if_input(policy, stencil, GpuOp::<Pred>::new())?,
+    )
 }
 
 /// Removes values satisfying `Pred`.
@@ -1008,29 +1164,55 @@ where
 /// This is a borrowing algorithm. It reads the input and returns newly owned SoA
 /// storage for the remaining values.
 pub fn remove_if<Source, Pred>(
+    policy: &CubePolicy<<Source as SelectInput<Pred>>::Runtime>,
     source: Source,
     _pred: Pred,
 ) -> Result<<<Source as SelectInput<Pred>>::Output as MaterializeOutput>::Output, Error>
 where
     Source: SelectInput<Pred> + OwnedSelectionInput,
-    <Source as SelectInput<Pred>>::Output: MaterializeOutput,
+    <Source as SelectInput<Pred>>::Output:
+        MaterializeOutput<Runtime = <Source as SelectInput<Pred>>::Runtime>,
 {
-    materialize(source.select_input(true, GpuOp::<Pred>::new())?)
+    materialize(
+        policy,
+        source.select_input(policy, true, GpuOp::<Pred>::new())?,
+    )
 }
 
 #[doc(hidden)]
 pub trait PredicateQueryInput<Pred> {
-    fn count_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<usize, Error>;
-    fn find_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<Option<usize>, Error>;
+    type Runtime: Runtime;
+
+    fn count_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        pred: GpuOp<Pred>,
+    ) -> Result<usize, Error>;
+    fn find_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error>;
 }
 
 #[doc(hidden)]
 pub trait PartitionInput<Pred> {
+    type Runtime: Runtime;
     type Output;
     type SplitOutput;
 
-    fn is_partitioned_input(self, pred: GpuOp<Pred>) -> Result<bool, Error>;
-    fn partition_copy_input(self, pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error>;
+    fn is_partitioned_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<bool, Error>;
+    fn partition_copy_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::SplitOutput, Error>;
 }
 
 #[doc(hidden)]
@@ -1058,20 +1240,29 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
     type SplitOutput = (
         SoA1<DeviceVec<Source::Runtime, Source::Item>>,
         SoA1<DeviceVec<Source::Runtime, Source::Item>>,
     );
 
-    fn is_partitioned_input(self, _pred: GpuOp<Pred>) -> Result<bool, Error> {
-        let input = materialize_one(self)?;
-        search::is_partitioned(&input, GpuOp::<Pred>::new())
+    fn is_partitioned_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<bool, Error> {
+        let input = materialize_one(policy, self)?;
+        search::is_partitioned(policy, &input, GpuOp::<Pred>::new())
     }
 
-    fn partition_copy_input(self, _pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
-        let input = materialize_one(self)?;
-        let (matching, failing) = select::partition_copy(&input, GpuOp::<Pred>::new())?;
+    fn partition_copy_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::SplitOutput, Error> {
+        let input = materialize_one(policy, self)?;
+        let (matching, failing) = select::partition_copy(policy, &input, GpuOp::<Pred>::new())?;
         Ok((SoA1 { source: matching }, SoA1 { source: failing }))
     }
 }
@@ -1083,22 +1274,33 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
     type SplitOutput = (
         SoA1<DeviceVec<Source::Runtime, Source::Item>>,
         SoA1<DeviceVec<Source::Runtime, Source::Item>>,
     );
 
-    fn is_partitioned_input(self, pred: GpuOp<Pred>) -> Result<bool, Error> {
+    fn is_partitioned_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<bool, Error> {
         <SoAView1<Source> as PartitionInput<Pred>>::is_partitioned_input(
             SoAView1 { source: self },
+            policy,
             pred,
         )
     }
 
-    fn partition_copy_input(self, pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+    fn partition_copy_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::SplitOutput, Error> {
         <SoAView1<Source> as PartitionInput<Pred>>::partition_copy_input(
             SoAView1 { source: self },
+            policy,
             pred,
         )
     }
@@ -1111,22 +1313,33 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: PredicateOp<(Source::Item,)>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
     type SplitOutput = (
         SoA1<DeviceVec<Source::Runtime, Source::Item>>,
         SoA1<DeviceVec<Source::Runtime, Source::Item>>,
     );
 
-    fn is_partitioned_input(self, _pred: GpuOp<Pred>) -> Result<bool, Error> {
+    fn is_partitioned_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<bool, Error> {
         <Source as PartitionInput<super::Tuple1PredicateOp<Pred>>>::is_partitioned_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
         )
     }
 
-    fn partition_copy_input(self, _pred: GpuOp<Pred>) -> Result<Self::SplitOutput, Error> {
+    fn partition_copy_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::SplitOutput, Error> {
         <Source as PartitionInput<super::Tuple1PredicateOp<Pred>>>::partition_copy_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
         )
     }
@@ -1140,14 +1353,26 @@ where
     Source::Expr: GpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
-    fn count_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<usize, Error> {
+    type Runtime = Source::Runtime;
+
+    fn count_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        _pred: GpuOp<Pred>,
+    ) -> Result<usize, Error> {
         ReadOnlySoA::validate(&self)?;
-        super::device_expr_count_if::<Source, Pred>(&self.source, invert)
+        super::device_expr_count_if_with_policy::<Source, Pred>(policy, &self.source, invert)
     }
 
-    fn find_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+    fn find_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error> {
         ReadOnlySoA::validate(&self)?;
-        super::device_expr_find_if::<Source, Pred>(&self.source, invert)
+        super::device_expr_find_if_with_policy::<Source, Pred>(policy, &self.source, invert)
     }
 }
 
@@ -1158,17 +1383,31 @@ where
     Source::Expr: GpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
-    fn count_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<usize, Error> {
+    type Runtime = Source::Runtime;
+
+    fn count_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        pred: GpuOp<Pred>,
+    ) -> Result<usize, Error> {
         <SoAView1<Source> as PredicateQueryInput<Pred>>::count_input(
             SoAView1 { source: self },
+            policy,
             invert,
             pred,
         )
     }
 
-    fn find_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+    fn find_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error> {
         <SoAView1<Source> as PredicateQueryInput<Pred>>::find_input(
             SoAView1 { source: self },
+            policy,
             invert,
             pred,
         )
@@ -1182,17 +1421,31 @@ where
     Source::Expr: GpuExpr<Source::Item>,
     Pred: PredicateOp<(Source::Item,)>,
 {
-    fn count_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<usize, Error> {
+    type Runtime = Source::Runtime;
+
+    fn count_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        _pred: GpuOp<Pred>,
+    ) -> Result<usize, Error> {
         <Source as PredicateQueryInput<super::Tuple1PredicateOp<Pred>>>::count_input(
             self.0,
+            policy,
             invert,
             GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
         )
     }
 
-    fn find_input(self, invert: bool, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+    fn find_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error> {
         <Source as PredicateQueryInput<super::Tuple1PredicateOp<Pred>>>::find_input(
             self.0,
+            policy,
             invert,
             GpuOp::<super::Tuple1PredicateOp<Pred>>::new(),
         )
@@ -1205,17 +1458,31 @@ macro_rules! impl_predicate_query_tuple_input {
         where
             $view<$( $ty ),+>: PredicateQueryInput<Pred>,
         {
-            fn count_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<usize, Error> {
+            type Runtime = <$view<$( $ty ),+> as PredicateQueryInput<Pred>>::Runtime;
+
+            fn count_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                pred: GpuOp<Pred>,
+            ) -> Result<usize, Error> {
                 <$view<$( $ty ),+> as PredicateQueryInput<Pred>>::count_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     invert,
                     pred,
                 )
             }
 
-            fn find_input(self, invert: bool, pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+            fn find_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                invert: bool,
+                pred: GpuOp<Pred>,
+            ) -> Result<Option<usize>, Error> {
                 <$view<$( $ty ),+> as PredicateQueryInput<Pred>>::find_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     invert,
                     pred,
                 )
@@ -1228,54 +1495,79 @@ impl_predicate_query_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
 impl_predicate_query_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
 
 /// Counts values satisfying `Pred`.
-pub fn count_if<Source, Pred>(source: Source, _pred: Pred) -> Result<usize, Error>
+pub fn count_if<Source, Pred>(
+    policy: &CubePolicy<<Source as PredicateQueryInput<Pred>>::Runtime>,
+    source: Source,
+    _pred: Pred,
+) -> Result<usize, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
-    source.count_input(false, GpuOp::<Pred>::new())
+    source.count_input(policy, false, GpuOp::<Pred>::new())
 }
 
 /// Returns whether all values satisfy `Pred`.
-pub fn all_of<Source, Pred>(source: Source, pred: Pred) -> Result<bool, Error>
+pub fn all_of<Source, Pred>(
+    policy: &CubePolicy<<Source as PredicateQueryInput<Pred>>::Runtime>,
+    source: Source,
+    pred: Pred,
+) -> Result<bool, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
-    Ok(find_if_not(source, pred)?.is_none())
+    Ok(find_if_not(policy, source, pred)?.is_none())
 }
 
 /// Returns whether any value satisfies `Pred`.
-pub fn any_of<Source, Pred>(source: Source, pred: Pred) -> Result<bool, Error>
+pub fn any_of<Source, Pred>(
+    policy: &CubePolicy<<Source as PredicateQueryInput<Pred>>::Runtime>,
+    source: Source,
+    pred: Pred,
+) -> Result<bool, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
-    Ok(find_if(source, pred)?.is_some())
+    Ok(find_if(policy, source, pred)?.is_some())
 }
 
 /// Returns whether no values satisfy `Pred`.
-pub fn none_of<Source, Pred>(source: Source, pred: Pred) -> Result<bool, Error>
+pub fn none_of<Source, Pred>(
+    policy: &CubePolicy<<Source as PredicateQueryInput<Pred>>::Runtime>,
+    source: Source,
+    pred: Pred,
+) -> Result<bool, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
-    Ok(find_if(source, pred)?.is_none())
+    Ok(find_if(policy, source, pred)?.is_none())
 }
 
 /// Finds the first value satisfying `Pred`.
-pub fn find_if<Source, Pred>(source: Source, _pred: Pred) -> Result<Option<usize>, Error>
+pub fn find_if<Source, Pred>(
+    policy: &CubePolicy<<Source as PredicateQueryInput<Pred>>::Runtime>,
+    source: Source,
+    _pred: Pred,
+) -> Result<Option<usize>, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
-    source.find_input(false, GpuOp::<Pred>::new())
+    source.find_input(policy, false, GpuOp::<Pred>::new())
 }
 
-fn find_if_not<Source, Pred>(source: Source, _pred: Pred) -> Result<Option<usize>, Error>
+fn find_if_not<Source, Pred>(
+    policy: &CubePolicy<<Source as PredicateQueryInput<Pred>>::Runtime>,
+    source: Source,
+    _pred: Pred,
+) -> Result<Option<usize>, Error>
 where
     Source: PredicateQueryInput<Pred>,
 {
-    source.find_input(true, GpuOp::<Pred>::new())
+    source.find_input(policy, true, GpuOp::<Pred>::new())
 }
 
 /// Partitions elements by `Pred`, preserving relative order within each side.
 pub fn partition<Input, Pred>(
+    policy: &CubePolicy<<Input as PartitionInput<Pred>>::Runtime>,
     input: Input,
     _pred: Pred,
 ) -> Result<
@@ -1288,19 +1580,28 @@ pub fn partition<Input, Pred>(
 where
     Input: PartitionInput<Pred>,
     <Input as PartitionInput<Pred>>::SplitOutput: TuplePair,
-    <<Input as PartitionInput<Pred>>::SplitOutput as TuplePair>::Left: MaterializeOutput,
-    <<Input as PartitionInput<Pred>>::SplitOutput as TuplePair>::Right: MaterializeOutput,
+    <<Input as PartitionInput<Pred>>::SplitOutput as TuplePair>::Left:
+        MaterializeOutput<Runtime = <Input as PartitionInput<Pred>>::Runtime>,
+    <<Input as PartitionInput<Pred>>::SplitOutput as TuplePair>::Right:
+        MaterializeOutput<Runtime = <Input as PartitionInput<Pred>>::Runtime>,
 {
     let (matching, failing) = input
-        .partition_copy_input(GpuOp::<Pred>::new())?
+        .partition_copy_input(policy, GpuOp::<Pred>::new())?
         .into_pair();
-    Ok((materialize(matching)?, materialize(failing)?))
+    Ok((
+        materialize(policy, matching)?,
+        materialize(policy, failing)?,
+    ))
 }
 
 /// Returns whether all elements satisfying `Pred` appear before all non-matching elements.
-pub fn is_partitioned<Input, Pred>(input: Input, _pred: Pred) -> Result<bool, Error>
+pub fn is_partitioned<Input, Pred>(
+    policy: &CubePolicy<<Input as PartitionInput<Pred>>::Runtime>,
+    input: Input,
+    _pred: Pred,
+) -> Result<bool, Error>
 where
     Input: PartitionInput<Pred>,
 {
-    input.is_partitioned_input(GpuOp::<Pred>::new())
+    input.is_partitioned_input(policy, GpuOp::<Pred>::new())
 }

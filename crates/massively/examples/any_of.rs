@@ -1,12 +1,12 @@
 mod common;
 
-use massively::{CubeWgpu, any_of};
+use massively::{Executor, Wgpu, any_of};
 
 fn main() -> common::Result {
-    let policy = CubeWgpu::cpu();
-    let values = policy.to_device(&[-1.0_f32, -2.0, 3.0])?;
+    let exec = Executor::<Wgpu>::cpu();
+    let values = exec.to_device(&[-1.0_f32, -2.0, 3.0])?;
 
-    let result = any_of((values.slice(..),), common::Positive)?;
+    let result = any_of(&exec, (values.slice(..),), common::Positive)?;
 
     assert!(result);
     Ok(())

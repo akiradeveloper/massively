@@ -8,6 +8,7 @@ use crate::{
     expr::DeviceGpuExpr,
     kernels::*,
     op::{BinaryOp, BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::{reduce as primitive_reduce, scan as primitive_scan, segmented, select},
 };
 use cubecl::prelude::*;
@@ -22,7 +23,10 @@ pub trait KeyInput {
     type Item;
 
     /// Materializes keys for primitive kernels.
-    fn key_input(self) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error>;
+    fn key_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error>;
 }
 
 impl<Source> KeyInput for SoAView1<Source>
@@ -35,9 +39,12 @@ where
     type Runtime = Source::Runtime;
     type Item = Source::Item;
 
-    fn key_input(self) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error> {
+    fn key_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error> {
         ReadOnlySoA::validate(&self)?;
-        super::device_expr_collect(&self.source)
+        super::device_expr_collect_with_policy(policy, &self.source)
     }
 }
 
@@ -50,21 +57,31 @@ where
     type Runtime = Source::Runtime;
     type Item = Source::Item;
 
-    fn key_input(self) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error> {
-        <SoAView1<Source> as KeyInput>::key_input(SoAView1 { source: self })
+    fn key_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error> {
+        <SoAView1<Source> as KeyInput>::key_input(SoAView1 { source: self }, policy)
     }
 }
 
 /// Input accepted by [`reduce`].
 #[doc(hidden)]
 pub trait ReduceInput<Op> {
+    /// CubeCL runtime used by this input.
+    type Runtime: Runtime;
     /// Initial value type.
     type Init;
     /// Reduction output type.
     type Output;
 
     /// Reduces this input.
-    fn reduce_input(self, init: Self::Init, op: GpuOp<Op>) -> Result<Self::Output, Error>;
+    fn reduce_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        init: Self::Init,
+        op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error>;
 }
 
 impl<Source, Op> ReduceInput<Op> for SoAView1<Source>
@@ -75,14 +92,20 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<(Source::Item,)>,
 {
+    type Runtime = Source::Runtime;
     type Init = (Source::Item,);
     type Output = (Source::Item,);
 
-    fn reduce_input(self, init: Self::Init, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+    fn reduce_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        init: Self::Init,
+        _op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let bindings = self.source.stage()?;
+        let bindings = self.source.stage(policy)?;
         primitive_reduce::reduce_tuple1_device_expr::<_, _, Source::Expr, Op>(
-            self.source.policy(),
+            policy,
             &bindings,
             self.source.len(),
             init,
@@ -94,11 +117,22 @@ impl<Source, Op> ReduceInput<Op> for (Source,)
 where
     SoAView1<Source>: ReduceInput<Op>,
 {
+    type Runtime = <SoAView1<Source> as ReduceInput<Op>>::Runtime;
     type Init = <SoAView1<Source> as ReduceInput<Op>>::Init;
     type Output = <SoAView1<Source> as ReduceInput<Op>>::Output;
 
-    fn reduce_input(self, init: Self::Init, op: GpuOp<Op>) -> Result<Self::Output, Error> {
-        <SoAView1<Source> as ReduceInput<Op>>::reduce_input(SoAView1 { source: self.0 }, init, op)
+    fn reduce_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        init: Self::Init,
+        op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
+        <SoAView1<Source> as ReduceInput<Op>>::reduce_input(
+            SoAView1 { source: self.0 },
+            policy,
+            init,
+            op,
+        )
     }
 }
 
@@ -122,6 +156,7 @@ macro_rules! impl_reduce_input {
             )+
             Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
                 <$first as KernelColumn>::Item,
                 $( <$rest as KernelColumn>::Item ),+
@@ -131,11 +166,16 @@ macro_rules! impl_reduce_input {
                 $( <$rest as KernelColumn>::Item ),+
             );
 
-            fn reduce_input(self, init: Self::Init, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+            fn reduce_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                init: Self::Init,
+                _op: GpuOp<Op>,
+            ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = self.$first_field.stage()?;
+                let $first_field = self.$first_field.stage(policy)?;
                 $(
-                    let $field = self.$field.stage()?;
+                    let $field = self.$field.stage(policy)?;
                 )+
                 primitive_reduce::$reduce_fn::<
                     <$first as KernelColumn>::Runtime,
@@ -145,7 +185,7 @@ macro_rules! impl_reduce_input {
                     $( <$rest as KernelColumn>::Expr, )+
                     Op,
                 >(
-                    KernelColumn::policy(&self.$first_field),
+                    policy,
                     &$first_field,
                     $( &$field, )+
                     KernelColumn::len(&self.$first_field),
@@ -163,15 +203,22 @@ impl<Left, Right, Op> ReduceInput<Op> for (Left, Right)
 where
     SoAView2<Left, Right>: ReduceInput<Op>,
 {
+    type Runtime = <SoAView2<Left, Right> as ReduceInput<Op>>::Runtime;
     type Init = <SoAView2<Left, Right> as ReduceInput<Op>>::Init;
     type Output = <SoAView2<Left, Right> as ReduceInput<Op>>::Output;
 
-    fn reduce_input(self, init: Self::Init, op: GpuOp<Op>) -> Result<Self::Output, Error> {
+    fn reduce_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        init: Self::Init,
+        op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
         <SoAView2<Left, Right> as ReduceInput<Op>>::reduce_input(
             SoAView2 {
                 left: self.0,
                 right: self.1,
             },
+            policy,
             init,
             op,
         )
@@ -182,16 +229,23 @@ impl<First, Second, Third, Op> ReduceInput<Op> for (First, Second, Third)
 where
     SoAView3<First, Second, Third>: ReduceInput<Op>,
 {
+    type Runtime = <SoAView3<First, Second, Third> as ReduceInput<Op>>::Runtime;
     type Init = <SoAView3<First, Second, Third> as ReduceInput<Op>>::Init;
     type Output = <SoAView3<First, Second, Third> as ReduceInput<Op>>::Output;
 
-    fn reduce_input(self, init: Self::Init, op: GpuOp<Op>) -> Result<Self::Output, Error> {
+    fn reduce_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        init: Self::Init,
+        op: GpuOp<Op>,
+    ) -> Result<Self::Output, Error> {
         <SoAView3<First, Second, Third> as ReduceInput<Op>>::reduce_input(
             SoAView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
             },
+            policy,
             init,
             op,
         )
@@ -216,6 +270,7 @@ macro_rules! impl_reduce_soa_input {
             )+
             Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
                 <$first as KernelColumn>::Item,
                 $( <$rest as KernelColumn>::Item ),+
@@ -225,11 +280,16 @@ macro_rules! impl_reduce_soa_input {
                 $( <$rest as KernelColumn>::Item ),+
             );
 
-            fn reduce_input(self, init: Self::Init, _op: GpuOp<Op>) -> Result<Self::Output, Error> {
+            fn reduce_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                init: Self::Init,
+                _op: GpuOp<Op>,
+            ) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
-                let $first_field = self.$first_field.stage()?;
+                let $first_field = self.$first_field.stage(policy)?;
                 $(
-                    let $field = self.$field.stage()?;
+                    let $field = self.$field.stage(policy)?;
                 )+
                 primitive_reduce::$reduce_fn::<
                     <$first as KernelColumn>::Runtime,
@@ -239,7 +299,7 @@ macro_rules! impl_reduce_soa_input {
                     $( <$rest as KernelColumn>::Expr, )+
                     Op,
                 >(
-                    KernelColumn::policy(&self.$first_field),
+                    policy,
                     &$first_field,
                     $( &$field, )+
                     KernelColumn::len(&self.$first_field),
@@ -260,6 +320,7 @@ impl_reduce_soa_input!(SoA3<A, B, C> { first, second, third } => reduce_tuple3_d
 ///
 /// [`zip`]: crate::zip
 pub fn reduce<Input, Op>(
+    policy: &CubePolicy<<Input as ReduceInput<Op>>::Runtime>,
     input: Input,
     init: <Input as ReduceInput<Op>>::Init,
     _op: Op,
@@ -267,18 +328,21 @@ pub fn reduce<Input, Op>(
 where
     Input: ReduceInput<Op>,
 {
-    input.reduce_input(init, GpuOp::<Op>::new())
+    input.reduce_input(policy, init, GpuOp::<Op>::new())
 }
 
 /// Input accepted by [`inner_product`].
 #[doc(hidden)]
 pub trait InnerProductInput<Right, TransformOp, ReduceOp> {
+    /// CubeCL runtime used by this input.
+    type Runtime: Runtime;
     /// Reduced item type.
     type Item;
 
     /// Applies a binary transform and reduces the result.
     fn inner_product_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         right: Right,
         init: Self::Item,
         transform_op: GpuOp<TransformOp>,
@@ -298,10 +362,12 @@ where
         KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
     <DeviceBinaryMap<Left, Right, TransformOp> as KernelColumn>::Expr: DeviceGpuExpr<Left::Item>,
 {
+    type Runtime = Left::Runtime;
     type Item = Left::Item;
 
     fn inner_product_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         right: Right,
         init: Self::Item,
         _transform_op: GpuOp<TransformOp>,
@@ -313,7 +379,7 @@ where
             _op: PhantomData::<fn() -> TransformOp>,
         };
         let _ = reduce_op;
-        super::device_expr_reduce::<_, ReduceOp>(&mapped, init)
+        super::device_expr_reduce_with_policy::<_, ReduceOp>(policy, &mapped, init)
     }
 }
 
@@ -359,6 +425,7 @@ macro_rules! impl_inner_product_tuple_input {
                     DeviceGpuExpr<<$left as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first_left as KernelColumn>::Runtime;
             type Item = (
                 <$first_left as KernelColumn>::Item,
                 $( <$left as KernelColumn>::Item ),+
@@ -366,6 +433,7 @@ macro_rules! impl_inner_product_tuple_input {
 
             fn inner_product_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 right: $right_name<$first_right, $( $right ),+>,
                 init: Self::Item,
                 _transform_op: GpuOp<TransformOp>,
@@ -379,14 +447,22 @@ macro_rules! impl_inner_product_tuple_input {
                     right: right.$first_field,
                     _op: PhantomData::<fn() -> TransformOp>,
                 };
-                let $first_field = super::device_expr_reduce::<_, ReduceOp>(&first_mapped, $first_field)?;
+                let $first_field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
+                    policy,
+                    &first_mapped,
+                    $first_field,
+                )?;
                 $(
                     let mapped = DeviceBinaryMap {
                         left: self.$field,
                         right: right.$field,
                         _op: PhantomData::<fn() -> TransformOp>,
                     };
-                    let $field = super::device_expr_reduce::<_, ReduceOp>(&mapped, $field)?;
+                    let $field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
+                        policy,
+                        &mapped,
+                        $field,
+                    )?;
                 )+
                 Ok(($first_field, $( $field ),+))
             }
@@ -439,6 +515,7 @@ macro_rules! impl_inner_product_owned_tuple_input {
                     DeviceGpuExpr<<$left as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first_left as KernelColumn>::Runtime;
             type Item = (
                 <$first_left as KernelColumn>::Item,
                 $( <$left as KernelColumn>::Item ),+
@@ -446,6 +523,7 @@ macro_rules! impl_inner_product_owned_tuple_input {
 
             fn inner_product_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 right: $right_name<$first_right, $( $right ),+>,
                 init: Self::Item,
                 _transform_op: GpuOp<TransformOp>,
@@ -460,14 +538,22 @@ macro_rules! impl_inner_product_owned_tuple_input {
                     right: right.$first_field,
                     _op: PhantomData::<fn() -> TransformOp>,
                 };
-                let $first_field = super::device_expr_reduce::<_, ReduceOp>(&first_mapped, $first_field)?;
+                let $first_field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
+                    policy,
+                    &first_mapped,
+                    $first_field,
+                )?;
                 $(
                     let mapped = DeviceBinaryMap {
                         left: self.$field,
                         right: right.$field,
                         _op: PhantomData::<fn() -> TransformOp>,
                     };
-                    let $field = super::device_expr_reduce::<_, ReduceOp>(&mapped, $field)?;
+                    let $field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
+                        policy,
+                        &mapped,
+                        $field,
+                    )?;
                 )+
                 Ok(($first_field, $( $field ),+))
             }
@@ -522,6 +608,7 @@ macro_rules! impl_inner_product_mixed_tuple_input {
                     DeviceGpuExpr<<$left as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first_left as KernelColumn>::Runtime;
             type Item = (
                 <$first_left as KernelColumn>::Item,
                 $( <$left as KernelColumn>::Item ),+
@@ -529,6 +616,7 @@ macro_rules! impl_inner_product_mixed_tuple_input {
 
             fn inner_product_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 right: $right_name<$first_right, $( $right ),+>,
                 init: Self::Item,
                 _transform_op: GpuOp<TransformOp>,
@@ -543,14 +631,22 @@ macro_rules! impl_inner_product_mixed_tuple_input {
                     right: right.$first_field,
                     _op: PhantomData::<fn() -> TransformOp>,
                 };
-                let $first_field = super::device_expr_reduce::<_, ReduceOp>(&first_mapped, $first_field)?;
+                let $first_field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
+                    policy,
+                    &first_mapped,
+                    $first_field,
+                )?;
                 $(
                     let mapped = DeviceBinaryMap {
                         left: self.$field,
                         right: right.$field,
                         _op: PhantomData::<fn() -> TransformOp>,
                     };
-                    let $field = super::device_expr_reduce::<_, ReduceOp>(&mapped, $field)?;
+                    let $field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
+                        policy,
+                        &mapped,
+                        $field,
+                    )?;
                 )+
                 Ok(($first_field, $( $field ),+))
             }
@@ -591,7 +687,8 @@ impl_inner_product_mixed_tuple_inputs!(SoA3<A, B, C>, SoAView3<RA, RB, RC> { fir
 ///
 /// This is a fused borrowing algorithm. It reads both inputs and returns a host
 /// scalar.
-pub fn inner_product<Left, Right, TransformOp, ReduceOp>(
+pub fn inner_product<R, Left, Right, TransformOp, ReduceOp>(
+    policy: &CubePolicy<R>,
     left: Left,
     right: Right,
     _transform_op: TransformOp,
@@ -599,9 +696,11 @@ pub fn inner_product<Left, Right, TransformOp, ReduceOp>(
     _reduce_op: ReduceOp,
 ) -> Result<<Left as InnerProductInput<Right, TransformOp, ReduceOp>>::Item, Error>
 where
-    Left: InnerProductInput<Right, TransformOp, ReduceOp>,
+    R: Runtime,
+    Left: InnerProductInput<Right, TransformOp, ReduceOp, Runtime = R>,
 {
     left.inner_product_input(
+        policy,
         right,
         init,
         GpuOp::<TransformOp>::new(),
@@ -622,6 +721,7 @@ pub trait ReduceByKeyInput<K, KeyEq, Op> {
     /// Reduces contiguous equal-key runs.
     fn reduce_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         keys: &DeviceVec<Self::Runtime, K>,
         init: Self::Init,
         op: GpuOp<Op>,
@@ -644,13 +744,18 @@ where
 
     fn reduce_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         keys: &DeviceVec<Self::Runtime, K>,
         init: Self::Init,
         _op: GpuOp<Op>,
     ) -> Result<(DeviceVec<Self::Runtime, K>, Self::Values), Error> {
         ReadOnlySoA::validate(&self)?;
-        let (keys, source) =
-            super::device_expr_reduce_by_key::<Source, K, KeyEq, Op>(&self.source, keys, init)?;
+        let (keys, source) = super::device_expr_reduce_by_key_with_policy::<Source, K, KeyEq, Op>(
+            policy,
+            &self.source,
+            keys,
+            init,
+        )?;
         Ok((keys, SoA1 { source }))
     }
 }
@@ -668,12 +773,14 @@ where
 
     fn reduce_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         keys: &DeviceVec<Self::Runtime, K>,
         init: Self::Init,
         op: GpuOp<Op>,
     ) -> Result<(DeviceVec<Self::Runtime, K>, Self::Values), Error> {
         <SoAView1<Source> as ReduceByKeyInput<K, KeyEq, Op>>::reduce_by_key_input(
             SoAView1 { source: self },
+            policy,
             keys,
             init,
             op,
@@ -701,6 +808,7 @@ where
 
     fn reduce_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         keys: &DeviceVec<Self::Runtime, K>,
         init: Self::Init,
         _op: GpuOp<Op>,
@@ -708,28 +816,26 @@ where
         self.left.validate()?;
         self.right.validate()?;
         super::ensure_same_len(self.right.len(), self.left.len())?;
-        let left = super::device_expr_collect(&self.left)?;
-        let right = super::device_expr_collect(&self.right)?;
+        let left = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let right = super::device_expr_collect_with_policy(policy, &self.right)?;
         let scanned = primitive_scan::inclusive_scan_tuple2_by_key_values_device_vec(
+            policy,
             keys,
             &left,
             &right,
             GpuOp::<KeyEq>::new(),
             GpuOp::<Op>::new(),
         )?;
-        let control = segmented::key_run_end_control::<Self::Runtime, K, KeyEq>(keys)?;
-        let out_keys = control.compact_first::<Self::Runtime, K>(keys.policy())?;
-        let left = control.compact_value::<Self::Runtime, Left::Item>(
-            left.policy(),
-            scanned.left.handle.clone(),
-        )?;
-        let right = control.compact_value::<Self::Runtime, Right::Item>(
-            right.policy(),
-            scanned.right.handle.clone(),
-        )?;
+        let control =
+            segmented::key_run_end_control_with_policy::<Self::Runtime, K, KeyEq>(policy, keys)?;
+        let out_keys = control.compact_first::<Self::Runtime, K>(policy)?;
+        let left = control
+            .compact_value::<Self::Runtime, Left::Item>(policy, scanned.left.handle.clone())?;
+        let right = control
+            .compact_value::<Self::Runtime, Right::Item>(policy, scanned.right.handle.clone())?;
         let (left, right) =
             primitive_reduce::apply_tuple2_init::<Self::Runtime, Left::Item, Right::Item, Op>(
-                &left, &right, init,
+                policy, &left, &right, init,
             )?;
         Ok((out_keys, SoA2 { left, right }))
     }
@@ -765,6 +871,7 @@ where
 
     fn reduce_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         keys: &DeviceVec<Self::Runtime, K>,
         init: Self::Init,
         _op: GpuOp<Op>,
@@ -774,10 +881,11 @@ where
         self.third.validate()?;
         super::ensure_same_len(self.second.len(), self.first.len())?;
         super::ensure_same_len(self.third.len(), self.first.len())?;
-        let first = super::device_expr_collect(&self.first)?;
-        let second = super::device_expr_collect(&self.second)?;
-        let third = super::device_expr_collect(&self.third)?;
+        let first = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let second = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let third = super::device_expr_collect_with_policy(policy, &self.third)?;
         let scanned = primitive_scan::inclusive_scan_tuple3_by_key_values_device_vec(
+            policy,
             keys,
             &first,
             &second,
@@ -785,27 +893,22 @@ where
             GpuOp::<KeyEq>::new(),
             GpuOp::<Op>::new(),
         )?;
-        let control = segmented::key_run_end_control::<Self::Runtime, K, KeyEq>(keys)?;
-        let out_keys = control.compact_first::<Self::Runtime, K>(keys.policy())?;
-        let first = control.compact_value::<Self::Runtime, First::Item>(
-            first.policy(),
-            scanned.first.handle.clone(),
-        )?;
-        let second = control.compact_value::<Self::Runtime, Second::Item>(
-            second.policy(),
-            scanned.second.handle.clone(),
-        )?;
-        let third = control.compact_value::<Self::Runtime, Third::Item>(
-            third.policy(),
-            scanned.third.handle.clone(),
-        )?;
+        let control =
+            segmented::key_run_end_control_with_policy::<Self::Runtime, K, KeyEq>(policy, keys)?;
+        let out_keys = control.compact_first::<Self::Runtime, K>(policy)?;
+        let first = control
+            .compact_value::<Self::Runtime, First::Item>(policy, scanned.first.handle.clone())?;
+        let second = control
+            .compact_value::<Self::Runtime, Second::Item>(policy, scanned.second.handle.clone())?;
+        let third = control
+            .compact_value::<Self::Runtime, Third::Item>(policy, scanned.third.handle.clone())?;
         let (first, second, third) = primitive_reduce::apply_tuple3_init::<
             Self::Runtime,
             First::Item,
             Second::Item,
             Third::Item,
             Op,
-        >(&first, &second, &third, init)?;
+        >(policy, &first, &second, &third, init)?;
         Ok((
             out_keys,
             SoA3 {
@@ -852,19 +955,23 @@ macro_rules! impl_reduce_by_key_soa_input {
 
             fn reduce_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 keys: &DeviceVec<Self::Runtime, Key>,
                 init: Self::Init,
                 _op: GpuOp<Op>,
             ) -> Result<(DeviceVec<Self::Runtime, Key>, Self::Values), Error> {
                 SoA::validate(&self)?;
+                let _ = policy;
                 let ($first_field, $( $field ),+) = init;
-                let (out_keys, $first_field, control) = super::device_expr_reduce_by_key_with_control::<$first, Key, KeyEq, Op>(
+                let (out_keys, $first_field, control) = super::device_expr_reduce_by_key_with_control_with_policy::<$first, Key, KeyEq, Op>(
+                    policy,
                     &self.$first_field,
                     keys,
                     $first_field,
                 )?;
                 $(
-                    let $field = super::device_expr_reduce_by_key_with_existing_control::<$rest, Key, KeyEq, Op>(
+                    let $field = super::device_expr_reduce_by_key_with_existing_control_with_policy::<$rest, Key, KeyEq, Op>(
+                        policy,
                         &self.$field,
                         keys,
                         $field,
@@ -892,12 +999,14 @@ macro_rules! impl_reduce_by_key_tuple_values {
 
             fn reduce_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 keys: &DeviceVec<Self::Runtime, Key>,
                 init: Self::Init,
                 op: GpuOp<Op>,
             ) -> Result<(DeviceVec<Self::Runtime, Key>, Self::Values), Error> {
                 <$view<$( $ty ),+> as ReduceByKeyInput<Key, KeyEq, Op>>::reduce_by_key_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     keys,
                     init,
                     op,
@@ -912,11 +1021,13 @@ impl_reduce_by_key_tuple_values!(SoAView3<A, B, C> { first: 0, second: 1, third:
 
 #[doc(hidden)]
 pub trait ReduceByKeyCall<Values, KeyEq, Op> {
+    type Runtime: Runtime;
     type Init;
     type Output;
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: Values,
         key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -931,6 +1042,7 @@ where
     KeyEq: BinaryPredicateOp<Keys::Item>,
     Values: ReduceByKeyInput<Keys::Item, KeyEq, Op, Runtime = Keys::Runtime>,
 {
+    type Runtime = Keys::Runtime;
     type Init = <Values as ReduceByKeyInput<Keys::Item, KeyEq, Op>>::Init;
     type Output = (
         SoA1<DeviceVec<Keys::Runtime, Keys::Item>>,
@@ -939,13 +1051,14 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: Values,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        let keys = self.key_input()?;
-        let (keys, values) = values.reduce_by_key_input(&keys, init, GpuOp::<Op>::new())?;
+        let keys = self.key_input(policy)?;
+        let (keys, values) = values.reduce_by_key_input(policy, &keys, init, GpuOp::<Op>::new())?;
         Ok((SoA1 { source: keys }, values))
     }
 }
@@ -966,6 +1079,7 @@ where
     KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
     Op: BinaryOp<ValueSource::Item>,
 {
+    type Runtime = KeyA::Runtime;
     type Init = ValueSource::Item;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
@@ -974,6 +1088,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -982,12 +1097,12 @@ where
         ReadOnlySoA::validate(&self)?;
         let values = SoAView1 { source: values };
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let values = super::device_expr_collect(&values.source)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
         let (left, right, source) =
             primitive_reduce::reduce_tuple2_by_key_device_vec::<_, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &values, init,
+                policy, &key_a, &key_b, &values, init,
             )?;
         Ok((SoA2 { left, right }, SoA1 { source }))
     }
@@ -1015,6 +1130,7 @@ where
     Op: BinaryOp<ValueA::Item>,
     Op: BinaryOp<ValueB::Item>,
 {
+    type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
@@ -1023,6 +1139,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoAView2<ValueA, ValueB>,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1030,17 +1147,17 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let value_a = super::device_expr_collect(&values.left)?;
-        let value_b = super::device_expr_collect(&values.right)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
         let (left, right, value_a) =
             primitive_reduce::reduce_tuple2_by_key_device_vec::<_, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &value_a, init.0,
+                policy, &key_a, &key_b, &value_a, init.0,
             )?;
         let (_, _, value_b) =
             primitive_reduce::reduce_tuple2_by_key_device_vec::<_, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &value_b, init.1,
+                policy, &key_a, &key_b, &value_b, init.1,
             )?;
         Ok((
             SoA2 { left, right },
@@ -1078,6 +1195,7 @@ where
     Op: BinaryOp<ValueB::Item>,
     Op: BinaryOp<ValueC::Item>,
 {
+    type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
@@ -1090,6 +1208,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoAView3<ValueA, ValueB, ValueC>,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1097,22 +1216,22 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let value_a = super::device_expr_collect(&values.first)?;
-        let value_b = super::device_expr_collect(&values.second)?;
-        let value_c = super::device_expr_collect(&values.third)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
+        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
         let (left, right, value_a) =
             primitive_reduce::reduce_tuple2_by_key_device_vec::<_, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &value_a, init.0,
+                policy, &key_a, &key_b, &value_a, init.0,
             )?;
         let (_, _, value_b) =
             primitive_reduce::reduce_tuple2_by_key_device_vec::<_, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &value_b, init.1,
+                policy, &key_a, &key_b, &value_b, init.1,
             )?;
         let (_, _, value_c) =
             primitive_reduce::reduce_tuple2_by_key_device_vec::<_, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &value_c, init.2,
+                policy, &key_a, &key_b, &value_c, init.2,
             )?;
         Ok((
             SoA2 { left, right },
@@ -1144,6 +1263,7 @@ where
     KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
     Op: BinaryOp<ValueSource::Item>,
 {
+    type Runtime = KeyA::Runtime;
     type Init = ValueSource::Item;
     type Output = (
         SoA3<
@@ -1156,6 +1276,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1164,13 +1285,13 @@ where
         ReadOnlySoA::validate(&self)?;
         let values = SoAView1 { source: values };
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let values = super::device_expr_collect(&values.source)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
         let (first, second, third, source) =
             primitive_reduce::reduce_tuple3_by_key_device_vec::<_, _, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &key_c, &values, init,
+                policy, &key_a, &key_b, &key_c, &values, init,
             )?;
         Ok((
             SoA3 {
@@ -1208,6 +1329,7 @@ where
     Op: BinaryOp<ValueA::Item>,
     Op: BinaryOp<ValueB::Item>,
 {
+    type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
     type Output = (
         SoA3<
@@ -1220,6 +1342,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoAView2<ValueA, ValueB>,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1227,18 +1350,18 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let value_a = super::device_expr_collect(&values.left)?;
-        let value_b = super::device_expr_collect(&values.right)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
         let (first, second, third, value_a) =
             primitive_reduce::reduce_tuple3_by_key_device_vec::<_, _, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &key_c, &value_a, init.0,
+                policy, &key_a, &key_b, &key_c, &value_a, init.0,
             )?;
         let (_, _, _, value_b) =
             primitive_reduce::reduce_tuple3_by_key_device_vec::<_, _, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &key_c, &value_b, init.1,
+                policy, &key_a, &key_b, &key_c, &value_b, init.1,
             )?;
         Ok((
             SoA3 {
@@ -1283,6 +1406,7 @@ where
     Op: BinaryOp<ValueB::Item>,
     Op: BinaryOp<ValueC::Item>,
 {
+    type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
     type Output = (
         SoA3<
@@ -1299,6 +1423,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoAView3<ValueA, ValueB, ValueC>,
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1306,23 +1431,23 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let value_a = super::device_expr_collect(&values.first)?;
-        let value_b = super::device_expr_collect(&values.second)?;
-        let value_c = super::device_expr_collect(&values.third)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
+        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
         let (first, second, third, value_a) =
             primitive_reduce::reduce_tuple3_by_key_device_vec::<_, _, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &key_c, &value_a, init.0,
+                policy, &key_a, &key_b, &key_c, &value_a, init.0,
             )?;
         let (_, _, _, value_b) =
             primitive_reduce::reduce_tuple3_by_key_device_vec::<_, _, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &key_c, &value_b, init.1,
+                policy, &key_a, &key_b, &key_c, &value_b, init.1,
             )?;
         let (_, _, _, value_c) =
             primitive_reduce::reduce_tuple3_by_key_device_vec::<_, _, _, _, _, KeyEq, Op>(
-                &key_a, &key_b, &key_c, &value_c, init.2,
+                policy, &key_a, &key_b, &key_c, &value_c, init.2,
             )?;
         Ok((
             SoA3 {
@@ -1362,6 +1487,7 @@ macro_rules! impl_reduce_by_tuple_key_scalar_value {
             KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
             Op: BinaryOp<ValueSource::Item>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Init = ValueSource::Item;
             type Output = (
                 $out_keys<
@@ -1373,6 +1499,7 @@ macro_rules! impl_reduce_by_tuple_key_scalar_value {
 
             fn reduce_by_key_call(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: ValueSource,
                 _key_eq: GpuOp<KeyEq>,
                 init: Self::Init,
@@ -1380,9 +1507,9 @@ macro_rules! impl_reduce_by_tuple_key_scalar_value {
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 values.validate()?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let values = super::device_expr_collect(&values)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let values = super::device_expr_collect_with_policy(policy, &values)?;
                 let ($first_out, $( $out_field, )+ source) =
                     primitive_reduce::$reduce_fn::<
                         <$first as KernelColumn>::Runtime,
@@ -1392,6 +1519,7 @@ macro_rules! impl_reduce_by_tuple_key_scalar_value {
                         KeyEq,
                         Op,
                     >(
+                        policy,
                         &$first_field,
                         $( &$field, )+
                         &values,
@@ -1410,7 +1538,7 @@ impl_reduce_by_tuple_key_scalar_value!(SoA2 -> SoA2, reduce_tuple2_by_key_device
 impl_reduce_by_tuple_key_scalar_value!(SoA3 -> SoA3, reduce_tuple3_by_key_device_vec, Tuple3Equal, (A: first: out_first, B: second: out_second, C: third: out_third));
 
 macro_rules! impl_reduce_by_tuple_key_soa_view_values {
-    (@reduce $reduce_fn:ident, $eq:ident, ($first_field:ident, $( $field:ident ),+), $value_ty:ident, $value_field:ident, $init:expr, ($first:ident, $( $key:ident ),+)) => {
+    (@reduce $reduce_fn:ident, $eq:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), $value_ty:ident, $value_field:ident, $init:expr, ($first:ident, $( $key:ident ),+)) => {
         primitive_reduce::$reduce_fn::<
             <$first as KernelColumn>::Runtime,
             <$first as KernelColumn>::Item,
@@ -1419,17 +1547,19 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
             $eq,
             Op,
         >(
+            $policy,
             &$first_field,
             $( &$field, )+
             &$value_field,
             $init,
         )
     };
-    (@reduce_values $reduce_fn:ident, $eq:ident, $value_index:tt, ($first_field:ident, $( $field:ident ),+), ($first:ident, $( $key:ident ),+), $init:ident, ) => {};
-    (@reduce_values $reduce_fn:ident, $eq:ident, $value_index:tt, ($first_field:ident, $( $field:ident ),+), ($first:ident, $( $key:ident ),+), $init:ident, $value_ty:ident: $value_field:ident: $idx:tt $(, $tail_ty:ident: $tail_field:ident: $tail_idx:tt )*) => {
+    (@reduce_values $reduce_fn:ident, $eq:ident, $policy:ident, $value_index:tt, ($first_field:ident, $( $field:ident ),+), ($first:ident, $( $key:ident ),+), $init:ident, ) => {};
+    (@reduce_values $reduce_fn:ident, $eq:ident, $policy:ident, $value_index:tt, ($first_field:ident, $( $field:ident ),+), ($first:ident, $( $key:ident ),+), $init:ident, $value_ty:ident: $value_field:ident: $idx:tt $(, $tail_ty:ident: $tail_field:ident: $tail_idx:tt )*) => {
         let $value_field = impl_reduce_by_tuple_key_soa_view_values!(
             @reduce $reduce_fn,
             $eq,
+            $policy,
             ($first_field, $( $field ),+),
             $value_ty,
             $value_field,
@@ -1439,6 +1569,7 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
         impl_reduce_by_tuple_key_soa_view_values!(
             @reduce_values $reduce_fn,
             $eq,
+            $policy,
             $value_index,
             ($first_field, $( $field ),+),
             ($first, $( $key ),+),
@@ -1478,6 +1609,7 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
             Op: BinaryOp<<$first_value as KernelColumn>::Item>,
             $( Op: BinaryOp<<$value as KernelColumn>::Item>, )+
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (<$first_value as KernelColumn>::Item, $( <$value as KernelColumn>::Item ),+);
             type Output = (
                 $out_keys<
@@ -1492,6 +1624,7 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
 
             fn reduce_by_key_call(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $values<$first_value, $( $value ),+>,
                 _key_eq: GpuOp<KeyEq>,
                 init: Self::Init,
@@ -1499,13 +1632,14 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
             ) -> Result<Self::Output, Error> {
                 $key_storage::validate(&self)?;
                 $storage::validate(&values)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let $first_value_field = super::device_expr_collect(&values.$first_value_field)?;
-                $( let $value_field = super::device_expr_collect(&values.$value_field)?; )+
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let $first_value_field = super::device_expr_collect_with_policy(policy, &values.$first_value_field)?;
+                $( let $value_field = super::device_expr_collect_with_policy(policy, &values.$value_field)?; )+
                 let ($first_out, $( $out_field, )+ $first_value_field) = impl_reduce_by_tuple_key_soa_view_values!(
                     @reduce $reduce_fn,
                     KeyEq,
+                    policy,
                     ($first_field, $( $field ),+),
                     $first_value,
                     $first_value_field,
@@ -1515,6 +1649,7 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
                 impl_reduce_by_tuple_key_soa_view_values!(
                     @reduce_values $reduce_fn,
                     KeyEq,
+                    policy,
                     $value_index,
                     ($first_field, $( $field ),+),
                     ($first, $( $key ),+),
@@ -1548,11 +1683,13 @@ macro_rules! impl_reduce_by_key_tuple_keys {
         where
             $view<$( $ty ),+>: ReduceByKeyCall<Values, KeyEq, Op>,
         {
+            type Runtime = <$view<$( $ty ),+> as ReduceByKeyCall<Values, KeyEq, Op>>::Runtime;
             type Init = <$view<$( $ty ),+> as ReduceByKeyCall<Values, KeyEq, Op>>::Init;
             type Output = <$view<$( $ty ),+> as ReduceByKeyCall<Values, KeyEq, Op>>::Output;
 
             fn reduce_by_key_call(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: Values,
                 key_eq: GpuOp<KeyEq>,
                 init: Self::Init,
@@ -1560,6 +1697,7 @@ macro_rules! impl_reduce_by_key_tuple_keys {
             ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as ReduceByKeyCall<Values, KeyEq, Op>>::reduce_by_key_call(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     values,
                     key_eq,
                     init,
@@ -1584,6 +1722,7 @@ where
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
     Op: BinaryOp<(ValueSource::Item,)>,
 {
+    type Runtime = KeySource::Runtime;
     type Init = (ValueSource::Item,);
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
@@ -1592,6 +1731,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: (ValueSource,),
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1604,17 +1744,17 @@ where
         if len == 0 {
             return Ok((
                 SoA1 {
-                    source: DeviceVec::empty(self.0.policy().clone()),
+                    source: policy.empty_device_vec(),
                 },
                 SoA1 {
-                    source: DeviceVec::empty(values.0.policy().clone()),
+                    source: policy.empty_device_vec(),
                 },
             ));
         }
 
-        let client = self.0.policy().client();
-        let key_bindings = self.0.stage()?;
-        let value_bindings = values.0.stage()?;
+        let client = policy.client();
+        let key_bindings = self.0.stage(policy)?;
+        let value_bindings = values.0.stage(policy)?;
         let inclusive_handle = primitive_scan::inclusive_scan_by_key_device_expr_handle::<
             KeySource::Runtime,
             KeySource::Item,
@@ -1623,7 +1763,7 @@ where
             ValueSource::Expr,
             super::Tuple1Less<KeyEq>,
             super::Tuple1BinaryOp<Op>,
-        >(self.0.policy(), &key_bindings, &value_bindings, len)?;
+        >(policy, &key_bindings, &value_bindings, len)?;
 
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
@@ -1664,16 +1804,14 @@ where
             );
         }
 
-        let out_keys = super::device_expr_compact_with_flags(&self.0, flag_handle.clone())?;
-        let handles = select::handles_from_flags(
-            values.0.policy(),
-            len,
-            len_u32,
-            flag_handle,
-            reduced_value_handle,
+        let out_keys = super::device_expr_compact_with_flags_with_policy(
+            policy,
+            &self.0,
+            flag_handle.clone(),
         )?;
-        let out_values =
-            select::compact::<KeySource::Runtime, ValueSource::Item>(values.0.policy(), handles)?;
+        let handles =
+            select::handles_from_flags(policy, len, len_u32, flag_handle, reduced_value_handle)?;
+        let out_values = select::compact::<KeySource::Runtime, ValueSource::Item>(policy, handles)?;
         Ok((SoA1 { source: out_keys }, SoA1 { source: out_values }))
     }
 }
@@ -1693,6 +1831,7 @@ where
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
     Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
 {
+    type Runtime = KeySource::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
@@ -1704,6 +1843,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: (ValueA, ValueB),
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1718,19 +1858,19 @@ where
         if len == 0 {
             return Ok((
                 SoA1 {
-                    source: DeviceVec::empty(self.0.policy().clone()),
+                    source: policy.empty_device_vec(),
                 },
                 SoA2 {
-                    left: DeviceVec::empty(values.0.policy().clone()),
-                    right: DeviceVec::empty(values.1.policy().clone()),
+                    left: policy.empty_device_vec(),
+                    right: policy.empty_device_vec(),
                 },
             ));
         }
 
-        let client = self.0.policy().client();
-        let key_bindings = self.0.stage()?;
-        let a_bindings = values.0.stage()?;
-        let b_bindings = values.1.stage()?;
+        let client = policy.client();
+        let key_bindings = self.0.stage(policy)?;
+        let a_bindings = values.0.stage(policy)?;
+        let b_bindings = values.1.stage(policy)?;
         let (inclusive_a, inclusive_b) =
             primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr_handle::<
                 KeySource::Runtime,
@@ -1742,13 +1882,7 @@ where
                 ValueB::Expr,
                 super::Tuple1Less<KeyEq>,
                 Op,
-            >(
-                self.0.policy(),
-                &key_bindings,
-                &a_bindings,
-                &b_bindings,
-                len,
-            )?;
+            >(policy, &key_bindings, &a_bindings, &b_bindings, len)?;
 
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
@@ -1795,25 +1929,22 @@ where
             );
         }
 
-        let out_keys = super::device_expr_compact_with_flags(&self.0, flag_handle.clone())?;
+        let out_keys = super::device_expr_compact_with_flags_with_policy(
+            policy,
+            &self.0,
+            flag_handle.clone(),
+        )?;
         let left_handles = select::handles_from_flags(
-            values.0.policy(),
+            policy,
             len,
             len_u32,
             flag_handle.clone(),
             reduced_a_handle,
         )?;
-        let right_handles = select::handles_from_flags(
-            values.1.policy(),
-            len,
-            len_u32,
-            flag_handle,
-            reduced_b_handle,
-        )?;
-        let left =
-            select::compact::<KeySource::Runtime, ValueA::Item>(values.0.policy(), left_handles)?;
-        let right =
-            select::compact::<KeySource::Runtime, ValueB::Item>(values.1.policy(), right_handles)?;
+        let right_handles =
+            select::handles_from_flags(policy, len, len_u32, flag_handle, reduced_b_handle)?;
+        let left = select::compact::<KeySource::Runtime, ValueA::Item>(policy, left_handles)?;
+        let right = select::compact::<KeySource::Runtime, ValueB::Item>(policy, right_handles)?;
 
         Ok((SoA1 { source: out_keys }, SoA2 { left, right }))
     }
@@ -1837,6 +1968,7 @@ where
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
     Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
 {
+    type Runtime = KeySource::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
@@ -1849,6 +1981,7 @@ where
 
     fn reduce_by_key_call(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: (ValueA, ValueB, ValueC),
         _key_eq: GpuOp<KeyEq>,
         init: Self::Init,
@@ -1865,21 +1998,21 @@ where
         if len == 0 {
             return Ok((
                 SoA1 {
-                    source: DeviceVec::empty(self.0.policy().clone()),
+                    source: policy.empty_device_vec(),
                 },
                 SoA3 {
-                    first: DeviceVec::empty(values.0.policy().clone()),
-                    second: DeviceVec::empty(values.1.policy().clone()),
-                    third: DeviceVec::empty(values.2.policy().clone()),
+                    first: policy.empty_device_vec(),
+                    second: policy.empty_device_vec(),
+                    third: policy.empty_device_vec(),
                 },
             ));
         }
 
-        let client = self.0.policy().client();
-        let key_bindings = self.0.stage()?;
-        let a_bindings = values.0.stage()?;
-        let b_bindings = values.1.stage()?;
-        let c_bindings = values.2.stage()?;
+        let client = policy.client();
+        let key_bindings = self.0.stage(policy)?;
+        let a_bindings = values.0.stage(policy)?;
+        let b_bindings = values.1.stage(policy)?;
+        let c_bindings = values.2.stage(policy)?;
         let (inclusive_a, inclusive_b, inclusive_c) =
             primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr_handle::<
                 KeySource::Runtime,
@@ -1894,7 +2027,7 @@ where
                 super::Tuple1Less<KeyEq>,
                 Op,
             >(
-                self.0.policy(),
+                policy,
                 &key_bindings,
                 &a_bindings,
                 &b_bindings,
@@ -1953,34 +2086,30 @@ where
             );
         }
 
-        let out_keys = super::device_expr_compact_with_flags(&self.0, flag_handle.clone())?;
+        let out_keys = super::device_expr_compact_with_flags_with_policy(
+            policy,
+            &self.0,
+            flag_handle.clone(),
+        )?;
         let first_handles = select::handles_from_flags(
-            values.0.policy(),
+            policy,
             len,
             len_u32,
             flag_handle.clone(),
             reduced_a_handle,
         )?;
         let second_handles = select::handles_from_flags(
-            values.1.policy(),
+            policy,
             len,
             len_u32,
             flag_handle.clone(),
             reduced_b_handle,
         )?;
-        let third_handles = select::handles_from_flags(
-            values.2.policy(),
-            len,
-            len_u32,
-            flag_handle,
-            reduced_c_handle,
-        )?;
-        let first =
-            select::compact::<KeySource::Runtime, ValueA::Item>(values.0.policy(), first_handles)?;
-        let second =
-            select::compact::<KeySource::Runtime, ValueB::Item>(values.1.policy(), second_handles)?;
-        let third =
-            select::compact::<KeySource::Runtime, ValueC::Item>(values.2.policy(), third_handles)?;
+        let third_handles =
+            select::handles_from_flags(policy, len, len_u32, flag_handle, reduced_c_handle)?;
+        let first = select::compact::<KeySource::Runtime, ValueA::Item>(policy, first_handles)?;
+        let second = select::compact::<KeySource::Runtime, ValueB::Item>(policy, second_handles)?;
+        let third = select::compact::<KeySource::Runtime, ValueC::Item>(policy, third_handles)?;
 
         Ok((
             SoA1 { source: out_keys },
@@ -1998,7 +2127,8 @@ where
 /// This is a borrowing algorithm: values may be a borrowed column or a read-only
 /// SoA from [`zip`](crate::zip). The returned keys and values are owned SoA
 /// storage.
-pub fn reduce_by_key<Keys, Values, KeyEq, Op>(
+pub fn reduce_by_key<R, Keys, Values, KeyEq, Op>(
+    policy: &CubePolicy<R>,
     keys: Keys,
     values: Values,
     _key_eq: KeyEq,
@@ -2009,8 +2139,18 @@ pub fn reduce_by_key<Keys, Values, KeyEq, Op>(
     Error,
 >
 where
-    Keys: ReduceByKeyCall<Values, KeyEq, Op>,
-    <Keys as ReduceByKeyCall<Values, KeyEq, Op>>::Output: MaterializeOutput,
+    R: Runtime,
+    Keys: ReduceByKeyCall<Values, KeyEq, Op, Runtime = R>,
+    <Keys as ReduceByKeyCall<Values, KeyEq, Op>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(keys.reduce_by_key_call(values, GpuOp::<KeyEq>::new(), init, GpuOp::<Op>::new())?)
+    materialize(
+        policy,
+        keys.reduce_by_key_call(
+            policy,
+            values,
+            GpuOp::<KeyEq>::new(),
+            init,
+            GpuOp::<Op>::new(),
+        )?,
+    )
 }

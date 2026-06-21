@@ -128,7 +128,8 @@ fn offset_handle<R: Runtime>(
     Ok(client.create_from_slice(u32::as_bytes(&[offset])))
 }
 
-pub(super) fn device_expr_collect<ExprSource>(
+pub(super) fn device_expr_collect_with_policy<ExprSource>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
 where
@@ -141,13 +142,13 @@ where
     let len = expr.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(expr.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = expr.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<ExprSource::Item>());
 
-    let bindings = expr.stage()?;
+    let bindings = expr.stage(policy)?;
     let slot0 = bindings.slots.first().unwrap();
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
@@ -175,14 +176,11 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(
-        expr.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
 pub(super) fn device_expr_reverse_collect<ExprSource>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
 where
@@ -195,13 +193,13 @@ where
     let len = expr.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(expr.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = expr.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<ExprSource::Item>());
 
-    let bindings = expr.stage()?;
+    let bindings = expr.stage(policy)?;
     let slot0 = bindings.slots.first().unwrap();
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
@@ -229,14 +227,11 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(
-        expr.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(super) fn device_expr_gather<InputSource, IndexSource>(
+pub(super) fn device_expr_gather_with_policy<InputSource, IndexSource>(
+    policy: &crate::policy::CubePolicy<InputSource::Runtime>,
     input: &InputSource,
     indices: &IndexSource,
 ) -> Result<DeviceVec<InputSource::Runtime, InputSource::Item>, Error>
@@ -253,15 +248,15 @@ where
     let len = indices.len();
     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(input.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = input.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<InputSource::Item>());
 
     let block_count_u32 = api_expr_block_count(len)?;
-    let input_bindings = input.stage()?;
-    let index_bindings = indices.stage()?;
+    let input_bindings = input.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
     let input_offset = offset_handle(client, input_bindings.input_offset)?;
     let input_rhs_offset = offset_handle(client, input_bindings.rhs_offset)?;
     let index_offset = offset_handle(client, index_bindings.input_offset)?;
@@ -297,14 +292,11 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(
-        input.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(super) fn device_expr_scatter<ValueSource, IndexSource, InitialSource>(
+pub(super) fn device_expr_scatter_with_policy<ValueSource, IndexSource, InitialSource>(
+    policy: &crate::policy::CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
     initial: &InitialSource,
@@ -324,17 +316,17 @@ where
     indices.validate()?;
     ensure_same_len(values.len(), indices.len())?;
 
-    let output = device_expr_collect(initial)?;
+    let output = device_expr_collect_with_policy(policy, initial)?;
     let len = values.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
         return Ok(output);
     }
 
-    let client = values.policy().client();
+    let client = policy.client();
     let block_count_u32 = api_expr_block_count(len)?;
-    let value_bindings = values.stage()?;
-    let index_bindings = indices.stage()?;
+    let value_bindings = values.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
     let len_values = [len_u32];
     let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
     let value_offset = offset_handle(client, value_bindings.input_offset)?;
@@ -376,7 +368,8 @@ where
     Ok(output)
 }
 
-pub(super) fn device_expr_copy_if<ExprSource, Pred>(
+pub(super) fn device_expr_copy_if_with_policy<ExprSource, Pred>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
@@ -387,11 +380,13 @@ where
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
     Pred: PredicateOp<ExprSource::Item>,
 {
-    let handles = device_expr_selection_handles::<ExprSource, Pred>(expr, invert)?;
-    select::compact::<ExprSource::Runtime, ExprSource::Item>(expr.policy(), handles)
+    let handles =
+        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
+    select::compact::<ExprSource::Runtime, ExprSource::Item>(policy, handles)
 }
 
-pub(super) fn device_expr_compact_with_flags<ExprSource>(
+pub(super) fn device_expr_compact_with_flags_with_policy<ExprSource>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     flag_handle: cubecl::server::Handle,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
@@ -405,24 +400,19 @@ where
     let len = expr.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(expr.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let handles = select::handles_from_flags(
-        expr.policy(),
-        len,
-        len_u32,
-        flag_handle,
-        expr.policy().empty_handle(),
-    )?;
-    let count = select::selected_count(expr.policy(), &handles)?;
+    let handles =
+        select::handles_from_flags(policy, len, len_u32, flag_handle, policy.empty_handle())?;
+    let count = select::selected_count(policy, &handles)?;
     if count == 0 {
-        return Ok(DeviceVec::empty(expr.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = expr.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(count * std::mem::size_of::<ExprSource::Item>());
-    let bindings = expr.stage()?;
+    let bindings = expr.stage(policy)?;
     let slot_offsets = bindings.slot_offsets_handle(client)?;
     let slot0 = bindings.slots.first().unwrap();
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
@@ -450,14 +440,11 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(
-        expr.policy().clone(),
-        output_handle,
-        count,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, count))
 }
 
-pub(super) fn device_expr_count_if<ExprSource, Pred>(
+pub(super) fn device_expr_count_if_with_policy<ExprSource, Pred>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
 ) -> Result<usize, Error>
@@ -468,15 +455,17 @@ where
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
     Pred: PredicateOp<ExprSource::Item>,
 {
-    let handles = device_expr_selection_handles::<ExprSource, Pred>(expr, invert)?;
+    let handles =
+        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
     if handles.len == 0 {
         return Ok(0);
     }
 
-    Ok(read_u32_scalar::<ExprSource::Runtime>(expr.policy().client(), handles.count)? as usize)
+    Ok(read_u32_scalar::<ExprSource::Runtime>(policy.client(), handles.count)? as usize)
 }
 
-pub(super) fn device_expr_find_if<ExprSource, Pred>(
+pub(super) fn device_expr_find_if_with_policy<ExprSource, Pred>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
 ) -> Result<Option<usize>, Error>
@@ -487,11 +476,13 @@ where
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
     Pred: PredicateOp<ExprSource::Item>,
 {
-    let handles = device_expr_selection_handles::<ExprSource, Pred>(expr, invert)?;
-    primitive_search::first_flag(expr.policy(), handles.flag, handles.len, expr.len())
+    let handles =
+        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
+    primitive_search::first_flag(policy, handles.flag, handles.len, expr.len())
 }
 
-pub(super) fn device_expr_selection_handles<ExprSource, Pred>(
+pub(super) fn device_expr_selection_handles_with_policy<ExprSource, Pred>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
 ) -> Result<select::SelectionHandles, Error>
@@ -505,14 +496,14 @@ where
     expr.validate()?;
     let len = expr.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let client = expr.policy().client();
+    let client = policy.client();
     if len == 0 {
         return select::handles_from_flags(
-            expr.policy(),
+            policy,
             0,
             0,
-            expr.policy().empty_handle(),
-            expr.policy().empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
         );
     }
 
@@ -521,7 +512,7 @@ where
     let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
     let invert_handle = client.create_from_slice(u32::as_bytes(&invert_values));
     let flag_handle = client.empty(len * std::mem::size_of::<u32>());
-    let bindings = expr.stage()?;
+    let bindings = expr.stage(policy)?;
     let input_offset = offset_handle(client, bindings.input_offset)?;
     let rhs_offset = offset_handle(client, bindings.rhs_offset)?;
     let value_handle = expr.staged_value_handle(&bindings);
@@ -573,7 +564,7 @@ where
         value_handle
     };
 
-    select::handles_from_flags(expr.policy(), len, len_u32, flag_handle, value_handle)
+    select::handles_from_flags(policy, len, len_u32, flag_handle, value_handle)
 }
 
 #[doc(hidden)]
@@ -581,7 +572,11 @@ pub trait SelectionStencil<Pred> {
     type Runtime: Runtime;
 
     fn len(&self) -> usize;
-    fn selection_handles(&self, invert: bool) -> Result<select::SelectionHandles, Error>;
+    fn selection_handles_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error>;
 }
 
 #[doc(hidden)]
@@ -592,7 +587,8 @@ pub struct PrecomputedSelection<R: Runtime> {
 }
 
 impl<R: Runtime> PrecomputedSelection<R> {
-    pub(crate) fn from_stencil<Stencil, Pred>(
+    pub(crate) fn from_stencil_with_policy<Stencil, Pred>(
+        policy: &crate::policy::CubePolicy<R>,
         stencil: &Stencil,
         invert: bool,
     ) -> Result<Self, Error>
@@ -601,7 +597,7 @@ impl<R: Runtime> PrecomputedSelection<R> {
     {
         Ok(Self {
             len: stencil.len(),
-            handles: stencil.selection_handles(invert)?,
+            handles: stencil.selection_handles_with_policy(policy, invert)?,
             _runtime: std::marker::PhantomData,
         })
     }
@@ -617,7 +613,11 @@ where
         self.len
     }
 
-    fn selection_handles(&self, _invert: bool) -> Result<select::SelectionHandles, Error> {
+    fn selection_handles_with_policy(
+        &self,
+        _policy: &crate::policy::CubePolicy<Self::Runtime>,
+        _invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
         Ok(self.handles.clone())
     }
 }
@@ -636,8 +636,12 @@ where
         KernelColumn::len(self)
     }
 
-    fn selection_handles(&self, invert: bool) -> Result<select::SelectionHandles, Error> {
-        device_expr_selection_handles::<Stencil, Pred>(self, invert)
+    fn selection_handles_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
+        device_expr_selection_handles_with_policy::<Stencil, Pred>(policy, self, invert)
     }
 }
 
@@ -655,8 +659,14 @@ where
         self.0.len()
     }
 
-    fn selection_handles(&self, invert: bool) -> Result<select::SelectionHandles, Error> {
-        device_expr_selection_handles::<Stencil, Tuple1PredicateOp<Pred>>(&self.0, invert)
+    fn selection_handles_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
+        device_expr_selection_handles_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
+            policy, &self.0, invert,
+        )
     }
 }
 
@@ -692,19 +702,23 @@ macro_rules! impl_tuple_selection_stencil {
                 self.$first_field.len()
             }
 
-            fn selection_handles(&self, invert: bool) -> Result<select::SelectionHandles, Error> {
+            fn selection_handles_with_policy(
+                &self,
+                policy: &crate::policy::CubePolicy<Self::Runtime>,
+                invert: bool,
+            ) -> Result<select::SelectionHandles, Error> {
                 self.$first_field.validate()?;
                 $(
                     self.$field.validate()?;
                     ensure_same_len(self.$field.len(), self.$first_field.len())?;
                 )+
-                let $first_field = device_expr_collect(&self.$first_field)?;
+                let $first_field = device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = device_expr_collect(&self.$field)?;
+                    let $field = device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag = client.empty(len * std::mem::size_of::<u32>());
                 if len != 0 {
                     let block_count_u32 = api_expr_block_count(len)?;
@@ -732,7 +746,7 @@ macro_rules! impl_tuple_selection_stencil {
                     }
                 }
                 select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     len,
                     len_u32,
                     flag,
@@ -767,12 +781,16 @@ where
         })
     }
 
-    fn selection_handles(&self, invert: bool) -> Result<select::SelectionHandles, Error> {
+    fn selection_handles_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
         SoAView2 {
             left: self.0,
             right: self.1,
         }
-        .selection_handles(invert)
+        .selection_handles_with_policy(policy, invert)
     }
 }
 
@@ -793,17 +811,22 @@ where
         })
     }
 
-    fn selection_handles(&self, invert: bool) -> Result<select::SelectionHandles, Error> {
+    fn selection_handles_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
         SoAView3 {
             first: self.0,
             second: self.1,
             third: self.2,
         }
-        .selection_handles(invert)
+        .selection_handles_with_policy(policy, invert)
     }
 }
 
-pub(super) fn device_expr_reduce<ExprSource, Op>(
+pub(super) fn device_expr_reduce_with_policy<ExprSource, Op>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     init: ExprSource::Item,
 ) -> Result<ExprSource::Item, Error>
@@ -819,9 +842,9 @@ where
         return Ok(init);
     }
 
-    let values = device_expr_collect(expr)?;
+    let values = device_expr_collect_with_policy(policy, expr)?;
     primitive_reduce::reduce_input_handle::<ExprSource::Runtime, ExprSource::Item, Op>(
-        expr.policy(),
+        policy,
         values.handle,
         values.len,
         values.len,
@@ -829,7 +852,8 @@ where
     )
 }
 
-pub(super) fn device_expr_adjacent_difference<ExprSource, Op>(
+pub(super) fn device_expr_adjacent_difference_with_policy<ExprSource, Op>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
 where
@@ -842,13 +866,13 @@ where
     expr.validate()?;
     let len = expr.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let client = expr.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<ExprSource::Item>());
 
     if len != 0 {
         let block_count_u32 = api_expr_block_count(len)?;
         let len_values = [len_u32];
-        let bindings = expr.stage()?;
+        let bindings = expr.stage(policy)?;
         let slot0 = bindings.slots.first().unwrap();
         let slot1 = bindings.slots.get(1).unwrap_or(slot0);
         let slot2 = bindings.slots.get(2).unwrap_or(slot0);
@@ -876,14 +900,11 @@ where
         }
     }
 
-    Ok(DeviceVec::from_handle(
-        expr.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(super) fn device_expr_minmax_element<ExprSource, Less>(
+pub(super) fn device_expr_minmax_element_with_policy<ExprSource, Less>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
 ) -> Result<Option<(usize, usize)>, Error>
 where
@@ -894,11 +915,12 @@ where
     Less: BinaryPredicateOp<ExprSource::Item>,
 {
     expr.validate()?;
-    let values = device_expr_collect(expr)?;
-    primitive_search::minmax_element(&values, GpuOp::<Less>::new())
+    let values = device_expr_collect_with_policy(policy, expr)?;
+    primitive_search::minmax_element(policy, &values, GpuOp::<Less>::new())
 }
 
-pub(super) fn device_expr_inclusive_scan_by_key<ExprSource, K, KeyEq, Op>(
+pub(super) fn device_expr_inclusive_scan_by_key_with_policy<ExprSource, K, KeyEq, Op>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     keys: &DeviceVec<ExprSource::Runtime, K>,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
@@ -914,8 +936,9 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let values = device_expr_collect(expr)?;
+    let values = device_expr_collect_with_policy(policy, expr)?;
     primitive_scan::inclusive_scan_by_key_device_vec(
+        policy,
         keys,
         &values,
         GpuOp::<KeyEq>::new(),
@@ -923,7 +946,8 @@ where
     )
 }
 
-pub(super) fn device_expr_exclusive_scan_by_key<ExprSource, K, KeyEq, Op>(
+pub(super) fn device_expr_exclusive_scan_by_key_with_policy<ExprSource, K, KeyEq, Op>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     keys: &DeviceVec<ExprSource::Runtime, K>,
     init: ExprSource::Item,
@@ -940,8 +964,9 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let values = device_expr_collect(expr)?;
+    let values = device_expr_collect_with_policy(policy, expr)?;
     primitive_scan::exclusive_scan_by_key_device_vec(
+        policy,
         keys,
         &values,
         init,
@@ -950,7 +975,8 @@ where
     )
 }
 
-pub(super) fn device_expr_reduce_by_key<ExprSource, K, KeyEq, Op>(
+pub(super) fn device_expr_reduce_by_key_with_policy<ExprSource, K, KeyEq, Op>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     keys: &DeviceVec<ExprSource::Runtime, K>,
     init: ExprSource::Item,
@@ -973,16 +999,17 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let values = device_expr_collect(expr)?;
+    let values = device_expr_collect_with_policy(policy, expr)?;
     primitive_reduce::reduce_by_key_handle::<ExprSource::Runtime, K, ExprSource::Item, KeyEq, Op>(
-        expr.policy(),
+        policy,
         keys,
         values.handle.clone(),
         init,
     )
 }
 
-pub(super) fn device_expr_reduce_by_key_with_control<ExprSource, K, KeyEq, Op>(
+pub(super) fn device_expr_reduce_by_key_with_control_with_policy<ExprSource, K, KeyEq, Op>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     keys: &DeviceVec<ExprSource::Runtime, K>,
     init: ExprSource::Item,
@@ -1006,17 +1033,23 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let values = device_expr_collect(expr)?;
+    let values = device_expr_collect_with_policy(policy, expr)?;
     primitive_reduce::reduce_by_key_handle_with_control::<
         ExprSource::Runtime,
         K,
         ExprSource::Item,
         KeyEq,
         Op,
-    >(expr.policy(), keys, values.handle.clone(), init)
+    >(policy, keys, values.handle.clone(), init)
 }
 
-pub(super) fn device_expr_reduce_by_key_with_existing_control<ExprSource, K, KeyEq, Op>(
+pub(super) fn device_expr_reduce_by_key_with_existing_control_with_policy<
+    ExprSource,
+    K,
+    KeyEq,
+    Op,
+>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     keys: &DeviceVec<ExprSource::Runtime, K>,
     init: ExprSource::Item,
@@ -1034,12 +1067,12 @@ where
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
 
-    let values = device_expr_collect(expr)?;
+    let values = device_expr_collect_with_policy(policy, expr)?;
     primitive_reduce::reduce_by_key_handle_with_existing_control::<
         ExprSource::Runtime,
         K,
         ExprSource::Item,
         KeyEq,
         Op,
-    >(expr.policy(), keys, values.handle.clone(), init, control)
+    >(policy, keys, values.handle.clone(), init, control)
 }

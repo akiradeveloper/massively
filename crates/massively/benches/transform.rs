@@ -4,7 +4,7 @@ use common::{Backend, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{CubeWgpu, DeviceVec, Wgpu, transform};
+use massively::{DeviceVec, Executor, Wgpu, transform};
 
 struct MulTwo;
 
@@ -17,26 +17,26 @@ impl UnaryOp<(f32,)> for MulTwo {
     }
 }
 
-fn check_transform(policy: &CubeWgpu) {
-    let values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let (output,) = transform((values.slice(..),), MulTwo).unwrap();
-    assert_eq!(output.to_vec().unwrap(), vec![2.0, 4.0, 6.0]);
+fn check_transform(exec: &Executor<Wgpu>) {
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let (output,) = transform(&exec, (values.slice(..),), MulTwo).unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
 fn bench_transform(c: &mut Criterion) {
     let mut transform_group = c.benchmark_group("transform");
     for backend in Backend::available() {
-        let policy = backend.policy();
-        check_transform(&policy);
+        let exec = backend.exec();
+        check_transform(&exec);
 
         for &len in SIZES {
-            let values = policy.to_device(&dense_f32(len)).unwrap();
-            sync(&policy);
+            let values = exec.to_device(&dense_f32(len)).unwrap();
+            sync(&exec);
             transform_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) =
-                        transform((black_box(values.slice(..)),), MulTwo).unwrap();
-                    sync(&policy);
+                        transform(&exec, (black_box(values.slice(..)),), MulTwo).unwrap();
+                    sync(&exec);
                     black_box(output)
                 })
             });

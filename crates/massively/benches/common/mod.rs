@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use massively::CubeWgpu;
+use massively::{Executor, Wgpu};
 
 pub const SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024, 1024 * 1024];
 pub const SORT_SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024];
@@ -27,10 +27,10 @@ impl Backend {
         }
     }
 
-    pub fn policy(self) -> CubeWgpu {
+    pub fn exec(self) -> Executor<Wgpu> {
         match self {
-            Self::Cpu => CubeWgpu::cpu(),
-            Self::Gpu => CubeWgpu::new(),
+            Self::Cpu => Executor::<Wgpu>::cpu(),
+            Self::Gpu => Executor::<Wgpu>::new(),
         }
     }
 
@@ -61,6 +61,6 @@ pub fn half_select_flags(len: usize) -> Vec<u32> {
     (0..len).map(|index| (index % 2 == 0) as u32).collect()
 }
 
-pub fn sync(policy: &CubeWgpu) {
-    policy.sync().unwrap();
+pub fn sync(exec: &Executor<Wgpu>) {
+    exec.sync().unwrap();
 }

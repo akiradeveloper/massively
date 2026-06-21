@@ -10,10 +10,10 @@ where
 {
     u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     if input.is_empty() {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
     let handle = policy.client().create_from_slice(T::as_bytes(input));
-    Ok(DeviceVec::from_handle(policy.clone(), handle, input.len()))
+    Ok(DeviceVec::from_handle(policy.id(), handle, input.len()))
 }
 
 pub(crate) fn filled<R, T>(
@@ -27,7 +27,7 @@ where
 {
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
 
     let client = policy.client();
@@ -52,10 +52,11 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(policy.clone(), output_handle, len))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(crate) fn concat_device<R, T>(
+pub(crate) fn concat_device_with_policy<R, T>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
 ) -> Result<DeviceVec<R, T>, Error>
@@ -66,10 +67,10 @@ where
     let len = left.len() + right.len();
     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(left.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = left.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<T>());
 
     let block_count = len.div_ceil(BLOCK_RANGE_SIZE as usize);
@@ -86,11 +87,7 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(
-        left.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
 pub(crate) fn copy_handle<R, T>(
@@ -126,7 +123,8 @@ where
     Ok(output_handle)
 }
 
-pub(crate) fn copy_slice<R, T>(
+pub(crate) fn copy_slice_with_policy<R, T>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     offset: usize,
     len: usize,
@@ -147,10 +145,10 @@ where
     let offset_u32 = u32::try_from(offset).map_err(|_| Error::LengthTooLarge { len: offset })?;
     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(input.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = input.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<T>());
     let offset_handle = client.create_from_slice(u32::as_bytes(&[offset_u32]));
 
@@ -168,11 +166,7 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(
-        input.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
 pub(crate) fn indices_u32<R>(policy: &CubePolicy<R>, len: usize) -> Result<DeviceVec<R, u32>, Error>
@@ -181,7 +175,7 @@ where
 {
     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
 
     let client = policy.client();
@@ -199,10 +193,11 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(policy.clone(), output_handle, len))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(crate) fn gather_device<R, T>(
+pub(crate) fn gather_device_with_policy<R, T>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     indices: &DeviceVec<R, u32>,
 ) -> Result<DeviceVec<R, T>, Error>
@@ -212,10 +207,10 @@ where
 {
     u32::try_from(indices.len()).map_err(|_| Error::LengthTooLarge { len: indices.len() })?;
     if indices.len() == 0 {
-        return Ok(DeviceVec::empty(input.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = input.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(indices.len() * std::mem::size_of::<T>());
 
     let block_count = indices.len().div_ceil(BLOCK_RANGE_SIZE as usize);
@@ -233,7 +228,7 @@ where
     }
 
     Ok(DeviceVec::from_handle(
-        input.policy().clone(),
+        policy.id(),
         output_handle,
         indices.len(),
     ))

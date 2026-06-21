@@ -52,6 +52,7 @@ impl SelectionControl {
 }
 
 pub(crate) fn partition_copy<R, T, Pred>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _pred: GpuOp<Pred>,
 ) -> Result<(DeviceVec<R, T>, DeviceVec<R, T>), Error>
@@ -60,23 +61,24 @@ where
     T: CubePrimitive + CubeElement,
     Pred: PredicateOp<T>,
 {
-    let selected_handles = predicate_handles::<R, T, Pred>(input, false)?;
+    let selected_handles = predicate_handles::<R, T, Pred>(policy, input, false)?;
     if selected_handles.len == 0 {
-        let empty_selected = DeviceVec::empty(input.policy().clone());
-        let empty_rejected = DeviceVec::empty(input.policy().clone());
+        let empty_selected = policy.empty_device_vec();
+        let empty_rejected = policy.empty_device_vec();
         return Ok((empty_selected, empty_rejected));
     }
 
-    let selected_count = selected_count(input.policy(), &selected_handles)?;
+    let selected_count = selected_count(policy, &selected_handles)?;
     let rejected_count = selected_handles.len - selected_count;
 
     Ok((
-        compact_with_count(input.policy(), selected_handles.clone(), selected_count)?,
-        compact_rejected_with_count(input.policy(), selected_handles, rejected_count)?,
+        compact_with_count(policy, selected_handles.clone(), selected_count)?,
+        compact_rejected_with_count(policy, selected_handles, rejected_count)?,
     ))
 }
 
 pub(crate) fn unique<R, T, Pred>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _pred: GpuOp<Pred>,
 ) -> Result<DeviceVec<R, T>, Error>
@@ -88,10 +90,10 @@ where
     let len_u32 =
         u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     if input.is_empty() {
-        return Ok(DeviceVec::empty(input.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = input.policy().client();
+    let client = policy.client();
     let block_count_u32 = select_block_count(input.len())?;
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
@@ -106,13 +108,13 @@ where
     }
 
     let handles = handles_from_flags(
-        input.policy(),
+        policy,
         input.len(),
         len_u32,
         flag_handle,
         input.handle.clone(),
     )?;
-    compact(input.policy(), handles)
+    compact(policy, handles)
 }
 
 pub(crate) fn handles_from_flags<R>(
@@ -188,12 +190,12 @@ where
     T: CubePrimitive + CubeElement,
 {
     if handles.len == 0 {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
 
     let client = policy.client();
     if count == 0 {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
     let output_handle = client.empty(count * std::mem::size_of::<T>());
 
@@ -210,7 +212,7 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(policy.clone(), output_handle, count))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, count))
 }
 
 pub(crate) fn compact_rejected_with_count<R, T>(
@@ -223,7 +225,7 @@ where
     T: CubePrimitive + CubeElement,
 {
     if handles.len == 0 || count == 0 {
-        return Ok(DeviceVec::empty(policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
 
     let client = policy.client();
@@ -242,7 +244,7 @@ where
         );
     }
 
-    Ok(DeviceVec::from_handle(policy.clone(), output_handle, count))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, count))
 }
 
 pub(crate) fn compact_pair_with_count<R, A, B>(
@@ -258,10 +260,7 @@ where
     B: CubePrimitive + CubeElement,
 {
     if handles.len == 0 || count == 0 {
-        return Ok((
-            DeviceVec::empty(policy.clone()),
-            DeviceVec::empty(policy.clone()),
-        ));
+        return Ok((policy.empty_device_vec(), policy.empty_device_vec()));
     }
 
     let client = policy.client();
@@ -284,8 +283,8 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(policy.clone(), first_output_handle, count),
-        DeviceVec::from_handle(policy.clone(), second_output_handle, count),
+        DeviceVec::from_handle(policy.id(), first_output_handle, count),
+        DeviceVec::from_handle(policy.id(), second_output_handle, count),
     ))
 }
 
@@ -297,6 +296,7 @@ pub(crate) fn handles_for_value(
 }
 
 fn predicate_handles<R, T, Pred>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     invert: bool,
 ) -> Result<SelectionControl, Error>
@@ -308,10 +308,10 @@ where
     let len_u32 =
         u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     if input.is_empty() {
-        return Ok(SelectionControl::empty(input.policy().client()));
+        return Ok(SelectionControl::empty(policy.client()));
     }
 
-    let client = input.policy().client();
+    let client = policy.client();
     let block_count_u32 = select_block_count(input.len())?;
     let invert_values = [if invert { 1_u32 } else { 0_u32 }];
     let invert_handle = client.create_from_slice(u32::as_bytes(&invert_values));
@@ -329,7 +329,7 @@ where
     }
 
     handles_from_flags(
-        input.policy(),
+        policy,
         input.len(),
         len_u32,
         flag_handle,

@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
 use massively::{
-    DeviceVec, Policy as ApiPolicy, Wgpu as ApiWgpu,
+    DeviceVec, Executor as ApiExecutor, Wgpu as ApiWgpu,
     adjacent_difference as api_adjacent_difference, adjacent_find, all_of as api_all_of,
     any_of as api_any_of, copy_if as api_copy_if, count_if as api_count_if, equal, equal_range,
     exclusive_scan as api_exclusive_scan, exclusive_scan_by_key, find_first_of,
@@ -74,24 +74,24 @@ fn transform_map(input: &[u32]) -> Vec<u32> {
     input.iter().map(|value| value / 3 + 17).collect()
 }
 
-fn policy() -> ApiPolicy<ApiWgpu> {
-    ApiPolicy::cpu()
+fn exec() -> ApiExecutor<ApiWgpu> {
+    ApiExecutor::cpu()
 }
 
-fn api_policy() -> ApiPolicy<ApiWgpu> {
-    policy()
+fn api_exec() -> ApiExecutor<ApiWgpu> {
+    exec()
 }
 
 fn slice_range(input: &[u32]) -> std::ops::Range<usize> {
     1..input.len() + 1
 }
 
-fn padded_device(policy: &ApiPolicy<ApiWgpu>, input: &[u32]) -> DeviceVec<ApiWgpu, u32> {
+fn padded_device(exec: &ApiExecutor<ApiWgpu>, input: &[u32]) -> DeviceVec<ApiWgpu, u32> {
     let mut padded = Vec::with_capacity(input.len() + 2);
     padded.push(0xface_feed);
     padded.extend_from_slice(input);
     padded.push(0xdead_beef);
-    policy.to_device(&padded).unwrap()
+    exec.to_device(&padded).unwrap()
 }
 
 fn gpu_lock() -> MutexGuard<'static, ()> {
@@ -135,164 +135,164 @@ proptest! {
     #[test]
     fn transform_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_transform((input_g.slice(slice_range(&input)),), TransformMap).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), transform_map(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_transform(&exec, (input_g.slice(slice_range(&input)),), TransformMap).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), transform_map(&input));
     }
 
     #[test]
     fn reduce_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), init in any::<u32>()) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_reduce((input_g.slice(slice_range(&input)),), (init,), TupleMaxOp).unwrap().0, oracle::reduce(&input, init));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_reduce(&exec, (input_g.slice(slice_range(&input)),), (init,), TupleMaxOp).unwrap().0, oracle::reduce(&input, init));
     }
 
     #[test]
     fn inclusive_scan_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_inclusive_scan((input_g.slice(slice_range(&input)),), TupleMaxOp).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::inclusive_scan(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_inclusive_scan(&exec, (input_g.slice(slice_range(&input)),), TupleMaxOp).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::inclusive_scan(&input));
     }
 
     #[test]
     fn exclusive_scan_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), init in any::<u32>()) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_exclusive_scan((input_g.slice(slice_range(&input)),), (init,), TupleMaxOp).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::exclusive_scan(&input, init));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_exclusive_scan(&exec, (input_g.slice(slice_range(&input)),), (init,), TupleMaxOp).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::exclusive_scan(&input, init));
     }
 
     #[test]
     fn adjacent_difference_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_adjacent_difference((input_g.slice(slice_range(&input)),), TupleMaxOp).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::adjacent_difference(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_adjacent_difference(&exec, (input_g.slice(slice_range(&input)),), TupleMaxOp).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::adjacent_difference(&input));
     }
 
     #[test]
     fn copy_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
+        let exec = api_exec();
         let stencil = stencil_flags(&input);
-        let input_g = padded_device(&policy, &input);
-        let stencil_g = padded_device(&policy, &stencil);
-        let (output_g,) = api_copy_if((input_g.slice(slice_range(&input)),), (stencil_g.slice(slice_range(&stencil)),)).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::copy_if(&input, &stencil));
+        let input_g = padded_device(&exec, &input);
+        let stencil_g = padded_device(&exec, &stencil);
+        let (output_g,) = api_copy_if(&exec, (input_g.slice(slice_range(&input)),), (stencil_g.slice(slice_range(&stencil)),)).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::copy_if(&input, &stencil));
     }
 
     #[test]
     fn remove_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_remove_if((input_g.slice(slice_range(&input)),), TupleKeep).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::remove_if(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_remove_if(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::remove_if(&input));
     }
 
     #[test]
     fn partition_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let ((matching_g,), (failing_g,)) = api_partition((input_g.slice(slice_range(&input)),), TupleKeep).unwrap();
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let ((matching_g,), (failing_g,)) = api_partition(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap();
         let (matching, failing) = oracle::partition(&input);
-        prop_assert_eq!(matching_g.to_vec().unwrap(), matching);
-        prop_assert_eq!(failing_g.to_vec().unwrap(), failing);
+        prop_assert_eq!(exec.to_host(&matching_g).unwrap(), matching);
+        prop_assert_eq!(exec.to_host(&failing_g).unwrap(), failing);
     }
 
     #[test]
     fn count_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_count_if((input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::count_if(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_count_if(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::count_if(&input));
     }
 
     #[test]
     fn all_of_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_all_of((input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::all_of(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_all_of(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::all_of(&input));
     }
 
     #[test]
     fn any_of_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_any_of((input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::any_of(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_any_of(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::any_of(&input));
     }
 
     #[test]
     fn none_of_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_none_of((input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::none_of(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_none_of(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::none_of(&input));
     }
 
     #[test]
     fn find_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_find_if((input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::find_if(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_find_if(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::find_if(&input));
     }
 
     #[test]
     fn is_partitioned_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(api_is_partitioned((input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::is_partitioned(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(api_is_partitioned(&exec, (input_g.slice(slice_range(&input)),), TupleKeep).unwrap(), oracle::is_partitioned(&input));
     }
 
     #[test]
     fn replace_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), replacement in any::<u32>()) {
         let _guard = gpu_lock();
-        let policy = api_policy();
+        let exec = api_exec();
         let stencil = stencil_flags(&input);
-        let input_g = padded_device(&policy, &input);
-        let stencil_g = padded_device(&policy, &stencil);
-        let (output_g,) = api_replace_if((input_g.slice(slice_range(&input)),), (replacement,), (stencil_g.slice(slice_range(&stencil)),)).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::replace_if(&input, replacement, &stencil));
+        let input_g = padded_device(&exec, &input);
+        let stencil_g = padded_device(&exec, &stencil);
+        let (output_g,) = api_replace_if(&exec, (input_g.slice(slice_range(&input)),), (replacement,), (stencil_g.slice(slice_range(&stencil)),)).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::replace_if(&input, replacement, &stencil));
     }
 
     #[test]
     fn unique_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_unique((input_g.slice(slice_range(&input)),), TupleSameLowNibble).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::unique(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_unique(&exec, (input_g.slice(slice_range(&input)),), TupleSameLowNibble).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::unique(&input));
     }
 
     #[test]
     fn reverse_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_reverse((input_g.slice(slice_range(&input)),)).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::reverse(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_reverse(&exec, (input_g.slice(slice_range(&input)),)).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::reverse(&input));
     }
 
     #[test]
     fn gather_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let indices = reverse_indices(input.len());
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let indices_g = padded_device(&policy, &indices);
-        let (output_g,) = api_gather((input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),)).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::gather(&input, &indices));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let indices_g = padded_device(&exec, &indices);
+        let (output_g,) = api_gather(&exec, (input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),)).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::gather(&input, &indices));
     }
 
     #[test]
@@ -300,16 +300,16 @@ proptest! {
         let _guard = gpu_lock();
         let indices = reverse_indices(input.len());
         let stencil = oracle::gather(&stencil_flags(&input), &indices);
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let indices_g = padded_device(&policy, &indices);
-        let stencil_g = padded_device(&policy, &stencil);
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let indices_g = padded_device(&exec, &indices);
+        let stencil_g = padded_device(&exec, &stencil);
         prop_assert_eq!(
             {
                 let (output_g,) =
-                    gather_if((input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),), (0_u32,), (stencil_g.slice(slice_range(&stencil)),))
+                    gather_if(&exec, (input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),), (0_u32,), (stencil_g.slice(slice_range(&stencil)),))
                         .unwrap();
-                output_g.to_vec().unwrap()
+                exec.to_host(&output_g).unwrap()
             },
             oracle::gather_if(&input, &indices, &stencil)
         );
@@ -320,11 +320,11 @@ proptest! {
         let _guard = gpu_lock();
         let indices = reverse_indices(input.len());
         let default = 0xdead_beef;
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let indices_g = padded_device(&policy, &indices);
-        let (output_g,) = scatter((input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),), input.len(), (default,)).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::scatter(&input, &indices, input.len(), default));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let indices_g = padded_device(&exec, &indices);
+        let (output_g,) = scatter(&exec, (input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),), input.len(), (default,)).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::scatter(&input, &indices, input.len(), default));
     }
 
     #[test]
@@ -333,14 +333,14 @@ proptest! {
         let indices = reverse_indices(input.len());
         let default = 0xdead_beef;
         let stencil = stencil_flags(&input);
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let indices_g = padded_device(&policy, &indices);
-        let stencil_g = padded_device(&policy, &stencil);
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let indices_g = padded_device(&exec, &indices);
+        let stencil_g = padded_device(&exec, &stencil);
         prop_assert_eq!(
             {
-                let (output_g,) = scatter_if((input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),), input.len(), (default,), (stencil_g.slice(slice_range(&stencil)),)).unwrap();
-                output_g.to_vec().unwrap()
+                let (output_g,) = scatter_if(&exec, (input_g.slice(slice_range(&input)),), (indices_g.slice(slice_range(&indices)),), input.len(), (default,), (stencil_g.slice(slice_range(&stencil)),)).unwrap();
+                exec.to_host(&output_g).unwrap()
             },
             oracle::scatter_if(&input, &indices, input.len(), default, &stencil)
         );
@@ -349,64 +349,64 @@ proptest! {
     #[test]
     fn sort_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = api_policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = api_sort((input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::sort(&input));
+        let exec = api_exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = api_sort(&exec, (input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::sort(&input));
     }
 
     #[test]
     fn stable_sort_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let (output_g,) = stable_sort((input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::sort(&input));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let (output_g,) = stable_sort(&exec, (input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::sort(&input));
     }
 
     #[test]
     fn lower_bound_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), value in any::<u32>()) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
-        let policy = policy();
-        let sorted_g = padded_device(&policy, &sorted);
-        prop_assert_eq!(lower_bound((sorted_g.slice(slice_range(&sorted)),), (value,), TupleBucketThenValueLess).unwrap(), oracle::lower_bound(&sorted, value));
+        let exec = exec();
+        let sorted_g = padded_device(&exec, &sorted);
+        prop_assert_eq!(lower_bound(&exec, (sorted_g.slice(slice_range(&sorted)),), (value,), TupleBucketThenValueLess).unwrap(), oracle::lower_bound(&sorted, value));
     }
 
     #[test]
     fn upper_bound_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), value in any::<u32>()) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
-        let policy = policy();
-        let sorted_g = padded_device(&policy, &sorted);
-        prop_assert_eq!(upper_bound((sorted_g.slice(slice_range(&sorted)),), (value,), TupleBucketThenValueLess).unwrap(), oracle::upper_bound(&sorted, value));
+        let exec = exec();
+        let sorted_g = padded_device(&exec, &sorted);
+        prop_assert_eq!(upper_bound(&exec, (sorted_g.slice(slice_range(&sorted)),), (value,), TupleBucketThenValueLess).unwrap(), oracle::upper_bound(&sorted, value));
     }
 
     #[test]
     fn equal_range_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), value in any::<u32>()) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
-        let policy = policy();
-        let sorted_g = padded_device(&policy, &sorted);
-        prop_assert_eq!(equal_range((sorted_g.slice(slice_range(&sorted)),), (value,), TupleBucketThenValueLess).unwrap(), oracle::equal_range(&sorted, value));
+        let exec = exec();
+        let sorted_g = padded_device(&exec, &sorted);
+        prop_assert_eq!(equal_range(&exec, (sorted_g.slice(slice_range(&sorted)),), (value,), TupleBucketThenValueLess).unwrap(), oracle::equal_range(&sorted, value));
     }
 
     #[test]
     fn is_sorted_until_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
-        let policy = policy();
-        let sorted_g = padded_device(&policy, &sorted);
-        prop_assert_eq!(is_sorted_until((sorted_g.slice(slice_range(&sorted)),), TupleBucketThenValueLess).unwrap(), oracle::is_sorted_until(&sorted));
+        let exec = exec();
+        let sorted_g = padded_device(&exec, &sorted);
+        prop_assert_eq!(is_sorted_until(&exec, (sorted_g.slice(slice_range(&sorted)),), TupleBucketThenValueLess).unwrap(), oracle::is_sorted_until(&sorted));
     }
 
     #[test]
     fn is_sorted_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
-        let policy = policy();
-        let sorted_g = padded_device(&policy, &sorted);
-        prop_assert_eq!(is_sorted((sorted_g.slice(slice_range(&sorted)),), TupleBucketThenValueLess).unwrap(), oracle::is_sorted(&sorted));
+        let exec = exec();
+        let sorted_g = padded_device(&exec, &sorted);
+        prop_assert_eq!(is_sorted(&exec, (sorted_g.slice(slice_range(&sorted)),), TupleBucketThenValueLess).unwrap(), oracle::is_sorted(&sorted));
     }
 
     #[test]
@@ -414,11 +414,11 @@ proptest! {
         let _guard = gpu_lock();
         let left = oracle::sort(&left);
         let right = oracle::sort(&right);
-        let policy = policy();
-        let left_g = padded_device(&policy, &left);
-        let right_g = padded_device(&policy, &right);
-        let (output_g,) = merge((left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::merge(&left, &right));
+        let exec = exec();
+        let left_g = padded_device(&exec, &left);
+        let right_g = padded_device(&exec, &right);
+        let (output_g,) = merge(&exec, (left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::merge(&left, &right));
     }
 
     #[test]
@@ -426,11 +426,11 @@ proptest! {
         let _guard = gpu_lock();
         let left = oracle::sort(&left);
         let right = oracle::sort(&right);
-        let policy = policy();
-        let left_g = padded_device(&policy, &left);
-        let right_g = padded_device(&policy, &right);
-        let (output_g,) = set_union((left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::set_union(&left, &right));
+        let exec = exec();
+        let left_g = padded_device(&exec, &left);
+        let right_g = padded_device(&exec, &right);
+        let (output_g,) = set_union(&exec, (left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::set_union(&left, &right));
     }
 
     #[test]
@@ -438,11 +438,11 @@ proptest! {
         let _guard = gpu_lock();
         let left = oracle::sort(&left);
         let right = oracle::sort(&right);
-        let policy = policy();
-        let left_g = padded_device(&policy, &left);
-        let right_g = padded_device(&policy, &right);
-        let (output_g,) = set_intersection((left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::set_intersection(&left, &right));
+        let exec = exec();
+        let left_g = padded_device(&exec, &left);
+        let right_g = padded_device(&exec, &right);
+        let (output_g,) = set_intersection(&exec, (left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::set_intersection(&left, &right));
     }
 
     #[test]
@@ -450,39 +450,39 @@ proptest! {
         let _guard = gpu_lock();
         let left = oracle::sort(&left);
         let right = oracle::sort(&right);
-        let policy = policy();
-        let left_g = padded_device(&policy, &left);
-        let right_g = padded_device(&policy, &right);
-        let (output_g,) = set_difference((left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::set_difference(&left, &right));
+        let exec = exec();
+        let left_g = padded_device(&exec, &left);
+        let right_g = padded_device(&exec, &right);
+        let (output_g,) = set_difference(&exec, (left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::set_difference(&left, &right));
     }
 
     #[test]
     fn adjacent_find_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(adjacent_find((input_g.slice(slice_range(&input)),), TupleSameLowNibble).unwrap(), oracle::adjacent_find(&input));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(adjacent_find(&exec, (input_g.slice(slice_range(&input)),), TupleSameLowNibble).unwrap(), oracle::adjacent_find(&input));
     }
 
     #[test]
     fn equal_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let right = oracle::transform(&input);
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let right_g = padded_device(&policy, &right);
-        prop_assert_eq!(equal((input_g.slice(slice_range(&input)),), (right_g.slice(slice_range(&right)),), TupleSameLowNibble).unwrap(), oracle::equal(&input, &right));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let right_g = padded_device(&exec, &right);
+        prop_assert_eq!(equal(&exec, (input_g.slice(slice_range(&input)),), (right_g.slice(slice_range(&right)),), TupleSameLowNibble).unwrap(), oracle::equal(&input, &right));
     }
 
     #[test]
     fn mismatch_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let right = oracle::transform(&input);
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let right_g = padded_device(&policy, &right);
-        prop_assert_eq!(mismatch((input_g.slice(slice_range(&input)),), (right_g.slice(slice_range(&right)),), TupleSameLowNibble).unwrap(), oracle::mismatch(&input, &right));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let right_g = padded_device(&exec, &right);
+        prop_assert_eq!(mismatch(&exec, (input_g.slice(slice_range(&input)),), (right_g.slice(slice_range(&right)),), TupleSameLowNibble).unwrap(), oracle::mismatch(&input, &right));
     }
 
     #[test]
@@ -493,54 +493,54 @@ proptest! {
         } else {
             vec![input[0], input[input.len() - 1]]
         };
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        let needles_g = padded_device(&policy, &needles);
-        prop_assert_eq!(find_first_of((input_g.slice(slice_range(&input)),), (needles_g.slice(slice_range(&needles)),), TupleSameLowNibble).unwrap(), oracle::find_first_of(&input, &needles));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        let needles_g = padded_device(&exec, &needles);
+        prop_assert_eq!(find_first_of(&exec, (input_g.slice(slice_range(&input)),), (needles_g.slice(slice_range(&needles)),), TupleSameLowNibble).unwrap(), oracle::find_first_of(&input, &needles));
     }
 
     #[test]
     fn min_element_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(min_element((input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap(), oracle::min_element(&input));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(min_element(&exec, (input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap(), oracle::min_element(&input));
     }
 
     #[test]
     fn max_element_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(max_element((input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap(), oracle::max_element(&input));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(max_element(&exec, (input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap(), oracle::max_element(&input));
     }
 
     #[test]
     fn minmax_element_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = policy();
-        let input_g = padded_device(&policy, &input);
-        prop_assert_eq!(minmax_element((input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap(), oracle::minmax_element(&input));
+        let exec = exec();
+        let input_g = padded_device(&exec, &input);
+        prop_assert_eq!(minmax_element(&exec, (input_g.slice(slice_range(&input)),), TupleBucketThenValueLess).unwrap(), oracle::minmax_element(&input));
     }
 
     #[test]
     fn lexicographical_compare_matches_oracle(left in prop::collection::vec(any::<u32>(), 0..MAX_LEN), right in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
-        let policy = policy();
-        let left_g = padded_device(&policy, &left);
-        let right_g = padded_device(&policy, &right);
-        prop_assert_eq!(lexicographical_compare((left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap(), oracle::lexicographical_compare(&left, &right));
+        let exec = exec();
+        let left_g = padded_device(&exec, &left);
+        let right_g = padded_device(&exec, &right);
+        prop_assert_eq!(lexicographical_compare(&exec, (left_g.slice(slice_range(&left)),), (right_g.slice(slice_range(&right)),), TupleBucketThenValueLess).unwrap(), oracle::lexicographical_compare(&left, &right));
     }
 
     #[test]
     fn inner_product_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), init in any::<u32>()) {
         let _guard = gpu_lock();
         let right = oracle::transform(&input);
-        let policy = policy();
-        let left_g = padded_device(&policy, &input);
-        let right_g = padded_device(&policy, &right);
+        let exec = exec();
+        let left_g = padded_device(&exec, &input);
+        let right_g = padded_device(&exec, &right);
         prop_assert_eq!(
-            inner_product(
+            inner_product(&exec,
                 (left_g.slice(slice_range(&input)),),
                 (right_g.slice(slice_range(&right)),),
                 TupleMaxOp,
@@ -556,11 +556,11 @@ proptest! {
     fn inclusive_scan_by_key_matches_oracle(values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let keys = run_keys(values.len());
-        let policy = policy();
-        let keys_g = padded_device(&policy, &keys);
-        let values_g = padded_device(&policy, &values);
-        let (output_g,) = inclusive_scan_by_key((keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble, TupleMaxOp).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::inclusive_scan_by_key(&keys, &values));
+        let exec = exec();
+        let keys_g = padded_device(&exec, &keys);
+        let values_g = padded_device(&exec, &values);
+        let (output_g,) = inclusive_scan_by_key(&exec, (keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble, TupleMaxOp).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::inclusive_scan_by_key(&keys, &values));
     }
 
     #[test]
@@ -568,11 +568,11 @@ proptest! {
         let _guard = gpu_lock();
         let keys = run_keys(values.len());
         let init = 0;
-        let policy = policy();
-        let keys_g = padded_device(&policy, &keys);
-        let values_g = padded_device(&policy, &values);
-        let (output_g,) = exclusive_scan_by_key((keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble, (init,), TupleMaxOp).unwrap();
-        prop_assert_eq!(output_g.to_vec().unwrap(), oracle::exclusive_scan_by_key(&keys, &values, init));
+        let exec = exec();
+        let keys_g = padded_device(&exec, &keys);
+        let values_g = padded_device(&exec, &values);
+        let (output_g,) = exclusive_scan_by_key(&exec, (keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble, (init,), TupleMaxOp).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::exclusive_scan_by_key(&keys, &values, init));
     }
 
     #[test]
@@ -580,56 +580,56 @@ proptest! {
         let _guard = gpu_lock();
         let keys = run_keys(values.len());
         let init = 0;
-        let policy = policy();
-        let keys_g = padded_device(&policy, &keys);
-        let values_g = padded_device(&policy, &values);
+        let exec = exec();
+        let keys_g = padded_device(&exec, &keys);
+        let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle::reduce_by_key(&keys, &values, init);
         let ((actual_keys,), (actual_values,)) =
-            reduce_by_key((keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble, (init,), TupleMaxOp).unwrap();
-        prop_assert_eq!(actual_keys.to_vec().unwrap(), expected_keys);
-        prop_assert_eq!(actual_values.to_vec().unwrap(), expected_values);
+            reduce_by_key(&exec, (keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble, (init,), TupleMaxOp).unwrap();
+        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
 
     #[test]
     fn unique_by_key_matches_oracle(values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let keys = run_keys(values.len());
-        let policy = policy();
-        let keys_g = padded_device(&policy, &keys);
-        let values_g = padded_device(&policy, &values);
+        let exec = exec();
+        let keys_g = padded_device(&exec, &keys);
+        let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle::unique_by_key(&keys, &values);
         let ((actual_keys,), (actual_values,)) =
-            unique_by_key((keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble).unwrap();
-        prop_assert_eq!(actual_keys.to_vec().unwrap(), expected_keys);
-        prop_assert_eq!(actual_values.to_vec().unwrap(), expected_values);
+            unique_by_key(&exec, (keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleSameLowNibble).unwrap();
+        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
 
     #[test]
     fn sort_by_key_matches_oracle(values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let keys = unique_keys(values.len());
-        let policy = policy();
-        let keys_g = padded_device(&policy, &keys);
-        let values_g = padded_device(&policy, &values);
+        let exec = exec();
+        let keys_g = padded_device(&exec, &keys);
+        let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle::sort_by_key(&keys, &values);
         let ((actual_keys,), (actual_values,)) =
-            sort_by_key((keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(actual_keys.to_vec().unwrap(), expected_keys);
-        prop_assert_eq!(actual_values.to_vec().unwrap(), expected_values);
+            sort_by_key(&exec, (keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
 
     #[test]
     fn stable_sort_by_key_matches_oracle(values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let keys = unique_keys(values.len());
-        let policy = policy();
-        let keys_g = padded_device(&policy, &keys);
-        let values_g = padded_device(&policy, &values);
+        let exec = exec();
+        let keys_g = padded_device(&exec, &keys);
+        let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle::sort_by_key(&keys, &values);
         let ((actual_keys,), (actual_values,)) =
-            stable_sort_by_key((keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(actual_keys.to_vec().unwrap(), expected_keys);
-        prop_assert_eq!(actual_values.to_vec().unwrap(), expected_values);
+            stable_sort_by_key(&exec, (keys_g.slice(slice_range(&keys)),), (values_g.slice(slice_range(&values)),), TupleBucketThenValueLess).unwrap();
+        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
 
     #[test]
@@ -642,13 +642,13 @@ proptest! {
         let left_values = values[..mid].to_vec();
         let right_keys = keys[mid..].to_vec();
         let right_values = values[mid..].to_vec();
-        let policy = policy();
-        let left_keys_g = padded_device(&policy, &left_keys);
-        let left_values_g = padded_device(&policy, &left_values);
-        let right_keys_g = padded_device(&policy, &right_keys);
-        let right_values_g = padded_device(&policy, &right_values);
+        let exec = exec();
+        let left_keys_g = padded_device(&exec, &left_keys);
+        let left_values_g = padded_device(&exec, &left_values);
+        let right_keys_g = padded_device(&exec, &right_keys);
+        let right_values_g = padded_device(&exec, &right_values);
         let (expected_keys, expected_values) = oracle::merge_by_key(&left_keys, &left_values, &right_keys, &right_values);
-        let ((actual_keys,), (actual_values,)) = merge_by_key(
+        let ((actual_keys,), (actual_values,)) = merge_by_key(&exec,
             (left_keys_g.slice(slice_range(&left_keys)),),
             (left_values_g.slice(slice_range(&left_values)),),
             (right_keys_g.slice(slice_range(&right_keys)),),
@@ -656,7 +656,7 @@ proptest! {
             TupleBucketThenValueLess,
         )
         .unwrap();
-        prop_assert_eq!(actual_keys.to_vec().unwrap(), expected_keys);
-        prop_assert_eq!(actual_values.to_vec().unwrap(), expected_values);
+        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
 }

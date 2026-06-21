@@ -9,13 +9,29 @@ pub use backends::CubeWgpu;
 
 use cubecl::prelude::*;
 use std::fmt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{device::DeviceVec, primitives::range};
 
 pub(crate) const EMPTY_HANDLE_BYTES: usize = 16;
 
+static NEXT_POLICY_ID: AtomicU64 = AtomicU64::new(1);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CubePolicyId(u64);
+
+fn next_policy_id() -> CubePolicyId {
+    CubePolicyId(NEXT_POLICY_ID.fetch_add(1, Ordering::Relaxed))
+}
+
 pub(crate) fn empty_handle<R: Runtime>(client: &ComputeClient<R>) -> cubecl::server::Handle {
     client.empty(EMPTY_HANDLE_BYTES)
+}
+
+struct CubePolicyInner<R: Runtime> {
+    client: ComputeClient<R>,
+    id: CubePolicyId,
 }
 
 /// CubeCL execution policy.
@@ -23,28 +39,40 @@ pub(crate) fn empty_handle<R: Runtime>(client: &ComputeClient<R>) -> cubecl::ser
 /// This keeps the public shape close to Thrust execution policies while making
 /// CubeCL the backend from the first implemented algorithm.
 ///
-/// A policy owns the backend client used for allocations, transfers, and kernel
-/// launches. Client code usually creates one policy and uses it to move host
-/// slices into [`DeviceVec`] storage with [`CubePolicy::to_device`].
+/// A policy is a lightweight shared handle to the backend client and owner id
+/// used for allocations, transfers, and kernel launches. Client code usually
+/// creates one policy and uses it to move host slices into [`DeviceVec`] storage
+/// with [`CubePolicy::to_device`].
 pub struct CubePolicy<R: Runtime> {
-    pub(crate) client: ComputeClient<R>,
+    inner: Arc<CubePolicyInner<R>>,
 }
 
 impl<R: Runtime> CubePolicy<R> {
     /// Creates a policy from a CubeCL device.
     pub fn from_device(device: &R::Device) -> Self {
         Self {
-            client: R::client(device),
+            inner: Arc::new(CubePolicyInner {
+                client: R::client(device),
+                id: next_policy_id(),
+            }),
         }
     }
 
     /// Returns the underlying CubeCL client.
     pub fn client(&self) -> &ComputeClient<R> {
-        &self.client
+        &self.inner.client
+    }
+
+    pub(crate) fn id(&self) -> CubePolicyId {
+        self.inner.id
     }
 
     pub(crate) fn empty_handle(&self) -> cubecl::server::Handle {
-        empty_handle(&self.client)
+        empty_handle(&self.inner.client)
+    }
+
+    pub(crate) fn empty_device_vec<T>(&self) -> DeviceVec<R, T> {
+        DeviceVec::from_handle(self.id(), self.empty_handle(), 0)
     }
 
     /// Copies a host slice to device-resident storage.
@@ -72,7 +100,7 @@ impl<R: Runtime> CubePolicy<R> {
 impl<R: Runtime> Clone for CubePolicy<R> {
     fn clone(&self) -> Self {
         Self {
-            client: self.client.clone(),
+            inner: self.inner.clone(),
         }
     }
 }
@@ -80,7 +108,8 @@ impl<R: Runtime> Clone for CubePolicy<R> {
 impl<R: Runtime> fmt::Debug for CubePolicy<R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CubePolicy")
-            .field("runtime", &R::name(&self.client))
+            .field("runtime", &R::name(self.client()))
+            .field("id", &self.id())
             .finish_non_exhaustive()
     }
 }

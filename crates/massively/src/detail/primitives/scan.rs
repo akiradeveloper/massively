@@ -88,8 +88,8 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok(SoA2 {
-            left: DeviceVec::empty(policy.clone()),
-            right: DeviceVec::empty(policy.clone()),
+            left: policy.empty_device_vec(),
+            right: policy.empty_device_vec(),
         });
     }
 
@@ -133,8 +133,8 @@ where
     }
 
     Ok(SoA2 {
-        left: DeviceVec::from_handle(policy.clone(), output_a, len),
-        right: DeviceVec::from_handle(policy.clone(), output_b, len),
+        left: DeviceVec::from_handle(policy.id(), output_a, len),
+        right: DeviceVec::from_handle(policy.id(), output_b, len),
     })
 }
 
@@ -158,9 +158,9 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok(SoA3 {
-            first: DeviceVec::empty(policy.clone()),
-            second: DeviceVec::empty(policy.clone()),
-            third: DeviceVec::empty(policy.clone()),
+            first: policy.empty_device_vec(),
+            second: policy.empty_device_vec(),
+            third: policy.empty_device_vec(),
         });
     }
 
@@ -225,13 +225,14 @@ where
     }
 
     Ok(SoA3 {
-        first: DeviceVec::from_handle(policy.clone(), output_a, len),
-        second: DeviceVec::from_handle(policy.clone(), output_b, len),
-        third: DeviceVec::from_handle(policy.clone(), output_c, len),
+        first: DeviceVec::from_handle(policy.id(), output_a, len),
+        second: DeviceVec::from_handle(policy.id(), output_b, len),
+        third: DeviceVec::from_handle(policy.id(), output_c, len),
     })
 }
 
 pub(crate) fn inclusive_scan_by_key_device_vec<R, K, T, KeyEq, Op>(
+    policy: &CubePolicy<R>,
     keys: &DeviceVec<R, K>,
     values: &DeviceVec<R, T>,
     _key_eq: GpuOp<KeyEq>,
@@ -247,15 +248,16 @@ where
     super::ensure_same_len(values.len(), keys.len())?;
 
     let output_handle =
-        inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(values.policy(), keys, &values.handle)?;
+        inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(policy, keys, &values.handle)?;
     Ok(DeviceVec::from_handle(
-        values.policy().clone(),
+        policy.id(),
         output_handle,
         values.len(),
     ))
 }
 
 pub(crate) fn exclusive_scan_by_key_device_vec<R, K, T, KeyEq, Op>(
+    policy: &CubePolicy<R>,
     keys: &DeviceVec<R, K>,
     values: &DeviceVec<R, T>,
     init: T,
@@ -271,13 +273,13 @@ where
 {
     super::ensure_same_len(values.len(), keys.len())?;
 
-    let client = values.policy().client();
+    let client = policy.client();
     let inclusive_handle =
-        inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(values.policy(), keys, &values.handle)?;
+        inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(policy, keys, &values.handle)?;
     let output_handle =
         make_scan_by_key_exclusive::<R, K, T, KeyEq, Op>(client, keys, &inclusive_handle, init)?;
     Ok(DeviceVec::from_handle(
-        values.policy().clone(),
+        policy.id(),
         output_handle,
         values.len(),
     ))
@@ -305,7 +307,7 @@ where
             value_bindings,
             len,
         )?;
-    Ok(DeviceVec::from_handle(policy.clone(), output_handle, len))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
 pub(crate) fn exclusive_scan_by_key_device_expr<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
@@ -339,7 +341,7 @@ where
         &inclusive_handle,
         init,
     )?;
-    Ok(DeviceVec::from_handle(policy.clone(), output_handle, len))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
 pub(crate) fn inclusive_scan_tuple2_by_key_values_device_expr<
@@ -382,8 +384,8 @@ where
         Op,
     >(policy, key_bindings, a_bindings, b_bindings, len)?;
     Ok(SoA2 {
-        left: DeviceVec::from_handle(policy.clone(), left, len),
-        right: DeviceVec::from_handle(policy.clone(), right, len),
+        left: DeviceVec::from_handle(policy.id(), left, len),
+        right: DeviceVec::from_handle(policy.id(), right, len),
     })
 }
 
@@ -436,8 +438,8 @@ where
             init,
         )?;
     Ok(SoA2 {
-        left: DeviceVec::from_handle(policy.clone(), left, len),
-        right: DeviceVec::from_handle(policy.clone(), right, len),
+        left: DeviceVec::from_handle(policy.id(), left, len),
+        right: DeviceVec::from_handle(policy.id(), right, len),
     })
 }
 
@@ -495,9 +497,9 @@ where
         len,
     )?;
     Ok(SoA3 {
-        first: DeviceVec::from_handle(policy.clone(), first, len),
-        second: DeviceVec::from_handle(policy.clone(), second, len),
-        third: DeviceVec::from_handle(policy.clone(), third, len),
+        first: DeviceVec::from_handle(policy.id(), first, len),
+        second: DeviceVec::from_handle(policy.id(), second, len),
+        third: DeviceVec::from_handle(policy.id(), third, len),
     })
 }
 
@@ -564,9 +566,9 @@ where
             init,
         )?;
     Ok(SoA3 {
-        first: DeviceVec::from_handle(policy.clone(), first, len),
-        second: DeviceVec::from_handle(policy.clone(), second, len),
-        third: DeviceVec::from_handle(policy.clone(), third, len),
+        first: DeviceVec::from_handle(policy.id(), first, len),
+        second: DeviceVec::from_handle(policy.id(), second, len),
+        third: DeviceVec::from_handle(policy.id(), third, len),
     })
 }
 
@@ -584,6 +586,7 @@ macro_rules! define_scan_tuple_value_by_key_device_vec {
         ( $( $ty:ident: $value:ident: $out:ident: $tail:ident: $tail_vec:ident: $prefix:ident: $init:tt ),+ )
     ) => {
         pub(crate) fn $inclusive_fn<R, K, $( $ty ),+, KeyEq, Op>(
+            policy: &CubePolicy<R>,
             keys: &DeviceVec<R, K>,
             $( $value: &DeviceVec<R, $ty>, )+
             _key_eq: GpuOp<KeyEq>,
@@ -600,16 +603,17 @@ macro_rules! define_scan_tuple_value_by_key_device_vec {
                 super::ensure_same_len($value.len(), keys.len())?;
             )+
             let ($( $out, )+) = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
-                keys.policy(),
+                policy,
                 keys,
                 $( &$value.handle, )+
             )?;
             Ok($output {
-                $( $value: DeviceVec::from_handle($value.policy().clone(), $out, $value.len()), )+
+                $( $value: DeviceVec::from_handle(policy.id(), $out, $value.len()), )+
             })
         }
 
         pub(crate) fn $exclusive_fn<R, K, $( $ty ),+, KeyEq, Op>(
+            policy: &CubePolicy<R>,
             keys: &DeviceVec<R, K>,
             $( $value: &DeviceVec<R, $ty>, )+
             init: ($( $ty ),+),
@@ -627,18 +631,18 @@ macro_rules! define_scan_tuple_value_by_key_device_vec {
                 super::ensure_same_len($value.len(), keys.len())?;
             )+
             let inclusive = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
-                keys.policy(),
+                policy,
                 keys,
                 $( &$value.handle, )+
             )?;
             let ($( $out, )+) = $exclusive_handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
-                keys.policy(),
+                policy,
                 keys,
                 inclusive,
                 init,
             )?;
             Ok($output {
-                $( $value: DeviceVec::from_handle($value.policy().clone(), $out, $value.len()), )+
+                $( $value: DeviceVec::from_handle(policy.id(), $out, $value.len()), )+
             })
         }
 
@@ -699,10 +703,10 @@ macro_rules! define_scan_tuple_value_by_key_device_vec {
             }
 
             if num_blocks > 1 {
-                let tail_keys = DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+                let tail_keys = DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), num_blocks);
                 $(
                     let $tail_vec = DeviceVec::<R, $ty>::from_handle(
-                        policy.clone(),
+                        policy.id(),
                         $tail.clone(),
                         num_blocks,
                     );
@@ -828,6 +832,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
         ( $( $ty:ident: $key:ident: $tail_handle:ident: $tail_vec:ident ),+ )
     ) => {
         pub(crate) fn $inclusive_fn<R, $( $ty ),+, T, KeyEq, Op>(
+            policy: &CubePolicy<R>,
             $( $key: &DeviceVec<R, $ty>, )+
             values: &DeviceVec<R, T>,
             _key_eq: GpuOp<KeyEq>,
@@ -846,18 +851,18 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             )+
 
             let output_handle = $handle_fn::<R, $( $ty, )+ T, KeyEq, Op>(
-                values.policy(),
+                policy,
                 $( $key, )+
                 &values.handle,
             )?;
-            Ok(DeviceVec::from_handle(
-                values.policy().clone(),
+            Ok(DeviceVec::from_handle(policy.id(),
                 output_handle,
                 values.len(),
             ))
         }
 
         pub(crate) fn $exclusive_fn<R, $( $ty ),+, T, KeyEq, Op>(
+            policy: &CubePolicy<R>,
             $( $key: &DeviceVec<R, $ty>, )+
             values: &DeviceVec<R, T>,
             init: T,
@@ -876,9 +881,9 @@ macro_rules! define_scan_tuple_by_key_device_vec {
                 super::ensure_same_len($key.len(), len)?;
             )+
 
-            let client = values.policy().client();
+            let client = policy.client();
             let inclusive_handle = $handle_fn::<R, $( $ty, )+ T, KeyEq, Op>(
-                values.policy(),
+                policy,
                 $( $key, )+
                 &values.handle,
             )?;
@@ -888,8 +893,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
                 &inclusive_handle,
                 init,
             )?;
-            Ok(DeviceVec::from_handle(
-                values.policy().clone(),
+            Ok(DeviceVec::from_handle(policy.id(),
                 output_handle,
                 values.len(),
             ))
@@ -958,8 +962,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
 
             if num_blocks > 1 {
                 $(
-                    let $tail_vec = DeviceVec::from_handle(
-                        policy.clone(),
+                    let $tail_vec = DeviceVec::from_handle(policy.id(),
                         $tail_handle.clone(),
                         num_blocks,
                     );
@@ -1077,7 +1080,7 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok(SoA1 {
-            source: DeviceVec::empty(policy.clone()),
+            source: policy.empty_device_vec(),
         });
     }
 
@@ -1127,7 +1130,7 @@ where
     }
 
     Ok(SoA1 {
-        source: DeviceVec::from_handle(policy.clone(), output_a, len),
+        source: DeviceVec::from_handle(policy.id(), output_a, len),
     })
 }
 
@@ -1147,7 +1150,7 @@ where
     let (output_a,) =
         make_tuple1_exclusive::<R, A, Op>(policy, &inclusive.source.handle, len, init)?;
     Ok(SoA1 {
-        source: DeviceVec::from_handle(policy.clone(), output_a, len),
+        source: DeviceVec::from_handle(policy.id(), output_a, len),
     })
 }
 
@@ -1257,8 +1260,8 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok(SoA2 {
-            left: DeviceVec::empty(policy.clone()),
-            right: DeviceVec::empty(policy.clone()),
+            left: policy.empty_device_vec(),
+            right: policy.empty_device_vec(),
         });
     }
 
@@ -1328,8 +1331,8 @@ where
     }
 
     Ok(SoA2 {
-        left: DeviceVec::from_handle(policy.clone(), output_a, len),
-        right: DeviceVec::from_handle(policy.clone(), output_b, len),
+        left: DeviceVec::from_handle(policy.id(), output_a, len),
+        right: DeviceVec::from_handle(policy.id(), output_b, len),
     })
 }
 
@@ -1359,8 +1362,8 @@ where
         init,
     )?;
     Ok(SoA2 {
-        left: DeviceVec::from_handle(policy.clone(), output_a, len),
-        right: DeviceVec::from_handle(policy.clone(), output_b, len),
+        left: DeviceVec::from_handle(policy.id(), output_a, len),
+        right: DeviceVec::from_handle(policy.id(), output_b, len),
     })
 }
 
@@ -1493,9 +1496,9 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok(SoA3 {
-            first: DeviceVec::empty(policy.clone()),
-            second: DeviceVec::empty(policy.clone()),
-            third: DeviceVec::empty(policy.clone()),
+            first: policy.empty_device_vec(),
+            second: policy.empty_device_vec(),
+            third: policy.empty_device_vec(),
         });
     }
 
@@ -1592,9 +1595,9 @@ where
     }
 
     Ok(SoA3 {
-        first: DeviceVec::from_handle(policy.clone(), output_a, len),
-        second: DeviceVec::from_handle(policy.clone(), output_b, len),
-        third: DeviceVec::from_handle(policy.clone(), output_c, len),
+        first: DeviceVec::from_handle(policy.id(), output_a, len),
+        second: DeviceVec::from_handle(policy.id(), output_b, len),
+        third: DeviceVec::from_handle(policy.id(), output_c, len),
     })
 }
 
@@ -1628,9 +1631,9 @@ where
         init,
     )?;
     Ok(SoA3 {
-        first: DeviceVec::from_handle(policy.clone(), output_a, len),
-        second: DeviceVec::from_handle(policy.clone(), output_b, len),
-        third: DeviceVec::from_handle(policy.clone(), output_c, len),
+        first: DeviceVec::from_handle(policy.id(), output_a, len),
+        second: DeviceVec::from_handle(policy.id(), output_b, len),
+        third: DeviceVec::from_handle(policy.id(), output_c, len),
     })
 }
 
@@ -1830,7 +1833,7 @@ where
 
     if num_blocks > 1 {
         let block_tail_keys_vec =
-            DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), num_blocks);
         let block_prefixes = inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(
             policy,
             &block_tail_keys_vec,
@@ -1925,7 +1928,7 @@ where
 
     if num_blocks > 1 {
         let block_tail_keys_vec =
-            DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), num_blocks);
         let block_prefixes = inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(
             policy,
             &block_tail_keys_vec,
@@ -2154,11 +2157,11 @@ where
     }
 
     if num_blocks > 1 {
-        let tail_keys = DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+        let tail_keys = DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), num_blocks);
         let tail_a_vec: DeviceVec<R, A> =
-            DeviceVec::from_handle(policy.clone(), tail_a.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), tail_a.clone(), num_blocks);
         let tail_b_vec: DeviceVec<R, B> =
-            DeviceVec::from_handle(policy.clone(), tail_b.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), tail_b.clone(), num_blocks);
         let (prefix_a, prefix_b) =
             inclusive_scan_tuple2_by_key_values_handle::<R, K, A, B, KeyEq, Op>(
                 policy,
@@ -2392,13 +2395,13 @@ where
     }
 
     if num_blocks > 1 {
-        let tail_keys = DeviceVec::from_handle(policy.clone(), block_tail_keys.clone(), num_blocks);
+        let tail_keys = DeviceVec::from_handle(policy.id(), block_tail_keys.clone(), num_blocks);
         let tail_a_vec: DeviceVec<R, A> =
-            DeviceVec::from_handle(policy.clone(), tail_a.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), tail_a.clone(), num_blocks);
         let tail_b_vec: DeviceVec<R, B> =
-            DeviceVec::from_handle(policy.clone(), tail_b.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), tail_b.clone(), num_blocks);
         let tail_c_vec: DeviceVec<R, C> =
-            DeviceVec::from_handle(policy.clone(), tail_c.clone(), num_blocks);
+            DeviceVec::from_handle(policy.id(), tail_c.clone(), num_blocks);
         let (prefix_a, prefix_b, prefix_c) =
             inclusive_scan_tuple3_by_key_values_handle::<R, K, A, B, C, KeyEq, Op>(
                 policy,

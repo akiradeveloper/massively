@@ -8,11 +8,13 @@ use crate::{
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
     op::GpuOp,
+    policy::CubePolicy,
     primitives::range,
 };
 use cubecl::prelude::*;
 
 fn scatter_one<ValueSource, IndexSource>(
+    policy: &CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
     len: usize,
@@ -26,15 +28,16 @@ where
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
     IndexSource::Expr: GpuExpr<u32>,
 {
-    let initial = range::filled(values.policy(), len, default)?;
-    super::device_expr_scatter::<
+    let initial = range::filled(policy, len, default)?;
+    super::device_expr_scatter_with_policy::<
         ValueSource,
         IndexSource,
         DeviceVec<ValueSource::Runtime, ValueSource::Item>,
-    >(values, indices, &initial)
+    >(policy, values, indices, &initial)
 }
 
 fn scatter_if_one<ValueSource, IndexSource, Stencil, Pred>(
+    policy: &CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
     stencil: &Stencil,
@@ -54,17 +57,17 @@ where
     indices.validate()?;
     super::ensure_same_len(values.len(), indices.len())?;
     super::ensure_same_len(values.len(), stencil.len())?;
-    let values = super::device_expr_collect(values)?;
-    let indices = super::device_expr_collect(indices)?;
-    let flags = stencil.selection_handles(false)?;
-    let initial = range::filled(values.policy(), len, default)?;
+    let values = super::device_expr_collect_with_policy(policy, values)?;
+    let indices = super::device_expr_collect_with_policy(policy, indices)?;
+    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let initial = range::filled(policy, len, default)?;
     let block_count = values.len.div_ceil(256);
     let block_count_u32 =
         u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
     if values.len != 0 {
         unsafe {
             scatter_if_flags_kernel::launch_unchecked::<ValueSource::Item, ValueSource::Runtime>(
-                values.policy().client(),
+                policy.client(),
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(256),
                 unsafe { BufferArg::from_raw_parts(values.handle.clone(), values.len) },
@@ -80,6 +83,9 @@ where
 /// Input accepted by [`scatter`].
 #[doc(hidden)]
 pub trait ScatterInput<Indices> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
+
     /// Default value accepted by scatter.
     type Default;
     /// Output produced by scatter.
@@ -88,6 +94,7 @@ pub trait ScatterInput<Indices> {
     /// Scatters `self[i]` into default-initialized output at `indices[i]`.
     fn scatter_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: Indices,
         len: usize,
         default: Self::Default,
@@ -104,11 +111,13 @@ where
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
     IndexSource::Expr: GpuExpr<u32>,
 {
+    type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn scatter_input(
         self,
+        policy: &CubePolicy<ValueSource::Runtime>,
         indices: SoAView1<IndexSource>,
         len: usize,
         default: Self::Default,
@@ -117,6 +126,7 @@ where
         ReadOnlySoA::validate(&indices)?;
         Ok(SoA1 {
             source: scatter_one::<ValueSource, IndexSource>(
+                policy,
                 &self.source,
                 &indices.source,
                 len,
@@ -134,17 +144,19 @@ where
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
     IndexSource::Expr: GpuExpr<u32>,
 {
+    type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn scatter_input(
         self,
+        policy: &CubePolicy<ValueSource::Runtime>,
         indices: IndexSource,
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
         Ok(SoA1 {
-            source: scatter_one::<ValueSource, IndexSource>(&self, &indices, len, default)?,
+            source: scatter_one::<ValueSource, IndexSource>(policy, &self, &indices, len, default)?,
         })
     }
 }
@@ -153,17 +165,20 @@ impl<ValueSource, IndexSource> ScatterInput<(IndexSource,)> for (ValueSource,)
 where
     SoAView1<ValueSource>: ScatterInput<SoAView1<IndexSource>>,
 {
+    type Runtime = <SoAView1<ValueSource> as ScatterInput<SoAView1<IndexSource>>>::Runtime;
     type Default = <SoAView1<ValueSource> as ScatterInput<SoAView1<IndexSource>>>::Default;
     type Output = <SoAView1<ValueSource> as ScatterInput<SoAView1<IndexSource>>>::Output;
 
     fn scatter_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
         <SoAView1<ValueSource> as ScatterInput<SoAView1<IndexSource>>>::scatter_input(
             SoAView1 { source: self.0 },
+            policy,
             SoAView1 { source: indices.0 },
             len,
             default,
@@ -175,11 +190,13 @@ impl<Left, Right, IndexSource> ScatterInput<(IndexSource,)> for (Left, Right)
 where
     SoAView2<Left, Right>: ScatterInput<SoAView1<IndexSource>>,
 {
+    type Runtime = <SoAView2<Left, Right> as ScatterInput<SoAView1<IndexSource>>>::Runtime;
     type Default = <SoAView2<Left, Right> as ScatterInput<SoAView1<IndexSource>>>::Default;
     type Output = <SoAView2<Left, Right> as ScatterInput<SoAView1<IndexSource>>>::Output;
 
     fn scatter_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
         len: usize,
         default: Self::Default,
@@ -189,6 +206,7 @@ where
                 left: self.0,
                 right: self.1,
             },
+            policy,
             SoAView1 { source: indices.0 },
             len,
             default,
@@ -200,11 +218,13 @@ impl<First, Second, Third, IndexSource> ScatterInput<(IndexSource,)> for (First,
 where
     SoAView3<First, Second, Third>: ScatterInput<SoAView1<IndexSource>>,
 {
+    type Runtime = <SoAView3<First, Second, Third> as ScatterInput<SoAView1<IndexSource>>>::Runtime;
     type Default = <SoAView3<First, Second, Third> as ScatterInput<SoAView1<IndexSource>>>::Default;
     type Output = <SoAView3<First, Second, Third> as ScatterInput<SoAView1<IndexSource>>>::Output;
 
     fn scatter_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
         len: usize,
         default: Self::Default,
@@ -215,6 +235,7 @@ where
                 second: self.1,
                 third: self.2,
             },
+            policy,
             SoAView1 { source: indices.0 },
             len,
             default,
@@ -244,6 +265,8 @@ macro_rules! impl_scatter_input {
             )+
             IndexSource::Expr: GpuExpr<u32>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
             type Default = (
                 <$first as KernelColumn>::Item,
                 $( <$rest as KernelColumn>::Item ),+
@@ -255,6 +278,7 @@ macro_rules! impl_scatter_input {
 
             fn scatter_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 indices: SoAView1<IndexSource>,
                 len: usize,
                 default: Self::Default,
@@ -263,6 +287,7 @@ macro_rules! impl_scatter_input {
                 ReadOnlySoA::validate(&indices)?;
                 let ($first_field, $( $field ),+) = default;
                 let $first_field = scatter_one::<$first, IndexSource>(
+                    policy,
                     &self.$first_field,
                     &indices.source,
                     len,
@@ -270,6 +295,7 @@ macro_rules! impl_scatter_input {
                 )?;
                 $(
                     let $field = scatter_one::<$rest, IndexSource>(
+                        policy,
                         &self.$field,
                         &indices.source,
                         len,
@@ -295,17 +321,20 @@ macro_rules! impl_scatter_input_index_source {
             IndexSource: KernelColumn + KernelColumnAt<S0>,
             Self: ScatterInput<SoAView1<IndexSource>>,
         {
+            type Runtime = <Self as ScatterInput<SoAView1<IndexSource>>>::Runtime;
             type Default = <Self as ScatterInput<SoAView1<IndexSource>>>::Default;
             type Output = <Self as ScatterInput<SoAView1<IndexSource>>>::Output;
 
             fn scatter_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 indices: IndexSource,
                 len: usize,
                 default: Self::Default,
             ) -> Result<Self::Output, Error> {
                 <Self as ScatterInput<SoAView1<IndexSource>>>::scatter_input(
                     self,
+                    policy,
                     SoAView1 { source: indices },
                     len,
                     default,
@@ -323,6 +352,9 @@ impl_scatter_input_index_source!(SoA3<A, B, C>);
 /// Input accepted by [`scatter_if`].
 #[doc(hidden)]
 pub trait ScatterIfInput<Indices, Stencil, Pred> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
+
     /// Default value accepted by scatter-if.
     type Default;
     /// Output produced by scatter-if.
@@ -331,6 +363,7 @@ pub trait ScatterIfInput<Indices, Stencil, Pred> {
     /// Scatters selected values into default-initialized output at `indices[i]`.
     fn scatter_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: Indices,
         stencil: Stencil,
         len: usize,
@@ -351,11 +384,13 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
 {
+    type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn scatter_if_input(
         self,
+        policy: &CubePolicy<ValueSource::Runtime>,
         indices: SoAView1<IndexSource>,
         stencil: Stencil,
         len: usize,
@@ -366,6 +401,7 @@ where
         ReadOnlySoA::validate(&indices)?;
         Ok(SoA1 {
             source: scatter_if_one::<ValueSource, IndexSource, Stencil, Pred>(
+                policy,
                 &self.source,
                 &indices.source,
                 &stencil,
@@ -386,11 +422,13 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
 {
+    type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn scatter_if_input(
         self,
+        policy: &CubePolicy<ValueSource::Runtime>,
         indices: IndexSource,
         stencil: Stencil,
         len: usize,
@@ -400,7 +438,7 @@ where
         let _ = pred;
         Ok(SoA1 {
             source: scatter_if_one::<ValueSource, IndexSource, Stencil, Pred>(
-                &self, &indices, &stencil, len, default,
+                policy, &self, &indices, &stencil, len, default,
             )?,
         })
     }
@@ -411,6 +449,8 @@ impl<ValueSource, IndexSource, Stencil, Pred> ScatterIfInput<(IndexSource,), Ste
 where
     SoAView1<ValueSource>: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
+    type Runtime =
+        <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
     type Default =
         <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
     type Output =
@@ -418,6 +458,7 @@ where
 
     fn scatter_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
         stencil: Stencil,
         len: usize,
@@ -426,6 +467,7 @@ where
     ) -> Result<Self::Output, Error> {
         <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_if_input(
             SoAView1 { source: self.0 },
+            policy,
             SoAView1 { source: indices.0 },
             stencil,
             len,
@@ -440,6 +482,8 @@ impl<Left, Right, IndexSource, Stencil, Pred> ScatterIfInput<(IndexSource,), Ste
 where
     SoAView2<Left, Right>: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
+    type Runtime =
+        <SoAView2<Left, Right> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
     type Default =
         <SoAView2<Left, Right> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
     type Output =
@@ -447,6 +491,7 @@ where
 
     fn scatter_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
         stencil: Stencil,
         len: usize,
@@ -458,6 +503,7 @@ where
                 left: self.0,
                 right: self.1,
             },
+            policy,
             SoAView1 { source: indices.0 },
             stencil,
             len,
@@ -472,6 +518,11 @@ impl<First, Second, Third, IndexSource, Stencil, Pred> ScatterIfInput<(IndexSour
 where
     SoAView3<First, Second, Third>: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
+    type Runtime = <SoAView3<First, Second, Third> as ScatterIfInput<
+        SoAView1<IndexSource>,
+        Stencil,
+        Pred,
+    >>::Runtime;
     type Default = <SoAView3<First, Second, Third> as ScatterIfInput<
         SoAView1<IndexSource>,
         Stencil,
@@ -485,6 +536,7 @@ where
 
     fn scatter_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
         stencil: Stencil,
         len: usize,
@@ -501,6 +553,7 @@ where
                 second: self.1,
                 third: self.2,
             },
+            policy,
             SoAView1 { source: indices.0 },
             stencil,
             len,
@@ -533,6 +586,8 @@ macro_rules! impl_scatter_if_input {
             )+
             IndexSource::Expr: DeviceGpuExpr<u32>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
             type Default = (
                 <$first as KernelColumn>::Item,
                 $( <$rest as KernelColumn>::Item ),+
@@ -544,6 +599,7 @@ macro_rules! impl_scatter_if_input {
 
             fn scatter_if_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 indices: SoAView1<IndexSource>,
                 stencil: Stencil,
                 len: usize,
@@ -554,6 +610,7 @@ macro_rules! impl_scatter_if_input {
                 ReadOnlySoA::validate(&indices)?;
                 let ($first_field, $( $field ),+) = default;
                 let $first_field = scatter_if_one::<$first, IndexSource, Stencil, Pred>(
+                    policy,
                     &self.$first_field,
                     &indices.source,
                     &stencil,
@@ -562,6 +619,7 @@ macro_rules! impl_scatter_if_input {
                 )?;
                 $(
                     let $field = scatter_if_one::<$rest, IndexSource, Stencil, Pred>(
+                        policy,
                         &self.$field,
                         &indices.source,
                         &stencil,
@@ -588,11 +646,13 @@ macro_rules! impl_scatter_if_input_sources {
             IndexSource: KernelColumn + KernelColumnAt<S0>,
             Self: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
         {
+            type Runtime = <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
             type Default = <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
             type Output = <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
 
             fn scatter_if_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 indices: IndexSource,
                 stencil: Stencil,
                 len: usize,
@@ -601,6 +661,7 @@ macro_rules! impl_scatter_if_input_sources {
             ) -> Result<Self::Output, Error> {
                 <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_if_input(
                     self,
+                    policy,
                     SoAView1 { source: indices },
                     stencil,
                     len,
@@ -624,6 +685,7 @@ impl_scatter_if_input_sources!(SoA3<A, B, C>);
 /// columns as a tuple, such as `(values.slice(..), tags.slice(..))`, and use
 /// the same tuple shape for `default`.
 pub fn scatter<Values, Indices>(
+    policy: &CubePolicy<<Values as ScatterInput<Indices>>::Runtime>,
     values: Values,
     indices: Indices,
     len: usize,
@@ -631,9 +693,10 @@ pub fn scatter<Values, Indices>(
 ) -> Result<<<Values as ScatterInput<Indices>>::Output as MaterializeOutput>::Output, Error>
 where
     Values: ScatterInput<Indices>,
-    <Values as ScatterInput<Indices>>::Output: MaterializeOutput,
+    <Values as ScatterInput<Indices>>::Output:
+        MaterializeOutput<Runtime = <Values as ScatterInput<Indices>>::Runtime>,
 {
-    materialize(values.scatter_input(indices, len, default)?)
+    materialize(policy, values.scatter_input(policy, indices, len, default)?)
 }
 
 /// Scatters selected values into a new output at `indices[i]`.
@@ -641,6 +704,7 @@ where
 /// The output is allocated with `len` elements, initialized with `default`, and
 /// then updated for values satisfying `Pred`.
 pub fn scatter_if<Values, Indices, Stencil, Pred>(
+    policy: &CubePolicy<<Values as ScatterIfInput<Indices, Stencil, Pred>>::Runtime>,
     values: Values,
     indices: Indices,
     len: usize,
@@ -653,7 +717,11 @@ pub fn scatter_if<Values, Indices, Stencil, Pred>(
 >
 where
     Values: ScatterIfInput<Indices, Stencil, Pred>,
-    <Values as ScatterIfInput<Indices, Stencil, Pred>>::Output: MaterializeOutput,
+    <Values as ScatterIfInput<Indices, Stencil, Pred>>::Output:
+        MaterializeOutput<Runtime = <Values as ScatterIfInput<Indices, Stencil, Pred>>::Runtime>,
 {
-    materialize(values.scatter_if_input(indices, stencil, len, default, GpuOp::<Pred>::new())?)
+    materialize(
+        policy,
+        values.scatter_if_input(policy, indices, stencil, len, default, GpuOp::<Pred>::new())?,
+    )
 }

@@ -3,13 +3,15 @@ use crate::{
     error::Error,
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::select,
 };
 use cubecl::prelude::*;
 
-use super::{BLOCK_ORDERING_SIZE, merge};
+use super::BLOCK_ORDERING_SIZE;
 
-pub(crate) fn set_union<R, T, Less>(
+pub(crate) fn set_union_with_policy<R, T, Less>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
@@ -19,11 +21,12 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<T>,
 {
-    let right_only = set_difference(right, left, GpuOp::<Less>::new())?;
-    merge(left, &right_only, GpuOp::<Less>::new())
+    let right_only = set_difference_with_policy(policy, right, left, GpuOp::<Less>::new())?;
+    super::merge_with_policy(policy, left, &right_only, GpuOp::<Less>::new())
 }
 
-pub(crate) fn set_intersection<R, T, Less>(
+pub(crate) fn set_intersection_with_policy<R, T, Less>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
@@ -33,10 +36,11 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<T>,
 {
-    membership_compact::<R, T, Less>(left, right, true)
+    membership_compact::<R, T, Less>(policy, left, right, true)
 }
 
-pub(crate) fn set_difference<R, T, Less>(
+pub(crate) fn set_difference_with_policy<R, T, Less>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
@@ -46,10 +50,11 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<T>,
 {
-    membership_compact::<R, T, Less>(left, right, false)
+    membership_compact::<R, T, Less>(policy, left, right, false)
 }
 
 fn membership_compact<R, T, Less>(
+    policy: &CubePolicy<R>,
     candidates: &DeviceVec<R, T>,
     sorted: &DeviceVec<R, T>,
     keep_present: bool,
@@ -63,10 +68,10 @@ where
         len: candidates.len(),
     })?;
     if candidates.len() == 0 {
-        return Ok(DeviceVec::empty(candidates.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = candidates.policy().client();
+    let client = policy.client();
     let num_blocks = candidates.len().div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
@@ -86,11 +91,11 @@ where
     }
 
     let handles = select::handles_from_flags(
-        candidates.policy(),
+        policy,
         candidates.len(),
         len_u32,
         flag_handle,
         candidates.handle.clone(),
     )?;
-    select::compact(candidates.policy(), handles)
+    select::compact(policy, handles)
 }

@@ -7,9 +7,10 @@
 //!
 //! # Memory Boundaries
 //!
-//! Host/device transfers are explicit. Use [`Policy::to_device`] to copy a host
-//! slice to the device, and [`DeviceVec::to_vec`] to copy device storage back to
-//! the host.
+//! Host/device transfers are explicit. Use [`Executor::to_device`] to copy a host
+//! slice to the device, and [`Executor::to_host`] to copy device storage back to
+//! the host. Since v0.7, algorithms take `&Executor<B>` as their first argument;
+//! device storage does not own the execution context used for launches or reads.
 //!
 //! # Data Model
 //!
@@ -21,7 +22,7 @@
 //! Algorithm outputs are owned device storage: a [`DeviceVec`] for one output
 //! column, or a tuple of [`DeviceVec`] columns for multi-column output.
 //!
-//! # v0.6 By-Key Shape
+//! # v0.7 By-Key Shape
 //!
 //! By-key algorithms accept one key column and one or more value columns. If an
 //! application needs a compound key, build a single key column first and pass
@@ -32,11 +33,11 @@
 //! any non-zero value is true. Predicate markers remain the API for
 //! [`remove_if`], [`count_if`], [`find_if`], and partition-style queries.
 //!
-//! Tuple keys are intentionally not part of the v0.6 public by-key API:
+//! Tuple keys are intentionally not part of the v0.7 public by-key API:
 //!
 //! ```compile_fail
 //! use cubecl::prelude::*;
-//! use massively::{CubeWgpu, sort_by_key};
+//! use massively::{Executor, Wgpu, sort_by_key};
 //!
 //! struct TupleLess;
 //!
@@ -48,12 +49,13 @@
 //! }
 //!
 //! fn main() -> Result<(), massively::Error> {
-//!     let policy = CubeWgpu::cpu();
-//!     let key_a = policy.to_device(&[1_u32, 2, 3])?;
-//!     let key_b = policy.to_device(&[10_u32, 20, 30])?;
-//!     let values = policy.to_device(&[100_u32, 200, 300])?;
+//!     let exec = Executor::<Wgpu>::cpu();
+//!     let key_a = exec.to_device(&[1_u32, 2, 3])?;
+//!     let key_b = exec.to_device(&[10_u32, 20, 30])?;
+//!     let values = exec.to_device(&[100_u32, 200, 300])?;
 //!
-//!     let _ = sort_by_key::<CubeWgpu, _, _, _, _, _, _>(
+//!     let _ = sort_by_key::<Wgpu, _, _, _, _, _, _>(
+//!         &exec,
 //!         (key_a.slice(..), key_b.slice(..)),
 //!         (values.slice(..),),
 //!         TupleLess,
