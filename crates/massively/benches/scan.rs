@@ -5,7 +5,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use cubecl::prelude::*;
 use massively::op::{BinaryOp, BinaryPredicateOp};
 use massively::{
-    CubeWgpu, DeviceVec, Wgpu, exclusive_scan_by_key, inclusive_scan, inclusive_scan_by_key,
+    DeviceVec, Executor, Wgpu, exclusive_scan_by_key, inclusive_scan, inclusive_scan_by_key,
 };
 
 struct Sum;
@@ -30,38 +30,45 @@ fn keys(len: usize) -> Vec<u32> {
     (0..len).map(|index| (index / 8) as u32).collect()
 }
 
-fn check_scan(policy: &CubeWgpu) {
-    let values = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
-    let (output,) = inclusive_scan((values.slice(..),), Sum).unwrap();
-    assert_eq!(output.to_vec().unwrap(), vec![1.0, 3.0, 6.0, 10.0]);
+fn check_scan(exec: &Executor<Wgpu>) {
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
+    let (output,) = inclusive_scan(&exec, (values.slice(..),), Sum).unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1.0, 3.0, 6.0, 10.0]);
 }
 
-fn check_scan_by_key(policy: &CubeWgpu) {
-    let keys = policy.to_device(&[0_u32, 0, 1, 1]).unwrap();
-    let values = policy.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
+fn check_scan_by_key(exec: &Executor<Wgpu>) {
+    let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
+    let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
     let (output,) =
-        inclusive_scan_by_key((keys.slice(..),), (values.slice(..),), KeyEq, Sum).unwrap();
-    assert_eq!(output.to_vec().unwrap(), vec![1.0, 3.0, 10.0, 30.0]);
+        inclusive_scan_by_key(&exec, (keys.slice(..),), (values.slice(..),), KeyEq, Sum).unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1.0, 3.0, 10.0, 30.0]);
 
-    let (output,) =
-        exclusive_scan_by_key((keys.slice(..),), (values.slice(..),), KeyEq, (0.0,), Sum).unwrap();
-    assert_eq!(output.to_vec().unwrap(), vec![0.0, 1.0, 0.0, 10.0]);
+    let (output,) = exclusive_scan_by_key(
+        &exec,
+        (keys.slice(..),),
+        (values.slice(..),),
+        KeyEq,
+        (0.0,),
+        Sum,
+    )
+    .unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0.0, 1.0, 0.0, 10.0]);
 }
 
 fn bench_scan(c: &mut Criterion) {
     let mut scan_group = c.benchmark_group("inclusive_scan");
     for backend in Backend::available() {
-        let policy = backend.policy();
-        check_scan(&policy);
+        let exec = backend.exec();
+        check_scan(&exec);
 
         for &len in SIZES {
-            let values = policy.to_device(&dense_f32(len)).unwrap();
-            sync(&policy);
+            let values = exec.to_device(&dense_f32(len)).unwrap();
+            sync(&exec);
             scan_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) =
-                        inclusive_scan((black_box(values.slice(..)),), Sum).unwrap();
-                    sync(&policy);
+                        inclusive_scan(&exec, (black_box(values.slice(..)),), Sum).unwrap();
+                    sync(&exec);
                     black_box(output)
                 })
             });
@@ -71,23 +78,24 @@ fn bench_scan(c: &mut Criterion) {
 
     let mut by_key_group = c.benchmark_group("inclusive_scan_by_key");
     for backend in Backend::available() {
-        let policy = backend.policy();
-        check_scan_by_key(&policy);
+        let exec = backend.exec();
+        check_scan_by_key(&exec);
 
         for &len in SIZES {
-            let keys = policy.to_device(&keys(len)).unwrap();
-            let values = policy.to_device(&dense_f32(len)).unwrap();
-            sync(&policy);
+            let keys = exec.to_device(&keys(len)).unwrap();
+            let values = exec.to_device(&dense_f32(len)).unwrap();
+            sync(&exec);
             by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = inclusive_scan_by_key(
+                        &exec,
                         (black_box(keys.slice(..)),),
                         (black_box(values.slice(..)),),
                         KeyEq,
                         Sum,
                     )
                     .unwrap();
-                    sync(&policy);
+                    sync(&exec);
                     black_box(output)
                 })
             });
@@ -97,16 +105,17 @@ fn bench_scan(c: &mut Criterion) {
 
     let mut exclusive_by_key_group = c.benchmark_group("exclusive_scan_by_key");
     for backend in Backend::available() {
-        let policy = backend.policy();
-        check_scan_by_key(&policy);
+        let exec = backend.exec();
+        check_scan_by_key(&exec);
 
         for &len in SIZES {
-            let keys = policy.to_device(&keys(len)).unwrap();
-            let values = policy.to_device(&dense_f32(len)).unwrap();
-            sync(&policy);
+            let keys = exec.to_device(&keys(len)).unwrap();
+            let values = exec.to_device(&dense_f32(len)).unwrap();
+            sync(&exec);
             exclusive_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = exclusive_scan_by_key(
+                        &exec,
                         (black_box(keys.slice(..)),),
                         (black_box(values.slice(..)),),
                         KeyEq,
@@ -114,7 +123,7 @@ fn bench_scan(c: &mut Criterion) {
                         Sum,
                     )
                     .unwrap();
-                    sync(&policy);
+                    sync(&exec);
                     black_box(output)
                 })
             });

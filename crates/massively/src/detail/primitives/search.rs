@@ -16,6 +16,7 @@ fn search_block_count(len: usize) -> Result<u32, Error> {
 }
 
 pub(crate) fn equal<R, T, Eq>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _eq: GpuOp<Eq>,
@@ -28,10 +29,11 @@ where
     if left.len() != right.len() {
         return Ok(false);
     }
-    Ok(mismatch(left, right, GpuOp::<Eq>::new())?.is_none())
+    Ok(mismatch(policy, left, right, GpuOp::<Eq>::new())?.is_none())
 }
 
 pub(crate) fn adjacent_find<R, T, Pred>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _pred: GpuOp<Pred>,
 ) -> Result<Option<usize>, Error>
@@ -45,7 +47,7 @@ where
     }
 
     let block_count_u32 = search_block_count(input.len())?;
-    let client = input.policy().client();
+    let client = policy.client();
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
     unsafe {
@@ -58,10 +60,11 @@ where
         );
     }
 
-    first_flag(input.policy(), flag_handle, input.len(), input.len() - 1)
+    first_flag(policy, flag_handle, input.len(), input.len() - 1)
 }
 
 pub(crate) fn mismatch<R, T, Eq>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _eq: GpuOp<Eq>,
@@ -82,7 +85,7 @@ where
 
     u32::try_from(min_len).map_err(|_| Error::LengthTooLarge { len: min_len })?;
     let block_count_u32 = search_block_count(min_len)?;
-    let client = left.policy().client();
+    let client = policy.client();
     let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
 
     unsafe {
@@ -96,7 +99,7 @@ where
         );
     }
 
-    if let Some(index) = first_flag(left.policy(), flag_handle, min_len, min_len)? {
+    if let Some(index) = first_flag(policy, flag_handle, min_len, min_len)? {
         return Ok(Some(index));
     }
 
@@ -108,6 +111,7 @@ where
 }
 
 pub(crate) fn is_sorted_until<R, T, Less>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
 ) -> Result<usize, Error>
@@ -122,7 +126,7 @@ where
 
     u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     let block_count_u32 = search_block_count(input.len())?;
-    let client = input.policy().client();
+    let client = policy.client();
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
     unsafe {
@@ -135,10 +139,11 @@ where
         );
     }
 
-    Ok(first_flag(input.policy(), flag_handle, input.len(), input.len())?.unwrap_or(input.len()))
+    Ok(first_flag(policy, flag_handle, input.len(), input.len())?.unwrap_or(input.len()))
 }
 
 pub(crate) fn find_first_of<R, T, Eq>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     needles: &DeviceVec<R, T>,
     _eq: GpuOp<Eq>,
@@ -154,7 +159,7 @@ where
 
     u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     let block_count_u32 = search_block_count(input.len())?;
-    let client = input.policy().client();
+    let client = policy.client();
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
     unsafe {
@@ -168,10 +173,11 @@ where
         );
     }
 
-    first_flag(input.policy(), flag_handle, input.len(), input.len())
+    first_flag(policy, flag_handle, input.len(), input.len())
 }
 
 pub(crate) fn lexicographical_compare<R, T, Less>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
@@ -188,7 +194,7 @@ where
 
     u32::try_from(min_len).map_err(|_| Error::LengthTooLarge { len: min_len })?;
     let block_count_u32 = search_block_count(min_len)?;
-    let client = left.policy().client();
+    let client = policy.client();
     let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
 
     unsafe {
@@ -202,7 +208,7 @@ where
         );
     }
 
-    let Some(index) = first_flag(left.policy(), flag_handle, min_len, min_len)? else {
+    let Some(index) = first_flag(policy, flag_handle, min_len, min_len)? else {
         return Ok(left.len() < right.len());
     };
 
@@ -224,6 +230,7 @@ where
 }
 
 pub(crate) fn partition_point<R, T, Pred>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _pred: GpuOp<Pred>,
 ) -> Result<usize, Error>
@@ -238,7 +245,7 @@ where
 
     u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     let block_count_u32 = search_block_count(input.len())?;
-    let client = input.policy().client();
+    let client = policy.client();
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
     unsafe {
@@ -251,10 +258,11 @@ where
         );
     }
 
-    Ok(first_flag(input.policy(), flag_handle, input.len(), input.len())?.unwrap_or(input.len()))
+    Ok(first_flag(policy, flag_handle, input.len(), input.len())?.unwrap_or(input.len()))
 }
 
 pub(crate) fn is_partitioned<R, T, Pred>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _pred: GpuOp<Pred>,
 ) -> Result<bool, Error>
@@ -267,14 +275,14 @@ where
         return Ok(true);
     }
 
-    let point = partition_point(input, GpuOp::<Pred>::new())?;
+    let point = partition_point(policy, input, GpuOp::<Pred>::new())?;
     if point == input.len() {
         return Ok(true);
     }
 
     u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     let block_count_u32 = search_block_count(input.len())?;
-    let client = input.policy().client();
+    let client = policy.client();
     let point_handle = client.create_from_slice(u32::as_bytes(&[point as u32]));
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
@@ -289,10 +297,11 @@ where
         );
     }
 
-    Ok(first_flag(input.policy(), flag_handle, input.len(), input.len())?.is_none())
+    Ok(first_flag(policy, flag_handle, input.len(), input.len())?.is_none())
 }
 
 pub(crate) fn lower_bound<R, T, Less>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     value: T,
     _less: GpuOp<Less>,
@@ -302,10 +311,11 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<T>,
 {
-    sorted_bound_flags::<R, T, Less>(input, value, BoundKind::Lower)
+    sorted_bound_flags::<R, T, Less>(policy, input, value, BoundKind::Lower)
 }
 
 pub(crate) fn upper_bound<R, T, Less>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     value: T,
     _less: GpuOp<Less>,
@@ -315,10 +325,11 @@ where
     T: CubePrimitive + CubeElement,
     Less: BinaryPredicateOp<T>,
 {
-    sorted_bound_flags::<R, T, Less>(input, value, BoundKind::Upper)
+    sorted_bound_flags::<R, T, Less>(policy, input, value, BoundKind::Upper)
 }
 
 pub(crate) fn minmax_element<R, T, Less>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
 ) -> Result<Option<(usize, usize)>, Error>
@@ -331,7 +342,7 @@ where
         return Ok(None);
     }
 
-    let client = input.policy().client();
+    let client = policy.client();
     let mut current_count = input.len().div_ceil(BLOCK_SELECT_SIZE as usize);
     let mut current_count_u32 =
         u32::try_from(current_count).map_err(|_| Error::LengthTooLarge { len: current_count })?;
@@ -390,6 +401,7 @@ enum BoundKind {
 }
 
 fn sorted_bound_flags<R, T, Less>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     value: T,
     kind: BoundKind,
@@ -405,7 +417,7 @@ where
 
     u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
     let block_count_u32 = search_block_count(input.len())?;
-    let client = input.policy().client();
+    let client = policy.client();
     let value_handle = client.create_from_slice(T::as_bytes(&[value]));
     let flag_handle = client.empty(input.len() * std::mem::size_of::<u32>());
 
@@ -430,7 +442,7 @@ where
         }
     };
 
-    Ok(first_flag(input.policy(), flag_handle, input.len(), input.len())?.unwrap_or(input.len()))
+    Ok(first_flag(policy, flag_handle, input.len(), input.len())?.unwrap_or(input.len()))
 }
 
 pub(crate) fn first_flag<R>(

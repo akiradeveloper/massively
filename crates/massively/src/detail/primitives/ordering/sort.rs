@@ -4,13 +4,15 @@ use crate::{
     expr::DeviceGpuExpr,
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::{ensure_same_len, workspace::Workspace},
 };
 use cubecl::prelude::*;
 
 use super::BLOCK_ORDERING_SIZE;
 
-pub(crate) fn sort_input<Source, Less>(
+pub(crate) fn sort_input_with_policy<Source, Less>(
+    policy: &CubePolicy<Source::Runtime>,
     input: &Source,
     _less: GpuOp<Less>,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
@@ -25,14 +27,14 @@ where
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let client = input.policy().client();
+    let client = policy.client();
     if len == 0 {
-        return Ok(DeviceVec::empty(input.policy().clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let workspace = Workspace::new(input.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_a, scratch_b) = workspace.alloc_pair::<Source::Item>(len);
-    let bindings = input.stage()?;
+    let bindings = input.stage(policy)?;
     let slot_offsets = bindings.slot_offsets_handle(client)?;
     let (slot2, slot2_len) = bindings.slots.get(2).unwrap_or(&bindings.slots[0]);
     let (slot3, slot3_len) = bindings.slots.get(3).unwrap_or(&bindings.slots[0]);
@@ -88,14 +90,11 @@ where
         width *= 2;
     }
 
-    Ok(DeviceVec::from_handle(
-        input.policy().clone(),
-        input_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), input_handle, len))
 }
 
-pub(crate) fn sort_by_key_input<KeySource, ValueSource, Less>(
+pub(crate) fn sort_by_key_input_with_policy<KeySource, ValueSource, Less>(
+    policy: &CubePolicy<KeySource::Runtime>,
     keys: &KeySource,
     values: &ValueSource,
     _less: GpuOp<Less>,
@@ -121,21 +120,18 @@ where
 
     let len = keys.len();
     if len == 0 {
-        return Ok((
-            DeviceVec::empty(keys.policy().clone()),
-            DeviceVec::empty(keys.policy().clone()),
-        ));
+        return Ok((policy.empty_device_vec(), policy.empty_device_vec()));
     }
 
-    let client = keys.policy().client();
+    let client = policy.client();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(keys.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_keys_a, scratch_keys_b) = workspace.alloc_pair::<KeySource::Item>(len);
     let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<ValueSource::Item>(len);
-    let key_bindings = keys.stage()?;
-    let value_bindings = values.stage()?;
+    let key_bindings = keys.stage(policy)?;
+    let value_bindings = values.stage(policy)?;
     let key_offsets = key_bindings.slot_offsets_handle(client)?;
     let value_offsets = value_bindings.slot_offsets_handle(client)?;
     let (key_slot2, key_slot2_len) = key_bindings.slots.get(2).unwrap_or(&key_bindings.slots[0]);
@@ -227,12 +223,13 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(keys.policy().clone(), input_key_handle, len),
-        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+        DeviceVec::from_handle(policy.id(), input_key_handle, len),
+        DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple2<R, A, B, Less>(
+    policy: &CubePolicy<R>,
     first: &DeviceVec<R, A>,
     second: &DeviceVec<R, B>,
     _less: GpuOp<Less>,
@@ -246,18 +243,18 @@ where
     ensure_same_len(second.len(), first.len())?;
 
     let len = first.len();
-    let client = first.policy().client();
+    let client = policy.client();
     if len <= 1 {
         return Ok((
-            DeviceVec::from_handle(first.policy().clone(), first.handle.clone(), len),
-            DeviceVec::from_handle(second.policy().clone(), second.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), first.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), second.handle.clone(), len),
         ));
     }
 
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(first.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<A>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<B>(len);
     let mut input_first_handle = first.handle.clone();
@@ -297,12 +294,13 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(first.policy().clone(), input_first_handle, len),
-        DeviceVec::from_handle(second.policy().clone(), input_second_handle, len),
+        DeviceVec::from_handle(policy.id(), input_first_handle, len),
+        DeviceVec::from_handle(policy.id(), input_second_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple2_input<Left, Right, Less>(
+    policy: &CubePolicy<Left::Runtime>,
     first: &Left,
     second: &Right,
     _less: GpuOp<Less>,
@@ -330,21 +328,18 @@ where
 
     let len = first.len();
     if len == 0 {
-        return Ok((
-            DeviceVec::empty(first.policy().clone()),
-            DeviceVec::empty(first.policy().clone()),
-        ));
+        return Ok((policy.empty_device_vec(), policy.empty_device_vec()));
     }
 
-    let client = first.policy().client();
+    let client = policy.client();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(first.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<Left::Item>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<Right::Item>(len);
-    let first_bindings = first.stage()?;
-    let second_bindings = second.stage()?;
+    let first_bindings = first.stage(policy)?;
+    let second_bindings = second.stage(policy)?;
     let first_offsets = first_bindings.slot_offsets_handle(client)?;
     let second_offsets = second_bindings.slot_offsets_handle(client)?;
     let (first_slot2, first_slot2_len) = first_bindings
@@ -444,12 +439,13 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(first.policy().clone(), input_first_handle, len),
-        DeviceVec::from_handle(first.policy().clone(), input_second_handle, len),
+        DeviceVec::from_handle(policy.id(), input_first_handle, len),
+        DeviceVec::from_handle(policy.id(), input_second_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple3<R, A, B, C, Less>(
+    policy: &CubePolicy<R>,
     first: &DeviceVec<R, A>,
     second: &DeviceVec<R, B>,
     third: &DeviceVec<R, C>,
@@ -466,19 +462,19 @@ where
     ensure_same_len(third.len(), first.len())?;
 
     let len = first.len();
-    let client = first.policy().client();
+    let client = policy.client();
     if len <= 1 {
         return Ok((
-            DeviceVec::from_handle(first.policy().clone(), first.handle.clone(), len),
-            DeviceVec::from_handle(second.policy().clone(), second.handle.clone(), len),
-            DeviceVec::from_handle(third.policy().clone(), third.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), first.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), second.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), third.handle.clone(), len),
         ));
     }
 
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(first.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<A>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<B>(len);
     let (scratch_third_a, scratch_third_b) = workspace.alloc_pair::<C>(len);
@@ -526,13 +522,14 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(first.policy().clone(), input_first_handle, len),
-        DeviceVec::from_handle(second.policy().clone(), input_second_handle, len),
-        DeviceVec::from_handle(third.policy().clone(), input_third_handle, len),
+        DeviceVec::from_handle(policy.id(), input_first_handle, len),
+        DeviceVec::from_handle(policy.id(), input_second_handle, len),
+        DeviceVec::from_handle(policy.id(), input_third_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple3_input<First, Second, Third, Less>(
+    policy: &CubePolicy<First::Runtime>,
     first: &First,
     second: &Second,
     third: &Third,
@@ -566,23 +563,23 @@ where
     let len = first.len();
     if len == 0 {
         return Ok((
-            DeviceVec::empty(first.policy().clone()),
-            DeviceVec::empty(first.policy().clone()),
-            DeviceVec::empty(first.policy().clone()),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
         ));
     }
 
-    let client = first.policy().client();
+    let client = policy.client();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(first.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<First::Item>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<Second::Item>(len);
     let (scratch_third_a, scratch_third_b) = workspace.alloc_pair::<Third::Item>(len);
-    let first_bindings = first.stage()?;
-    let second_bindings = second.stage()?;
-    let third_bindings = third.stage()?;
+    let first_bindings = first.stage(policy)?;
+    let second_bindings = second.stage(policy)?;
+    let third_bindings = third.stage(policy)?;
     let first_offsets = first_bindings.slot_offsets_handle(client)?;
     let second_offsets = second_bindings.slot_offsets_handle(client)?;
     let third_offsets = third_bindings.slot_offsets_handle(client)?;
@@ -711,13 +708,14 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(first.policy().clone(), input_first_handle, len),
-        DeviceVec::from_handle(first.policy().clone(), input_second_handle, len),
-        DeviceVec::from_handle(first.policy().clone(), input_third_handle, len),
+        DeviceVec::from_handle(policy.id(), input_first_handle, len),
+        DeviceVec::from_handle(policy.id(), input_second_handle, len),
+        DeviceVec::from_handle(policy.id(), input_third_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple2_by_key<R, A, B, T, Less>(
+    policy: &CubePolicy<R>,
     key_a: &DeviceVec<R, A>,
     key_b: &DeviceVec<R, B>,
     values: &DeviceVec<R, T>,
@@ -734,19 +732,19 @@ where
     ensure_same_len(values.len(), key_a.len())?;
 
     let len = key_a.len();
-    let client = key_a.policy().client();
+    let client = policy.client();
     if len <= 1 {
         return Ok((
-            DeviceVec::from_handle(key_a.policy().clone(), key_a.handle.clone(), len),
-            DeviceVec::from_handle(key_b.policy().clone(), key_b.handle.clone(), len),
-            DeviceVec::from_handle(values.policy().clone(), values.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), key_a.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), key_b.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), values.handle.clone(), len),
         ));
     }
 
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(key_a.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_a_a, scratch_a_b) = workspace.alloc_pair::<A>(len);
     let (scratch_b_a, scratch_b_b) = workspace.alloc_pair::<B>(len);
     let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<T>(len);
@@ -794,13 +792,14 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(key_a.policy().clone(), input_a_handle, len),
-        DeviceVec::from_handle(key_b.policy().clone(), input_b_handle, len),
-        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+        DeviceVec::from_handle(policy.id(), input_a_handle, len),
+        DeviceVec::from_handle(policy.id(), input_b_handle, len),
+        DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple2_by_key_input<KeyA, KeyB, ValueSource, Less>(
+    policy: &CubePolicy<KeyA::Runtime>,
     key_a: &KeyA,
     key_b: &KeyB,
     values: &ValueSource,
@@ -834,23 +833,23 @@ where
     let len = key_a.len();
     if len == 0 {
         return Ok((
-            DeviceVec::empty(key_a.policy().clone()),
-            DeviceVec::empty(key_a.policy().clone()),
-            DeviceVec::empty(key_a.policy().clone()),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
         ));
     }
 
-    let client = key_a.policy().client();
+    let client = policy.client();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(key_a.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_a_a, scratch_a_b) = workspace.alloc_pair::<KeyA::Item>(len);
     let (scratch_b_a, scratch_b_b) = workspace.alloc_pair::<KeyB::Item>(len);
     let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<ValueSource::Item>(len);
-    let a_bindings = key_a.stage()?;
-    let b_bindings = key_b.stage()?;
-    let value_bindings = values.stage()?;
+    let a_bindings = key_a.stage(policy)?;
+    let b_bindings = key_b.stage(policy)?;
+    let value_bindings = values.stage(policy)?;
     let a_offsets = a_bindings.slot_offsets_handle(client)?;
     let b_offsets = b_bindings.slot_offsets_handle(client)?;
     let value_offsets = value_bindings.slot_offsets_handle(client)?;
@@ -959,13 +958,14 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(key_a.policy().clone(), input_a_handle, len),
-        DeviceVec::from_handle(key_b.policy().clone(), input_b_handle, len),
-        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+        DeviceVec::from_handle(policy.id(), input_a_handle, len),
+        DeviceVec::from_handle(policy.id(), input_b_handle, len),
+        DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }
 
 pub(crate) fn sort_tuple3_by_key<R, A, B, C, T, Less>(
+    policy: &CubePolicy<R>,
     key_a: &DeviceVec<R, A>,
     key_b: &DeviceVec<R, B>,
     key_c: &DeviceVec<R, C>,
@@ -993,20 +993,20 @@ where
     ensure_same_len(values.len(), key_a.len())?;
 
     let len = key_a.len();
-    let client = key_a.policy().client();
+    let client = policy.client();
     if len <= 1 {
         return Ok((
-            DeviceVec::from_handle(key_a.policy().clone(), key_a.handle.clone(), len),
-            DeviceVec::from_handle(key_b.policy().clone(), key_b.handle.clone(), len),
-            DeviceVec::from_handle(key_c.policy().clone(), key_c.handle.clone(), len),
-            DeviceVec::from_handle(values.policy().clone(), values.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), key_a.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), key_b.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), key_c.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), values.handle.clone(), len),
         ));
     }
 
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(key_a.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_a_a, scratch_a_b) = workspace.alloc_pair::<A>(len);
     let (scratch_b_a, scratch_b_b) = workspace.alloc_pair::<B>(len);
     let (scratch_c_a, scratch_c_b) = workspace.alloc_pair::<C>(len);
@@ -1062,9 +1062,9 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(key_a.policy().clone(), input_a_handle, len),
-        DeviceVec::from_handle(key_b.policy().clone(), input_b_handle, len),
-        DeviceVec::from_handle(key_c.policy().clone(), input_c_handle, len),
-        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+        DeviceVec::from_handle(policy.id(), input_a_handle, len),
+        DeviceVec::from_handle(policy.id(), input_b_handle, len),
+        DeviceVec::from_handle(policy.id(), input_c_handle, len),
+        DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }

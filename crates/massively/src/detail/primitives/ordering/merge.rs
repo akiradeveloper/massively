@@ -3,6 +3,7 @@ use crate::{
     error::Error,
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::ensure_same_len,
 };
 use cubecl::prelude::*;
@@ -18,7 +19,8 @@ pub(crate) struct MergeByKeyControl {
     len: usize,
 }
 
-pub(crate) fn merge<R, T, Less>(
+pub(crate) fn merge_with_policy<R, T, Less>(
+    policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
     right: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
@@ -31,14 +33,14 @@ where
     let len = left.len() + right.len();
     if left.is_empty() {
         return Ok(DeviceVec::from_handle(
-            right.policy().clone(),
+            policy.id(),
             right.handle.clone(),
             right.len(),
         ));
     }
     if right.is_empty() {
         return Ok(DeviceVec::from_handle(
-            left.policy().clone(),
+            policy.id(),
             left.handle.clone(),
             left.len(),
         ));
@@ -47,7 +49,7 @@ where
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let client = left.policy().client();
+    let client = policy.client();
     let output_handle = client.empty(len * std::mem::size_of::<T>());
 
     if len != 0 {
@@ -63,14 +65,11 @@ where
         }
     }
 
-    Ok(DeviceVec::from_handle(
-        left.policy().clone(),
-        output_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(crate) fn merge_by_key<R, K, T, Less>(
+pub(crate) fn merge_by_key_with_policy<R, K, T, Less>(
+    policy: &CubePolicy<R>,
     left_keys: &DeviceVec<R, K>,
     left_values: &DeviceVec<R, T>,
     right_keys: &DeviceVec<R, K>,
@@ -86,12 +85,15 @@ where
     ensure_same_len(left_values.len(), left_keys.len())?;
     ensure_same_len(right_values.len(), right_keys.len())?;
 
-    let (keys, control) = merge_by_key_control::<R, K, Less>(left_keys, right_keys)?;
-    let values = merge_by_key_values_with_control(left_values, right_values, &control)?;
+    let (keys, control) =
+        merge_by_key_control_with_policy::<R, K, Less>(policy, left_keys, right_keys)?;
+    let values =
+        merge_by_key_values_with_control_with_policy(policy, left_values, right_values, &control)?;
     Ok((keys, values))
 }
 
-pub(crate) fn merge_by_key_control<R, K, Less>(
+pub(crate) fn merge_by_key_control_with_policy<R, K, Less>(
+    policy: &CubePolicy<R>,
     left_keys: &DeviceVec<R, K>,
     right_keys: &DeviceVec<R, K>,
 ) -> Result<(DeviceVec<R, K>, MergeByKeyControl), Error>
@@ -104,7 +106,7 @@ where
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let client = left_keys.policy().client();
+    let client = policy.client();
     let out_key_handle = client.empty(len * std::mem::size_of::<K>());
     let source_sides = client.empty(len * std::mem::size_of::<u32>());
     let source_indices = client.empty(len * std::mem::size_of::<u32>());
@@ -125,7 +127,7 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(left_keys.policy().clone(), out_key_handle, len),
+        DeviceVec::from_handle(policy.id(), out_key_handle, len),
         MergeByKeyControl {
             source_sides,
             source_indices,
@@ -136,7 +138,8 @@ where
     ))
 }
 
-pub(crate) fn merge_by_key_values_with_control<R, T>(
+pub(crate) fn merge_by_key_values_with_control_with_policy<R, T>(
+    policy: &CubePolicy<R>,
     left_values: &DeviceVec<R, T>,
     right_values: &DeviceVec<R, T>,
     control: &MergeByKeyControl,
@@ -152,7 +155,7 @@ where
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let client = left_values.policy().client();
+    let client = policy.client();
     let out_value_handle = client.empty(len * std::mem::size_of::<T>());
 
     if len != 0 {
@@ -172,9 +175,5 @@ where
         }
     }
 
-    Ok(DeviceVec::from_handle(
-        left_values.policy().clone(),
-        out_value_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), out_value_handle, len))
 }

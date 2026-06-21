@@ -2,33 +2,34 @@ mod common;
 
 use common::{Backend, SIZES, dense_f32, reverse_indices, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use massively::{CubeWgpu, DeviceVec, Wgpu, gather};
+use massively::{DeviceVec, Executor, Wgpu, gather};
 
-fn check_gather(policy: &CubeWgpu) {
-    let values = policy.to_device(&[10.0_f32, 20.0, 30.0, 40.0]).unwrap();
-    let indices = policy.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let (output,) = gather((values.slice(..),), (indices.slice(..),)).unwrap();
-    assert_eq!(output.to_vec().unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
+fn check_gather(exec: &Executor<Wgpu>) {
+    let values = exec.to_device(&[10.0_f32, 20.0, 30.0, 40.0]).unwrap();
+    let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
+    let (output,) = gather(&exec, (values.slice(..),), (indices.slice(..),)).unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
 }
 
 fn bench_gather(c: &mut Criterion) {
     let mut group = c.benchmark_group("gather");
     for backend in Backend::available() {
-        let policy = backend.policy();
-        check_gather(&policy);
+        let exec = backend.exec();
+        check_gather(&exec);
 
         for &len in SIZES {
-            let values = policy.to_device(&dense_f32(len)).unwrap();
-            let indices = policy.to_device(&reverse_indices(len)).unwrap();
-            sync(&policy);
+            let values = exec.to_device(&dense_f32(len)).unwrap();
+            let indices = exec.to_device(&reverse_indices(len)).unwrap();
+            sync(&exec);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = gather(
+                        &exec,
                         (black_box(values.slice(..)),),
                         (black_box(indices.slice(..)),),
                     )
                     .unwrap();
-                    sync(&policy);
+                    sync(&exec);
                     black_box(output)
                 })
             });

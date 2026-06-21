@@ -2,170 +2,184 @@ use crate::common::*;
 
 #[test]
 fn transform_zip_output_returns_storage() {
-    let policy = policy();
-    let values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let tags = policy.to_device(&[10_u32, 20, 30]).unwrap();
+    let exec = exec();
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let output = transform((values.slice(..), tags.slice(..)), PairMixedSplit).unwrap();
+    let output = transform(&exec, (values.slice(..), tags.slice(..)), PairMixedSplit).unwrap();
     let (values, tags) = output;
 
-    assert_eq!(values.to_vec().unwrap(), vec![11.0, 12.0, 13.0]);
-    assert_eq!(tags.to_vec().unwrap(), vec![11, 21, 31]);
+    assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![11, 21, 31]);
 }
 
 #[test]
 fn transform_returns_device_storage() {
-    let policy = policy();
-    let left = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let right = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let split = transform((left.slice(..), right.slice(..)), PairMixedSplit).unwrap();
+    let exec = exec();
+    let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let split = transform(&exec, (left.slice(..), right.slice(..)), PairMixedSplit).unwrap();
     let (values, tags) = split;
 
-    assert_eq!(values.to_vec().unwrap(), vec![11.0, 12.0, 13.0]);
-    assert_eq!(tags.to_vec().unwrap(), vec![11, 21, 31]);
+    assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![11, 21, 31]);
 }
 
 #[test]
 fn transform_tuple_output_maps_to_storage_output() {
-    let policy = policy();
-    let values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let tags = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let bias = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let exec = exec();
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
     let split = transform(
+        &exec,
         (values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
     )
     .unwrap();
     let (values, flags, bias) = split;
-    assert_eq!(values.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
-    assert_eq!(flags.to_vec().unwrap(), vec![11, 21, 31]);
-    assert_eq!(bias.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&values).unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&flags).unwrap(), vec![11, 21, 31]);
+    assert_eq!(exec.to_host(&bias).unwrap(), vec![101.0, 202.0, 303.0]);
 }
 
 #[test]
 fn tuple1_transform_returns_soa1_storage() {
-    let policy = policy();
-    let input = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let exec = exec();
+    let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let (output,) = transform((input.slice(..),), Double).unwrap();
+    let (output,) = transform(&exec, (input.slice(..),), Double).unwrap();
 
-    assert_eq!(output.to_vec().unwrap(), vec![2.0, 4.0, 6.0]);
+    assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
 #[cfg(any())]
 #[test]
 fn unary_transform_accepts_wide_tuple_outputs() {
-    let policy = policy();
-    let input = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let exec = exec();
+    let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let output = transform((input.slice(..),), ScalarToTuple5Mixed).unwrap();
+    let output = transform(&exec, (input.slice(..),), ScalarToTuple5Mixed).unwrap();
     let (a, b, c, d, e) = output;
 
-    assert_eq!(a.to_vec().unwrap(), vec![2.0, 3.0, 4.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![3, 4, 5]);
-    assert_eq!(c.to_vec().unwrap(), vec![4.0, 5.0, 6.0]);
-    assert_eq!(d.to_vec().unwrap(), vec![5, 6, 7]);
-    assert_eq!(e.to_vec().unwrap(), vec![6.0, 7.0, 8.0]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![2.0, 3.0, 4.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![3, 4, 5]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![4.0, 5.0, 6.0]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![5, 6, 7]);
+    assert_eq!(exec.to_host(&e).unwrap(), vec![6.0, 7.0, 8.0]);
 }
 
 #[cfg(any())]
 #[test]
 fn unary_transform_accepts_tuple12_output_and_checks_every_column() {
-    let policy = policy();
-    let input = policy.to_device(&[10_u32, 20]).unwrap();
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20]).unwrap();
 
-    let output = transform((input.slice(..),), ScalarToTuple12Mixed).unwrap();
+    let output = transform(&exec, (input.slice(..),), ScalarToTuple12Mixed).unwrap();
     let (a, b, c, d, e, f, g, h, i, j, k, l) = output;
 
-    assert_eq!(a.to_vec().unwrap(), vec![11.0, 21.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![12, 22]);
-    assert_eq!(c.to_vec().unwrap(), vec![13.0, 23.0]);
-    assert_eq!(d.to_vec().unwrap(), vec![14, 24]);
-    assert_eq!(e.to_vec().unwrap(), vec![15.0, 25.0]);
-    assert_eq!(f.to_vec().unwrap(), vec![16, 26]);
-    assert_eq!(g.to_vec().unwrap(), vec![17.0, 27.0]);
-    assert_eq!(h.to_vec().unwrap(), vec![18, 28]);
-    assert_eq!(i.to_vec().unwrap(), vec![19.0, 29.0]);
-    assert_eq!(j.to_vec().unwrap(), vec![20, 30]);
-    assert_eq!(k.to_vec().unwrap(), vec![21.0, 31.0]);
-    assert_eq!(l.to_vec().unwrap(), vec![22, 32]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![11.0, 21.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![12, 22]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![13.0, 23.0]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![14, 24]);
+    assert_eq!(exec.to_host(&e).unwrap(), vec![15.0, 25.0]);
+    assert_eq!(exec.to_host(&f).unwrap(), vec![16, 26]);
+    assert_eq!(exec.to_host(&g).unwrap(), vec![17.0, 27.0]);
+    assert_eq!(exec.to_host(&h).unwrap(), vec![18, 28]);
+    assert_eq!(exec.to_host(&i).unwrap(), vec![19.0, 29.0]);
+    assert_eq!(exec.to_host(&j).unwrap(), vec![20, 30]);
+    assert_eq!(exec.to_host(&k).unwrap(), vec![21.0, 31.0]);
+    assert_eq!(exec.to_host(&l).unwrap(), vec![22, 32]);
 }
 
 #[test]
 fn tuple_transform_uses_flat_soa_input() {
-    let policy = policy();
-    let lhs = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let rhs = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let bias = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let exec = exec();
+    let lhs = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let rhs = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
     let output = transform(
+        &exec,
         (lhs.slice(..), rhs.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
     )
     .unwrap();
     let (values, tags, adjusted_bias) = output;
 
-    assert_eq!(values.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
-    assert_eq!(tags.to_vec().unwrap(), vec![11, 21, 31]);
-    assert_eq!(adjusted_bias.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&values).unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![11, 21, 31]);
+    assert_eq!(
+        exec.to_host(&adjusted_bias).unwrap(),
+        vec![101.0, 202.0, 303.0]
+    );
 }
 
 #[test]
 fn transform_accepts_heterogeneous_tuple_inputs() {
-    let policy = policy();
-    let values = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let tags = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let bias = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
-    let pair_output = transform((values.slice(..), tags.slice(..)), PairMixedSplit).unwrap();
+    let exec = exec();
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let pair_output = transform(&exec, (values.slice(..), tags.slice(..)), PairMixedSplit).unwrap();
     let (pair_values, pair_tags) = pair_output;
-    assert_eq!(pair_values.to_vec().unwrap(), vec![11.0, 12.0, 13.0]);
-    assert_eq!(pair_tags.to_vec().unwrap(), vec![11, 21, 31]);
+    assert_eq!(exec.to_host(&pair_values).unwrap(), vec![11.0, 12.0, 13.0]);
+    assert_eq!(exec.to_host(&pair_tags).unwrap(), vec![11, 21, 31]);
 
     let tuple3_output = transform(
+        &exec,
         (values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
     )
     .unwrap();
     let (tuple_values, tuple_tags, tuple_bias) = tuple3_output;
-    assert_eq!(tuple_values.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
-    assert_eq!(tuple_tags.to_vec().unwrap(), vec![11, 21, 31]);
-    assert_eq!(tuple_bias.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(
+        exec.to_host(&tuple_values).unwrap(),
+        vec![101.0, 202.0, 303.0]
+    );
+    assert_eq!(exec.to_host(&tuple_tags).unwrap(), vec![11, 21, 31]);
+    assert_eq!(
+        exec.to_host(&tuple_bias).unwrap(),
+        vec![101.0, 202.0, 303.0]
+    );
 }
 
 #[cfg(any())]
 #[test]
 fn transform_accepts_soa4_heterogeneous_inputs_and_checks_every_column() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
-    let c = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
-    let d = policy.to_device(&[1000_u32, 2000, 3000]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000, 3000]).unwrap();
 
     let output = transform(
+        &exec,
         zip4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
         Tuple4MixedSplit,
     )
     .unwrap();
     let (a, b, c, d) = output;
 
-    assert_eq!(a.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![12, 22, 32]);
-    assert_eq!(c.to_vec().unwrap(), vec![101.0, 202.0, 303.0]);
-    assert_eq!(d.to_vec().unwrap(), vec![1004, 2004, 3004]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![12, 22, 32]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![1004, 2004, 3004]);
 }
 
 #[cfg(any())]
 #[test]
 fn transform_accepts_mismatched_input_and_output_tuple_widths() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20]).unwrap();
-    let c = policy.to_device(&[100.0_f32, 200.0]).unwrap();
-    let d = policy.to_device(&[1000_u32, 2000]).unwrap();
-    let e = policy.to_device(&[10000.0_f32, 20000.0]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000]).unwrap();
+    let e = exec.to_device(&[10000.0_f32, 20000.0]).unwrap();
 
     let out_5_to_3 = transform(
+        &exec,
         zip5(
             a.slice(..),
             b.slice(..),
@@ -177,57 +191,59 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
     )
     .unwrap();
     let (x, y, z) = out_5_to_3;
-    assert_eq!(x.to_vec().unwrap(), vec![10101.0, 20202.0]);
-    assert_eq!(y.to_vec().unwrap(), vec![1010, 2020]);
-    assert_eq!(z.to_vec().unwrap(), vec![9999.0, 19998.0]);
+    assert_eq!(exec.to_host(&x).unwrap(), vec![10101.0, 20202.0]);
+    assert_eq!(exec.to_host(&y).unwrap(), vec![1010, 2020]);
+    assert_eq!(exec.to_host(&z).unwrap(), vec![9999.0, 19998.0]);
 
     let out_3_to_5 = transform(
+        &exec,
         zip3(a.slice(..), b.slice(..), c.slice(..)),
         Tuple3To5MixedSplit,
     )
     .unwrap();
     let (x, y, z, w, v) = out_3_to_5;
-    assert_eq!(x.to_vec().unwrap(), vec![101.0, 202.0]);
-    assert_eq!(y.to_vec().unwrap(), vec![20, 30]);
-    assert_eq!(z.to_vec().unwrap(), vec![99.0, 198.0]);
-    assert_eq!(w.to_vec().unwrap(), vec![30, 40]);
-    assert_eq!(v.to_vec().unwrap(), vec![100.0, 400.0]);
+    assert_eq!(exec.to_host(&x).unwrap(), vec![101.0, 202.0]);
+    assert_eq!(exec.to_host(&y).unwrap(), vec![20, 30]);
+    assert_eq!(exec.to_host(&z).unwrap(), vec![99.0, 198.0]);
+    assert_eq!(exec.to_host(&w).unwrap(), vec![30, 40]);
+    assert_eq!(exec.to_host(&v).unwrap(), vec![100.0, 400.0]);
 }
 
 #[cfg(any())]
 #[test]
 fn transform_accepts_extreme_mismatched_tuple_widths() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20]).unwrap();
 
-    let expanded = transform(zip(a.slice(..), b.slice(..)), Tuple2To12MixedExpand).unwrap();
+    let expanded = transform(&exec, zip(a.slice(..), b.slice(..)), Tuple2To12MixedExpand).unwrap();
     let (a1, b1, a2, b2, a3, b3, a4, b4, a5, b5, a6, b6) = expanded;
-    assert_eq!(a1.to_vec().unwrap(), vec![2.0, 3.0]);
-    assert_eq!(b1.to_vec().unwrap(), vec![12, 22]);
-    assert_eq!(a2.to_vec().unwrap(), vec![4.0, 5.0]);
-    assert_eq!(b2.to_vec().unwrap(), vec![14, 24]);
-    assert_eq!(a3.to_vec().unwrap(), vec![6.0, 7.0]);
-    assert_eq!(b3.to_vec().unwrap(), vec![16, 26]);
-    assert_eq!(a4.to_vec().unwrap(), vec![8.0, 9.0]);
-    assert_eq!(b4.to_vec().unwrap(), vec![18, 28]);
-    assert_eq!(a5.to_vec().unwrap(), vec![10.0, 11.0]);
-    assert_eq!(b5.to_vec().unwrap(), vec![20, 30]);
-    assert_eq!(a6.to_vec().unwrap(), vec![12.0, 13.0]);
-    assert_eq!(b6.to_vec().unwrap(), vec![22, 32]);
+    assert_eq!(exec.to_host(&a1).unwrap(), vec![2.0, 3.0]);
+    assert_eq!(exec.to_host(&b1).unwrap(), vec![12, 22]);
+    assert_eq!(exec.to_host(&a2).unwrap(), vec![4.0, 5.0]);
+    assert_eq!(exec.to_host(&b2).unwrap(), vec![14, 24]);
+    assert_eq!(exec.to_host(&a3).unwrap(), vec![6.0, 7.0]);
+    assert_eq!(exec.to_host(&b3).unwrap(), vec![16, 26]);
+    assert_eq!(exec.to_host(&a4).unwrap(), vec![8.0, 9.0]);
+    assert_eq!(exec.to_host(&b4).unwrap(), vec![18, 28]);
+    assert_eq!(exec.to_host(&a5).unwrap(), vec![10.0, 11.0]);
+    assert_eq!(exec.to_host(&b5).unwrap(), vec![20, 30]);
+    assert_eq!(exec.to_host(&a6).unwrap(), vec![12.0, 13.0]);
+    assert_eq!(exec.to_host(&b6).unwrap(), vec![22, 32]);
 
-    let c = policy.to_device(&[100.0_f32, 200.0]).unwrap();
-    let d = policy.to_device(&[1000_u32, 2000]).unwrap();
-    let e = policy.to_device(&[10000.0_f32, 20000.0]).unwrap();
-    let f = policy.to_device(&[100000_u32, 200000]).unwrap();
-    let g = policy.to_device(&[1000000.0_f32, 2000000.0]).unwrap();
-    let h = policy.to_device(&[7_u32, 8]).unwrap();
-    let i = policy.to_device(&[70.0_f32, 80.0]).unwrap();
-    let j = policy.to_device(&[700_u32, 800]).unwrap();
-    let k = policy.to_device(&[7000.0_f32, 8000.0]).unwrap();
-    let l = policy.to_device(&[70000_u32, 80000]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000]).unwrap();
+    let e = exec.to_device(&[10000.0_f32, 20000.0]).unwrap();
+    let f = exec.to_device(&[100000_u32, 200000]).unwrap();
+    let g = exec.to_device(&[1000000.0_f32, 2000000.0]).unwrap();
+    let h = exec.to_device(&[7_u32, 8]).unwrap();
+    let i = exec.to_device(&[70.0_f32, 80.0]).unwrap();
+    let j = exec.to_device(&[700_u32, 800]).unwrap();
+    let k = exec.to_device(&[7000.0_f32, 8000.0]).unwrap();
+    let l = exec.to_device(&[70000_u32, 80000]).unwrap();
 
     let projected = transform(
+        &exec,
         zip12(
             a.slice(..),
             b.slice(..),
@@ -246,27 +262,28 @@ fn transform_accepts_extreme_mismatched_tuple_widths() {
     )
     .unwrap();
     let (x, y) = projected;
-    assert_eq!(x.to_vec().unwrap(), vec![7101.0, 8202.0]);
-    assert_eq!(y.to_vec().unwrap(), vec![170010, 280020]);
+    assert_eq!(exec.to_host(&x).unwrap(), vec![7101.0, 8202.0]);
+    assert_eq!(exec.to_host(&y).unwrap(), vec![170010, 280020]);
 }
 
 #[cfg(any())]
 #[test]
 fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32]).unwrap();
-    let b = policy.to_device(&[10_u32]).unwrap();
-    let c = policy.to_device(&[100.0_f32]).unwrap();
-    let d = policy.to_device(&[1000_u32]).unwrap();
-    let e = policy.to_device(&[10000.0_f32]).unwrap();
-    let f = policy.to_device(&[100000_u32]).unwrap();
-    let g = policy.to_device(&[1000000.0_f32]).unwrap();
-    let h = policy.to_device(&[7_u32]).unwrap();
-    let i = policy.to_device(&[70.0_f32]).unwrap();
-    let j = policy.to_device(&[700_u32]).unwrap();
-    let k = policy.to_device(&[7000.0_f32]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32]).unwrap();
+    let b = exec.to_device(&[10_u32]).unwrap();
+    let c = exec.to_device(&[100.0_f32]).unwrap();
+    let d = exec.to_device(&[1000_u32]).unwrap();
+    let e = exec.to_device(&[10000.0_f32]).unwrap();
+    let f = exec.to_device(&[100000_u32]).unwrap();
+    let g = exec.to_device(&[1000000.0_f32]).unwrap();
+    let h = exec.to_device(&[7_u32]).unwrap();
+    let i = exec.to_device(&[70.0_f32]).unwrap();
+    let j = exec.to_device(&[700_u32]).unwrap();
+    let k = exec.to_device(&[7000.0_f32]).unwrap();
 
     let (a5, b5, c5, d5, e5) = transform(
+        &exec,
         zip5(
             a.slice(..),
             b.slice(..),
@@ -277,13 +294,14 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a5.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b5.to_vec().unwrap(), vec![12]);
-    assert_eq!(c5.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d5.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e5.to_vec().unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&a5).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b5).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c5).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d5).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e5).unwrap(), vec![10005.0]);
 
     let (a6, b6, c6, d6, e6, f6) = transform(
+        &exec,
         zip6(
             a.slice(..),
             b.slice(..),
@@ -295,14 +313,15 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a6.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b6.to_vec().unwrap(), vec![12]);
-    assert_eq!(c6.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d6.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e6.to_vec().unwrap(), vec![10005.0]);
-    assert_eq!(f6.to_vec().unwrap(), vec![100006]);
+    assert_eq!(exec.to_host(&a6).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b6).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c6).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d6).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e6).unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&f6).unwrap(), vec![100006]);
 
     let (a7, b7, c7, d7, e7, f7, g7) = transform(
+        &exec,
         zip7(
             a.slice(..),
             b.slice(..),
@@ -315,15 +334,16 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a7.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b7.to_vec().unwrap(), vec![12]);
-    assert_eq!(c7.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d7.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e7.to_vec().unwrap(), vec![10005.0]);
-    assert_eq!(f7.to_vec().unwrap(), vec![100006]);
-    assert_eq!(g7.to_vec().unwrap(), vec![1000007.0]);
+    assert_eq!(exec.to_host(&a7).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b7).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c7).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d7).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e7).unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&f7).unwrap(), vec![100006]);
+    assert_eq!(exec.to_host(&g7).unwrap(), vec![1000007.0]);
 
     let (a8, b8, c8, d8, e8, f8, g8, h8) = transform(
+        &exec,
         zip8(
             a.slice(..),
             b.slice(..),
@@ -337,16 +357,17 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a8.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b8.to_vec().unwrap(), vec![12]);
-    assert_eq!(c8.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d8.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e8.to_vec().unwrap(), vec![10005.0]);
-    assert_eq!(f8.to_vec().unwrap(), vec![100006]);
-    assert_eq!(g8.to_vec().unwrap(), vec![1000007.0]);
-    assert_eq!(h8.to_vec().unwrap(), vec![15]);
+    assert_eq!(exec.to_host(&a8).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b8).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c8).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d8).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e8).unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&f8).unwrap(), vec![100006]);
+    assert_eq!(exec.to_host(&g8).unwrap(), vec![1000007.0]);
+    assert_eq!(exec.to_host(&h8).unwrap(), vec![15]);
 
     let (a9, b9, c9, d9, e9, f9, g9, h9, i9) = transform(
+        &exec,
         zip9(
             a.slice(..),
             b.slice(..),
@@ -361,17 +382,18 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a9.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b9.to_vec().unwrap(), vec![12]);
-    assert_eq!(c9.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d9.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e9.to_vec().unwrap(), vec![10005.0]);
-    assert_eq!(f9.to_vec().unwrap(), vec![100006]);
-    assert_eq!(g9.to_vec().unwrap(), vec![1000007.0]);
-    assert_eq!(h9.to_vec().unwrap(), vec![15]);
-    assert_eq!(i9.to_vec().unwrap(), vec![79.0]);
+    assert_eq!(exec.to_host(&a9).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b9).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c9).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d9).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e9).unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&f9).unwrap(), vec![100006]);
+    assert_eq!(exec.to_host(&g9).unwrap(), vec![1000007.0]);
+    assert_eq!(exec.to_host(&h9).unwrap(), vec![15]);
+    assert_eq!(exec.to_host(&i9).unwrap(), vec![79.0]);
 
     let (a10, b10, c10, d10, e10, f10, g10, h10, i10, j10) = transform(
+        &exec,
         zip10(
             a.slice(..),
             b.slice(..),
@@ -387,18 +409,19 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a10.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b10.to_vec().unwrap(), vec![12]);
-    assert_eq!(c10.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d10.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e10.to_vec().unwrap(), vec![10005.0]);
-    assert_eq!(f10.to_vec().unwrap(), vec![100006]);
-    assert_eq!(g10.to_vec().unwrap(), vec![1000007.0]);
-    assert_eq!(h10.to_vec().unwrap(), vec![15]);
-    assert_eq!(i10.to_vec().unwrap(), vec![79.0]);
-    assert_eq!(j10.to_vec().unwrap(), vec![710]);
+    assert_eq!(exec.to_host(&a10).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b10).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c10).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d10).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e10).unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&f10).unwrap(), vec![100006]);
+    assert_eq!(exec.to_host(&g10).unwrap(), vec![1000007.0]);
+    assert_eq!(exec.to_host(&h10).unwrap(), vec![15]);
+    assert_eq!(exec.to_host(&i10).unwrap(), vec![79.0]);
+    assert_eq!(exec.to_host(&j10).unwrap(), vec![710]);
 
     let (a11, b11, c11, d11, e11, f11, g11, h11, i11, j11, k11) = transform(
+        &exec,
         zip11(
             a.slice(..),
             b.slice(..),
@@ -415,37 +438,38 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
         TupleWideMixedSplit,
     )
     .unwrap();
-    assert_eq!(a11.to_vec().unwrap(), vec![2.0]);
-    assert_eq!(b11.to_vec().unwrap(), vec![12]);
-    assert_eq!(c11.to_vec().unwrap(), vec![103.0]);
-    assert_eq!(d11.to_vec().unwrap(), vec![1004]);
-    assert_eq!(e11.to_vec().unwrap(), vec![10005.0]);
-    assert_eq!(f11.to_vec().unwrap(), vec![100006]);
-    assert_eq!(g11.to_vec().unwrap(), vec![1000007.0]);
-    assert_eq!(h11.to_vec().unwrap(), vec![15]);
-    assert_eq!(i11.to_vec().unwrap(), vec![79.0]);
-    assert_eq!(j11.to_vec().unwrap(), vec![710]);
-    assert_eq!(k11.to_vec().unwrap(), vec![7011.0]);
+    assert_eq!(exec.to_host(&a11).unwrap(), vec![2.0]);
+    assert_eq!(exec.to_host(&b11).unwrap(), vec![12]);
+    assert_eq!(exec.to_host(&c11).unwrap(), vec![103.0]);
+    assert_eq!(exec.to_host(&d11).unwrap(), vec![1004]);
+    assert_eq!(exec.to_host(&e11).unwrap(), vec![10005.0]);
+    assert_eq!(exec.to_host(&f11).unwrap(), vec![100006]);
+    assert_eq!(exec.to_host(&g11).unwrap(), vec![1000007.0]);
+    assert_eq!(exec.to_host(&h11).unwrap(), vec![15]);
+    assert_eq!(exec.to_host(&i11).unwrap(), vec![79.0]);
+    assert_eq!(exec.to_host(&j11).unwrap(), vec![710]);
+    assert_eq!(exec.to_host(&k11).unwrap(), vec![7011.0]);
 }
 
 #[cfg(any())]
 #[test]
 fn transform_accepts_soa12_heterogeneous_inputs_and_checks_every_column() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20]).unwrap();
-    let c = policy.to_device(&[100.0_f32, 200.0]).unwrap();
-    let d = policy.to_device(&[1000_u32, 2000]).unwrap();
-    let e = policy.to_device(&[10000.0_f32, 20000.0]).unwrap();
-    let f = policy.to_device(&[100000_u32, 200000]).unwrap();
-    let g = policy.to_device(&[1000000.0_f32, 2000000.0]).unwrap();
-    let h = policy.to_device(&[7_u32, 8]).unwrap();
-    let i = policy.to_device(&[70.0_f32, 80.0]).unwrap();
-    let j = policy.to_device(&[700_u32, 800]).unwrap();
-    let k = policy.to_device(&[7000.0_f32, 8000.0]).unwrap();
-    let l = policy.to_device(&[70000_u32, 80000]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000]).unwrap();
+    let e = exec.to_device(&[10000.0_f32, 20000.0]).unwrap();
+    let f = exec.to_device(&[100000_u32, 200000]).unwrap();
+    let g = exec.to_device(&[1000000.0_f32, 2000000.0]).unwrap();
+    let h = exec.to_device(&[7_u32, 8]).unwrap();
+    let i = exec.to_device(&[70.0_f32, 80.0]).unwrap();
+    let j = exec.to_device(&[700_u32, 800]).unwrap();
+    let k = exec.to_device(&[7000.0_f32, 8000.0]).unwrap();
+    let l = exec.to_device(&[70000_u32, 80000]).unwrap();
 
     let output = transform(
+        &exec,
         zip12(
             a.slice(..),
             b.slice(..),
@@ -465,38 +489,39 @@ fn transform_accepts_soa12_heterogeneous_inputs_and_checks_every_column() {
     .unwrap();
     let (a, b, c, d, e, f, g, h, i, j, k, l) = output;
 
-    assert_eq!(a.to_vec().unwrap(), vec![2.0, 3.0]);
-    assert_eq!(b.to_vec().unwrap(), vec![12, 22]);
-    assert_eq!(c.to_vec().unwrap(), vec![103.0, 203.0]);
-    assert_eq!(d.to_vec().unwrap(), vec![1004, 2004]);
-    assert_eq!(e.to_vec().unwrap(), vec![10005.0, 20005.0]);
-    assert_eq!(f.to_vec().unwrap(), vec![100006, 200006]);
-    assert_eq!(g.to_vec().unwrap(), vec![1000007.0, 2000007.0]);
-    assert_eq!(h.to_vec().unwrap(), vec![15, 16]);
-    assert_eq!(i.to_vec().unwrap(), vec![79.0, 89.0]);
-    assert_eq!(j.to_vec().unwrap(), vec![710, 810]);
-    assert_eq!(k.to_vec().unwrap(), vec![7011.0, 8011.0]);
-    assert_eq!(l.to_vec().unwrap(), vec![70012, 80012]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![2.0, 3.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![12, 22]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![103.0, 203.0]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![1004, 2004]);
+    assert_eq!(exec.to_host(&e).unwrap(), vec![10005.0, 20005.0]);
+    assert_eq!(exec.to_host(&f).unwrap(), vec![100006, 200006]);
+    assert_eq!(exec.to_host(&g).unwrap(), vec![1000007.0, 2000007.0]);
+    assert_eq!(exec.to_host(&h).unwrap(), vec![15, 16]);
+    assert_eq!(exec.to_host(&i).unwrap(), vec![79.0, 89.0]);
+    assert_eq!(exec.to_host(&j).unwrap(), vec![710, 810]);
+    assert_eq!(exec.to_host(&k).unwrap(), vec![7011.0, 8011.0]);
+    assert_eq!(exec.to_host(&l).unwrap(), vec![70012, 80012]);
 }
 
 #[cfg(any())]
 #[test]
 fn transform_accepts_soa12_heterogeneous_inputs_to_tuple1_output() {
-    let policy = policy();
-    let a = policy.to_device(&[1.0_f32, 2.0]).unwrap();
-    let b = policy.to_device(&[10_u32, 20]).unwrap();
-    let c = policy.to_device(&[100.0_f32, 200.0]).unwrap();
-    let d = policy.to_device(&[1000_u32, 2000]).unwrap();
-    let e = policy.to_device(&[3.0_f32, 4.0]).unwrap();
-    let f = policy.to_device(&[30_u32, 40]).unwrap();
-    let g = policy.to_device(&[300.0_f32, 400.0]).unwrap();
-    let h = policy.to_device(&[3000_u32, 4000]).unwrap();
-    let i = policy.to_device(&[5.0_f32, 6.0]).unwrap();
-    let j = policy.to_device(&[50_u32, 60]).unwrap();
-    let k = policy.to_device(&[500.0_f32, 600.0]).unwrap();
-    let l = policy.to_device(&[5000_u32, 6000]).unwrap();
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000]).unwrap();
+    let e = exec.to_device(&[3.0_f32, 4.0]).unwrap();
+    let f = exec.to_device(&[30_u32, 40]).unwrap();
+    let g = exec.to_device(&[300.0_f32, 400.0]).unwrap();
+    let h = exec.to_device(&[3000_u32, 4000]).unwrap();
+    let i = exec.to_device(&[5.0_f32, 6.0]).unwrap();
+    let j = exec.to_device(&[50_u32, 60]).unwrap();
+    let k = exec.to_device(&[500.0_f32, 600.0]).unwrap();
+    let l = exec.to_device(&[5000_u32, 6000]).unwrap();
 
     let (output,) = transform(
+        &exec,
         zip12(
             a.slice(..),
             b.slice(..),
@@ -515,18 +540,18 @@ fn transform_accepts_soa12_heterogeneous_inputs_to_tuple1_output() {
     )
     .unwrap();
 
-    assert_eq!(output.to_vec().unwrap(), vec![9999.0, 13332.0]);
+    assert_eq!(exec.to_host(&output).unwrap(), vec![9999.0, 13332.0]);
 }
 
 #[test]
 fn transform_zip_flattens_soa1_columns() {
-    let policy = policy();
-    let left = policy.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let right = policy.to_device(&[10_u32, 20, 30]).unwrap();
+    let exec = exec();
+    let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let split = transform((left.slice(..), right.slice(..)), PairMixedSplit).unwrap();
+    let split = transform(&exec, (left.slice(..), right.slice(..)), PairMixedSplit).unwrap();
     let (values, tags) = split;
 
-    assert_eq!(values.to_vec().unwrap(), vec![11.0, 12.0, 13.0]);
-    assert_eq!(tags.to_vec().unwrap(), vec![11, 21, 31]);
+    assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![11, 21, 31]);
 }

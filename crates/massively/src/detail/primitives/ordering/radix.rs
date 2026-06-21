@@ -2,6 +2,7 @@ use crate::{
     device::DeviceVec,
     error::Error,
     kernels::*,
+    policy::CubePolicy,
     primitives::{ensure_same_len, scan::inclusive_scan_u32, workspace::Workspace},
 };
 use cubecl::prelude::*;
@@ -9,24 +10,27 @@ use cubecl::prelude::*;
 use super::{BLOCK_ORDERING_SIZE, RADIX_DIGITS};
 
 #[allow(dead_code)]
-pub(crate) fn radix_sort_u32<R>(input: &DeviceVec<R, u32>) -> Result<DeviceVec<R, u32>, Error>
+pub(crate) fn radix_sort_u32<R>(
+    policy: &CubePolicy<R>,
+    input: &DeviceVec<R, u32>,
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
 {
-    let client = input.policy().client();
+    let client = policy.client();
     let len = input.len();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
     if len <= 1 {
         return Ok(DeviceVec::from_handle(
-            input.policy().clone(),
+            policy.id(),
             input.handle.clone(),
             len,
         ));
     }
 
-    let workspace = Workspace::new(input.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_a, scratch_b) = workspace.alloc_pair::<u32>(len);
     let mut input_handle = input.handle.clone();
     let mut output_handle = scratch_a.clone();
@@ -73,15 +77,12 @@ where
         next_uses_a = !next_uses_a;
     }
 
-    Ok(DeviceVec::from_handle(
-        input.policy().clone(),
-        input_handle,
-        len,
-    ))
+    Ok(DeviceVec::from_handle(policy.id(), input_handle, len))
 }
 
 #[allow(dead_code)]
 pub(crate) fn radix_sort_by_key_u32<R, T>(
+    policy: &CubePolicy<R>,
     keys: &DeviceVec<R, u32>,
     values: &DeviceVec<R, T>,
 ) -> Result<(DeviceVec<R, u32>, DeviceVec<R, T>), Error>
@@ -91,19 +92,19 @@ where
 {
     ensure_same_len(values.len(), keys.len())?;
 
-    let client = keys.policy().client();
+    let client = policy.client();
     let len = keys.len();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
     if len <= 1 {
         return Ok((
-            DeviceVec::from_handle(keys.policy().clone(), keys.handle.clone(), len),
-            DeviceVec::from_handle(values.policy().clone(), values.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), keys.handle.clone(), len),
+            DeviceVec::from_handle(policy.id(), values.handle.clone(), len),
         ));
     }
 
-    let workspace = Workspace::new(keys.policy());
+    let workspace = Workspace::new(policy);
     let (scratch_keys_a, scratch_keys_b) = workspace.alloc_pair::<u32>(len);
     let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<T>(len);
     let mut input_key_handle = keys.handle.clone();
@@ -159,7 +160,7 @@ where
     }
 
     Ok((
-        DeviceVec::from_handle(keys.policy().clone(), input_key_handle, len),
-        DeviceVec::from_handle(values.policy().clone(), input_value_handle, len),
+        DeviceVec::from_handle(policy.id(), input_key_handle, len),
+        DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }

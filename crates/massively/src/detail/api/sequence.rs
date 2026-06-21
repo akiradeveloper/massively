@@ -8,6 +8,7 @@ use crate::{
     expr::DeviceGpuExpr,
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::{segmented, select},
 };
 use cubecl::prelude::*;
@@ -19,7 +20,10 @@ fn sequence_block_count(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
-fn key_run_flags<KeySource, Eq>(keys: &KeySource) -> Result<cubecl::server::Handle, Error>
+fn key_run_flags<KeySource, Eq>(
+    policy: &CubePolicy<KeySource::Runtime>,
+    keys: &KeySource,
+) -> Result<cubecl::server::Handle, Error>
 where
     KeySource: ReadOnlyKernelColumn + KernelColumnAt<S0>,
     KeySource::Item: CubePrimitive + CubeElement,
@@ -28,15 +32,15 @@ where
 {
     keys.validate()?;
     let len = keys.len();
-    let client = keys.policy().client();
+    let client = policy.client();
     if len == 0 {
-        return Ok(keys.policy().empty_handle());
+        return Ok(policy.empty_handle());
     }
 
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let flag_handle = client.empty(len * std::mem::size_of::<u32>());
-    let bindings = keys.stage()?;
+    let bindings = keys.stage(policy)?;
     let slot_offsets = bindings.slot_offsets_handle(client)?;
     let slot0 = bindings.slots.first().unwrap();
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
@@ -69,11 +73,13 @@ where
 
 #[doc(hidden)]
 pub trait ReplaceIfInput<Stencil, Pred> {
+    type Runtime: Runtime;
     type Item;
     type Output;
 
     fn replace_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
         stencil: Stencil,
         pred: GpuOp<Pred>,
@@ -88,21 +94,28 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Item = Source::Item;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn replace_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
         stencil: Stencil,
         _pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         super::ensure_same_len(self.source.len(), stencil.len())?;
-        let input = super::device_expr_collect(&self.source)?;
-        let flags = stencil.selection_handles(false)?;
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
+        let flags = stencil.selection_handles_with_policy(policy, false)?;
         Ok(SoA1 {
-            source: replace_with_flags_device_vec(&input, replacement, &flags.flag)?,
+            source: replace_with_flags_device_vec_with_policy(
+                policy,
+                &input,
+                replacement,
+                &flags.flag,
+            )?,
         })
     }
 }
@@ -114,17 +127,20 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Item = Source::Item;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn replace_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
         stencil: Stencil,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         <SoA1<Source> as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
             SoA1 { source: self },
+            policy,
             replacement,
             stencil,
             pred,
@@ -139,17 +155,20 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Item = (Source::Item,);
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn replace_if_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
         stencil: Stencil,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         <Source as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
             self.0,
+            policy,
             replacement.0,
             stencil,
             pred,
@@ -183,6 +202,7 @@ macro_rules! impl_replace_if_tuple {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Item = (
                 impl_replace_if_tuple!(@item_ty $first),
                 $( impl_replace_if_tuple!(@item_ty $rest) ),+
@@ -194,25 +214,26 @@ macro_rules! impl_replace_if_tuple {
 
             fn replace_if_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 replacement: Self::Item,
                 stencil: Stencil,
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
                 super::ensure_same_len(self.$first_field.len(), stencil.len())?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let flags = stencil.selection_handles(false)?;
+                let flags = stencil.selection_handles_with_policy(policy, false)?;
                 Ok($name {
-                    $first_field: replace_with_flags_device_vec(
+                    $first_field: replace_with_flags_device_vec_with_policy(policy,
                         &$first_field,
                         replacement.$first_index,
                         &flags.flag,
                     )?,
                     $(
-                        $field: replace_with_flags_device_vec(
+                        $field: replace_with_flags_device_vec_with_policy(policy,
                             &$field,
                             replacement.$index,
                             &flags.flag,
@@ -253,6 +274,7 @@ macro_rules! impl_readonly_replace_if_tuple {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Item = (
                 impl_readonly_replace_if_tuple!(@item_ty $first),
                 $( impl_readonly_replace_if_tuple!(@item_ty $rest) ),+
@@ -264,25 +286,26 @@ macro_rules! impl_readonly_replace_if_tuple {
 
             fn replace_if_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 replacement: Self::Item,
                 stencil: Stencil,
                 _pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 super::ensure_same_len(ReadOnlySoA::len(&self), stencil.len())?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let flags = stencil.selection_handles(false)?;
+                let flags = stencil.selection_handles_with_policy(policy, false)?;
                 Ok($output {
-                    $first_field: replace_with_flags_device_vec(
+                    $first_field: replace_with_flags_device_vec_with_policy(policy,
                         &$first_field,
                         replacement.$first_index,
                         &flags.flag,
                     )?,
                     $(
-                        $field: replace_with_flags_device_vec(
+                        $field: replace_with_flags_device_vec_with_policy(policy,
                             &$field,
                             replacement.$index,
                             &flags.flag,
@@ -303,17 +326,20 @@ macro_rules! impl_replace_if_tuple_input {
         where
             $view<$( $ty ),+>: ReplaceIfInput<Stencil, Pred>,
         {
+            type Runtime = <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::Runtime;
             type Item = <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::Item;
             type Output = <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::Output;
 
             fn replace_if_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 replacement: Self::Item,
                 stencil: Stencil,
                 pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     replacement,
                     stencil,
                     pred,
@@ -328,16 +354,27 @@ impl_replace_if_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }
 
 #[doc(hidden)]
 pub trait UniqueInput<Pred> {
+    type Runtime: Runtime;
     type Output;
 
-    fn unique_input(self, pred: GpuOp<Pred>) -> Result<Self::Output, Error>;
+    fn unique_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error>;
 }
 
 #[doc(hidden)]
 pub trait UniqueByKeyInput<Values, Eq> {
+    type Runtime: Runtime;
     type Output;
 
-    fn unique_by_key_input(self, values: Values, eq: GpuOp<Eq>) -> Result<Self::Output, Error>;
+    fn unique_by_key_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        values: Values,
+        eq: GpuOp<Eq>,
+    ) -> Result<Self::Output, Error>;
 }
 
 impl<KeySource, ValueSource, Eq> UniqueByKeyInput<SoA1<ValueSource>, Eq> for SoA1<KeySource>
@@ -352,6 +389,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Eq: BinaryPredicateOp<KeySource::Item>,
 {
+    type Runtime = KeySource::Runtime;
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
         SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>,
@@ -359,15 +397,18 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA1<ValueSource>,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         SoA::validate(&values)?;
         super::ensure_same_len(values.source.len(), self.source.len())?;
-        let flags = key_run_flags::<KeySource, Eq>(&self.source)?;
-        let keys = super::device_expr_compact_with_flags(&self.source, flags.clone())?;
-        let values = super::device_expr_compact_with_flags(&values.source, flags)?;
+        let flags = key_run_flags::<KeySource, Eq>(policy, &self.source)?;
+        let keys =
+            super::device_expr_compact_with_flags_with_policy(policy, &self.source, flags.clone())?;
+        let values =
+            super::device_expr_compact_with_flags_with_policy(policy, &values.source, flags)?;
         Ok((SoA1 { source: keys }, SoA1 { source: values }))
     }
 }
@@ -380,15 +421,18 @@ where
     KeySource::Item: CubePrimitive + CubeElement,
     ValueSource::Item: CubePrimitive + CubeElement,
 {
+    type Runtime = <SoA1<KeySource> as UniqueByKeyInput<SoA1<ValueSource>, Eq>>::Runtime;
     type Output = <SoA1<KeySource> as UniqueByKeyInput<SoA1<ValueSource>, Eq>>::Output;
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         <SoA1<KeySource> as UniqueByKeyInput<SoA1<ValueSource>, Eq>>::unique_by_key_input(
             SoA1 { source: self },
+            policy,
             SoA1 { source: values },
             eq,
         )
@@ -409,6 +453,7 @@ macro_rules! impl_unique_by_key_view_values {
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
             Eq: BinaryPredicateOp<KeySource::Item>,
         {
+            type Runtime = KeySource::Runtime;
             type Output = (
                 SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
                 $out<$( DeviceVec<KeySource::Runtime, <$value as KernelColumn>::Item> ),+>,
@@ -416,29 +461,30 @@ macro_rules! impl_unique_by_key_view_values {
 
             fn unique_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $view<$( $value ),+>,
                 _eq: GpuOp<Eq>,
             ) -> Result<Self::Output, Error> {
                 self.validate()?;
                 ReadOnlySoA::validate(&values)?;
-                let flags = key_run_flags::<KeySource, Eq>(&self)?;
+                let flags = key_run_flags::<KeySource, Eq>(policy, &self)?;
                 $(
                     super::ensure_same_len(values.$field.len(), self.len())?;
                 )+
                 if self.len() == 0 {
                     return Ok((
                         SoA1 {
-                            source: DeviceVec::empty(self.policy().clone()),
+                            source: policy.empty_device_vec(),
                         },
                         $out {
-                            $( $field: DeviceVec::empty(values.$field.policy().clone()), )+
+                            $( $field: policy.empty_device_vec(), )+
                         },
                     ));
                 }
 
-                let out_keys = super::device_expr_compact_with_flags(&self, flags.clone())?;
+                let out_keys = super::device_expr_compact_with_flags_with_policy(policy, &self, flags.clone())?;
                 $(
-                    let $field = super::device_expr_compact_with_flags(&values.$field, flags.clone())?;
+                    let $field = super::device_expr_compact_with_flags_with_policy(policy, &values.$field, flags.clone())?;
                 )+
 
                 Ok((SoA1 { source: out_keys }, $out { $( $field ),+ }))
@@ -454,15 +500,18 @@ impl<KeySource, ValueSource, Eq> UniqueByKeyInput<(ValueSource,), Eq> for (KeySo
 where
     KeySource: UniqueByKeyInput<ValueSource, super::Tuple1Less<Eq>>,
 {
+    type Runtime = <KeySource as UniqueByKeyInput<ValueSource, super::Tuple1Less<Eq>>>::Runtime;
     type Output = <KeySource as UniqueByKeyInput<ValueSource, super::Tuple1Less<Eq>>>::Output;
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: (ValueSource,),
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         <KeySource as UniqueByKeyInput<ValueSource, super::Tuple1Less<Eq>>>::unique_by_key_input(
             self.0,
+            policy,
             values.0,
             GpuOp::<super::Tuple1Less<Eq>>::new(),
         )
@@ -491,6 +540,7 @@ macro_rules! impl_unique_by_tuple_key_scalar_value {
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
             Eq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -501,14 +551,15 @@ macro_rules! impl_unique_by_tuple_key_scalar_value {
 
             fn unique_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: ValueSource,
                 _eq: GpuOp<Eq>,
             ) -> Result<Self::Output, Error> {
                 $storage::validate(&self)?;
                 values.validate()?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let values = super::device_expr_collect(&values)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let values = super::device_expr_collect_with_policy(policy, &values)?;
                 $(
                     super::ensure_same_len($field.len, $first_field.len)?;
                 )+
@@ -516,18 +567,18 @@ macro_rules! impl_unique_by_tuple_key_scalar_value {
                 if $first_field.len == 0 {
                     return Ok((
                         $out_keys {
-                            $first_field: DeviceVec::empty($first_field.policy.clone()),
-                            $( $field: DeviceVec::empty($field.policy.clone()), )+
+                            $first_field: policy.empty_device_vec(),
+                            $( $field: policy.empty_device_vec(), )+
                         },
                         SoA1 {
-                            source: DeviceVec::empty(values.policy.clone()),
+                            source: policy.empty_device_vec(),
                         },
                     ));
                 }
 
                 let len = $first_field.len;
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let client = $first_field.policy.client();
+                let client = policy.client();
                 let block_count_u32 = sequence_block_count(len)?;
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 unsafe {
@@ -549,24 +600,24 @@ macro_rules! impl_unique_by_tuple_key_scalar_value {
                 }
 
                 let control = segmented::SegmentControl::from_end_flags(
-                    $first_field.policy(),
+                    policy,
                     len,
                     len_u32,
                     flag_handle,
                     $first_field.handle.clone(),
                 )?;
                 let $first_out = control.compact_first::<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>(
-                    $first_field.policy(),
+                    policy,
                 )?;
                 $(
                     let $handles = $field.handle.clone();
                     let $out = control.compact_value::<<$first as KernelColumn>::Runtime, <$key as KernelColumn>::Item>(
-                        $field.policy(),
+                        policy,
                         $handles,
                     )?;
                 )+
                 let source = control.compact_value::<<$first as KernelColumn>::Runtime, ValueSource::Item>(
-                    values.policy(),
+                    policy,
                     values.handle.clone(),
                 )?;
 
@@ -608,6 +659,7 @@ macro_rules! impl_unique_by_tuple_key_soa2_values {
             ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
             Eq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -621,15 +673,16 @@ macro_rules! impl_unique_by_tuple_key_soa2_values {
 
             fn unique_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: SoA2<ValueA, ValueB>,
                 _eq: GpuOp<Eq>,
             ) -> Result<Self::Output, Error> {
                 $storage::validate(&self)?;
                 SoA::validate(&values)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let value_a = super::device_expr_collect(&values.left)?;
-                let value_b = super::device_expr_collect(&values.right)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+                let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
                 $(
                     super::ensure_same_len($field.len, $first_field.len)?;
                 )+
@@ -638,19 +691,19 @@ macro_rules! impl_unique_by_tuple_key_soa2_values {
                 if $first_field.len == 0 {
                     return Ok((
                         $out_keys {
-                            $first_field: DeviceVec::empty($first_field.policy.clone()),
-                            $( $field: DeviceVec::empty($field.policy.clone()), )+
+                            $first_field: policy.empty_device_vec(),
+                            $( $field: policy.empty_device_vec(), )+
                         },
                         SoA2 {
-                            left: DeviceVec::empty(value_a.policy.clone()),
-                            right: DeviceVec::empty(value_b.policy.clone()),
+                            left: policy.empty_device_vec(),
+                            right: policy.empty_device_vec(),
                         },
                     ));
                 }
 
                 let len = $first_field.len;
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let client = $first_field.policy.client();
+                let client = policy.client();
                 let block_count_u32 = sequence_block_count(len)?;
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 unsafe {
@@ -672,28 +725,28 @@ macro_rules! impl_unique_by_tuple_key_soa2_values {
                 }
 
                 let control = segmented::SegmentControl::from_end_flags(
-                    $first_field.policy(),
+                    policy,
                     len,
                     len_u32,
                     flag_handle,
                     $first_field.handle.clone(),
                 )?;
                 let $first_out = control.compact_first::<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>(
-                    $first_field.policy(),
+                    policy,
                 )?;
                 $(
                     let $handles = $field.handle.clone();
                     let $out = control.compact_value::<<$first as KernelColumn>::Runtime, <$key as KernelColumn>::Item>(
-                        $field.policy(),
+                        policy,
                         $handles,
                     )?;
                 )+
                 let left = control.compact_value::<<$first as KernelColumn>::Runtime, ValueA::Item>(
-                    value_a.policy(),
+                    policy,
                     value_a.handle.clone(),
                 )?;
                 let right = control.compact_value::<<$first as KernelColumn>::Runtime, ValueB::Item>(
-                    value_b.policy(),
+                    policy,
                     value_b.handle.clone(),
                 )?;
 
@@ -734,6 +787,7 @@ macro_rules! impl_unique_by_tuple_key_soa_values {
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
             Eq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -744,14 +798,15 @@ macro_rules! impl_unique_by_tuple_key_soa_values {
 
             fn unique_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $values<$( $value ),+>,
                 _eq: GpuOp<Eq>,
             ) -> Result<Self::Output, Error> {
                 $storage::validate(&self)?;
                 SoA::validate(&values)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                $( let $value_vec = super::device_expr_collect(&values.$value_field)?; )+
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                $( let $value_vec = super::device_expr_collect_with_policy(policy, &values.$value_field)?; )+
                 $(
                     super::ensure_same_len($field.len, $first_field.len)?;
                 )+
@@ -761,17 +816,17 @@ macro_rules! impl_unique_by_tuple_key_soa_values {
                 if $first_field.len == 0 {
                     return Ok((
                         $out_keys {
-                            $first_field: DeviceVec::empty($first_field.policy.clone()),
-                            $( $field: DeviceVec::empty($field.policy.clone()), )+
+                            $first_field: policy.empty_device_vec(),
+                            $( $field: policy.empty_device_vec(), )+
                         },
                         $out_values {
-                            $( $value_field: DeviceVec::empty($value_vec.policy.clone()), )+
+                            $( $value_field: policy.empty_device_vec(), )+
                         },
                     ));
                 }
                 let len = $first_field.len;
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let client = $first_field.policy.client();
+                let client = policy.client();
                 let block_count_u32 = sequence_block_count(len)?;
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 unsafe {
@@ -790,26 +845,26 @@ macro_rules! impl_unique_by_tuple_key_soa_values {
                     );
                 }
                 let control = segmented::SegmentControl::from_end_flags(
-                    $first_field.policy(),
+                    policy,
                     len,
                     len_u32,
                     flag_handle,
                     $first_field.handle.clone(),
                 )?;
                 let $first_out = control.compact_first::<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>(
-                    $first_field.policy(),
+                    policy,
                 )?;
                 $(
                     let $handles = $field.handle.clone();
                     let $out = control.compact_value::<<$first as KernelColumn>::Runtime, <$key as KernelColumn>::Item>(
-                        $field.policy(),
+                        policy,
                         $handles,
                     )?;
                 )+
                 $(
                     let $value_handles = $value_vec.handle.clone();
                     let $value_out = control.compact_value::<<$first as KernelColumn>::Runtime, <$value as KernelColumn>::Item>(
-                        $value_vec.policy(),
+                        policy,
                         $value_handles,
                     )?;
                 )+
@@ -845,6 +900,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Eq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
         SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>,
@@ -852,32 +908,33 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         let values = SoAView1 { source: values };
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let values = super::device_expr_collect(&values.source)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
         super::ensure_same_len(key_b.len, key_a.len)?;
         super::ensure_same_len(values.len, key_a.len)?;
         if key_a.len == 0 {
             return Ok((
                 SoA2 {
-                    left: DeviceVec::empty(key_a.policy.clone()),
-                    right: DeviceVec::empty(key_b.policy.clone()),
+                    left: policy.empty_device_vec(),
+                    right: policy.empty_device_vec(),
                 },
                 SoA1 {
-                    source: DeviceVec::empty(values.policy.clone()),
+                    source: policy.empty_device_vec(),
                 },
             ));
         }
 
         let len_u32 =
             u32::try_from(key_a.len).map_err(|_| Error::LengthTooLarge { len: key_a.len })?;
-        let client = key_a.policy.client();
+        let client = policy.client();
         let block_count_u32 = sequence_block_count(key_a.len)?;
         let flag_handle = client.empty(key_a.len * std::mem::size_of::<u32>());
 
@@ -893,19 +950,17 @@ where
         }
 
         let control = segmented::SegmentControl::from_end_flags(
-            key_a.policy(),
+            policy,
             key_a.len,
             len_u32,
             flag_handle,
             key_a.handle.clone(),
         )?;
-        let left = control.compact_first::<KeyA::Runtime, KeyA::Item>(key_a.policy())?;
-        let right = control
-            .compact_value::<KeyA::Runtime, KeyB::Item>(key_b.policy(), key_b.handle.clone())?;
-        let source = control.compact_value::<KeyA::Runtime, ValueSource::Item>(
-            values.policy(),
-            values.handle.clone(),
-        )?;
+        let left = control.compact_first::<KeyA::Runtime, KeyA::Item>(policy)?;
+        let right =
+            control.compact_value::<KeyA::Runtime, KeyB::Item>(policy, key_b.handle.clone())?;
+        let source = control
+            .compact_value::<KeyA::Runtime, ValueSource::Item>(policy, values.handle.clone())?;
 
         Ok((SoA2 { left, right }, SoA1 { source }))
     }
@@ -930,6 +985,7 @@ where
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     Eq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
         SoA2<DeviceVec<KeyA::Runtime, ValueA::Item>, DeviceVec<KeyA::Runtime, ValueB::Item>>,
@@ -937,34 +993,35 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA2<ValueA, ValueB>,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let value_a = super::device_expr_collect(&values.left)?;
-        let value_b = super::device_expr_collect(&values.right)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
         super::ensure_same_len(key_b.len, key_a.len)?;
         super::ensure_same_len(value_a.len, key_a.len)?;
         super::ensure_same_len(value_b.len, key_a.len)?;
         if key_a.len == 0 {
             return Ok((
                 SoA2 {
-                    left: DeviceVec::empty(key_a.policy.clone()),
-                    right: DeviceVec::empty(key_b.policy.clone()),
+                    left: policy.empty_device_vec(),
+                    right: policy.empty_device_vec(),
                 },
                 SoA2 {
-                    left: DeviceVec::empty(value_a.policy.clone()),
-                    right: DeviceVec::empty(value_b.policy.clone()),
+                    left: policy.empty_device_vec(),
+                    right: policy.empty_device_vec(),
                 },
             ));
         }
 
         let len_u32 =
             u32::try_from(key_a.len).map_err(|_| Error::LengthTooLarge { len: key_a.len })?;
-        let client = key_a.policy.client();
+        let client = policy.client();
         let block_count_u32 = sequence_block_count(key_a.len)?;
         let flag_handle = client.empty(key_a.len * std::mem::size_of::<u32>());
 
@@ -980,23 +1037,19 @@ where
         }
 
         let control = segmented::SegmentControl::from_end_flags(
-            key_a.policy(),
+            policy,
             key_a.len,
             len_u32,
             flag_handle,
             key_a.handle.clone(),
         )?;
-        let left = control.compact_first::<KeyA::Runtime, KeyA::Item>(key_a.policy())?;
-        let right = control
-            .compact_value::<KeyA::Runtime, KeyB::Item>(key_b.policy(), key_b.handle.clone())?;
-        let value_a = control.compact_value::<KeyA::Runtime, ValueA::Item>(
-            value_a.policy(),
-            value_a.handle.clone(),
-        )?;
-        let value_b = control.compact_value::<KeyA::Runtime, ValueB::Item>(
-            value_b.policy(),
-            value_b.handle.clone(),
-        )?;
+        let left = control.compact_first::<KeyA::Runtime, KeyA::Item>(policy)?;
+        let right =
+            control.compact_value::<KeyA::Runtime, KeyB::Item>(policy, key_b.handle.clone())?;
+        let value_a =
+            control.compact_value::<KeyA::Runtime, ValueA::Item>(policy, value_a.handle.clone())?;
+        let value_b =
+            control.compact_value::<KeyA::Runtime, ValueB::Item>(policy, value_b.handle.clone())?;
 
         Ok((
             SoA2 { left, right },
@@ -1030,6 +1083,7 @@ where
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
     Eq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
         SoA3<
@@ -1041,16 +1095,17 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA3<ValueA, ValueB, ValueC>,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let value_a = super::device_expr_collect(&values.first)?;
-        let value_b = super::device_expr_collect(&values.second)?;
-        let value_c = super::device_expr_collect(&values.third)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
+        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
         super::ensure_same_len(key_b.len, key_a.len)?;
         super::ensure_same_len(value_a.len, key_a.len)?;
         super::ensure_same_len(value_b.len, key_a.len)?;
@@ -1058,20 +1113,20 @@ where
         if key_a.len == 0 {
             return Ok((
                 SoA2 {
-                    left: DeviceVec::empty(key_a.policy.clone()),
-                    right: DeviceVec::empty(key_b.policy.clone()),
+                    left: policy.empty_device_vec(),
+                    right: policy.empty_device_vec(),
                 },
                 SoA3 {
-                    first: DeviceVec::empty(value_a.policy.clone()),
-                    second: DeviceVec::empty(value_b.policy.clone()),
-                    third: DeviceVec::empty(value_c.policy.clone()),
+                    first: policy.empty_device_vec(),
+                    second: policy.empty_device_vec(),
+                    third: policy.empty_device_vec(),
                 },
             ));
         }
 
         let len_u32 =
             u32::try_from(key_a.len).map_err(|_| Error::LengthTooLarge { len: key_a.len })?;
-        let client = key_a.policy.client();
+        let client = policy.client();
         let block_count_u32 = sequence_block_count(key_a.len)?;
         let flag_handle = client.empty(key_a.len * std::mem::size_of::<u32>());
 
@@ -1087,27 +1142,21 @@ where
         }
 
         let control = segmented::SegmentControl::from_end_flags(
-            key_a.policy(),
+            policy,
             key_a.len,
             len_u32,
             flag_handle,
             key_a.handle.clone(),
         )?;
-        let left = control.compact_first::<KeyA::Runtime, KeyA::Item>(key_a.policy())?;
-        let right = control
-            .compact_value::<KeyA::Runtime, KeyB::Item>(key_b.policy(), key_b.handle.clone())?;
-        let value_a = control.compact_value::<KeyA::Runtime, ValueA::Item>(
-            value_a.policy(),
-            value_a.handle.clone(),
-        )?;
-        let value_b = control.compact_value::<KeyA::Runtime, ValueB::Item>(
-            value_b.policy(),
-            value_b.handle.clone(),
-        )?;
-        let value_c = control.compact_value::<KeyA::Runtime, ValueC::Item>(
-            value_c.policy(),
-            value_c.handle.clone(),
-        )?;
+        let left = control.compact_first::<KeyA::Runtime, KeyA::Item>(policy)?;
+        let right =
+            control.compact_value::<KeyA::Runtime, KeyB::Item>(policy, key_b.handle.clone())?;
+        let value_a =
+            control.compact_value::<KeyA::Runtime, ValueA::Item>(policy, value_a.handle.clone())?;
+        let value_b =
+            control.compact_value::<KeyA::Runtime, ValueB::Item>(policy, value_b.handle.clone())?;
+        let value_c =
+            control.compact_value::<KeyA::Runtime, ValueC::Item>(policy, value_c.handle.clone())?;
 
         Ok((
             SoA2 { left, right },
@@ -1138,6 +1187,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Eq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<KeyA::Runtime, KeyA::Item>,
@@ -1149,35 +1199,36 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         let values = SoAView1 { source: values };
         ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let values = super::device_expr_collect(&values.source)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
         super::ensure_same_len(key_b.len, key_a.len)?;
         super::ensure_same_len(key_c.len, key_a.len)?;
         super::ensure_same_len(values.len, key_a.len)?;
         if key_a.len == 0 {
             return Ok((
                 SoA3 {
-                    first: DeviceVec::empty(key_a.policy.clone()),
-                    second: DeviceVec::empty(key_b.policy.clone()),
-                    third: DeviceVec::empty(key_c.policy.clone()),
+                    first: policy.empty_device_vec(),
+                    second: policy.empty_device_vec(),
+                    third: policy.empty_device_vec(),
                 },
                 SoA1 {
-                    source: DeviceVec::empty(values.policy.clone()),
+                    source: policy.empty_device_vec(),
                 },
             ));
         }
 
         let len_u32 =
             u32::try_from(key_a.len).map_err(|_| Error::LengthTooLarge { len: key_a.len })?;
-        let client = key_a.policy.client();
+        let client = policy.client();
         let block_count_u32 = sequence_block_count(key_a.len)?;
         let flag_handle = client.empty(key_a.len * std::mem::size_of::<u32>());
 
@@ -1200,21 +1251,19 @@ where
         }
 
         let control = segmented::SegmentControl::from_end_flags(
-            key_a.policy(),
+            policy,
             key_a.len,
             len_u32,
             flag_handle,
             key_a.handle.clone(),
         )?;
-        let first = control.compact_first::<KeyA::Runtime, KeyA::Item>(key_a.policy())?;
-        let second = control
-            .compact_value::<KeyA::Runtime, KeyB::Item>(key_b.policy(), key_b.handle.clone())?;
-        let third = control
-            .compact_value::<KeyA::Runtime, KeyC::Item>(key_c.policy(), key_c.handle.clone())?;
-        let source = control.compact_value::<KeyA::Runtime, ValueSource::Item>(
-            values.policy(),
-            values.handle.clone(),
-        )?;
+        let first = control.compact_first::<KeyA::Runtime, KeyA::Item>(policy)?;
+        let second =
+            control.compact_value::<KeyA::Runtime, KeyB::Item>(policy, key_b.handle.clone())?;
+        let third =
+            control.compact_value::<KeyA::Runtime, KeyC::Item>(policy, key_c.handle.clone())?;
+        let source = control
+            .compact_value::<KeyA::Runtime, ValueSource::Item>(policy, values.handle.clone())?;
 
         Ok((
             SoA3 {
@@ -1249,6 +1298,7 @@ where
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     Eq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<KeyA::Runtime, KeyA::Item>,
@@ -1260,16 +1310,17 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA2<ValueA, ValueB>,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let value_a = super::device_expr_collect(&values.left)?;
-        let value_b = super::device_expr_collect(&values.right)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
         super::ensure_same_len(key_b.len, key_a.len)?;
         super::ensure_same_len(key_c.len, key_a.len)?;
         super::ensure_same_len(value_a.len, key_a.len)?;
@@ -1277,20 +1328,20 @@ where
         if key_a.len == 0 {
             return Ok((
                 SoA3 {
-                    first: DeviceVec::empty(key_a.policy.clone()),
-                    second: DeviceVec::empty(key_b.policy.clone()),
-                    third: DeviceVec::empty(key_c.policy.clone()),
+                    first: policy.empty_device_vec(),
+                    second: policy.empty_device_vec(),
+                    third: policy.empty_device_vec(),
                 },
                 SoA2 {
-                    left: DeviceVec::empty(value_a.policy.clone()),
-                    right: DeviceVec::empty(value_b.policy.clone()),
+                    left: policy.empty_device_vec(),
+                    right: policy.empty_device_vec(),
                 },
             ));
         }
 
         let len_u32 =
             u32::try_from(key_a.len).map_err(|_| Error::LengthTooLarge { len: key_a.len })?;
-        let client = key_a.policy.client();
+        let client = policy.client();
         let block_count_u32 = sequence_block_count(key_a.len)?;
         let flag_handle = client.empty(key_a.len * std::mem::size_of::<u32>());
 
@@ -1313,25 +1364,21 @@ where
         }
 
         let control = segmented::SegmentControl::from_end_flags(
-            key_a.policy(),
+            policy,
             key_a.len,
             len_u32,
             flag_handle,
             key_a.handle.clone(),
         )?;
-        let first = control.compact_first::<KeyA::Runtime, KeyA::Item>(key_a.policy())?;
-        let second = control
-            .compact_value::<KeyA::Runtime, KeyB::Item>(key_b.policy(), key_b.handle.clone())?;
-        let third = control
-            .compact_value::<KeyA::Runtime, KeyC::Item>(key_c.policy(), key_c.handle.clone())?;
-        let value_a = control.compact_value::<KeyA::Runtime, ValueA::Item>(
-            value_a.policy(),
-            value_a.handle.clone(),
-        )?;
-        let value_b = control.compact_value::<KeyA::Runtime, ValueB::Item>(
-            value_b.policy(),
-            value_b.handle.clone(),
-        )?;
+        let first = control.compact_first::<KeyA::Runtime, KeyA::Item>(policy)?;
+        let second =
+            control.compact_value::<KeyA::Runtime, KeyB::Item>(policy, key_b.handle.clone())?;
+        let third =
+            control.compact_value::<KeyA::Runtime, KeyC::Item>(policy, key_c.handle.clone())?;
+        let value_a =
+            control.compact_value::<KeyA::Runtime, ValueA::Item>(policy, value_a.handle.clone())?;
+        let value_b =
+            control.compact_value::<KeyA::Runtime, ValueB::Item>(policy, value_b.handle.clone())?;
 
         Ok((
             SoA3 {
@@ -1372,6 +1419,7 @@ where
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
     Eq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<KeyA::Runtime, KeyA::Item>,
@@ -1387,17 +1435,18 @@ where
 
     fn unique_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA3<ValueA, ValueB, ValueC>,
         _eq: GpuOp<Eq>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let value_a = super::device_expr_collect(&values.first)?;
-        let value_b = super::device_expr_collect(&values.second)?;
-        let value_c = super::device_expr_collect(&values.third)?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
+        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
         super::ensure_same_len(key_b.len, key_a.len)?;
         super::ensure_same_len(key_c.len, key_a.len)?;
         super::ensure_same_len(value_a.len, key_a.len)?;
@@ -1406,21 +1455,21 @@ where
         if key_a.len == 0 {
             return Ok((
                 SoA3 {
-                    first: DeviceVec::empty(key_a.policy.clone()),
-                    second: DeviceVec::empty(key_b.policy.clone()),
-                    third: DeviceVec::empty(key_c.policy.clone()),
+                    first: policy.empty_device_vec(),
+                    second: policy.empty_device_vec(),
+                    third: policy.empty_device_vec(),
                 },
                 SoA3 {
-                    first: DeviceVec::empty(value_a.policy.clone()),
-                    second: DeviceVec::empty(value_b.policy.clone()),
-                    third: DeviceVec::empty(value_c.policy.clone()),
+                    first: policy.empty_device_vec(),
+                    second: policy.empty_device_vec(),
+                    third: policy.empty_device_vec(),
                 },
             ));
         }
 
         let len_u32 =
             u32::try_from(key_a.len).map_err(|_| Error::LengthTooLarge { len: key_a.len })?;
-        let client = key_a.policy.client();
+        let client = policy.client();
         let block_count_u32 = sequence_block_count(key_a.len)?;
         let flag_handle = client.empty(key_a.len * std::mem::size_of::<u32>());
 
@@ -1443,29 +1492,23 @@ where
         }
 
         let control = segmented::SegmentControl::from_end_flags(
-            key_a.policy(),
+            policy,
             key_a.len,
             len_u32,
             flag_handle,
             key_a.handle.clone(),
         )?;
-        let first = control.compact_first::<KeyA::Runtime, KeyA::Item>(key_a.policy())?;
-        let second = control
-            .compact_value::<KeyA::Runtime, KeyB::Item>(key_b.policy(), key_b.handle.clone())?;
-        let third = control
-            .compact_value::<KeyA::Runtime, KeyC::Item>(key_c.policy(), key_c.handle.clone())?;
-        let value_a = control.compact_value::<KeyA::Runtime, ValueA::Item>(
-            value_a.policy(),
-            value_a.handle.clone(),
-        )?;
-        let value_b = control.compact_value::<KeyA::Runtime, ValueB::Item>(
-            value_b.policy(),
-            value_b.handle.clone(),
-        )?;
-        let value_c = control.compact_value::<KeyA::Runtime, ValueC::Item>(
-            value_c.policy(),
-            value_c.handle.clone(),
-        )?;
+        let first = control.compact_first::<KeyA::Runtime, KeyA::Item>(policy)?;
+        let second =
+            control.compact_value::<KeyA::Runtime, KeyB::Item>(policy, key_b.handle.clone())?;
+        let third =
+            control.compact_value::<KeyA::Runtime, KeyC::Item>(policy, key_c.handle.clone())?;
+        let value_a =
+            control.compact_value::<KeyA::Runtime, ValueA::Item>(policy, value_a.handle.clone())?;
+        let value_b =
+            control.compact_value::<KeyA::Runtime, ValueB::Item>(policy, value_b.handle.clone())?;
+        let value_c =
+            control.compact_value::<KeyA::Runtime, ValueC::Item>(policy, value_c.handle.clone())?;
 
         Ok((
             SoA3 {
@@ -1491,15 +1534,18 @@ macro_rules! impl_unique_by_key_key_forward {
             SoA1<KeySource>: UniqueByKeyInput<$name<$first, $( $rest ),+>, Eq>,
             KeySource::Item: CubePrimitive + CubeElement,
         {
+            type Runtime = <SoA1<KeySource> as UniqueByKeyInput<$name<$first, $( $rest ),+>, Eq>>::Runtime;
             type Output = <SoA1<KeySource> as UniqueByKeyInput<$name<$first, $( $rest ),+>, Eq>>::Output;
 
             fn unique_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $name<$first, $( $rest ),+>,
                 eq: GpuOp<Eq>,
             ) -> Result<Self::Output, Error> {
                 <SoA1<KeySource> as UniqueByKeyInput<$name<$first, $( $rest ),+>, Eq>>::unique_by_key_input(
                     SoA1 { source: self },
+            policy,
             values,
             eq,
         )
@@ -1535,6 +1581,7 @@ macro_rules! impl_unique_by_key_input {
             )+
             Eq: BinaryPredicateOp<KeySource::Item>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
                 $name<
@@ -1545,29 +1592,31 @@ macro_rules! impl_unique_by_key_input {
 
             fn unique_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $name<$first, $( $rest ),+>,
                 _eq: GpuOp<Eq>,
             ) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
                 SoA::validate(&values)?;
-                let keys = super::device_expr_collect(&self.source)?;
-                let $first_field = super::device_expr_collect(&values.$first_field)?;
-                let control = segmented::key_run_control::<_, _, Eq>(&keys)?;
+                let keys = super::device_expr_collect_with_policy(policy, &self.source)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &values.$first_field)?;
+                let control =
+                    segmented::key_run_control_with_policy::<_, _, Eq>(policy, &keys)?;
                 let out_keys = control.compact_first::<
                     KeySource::Runtime,
                     KeySource::Item,
-                >(keys.policy())?;
+                >(policy)?;
                 let $first_field = control.compact_value::<
                     KeySource::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), $first_field.handle.clone())?;
+                >(policy, $first_field.handle.clone())?;
                 $(
-                    let $field = super::device_expr_collect(&values.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &values.$field)?;
                     let $field = control.compact_value::<
                         KeySource::Runtime,
                         <$rest as KernelColumn>::Item,
                     >(
-                        $field.policy(),
+                        policy,
                         $field.handle.clone(),
                     )?;
                 )+
@@ -1588,13 +1637,18 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: BinaryPredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn unique_input(self, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn unique_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let input = super::device_expr_collect(&self.source)?;
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
         Ok(SoA1 {
-            source: select::unique(&input, GpuOp::<Pred>::new())?,
+            source: select::unique(policy, &input, GpuOp::<Pred>::new())?,
         })
     }
 }
@@ -1606,10 +1660,15 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: BinaryPredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn unique_input(self, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
-        <SoA1<Source> as UniqueInput<Pred>>::unique_input(SoA1 { source: self }, pred)
+    fn unique_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
+        <SoA1<Source> as UniqueInput<Pred>>::unique_input(SoA1 { source: self }, policy, pred)
     }
 }
 
@@ -1620,11 +1679,17 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: BinaryPredicateOp<(Source::Item,)>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn unique_input(self, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+    fn unique_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Self::Output, Error> {
         <Source as UniqueInput<super::Tuple1Less<Pred>>>::unique_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Pred>>::new(),
         )
     }
@@ -1659,21 +1724,26 @@ macro_rules! impl_unique_tuple {
                 $( impl_unique_tuple!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $name<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$first as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn unique_input(self, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn unique_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
 
                 let len = $first_field.len();
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag = client.empty(len * std::mem::size_of::<u32>());
 
                 if len != 0 {
@@ -1698,24 +1768,24 @@ macro_rules! impl_unique_tuple {
                 }
 
                 let handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     len,
                     len_u32,
                     flag,
                     $first_field.handle.clone(),
                 )?;
-                let count = select::selected_count($first_field.policy(), &handles)?;
+                let count = select::selected_count(policy, &handles)?;
 
                 let $first_field = select::compact_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), handles.clone(), count)?;
+                >(policy, handles.clone(), count)?;
                 $(
                     let $field = select::compact_with_count::<
                         <$first as KernelColumn>::Runtime,
                         <$rest as KernelColumn>::Item,
                     >(
-                        $field.policy(),
+                        policy,
                         select::handles_for_value(&handles, $field.handle.clone()),
                         count,
                     )?;
@@ -1759,21 +1829,26 @@ macro_rules! impl_readonly_unique_tuple {
                 $( impl_readonly_unique_tuple!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$first as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn unique_input(self, _pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn unique_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
 
                 let len = $first_field.len();
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag = client.empty(len * std::mem::size_of::<u32>());
 
                 if len != 0 {
@@ -1798,24 +1873,24 @@ macro_rules! impl_readonly_unique_tuple {
                 }
 
                 let handles = select::handles_from_flags(
-                    $first_field.policy(),
+                    policy,
                     len,
                     len_u32,
                     flag,
                     $first_field.handle.clone(),
                 )?;
-                let count = select::selected_count($first_field.policy(), &handles)?;
+                let count = select::selected_count(policy, &handles)?;
 
                 let $first_field = select::compact_with_count::<
                     <$first as KernelColumn>::Runtime,
                     <$first as KernelColumn>::Item,
-                >($first_field.policy(), handles.clone(), count)?;
+                >(policy, handles.clone(), count)?;
                 $(
                     let $field = select::compact_with_count::<
                         <$first as KernelColumn>::Runtime,
                         <$rest as KernelColumn>::Item,
                     >(
-                        $field.policy(),
+                        policy,
                         select::handles_for_value(&handles, $field.handle.clone()),
                         count,
                     )?;
@@ -1836,11 +1911,17 @@ macro_rules! impl_unique_tuple_input {
         where
             $view<$( $ty ),+>: UniqueInput<Pred>,
         {
+            type Runtime = <$view<$( $ty ),+> as UniqueInput<Pred>>::Runtime;
             type Output = <$view<$( $ty ),+> as UniqueInput<Pred>>::Output;
 
-            fn unique_input(self, pred: GpuOp<Pred>) -> Result<Self::Output, Error> {
+            fn unique_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                pred: GpuOp<Pred>,
+            ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as UniqueInput<Pred>>::unique_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     pred,
                 )
             }
@@ -1857,11 +1938,18 @@ macro_rules! impl_unique_by_key_tuple_input {
         where
             $view<$( $ty ),+>: UniqueByKeyInput<Values, Eq>,
         {
+            type Runtime = <$view<$( $ty ),+> as UniqueByKeyInput<Values, Eq>>::Runtime;
             type Output = <$view<$( $ty ),+> as UniqueByKeyInput<Values, Eq>>::Output;
 
-            fn unique_by_key_input(self, values: Values, eq: GpuOp<Eq>) -> Result<Self::Output, Error> {
+            fn unique_by_key_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                values: Values,
+                eq: GpuOp<Eq>,
+            ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as UniqueByKeyInput<Values, Eq>>::unique_by_key_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     values,
                     eq,
                 )
@@ -1873,7 +1961,8 @@ macro_rules! impl_unique_by_key_tuple_input {
 impl_unique_by_key_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
 impl_unique_by_key_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
 
-fn replace_with_flags_device_vec<R, T>(
+fn replace_with_flags_device_vec_with_policy<R, T>(
+    policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     replacement: T,
     flag: &cubecl::server::Handle,
@@ -1884,10 +1973,10 @@ where
 {
     u32::try_from(input.len).map_err(|_| Error::LengthTooLarge { len: input.len })?;
     if input.len == 0 {
-        return Ok(DeviceVec::empty(input.policy.clone()));
+        return Ok(policy.empty_device_vec());
     }
 
-    let client = input.policy.client();
+    let client = policy.client();
     let output_handle = client.empty(input.len * std::mem::size_of::<T>());
 
     let block_count_u32 = sequence_block_count(input.len)?;
@@ -1907,47 +1996,59 @@ where
     }
 
     Ok(DeviceVec::from_handle(
-        input.policy.clone(),
+        policy.id(),
         output_handle,
         input.len,
     ))
 }
 
 /// Replaces elements whose staged stencil flag satisfies `Pred`.
-pub fn replace_if<Input, Stencil, Pred>(
+pub fn replace_if<R, Input, Stencil, Pred>(
+    policy: &CubePolicy<R>,
     input: Input,
     replacement: <Input as ReplaceIfInput<Stencil, Pred>>::Item,
     stencil: Stencil,
     _pred: Pred,
 ) -> Result<<<Input as ReplaceIfInput<Stencil, Pred>>::Output as MaterializeOutput>::Output, Error>
 where
-    Input: ReplaceIfInput<Stencil, Pred>,
-    <Input as ReplaceIfInput<Stencil, Pred>>::Output: MaterializeOutput,
+    R: Runtime,
+    Input: ReplaceIfInput<Stencil, Pred, Runtime = R>,
+    <Input as ReplaceIfInput<Stencil, Pred>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(input.replace_if_input(replacement, stencil, GpuOp::<Pred>::new())?)
+    materialize(
+        policy,
+        input.replace_if_input(policy, replacement, stencil, GpuOp::<Pred>::new())?,
+    )
 }
 
 /// Removes consecutive duplicates.
-pub fn unique<Input, Pred>(
+pub fn unique<R, Input, Pred>(
+    policy: &CubePolicy<R>,
     input: Input,
     _pred: Pred,
 ) -> Result<<<Input as UniqueInput<Pred>>::Output as MaterializeOutput>::Output, Error>
 where
-    Input: UniqueInput<Pred>,
-    <Input as UniqueInput<Pred>>::Output: MaterializeOutput,
+    R: Runtime,
+    Input: UniqueInput<Pred, Runtime = R>,
+    <Input as UniqueInput<Pred>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(input.unique_input(GpuOp::<Pred>::new())?)
+    materialize(policy, input.unique_input(policy, GpuOp::<Pred>::new())?)
 }
 
 /// Removes consecutive duplicate keys and carries the first value for each key.
-pub fn unique_by_key<Keys, Values, Eq>(
+pub fn unique_by_key<R, Keys, Values, Eq>(
+    policy: &CubePolicy<R>,
     keys: Keys,
     values: Values,
     _eq: Eq,
 ) -> Result<<<Keys as UniqueByKeyInput<Values, Eq>>::Output as MaterializeOutput>::Output, Error>
 where
-    Keys: UniqueByKeyInput<Values, Eq>,
-    <Keys as UniqueByKeyInput<Values, Eq>>::Output: MaterializeOutput,
+    R: Runtime,
+    Keys: UniqueByKeyInput<Values, Eq, Runtime = R>,
+    <Keys as UniqueByKeyInput<Values, Eq>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(keys.unique_by_key_input(values, GpuOp::<Eq>::new())?)
+    materialize(
+        policy,
+        keys.unique_by_key_input(policy, values, GpuOp::<Eq>::new())?,
+    )
 }

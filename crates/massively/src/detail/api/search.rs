@@ -7,6 +7,7 @@ use crate::{
     expr::DeviceGpuExpr,
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::{scan, search},
 };
 use cubecl::prelude::*;
@@ -19,6 +20,7 @@ fn search_block_count(len: usize) -> Result<u32, Error> {
 }
 
 fn materialize_one<Source>(
+    policy: &CubePolicy<Source::Runtime>,
     input: SoAView1<Source>,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
@@ -28,10 +30,11 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
     ReadOnlySoA::validate(&input)?;
-    super::device_expr_collect(&input.source)
+    super::device_expr_collect_with_policy(policy, &input.source)
 }
 
 fn materialize_pair<Left, Right>(
+    policy: &CubePolicy<Left::Runtime>,
     left: SoAView1<Left>,
     right: SoAView1<Right>,
 ) -> Result<
@@ -50,20 +53,35 @@ where
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
 {
-    let left = materialize_one(left)?;
-    let right = materialize_one(right)?;
+    let left = materialize_one(policy, left)?;
+    let right = materialize_one(policy, right)?;
     Ok((left, right))
 }
 
 /// Input accepted by min/max element queries.
 #[doc(hidden)]
 pub trait MinMaxInput<Less> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
+
     /// Finds the minimum element index.
-    fn min_element_input(self, less: GpuOp<Less>) -> Result<Option<usize>, Error>;
+    fn min_element_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error>;
     /// Finds the maximum element index.
-    fn max_element_input(self, less: GpuOp<Less>) -> Result<Option<usize>, Error>;
+    fn max_element_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error>;
     /// Finds both minimum and maximum element indices.
-    fn minmax_element_input(self, less: GpuOp<Less>) -> Result<Option<(usize, usize)>, Error>;
+    fn minmax_element_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Option<(usize, usize)>, Error>;
 }
 
 impl<Source, Less> MinMaxInput<Less> for SoAView1<Source>
@@ -74,19 +92,39 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    fn min_element_input(self, _less: GpuOp<Less>) -> Result<Option<usize>, Error> {
+    type Runtime = Source::Runtime;
+
+    fn min_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error> {
         ReadOnlySoA::validate(&self)?;
-        Ok(super::device_expr_minmax_element::<Source, Less>(&self.source)?.map(|(min, _)| min))
+        Ok(
+            super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)?
+                .map(|(min, _)| min),
+        )
     }
 
-    fn max_element_input(self, _less: GpuOp<Less>) -> Result<Option<usize>, Error> {
+    fn max_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error> {
         ReadOnlySoA::validate(&self)?;
-        Ok(super::device_expr_minmax_element::<Source, Less>(&self.source)?.map(|(_, max)| max))
+        Ok(
+            super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)?
+                .map(|(_, max)| max),
+        )
     }
 
-    fn minmax_element_input(self, _less: GpuOp<Less>) -> Result<Option<(usize, usize)>, Error> {
+    fn minmax_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Option<(usize, usize)>, Error> {
         ReadOnlySoA::validate(&self)?;
-        super::device_expr_minmax_element::<Source, Less>(&self.source)
+        super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)
     }
 }
 
@@ -97,17 +135,40 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    fn min_element_input(self, less: GpuOp<Less>) -> Result<Option<usize>, Error> {
-        <SoAView1<Source> as MinMaxInput<Less>>::min_element_input(SoAView1 { source: self }, less)
+    type Runtime = Source::Runtime;
+
+    fn min_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error> {
+        <SoAView1<Source> as MinMaxInput<Less>>::min_element_input(
+            SoAView1 { source: self },
+            policy,
+            less,
+        )
     }
 
-    fn max_element_input(self, less: GpuOp<Less>) -> Result<Option<usize>, Error> {
-        <SoAView1<Source> as MinMaxInput<Less>>::max_element_input(SoAView1 { source: self }, less)
+    fn max_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error> {
+        <SoAView1<Source> as MinMaxInput<Less>>::max_element_input(
+            SoAView1 { source: self },
+            policy,
+            less,
+        )
     }
 
-    fn minmax_element_input(self, less: GpuOp<Less>) -> Result<Option<(usize, usize)>, Error> {
+    fn minmax_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Option<(usize, usize)>, Error> {
         <SoAView1<Source> as MinMaxInput<Less>>::minmax_element_input(
             SoAView1 { source: self },
+            policy,
             less,
         )
     }
@@ -120,23 +181,40 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<(Source::Item,)>,
 {
-    fn min_element_input(self, _less: GpuOp<Less>) -> Result<Option<usize>, Error> {
+    type Runtime = Source::Runtime;
+
+    fn min_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error> {
         <Source as MinMaxInput<super::Tuple1Less<Less>>>::min_element_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn max_element_input(self, _less: GpuOp<Less>) -> Result<Option<usize>, Error> {
+    fn max_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Option<usize>, Error> {
         <Source as MinMaxInput<super::Tuple1Less<Less>>>::max_element_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn minmax_element_input(self, _less: GpuOp<Less>) -> Result<Option<(usize, usize)>, Error> {
+    fn minmax_element_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Option<(usize, usize)>, Error> {
         <Source as MinMaxInput<super::Tuple1Less<Less>>>::minmax_element_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
@@ -145,8 +223,15 @@ where
 /// Input accepted by adjacent-pair search.
 #[doc(hidden)]
 pub trait AdjacentFindInput<Pred> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
+
     /// Finds the first adjacent pair that satisfies `Pred`.
-    fn adjacent_find_input(self, pred: GpuOp<Pred>) -> Result<Option<usize>, Error>;
+    fn adjacent_find_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error>;
 }
 
 impl<Source, Pred> AdjacentFindInput<Pred> for SoAView1<Source>
@@ -157,9 +242,15 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: BinaryPredicateOp<Source::Item>,
 {
-    fn adjacent_find_input(self, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
-        let input = materialize_one(self)?;
-        search::adjacent_find(&input, GpuOp::<Pred>::new())
+    type Runtime = Source::Runtime;
+
+    fn adjacent_find_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error> {
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
+        search::adjacent_find(policy, &input, GpuOp::<Pred>::new())
     }
 }
 
@@ -170,9 +261,16 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: BinaryPredicateOp<Source::Item>,
 {
-    fn adjacent_find_input(self, pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+    type Runtime = Source::Runtime;
+
+    fn adjacent_find_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error> {
         <SoAView1<Source> as AdjacentFindInput<Pred>>::adjacent_find_input(
             SoAView1 { source: self },
+            policy,
             pred,
         )
     }
@@ -185,9 +283,16 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Pred: BinaryPredicateOp<(Source::Item,)>,
 {
-    fn adjacent_find_input(self, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+    type Runtime = Source::Runtime;
+
+    fn adjacent_find_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _pred: GpuOp<Pred>,
+    ) -> Result<Option<usize>, Error> {
         <Source as AdjacentFindInput<super::Tuple1Less<Pred>>>::adjacent_find_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Pred>>::new(),
         )
     }
@@ -196,23 +301,44 @@ where
 /// Input accepted by sorted single-range search.
 #[doc(hidden)]
 pub trait SortedSearchInput<Less> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
     /// Element type.
     type Item;
 
     /// Returns the equal range for `value` in this sorted input.
     fn equal_range_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error>;
     /// Finds the first sorted insertion point for `value`.
-    fn lower_bound_input(self, value: Self::Item, less: GpuOp<Less>) -> Result<usize, Error>;
+    fn lower_bound_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        value: Self::Item,
+        less: GpuOp<Less>,
+    ) -> Result<usize, Error>;
     /// Finds the last sorted insertion point for `value`.
-    fn upper_bound_input(self, value: Self::Item, less: GpuOp<Less>) -> Result<usize, Error>;
+    fn upper_bound_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        value: Self::Item,
+        less: GpuOp<Less>,
+    ) -> Result<usize, Error>;
     /// Returns the first position where sorted order is broken.
-    fn is_sorted_until_input(self, less: GpuOp<Less>) -> Result<usize, Error>;
+    fn is_sorted_until_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<usize, Error>;
     /// Returns whether this input is sorted.
-    fn is_sorted_input(self, less: GpuOp<Less>) -> Result<bool, Error>;
+    fn is_sorted_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<bool, Error>;
 }
 
 impl<Source, Less> SortedSearchInput<Less> for SoAView1<Source>
@@ -223,38 +349,58 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Item = Source::Item;
 
     fn equal_range_input(
         self,
+        policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error> {
-        let input = materialize_one(self)?;
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
         Ok((
-            search::lower_bound(&input, value.clone(), GpuOp::<Less>::new())?,
-            search::upper_bound(&input, value, GpuOp::<Less>::new())?,
+            search::lower_bound(policy, &input, value.clone(), GpuOp::<Less>::new())?,
+            search::upper_bound(policy, &input, value, GpuOp::<Less>::new())?,
         ))
     }
 
-    fn lower_bound_input(self, value: Self::Item, _less: GpuOp<Less>) -> Result<usize, Error> {
-        let input = materialize_one(self)?;
-        search::lower_bound(&input, value, GpuOp::<Less>::new())
+    fn lower_bound_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        value: Self::Item,
+        _less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
+        search::lower_bound(policy, &input, value, GpuOp::<Less>::new())
     }
 
-    fn upper_bound_input(self, value: Self::Item, _less: GpuOp<Less>) -> Result<usize, Error> {
-        let input = materialize_one(self)?;
-        search::upper_bound(&input, value, GpuOp::<Less>::new())
+    fn upper_bound_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        value: Self::Item,
+        _less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
+        search::upper_bound(policy, &input, value, GpuOp::<Less>::new())
     }
 
-    fn is_sorted_until_input(self, _less: GpuOp<Less>) -> Result<usize, Error> {
-        let input = materialize_one(self)?;
-        search::is_sorted_until(&input, GpuOp::<Less>::new())
+    fn is_sorted_until_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
+        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
+        search::is_sorted_until(policy, &input, GpuOp::<Less>::new())
     }
 
-    fn is_sorted_input(self, less: GpuOp<Less>) -> Result<bool, Error> {
+    fn is_sorted_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<bool, Error> {
         let len = ReadOnlySoA::len(&self);
-        Ok(self.is_sorted_until_input(less)? == len)
+        Ok(self.is_sorted_until_input(policy, less)? == len)
     }
 }
 
@@ -265,46 +411,71 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Item = Source::Item;
 
     fn equal_range_input(
         self,
+        policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error> {
         <SoAView1<Source> as SortedSearchInput<Less>>::equal_range_input(
             SoAView1 { source: self },
+            policy,
             value,
             less,
         )
     }
 
-    fn lower_bound_input(self, value: Self::Item, less: GpuOp<Less>) -> Result<usize, Error> {
+    fn lower_bound_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        value: Self::Item,
+        less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
         <SoAView1<Source> as SortedSearchInput<Less>>::lower_bound_input(
             SoAView1 { source: self },
+            policy,
             value,
             less,
         )
     }
 
-    fn upper_bound_input(self, value: Self::Item, less: GpuOp<Less>) -> Result<usize, Error> {
+    fn upper_bound_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        value: Self::Item,
+        less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
         <SoAView1<Source> as SortedSearchInput<Less>>::upper_bound_input(
             SoAView1 { source: self },
+            policy,
             value,
             less,
         )
     }
 
-    fn is_sorted_until_input(self, less: GpuOp<Less>) -> Result<usize, Error> {
+    fn is_sorted_until_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
         <SoAView1<Source> as SortedSearchInput<Less>>::is_sorted_until_input(
             SoAView1 { source: self },
+            policy,
             less,
         )
     }
 
-    fn is_sorted_input(self, less: GpuOp<Less>) -> Result<bool, Error> {
+    fn is_sorted_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<bool, Error> {
         <SoAView1<Source> as SortedSearchInput<Less>>::is_sorted_input(
             SoAView1 { source: self },
+            policy,
             less,
         )
     }
@@ -317,46 +488,71 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<(Source::Item,)>,
 {
+    type Runtime = Source::Runtime;
     type Item = (Source::Item,);
 
     fn equal_range_input(
         self,
+        policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error> {
         <Source as SortedSearchInput<super::Tuple1Less<Less>>>::equal_range_input(
             self.0,
+            policy,
             value.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn lower_bound_input(self, value: Self::Item, _less: GpuOp<Less>) -> Result<usize, Error> {
+    fn lower_bound_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        value: Self::Item,
+        _less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
         <Source as SortedSearchInput<super::Tuple1Less<Less>>>::lower_bound_input(
             self.0,
+            policy,
             value.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn upper_bound_input(self, value: Self::Item, _less: GpuOp<Less>) -> Result<usize, Error> {
+    fn upper_bound_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        value: Self::Item,
+        _less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
         <Source as SortedSearchInput<super::Tuple1Less<Less>>>::upper_bound_input(
             self.0,
+            policy,
             value.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn is_sorted_until_input(self, _less: GpuOp<Less>) -> Result<usize, Error> {
+    fn is_sorted_until_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<usize, Error> {
         <Source as SortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_until_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn is_sorted_input(self, _less: GpuOp<Less>) -> Result<bool, Error> {
+    fn is_sorted_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<bool, Error> {
         <Source as SortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_input(
             self.0,
+            policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
@@ -368,15 +564,18 @@ macro_rules! impl_sorted_search_tuple_input {
         where
             $view<$( $ty ),+>: SortedSearchInput<Less>,
         {
+            type Runtime = <$view<$( $ty ),+> as SortedSearchInput<Less>>::Runtime;
             type Item = <$view<$( $ty ),+> as SortedSearchInput<Less>>::Item;
 
             fn equal_range_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 value: Self::Item,
                 less: GpuOp<Less>,
             ) -> Result<(usize, usize), Error> {
                 <$view<$( $ty ),+> as SortedSearchInput<Less>>::equal_range_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     value,
                     less,
                 )
@@ -384,11 +583,13 @@ macro_rules! impl_sorted_search_tuple_input {
 
             fn lower_bound_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 value: Self::Item,
                 less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 <$view<$( $ty ),+> as SortedSearchInput<Less>>::lower_bound_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     value,
                     less,
                 )
@@ -396,26 +597,38 @@ macro_rules! impl_sorted_search_tuple_input {
 
             fn upper_bound_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 value: Self::Item,
                 less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 <$view<$( $ty ),+> as SortedSearchInput<Less>>::upper_bound_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     value,
                     less,
                 )
             }
 
-            fn is_sorted_until_input(self, less: GpuOp<Less>) -> Result<usize, Error> {
+            fn is_sorted_until_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                less: GpuOp<Less>,
+            ) -> Result<usize, Error> {
                 <$view<$( $ty ),+> as SortedSearchInput<Less>>::is_sorted_until_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     less,
                 )
             }
 
-            fn is_sorted_input(self, less: GpuOp<Less>) -> Result<bool, Error> {
+            fn is_sorted_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                less: GpuOp<Less>,
+            ) -> Result<bool, Error> {
                 <$view<$( $ty ),+> as SortedSearchInput<Less>>::is_sorted_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     less,
                 )
             }
@@ -429,14 +642,37 @@ impl_sorted_search_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 
 /// Pair of inputs accepted by binary search/comparison algorithms.
 #[doc(hidden)]
 pub trait PairSearchInput<Other, Op> {
+    /// Runtime used by both inputs.
+    type Runtime: Runtime;
+
     /// Returns whether two inputs are equal under `Op`.
-    fn equal_input(self, other: Other, op: GpuOp<Op>) -> Result<bool, Error>;
+    fn equal_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        op: GpuOp<Op>,
+    ) -> Result<bool, Error>;
     /// Finds the first mismatch between two inputs.
-    fn mismatch_input(self, other: Other, op: GpuOp<Op>) -> Result<Option<usize>, Error>;
+    fn mismatch_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        op: GpuOp<Op>,
+    ) -> Result<Option<usize>, Error>;
     /// Finds the first element equal to any value in `other`.
-    fn find_first_of_input(self, other: Other, op: GpuOp<Op>) -> Result<Option<usize>, Error>;
+    fn find_first_of_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        op: GpuOp<Op>,
+    ) -> Result<Option<usize>, Error>;
     /// Lexicographically compares two inputs.
-    fn lexicographical_compare_input(self, other: Other, op: GpuOp<Op>) -> Result<bool, Error>;
+    fn lexicographical_compare_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        op: GpuOp<Op>,
+    ) -> Result<bool, Error>;
 }
 
 impl<Left, Right, Op> PairSearchInput<SoAView1<Right>, Op> for SoAView1<Left>
@@ -450,36 +686,46 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Op: BinaryPredicateOp<Left::Item>,
 {
-    fn equal_input(self, other: SoAView1<Right>, _op: GpuOp<Op>) -> Result<bool, Error> {
-        let (left, right) = materialize_pair(self, other)?;
-        search::equal(&left, &right, GpuOp::<Op>::new())
+    type Runtime = Left::Runtime;
+
+    fn equal_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: SoAView1<Right>,
+        _op: GpuOp<Op>,
+    ) -> Result<bool, Error> {
+        let (left, right) = materialize_pair(policy, self, other)?;
+        search::equal(policy, &left, &right, GpuOp::<Op>::new())
     }
 
     fn mismatch_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        let (left, right) = materialize_pair(self, other)?;
-        search::mismatch(&left, &right, GpuOp::<Op>::new())
+        let (left, right) = materialize_pair(policy, self, other)?;
+        search::mismatch(policy, &left, &right, GpuOp::<Op>::new())
     }
 
     fn find_first_of_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        let (input, needles) = materialize_pair(self, other)?;
-        search::find_first_of(&input, &needles, GpuOp::<Op>::new())
+        let (input, needles) = materialize_pair(policy, self, other)?;
+        search::find_first_of(policy, &input, &needles, GpuOp::<Op>::new())
     }
 
     fn lexicographical_compare_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        let (left, right) = materialize_pair(self, other)?;
-        search::lexicographical_compare(&left, &right, GpuOp::<Op>::new())
+        let (left, right) = materialize_pair(policy, self, other)?;
+        search::lexicographical_compare(policy, &left, &right, GpuOp::<Op>::new())
     }
 }
 
@@ -492,33 +738,59 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Op: BinaryPredicateOp<Left::Item>,
 {
-    fn equal_input(self, other: Right, op: GpuOp<Op>) -> Result<bool, Error> {
+    type Runtime = Left::Runtime;
+
+    fn equal_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Right,
+        op: GpuOp<Op>,
+    ) -> Result<bool, Error> {
         <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::equal_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             op,
         )
     }
 
-    fn mismatch_input(self, other: Right, op: GpuOp<Op>) -> Result<Option<usize>, Error> {
+    fn mismatch_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Right,
+        op: GpuOp<Op>,
+    ) -> Result<Option<usize>, Error> {
         <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::mismatch_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             op,
         )
     }
 
-    fn find_first_of_input(self, other: Right, op: GpuOp<Op>) -> Result<Option<usize>, Error> {
+    fn find_first_of_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Right,
+        op: GpuOp<Op>,
+    ) -> Result<Option<usize>, Error> {
         <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::find_first_of_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             op,
         )
     }
 
-    fn lexicographical_compare_input(self, other: Right, op: GpuOp<Op>) -> Result<bool, Error> {
+    fn lexicographical_compare_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Right,
+        op: GpuOp<Op>,
+    ) -> Result<bool, Error> {
         <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::lexicographical_compare_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             op,
         )
@@ -534,33 +806,59 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Op: BinaryPredicateOp<(Left::Item,)>,
 {
-    fn equal_input(self, other: (Right,), _op: GpuOp<Op>) -> Result<bool, Error> {
+    type Runtime = Left::Runtime;
+
+    fn equal_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: (Right,),
+        _op: GpuOp<Op>,
+    ) -> Result<bool, Error> {
         <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::equal_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Op>>::new(),
         )
     }
 
-    fn mismatch_input(self, other: (Right,), _op: GpuOp<Op>) -> Result<Option<usize>, Error> {
+    fn mismatch_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: (Right,),
+        _op: GpuOp<Op>,
+    ) -> Result<Option<usize>, Error> {
         <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::mismatch_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Op>>::new(),
         )
     }
 
-    fn find_first_of_input(self, other: (Right,), _op: GpuOp<Op>) -> Result<Option<usize>, Error> {
+    fn find_first_of_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: (Right,),
+        _op: GpuOp<Op>,
+    ) -> Result<Option<usize>, Error> {
         <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::find_first_of_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Op>>::new(),
         )
     }
 
-    fn lexicographical_compare_input(self, other: (Right,), _op: GpuOp<Op>) -> Result<bool, Error> {
+    fn lexicographical_compare_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: (Right,),
+        _op: GpuOp<Op>,
+    ) -> Result<bool, Error> {
         <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::lexicographical_compare_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Op>>::new(),
         )
@@ -578,13 +876,18 @@ macro_rules! impl_pair_search_tuple_input {
         where
             $view<$( $left_ty ),+>: PairSearchInput<$view<$( $right_ty ),+>, Op>,
         {
+            type Runtime =
+                <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::Runtime;
+
             fn equal_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<bool, Error> {
                 <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::equal_input(
                     $view { $( $field: self.$left_index ),+ },
+                    policy,
                     $view { $( $field: other.$right_index ),+ },
                     op,
                 )
@@ -592,11 +895,13 @@ macro_rules! impl_pair_search_tuple_input {
 
             fn mismatch_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<Option<usize>, Error> {
                 <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::mismatch_input(
                     $view { $( $field: self.$left_index ),+ },
+                    policy,
                     $view { $( $field: other.$right_index ),+ },
                     op,
                 )
@@ -604,11 +909,13 @@ macro_rules! impl_pair_search_tuple_input {
 
             fn find_first_of_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<Option<usize>, Error> {
                 <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::find_first_of_input(
                     $view { $( $field: self.$left_index ),+ },
+                    policy,
                     $view { $( $field: other.$right_index ),+ },
                     op,
                 )
@@ -616,11 +923,13 @@ macro_rules! impl_pair_search_tuple_input {
 
             fn lexicographical_compare_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<bool, Error> {
                 <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::lexicographical_compare_input(
                     $view { $( $field: self.$left_index ),+ },
+                    policy,
                     $view { $( $field: other.$right_index ),+ },
                     op,
                 )
@@ -669,26 +978,40 @@ macro_rules! impl_tuple_search {
                 $( impl_tuple_search!(@item_ty $rest) ),+
             )>,
         {
-            fn min_element_input(self, less: GpuOp<Less>) -> Result<Option<usize>, Error> {
-                Ok(self.minmax_element_input(less)?.map(|(min, _)| min))
+            type Runtime = <$first as KernelColumn>::Runtime;
+
+            fn min_element_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                less: GpuOp<Less>,
+            ) -> Result<Option<usize>, Error> {
+                Ok(self.minmax_element_input(policy, less)?.map(|(min, _)| min))
             }
 
-            fn max_element_input(self, less: GpuOp<Less>) -> Result<Option<usize>, Error> {
-                Ok(self.minmax_element_input(less)?.map(|(_, max)| max))
+            fn max_element_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                less: GpuOp<Less>,
+            ) -> Result<Option<usize>, Error> {
+                Ok(self.minmax_element_input(policy, less)?.map(|(_, max)| max))
             }
 
-            fn minmax_element_input(self, _less: GpuOp<Less>) -> Result<Option<(usize, usize)>, Error> {
+            fn minmax_element_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                _less: GpuOp<Less>,
+            ) -> Result<Option<(usize, usize)>, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 if len == 0 {
                     return Ok(None);
                 }
 
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let mut current_count = len.div_ceil(BLOCK_SEARCH_SIZE as usize);
                 let mut current_count_u32 = u32::try_from(current_count)
                     .map_err(|_| Error::LengthTooLarge { len: current_count })?;
@@ -778,18 +1101,24 @@ macro_rules! impl_tuple_search {
                 $( impl_tuple_search!(@item_ty $rest) ),+
             )>,
         {
-            fn adjacent_find_input(self, _pred: GpuOp<Pred>) -> Result<Option<usize>, Error> {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
+            fn adjacent_find_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                _pred: GpuOp<Pred>,
+            ) -> Result<Option<usize>, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 if len < 2 {
                     return Ok(None);
                 }
                 let block_count_u32 = search_block_count(len)?;
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 unsafe {
                     $adjacent_kernel::launch_unchecked::<
@@ -808,7 +1137,7 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                search::first_flag($first_field.policy(), flag_handle, len, len - 1)
+                search::first_flag(policy, flag_handle, len, len - 1)
             }
         }
 
@@ -832,6 +1161,8 @@ macro_rules! impl_tuple_search {
                 $( impl_tuple_search!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
             type Item = (
                 impl_tuple_search!(@item_ty $first),
                 $( impl_tuple_search!(@item_ty $rest) ),+
@@ -839,19 +1170,20 @@ macro_rules! impl_tuple_search {
 
             fn equal_range_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 value: Self::Item,
                 _less: GpuOp<Less>,
             ) -> Result<(usize, usize), Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 if len == 0 {
                     return Ok((0, 0));
                 }
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let lower_flag = client.empty(len * std::mem::size_of::<u32>());
                 let upper_flag = client.empty(len * std::mem::size_of::<u32>());
                 let first_value_handle = client.create_from_slice(
@@ -907,26 +1239,27 @@ macro_rules! impl_tuple_search {
                     );
                 }
                 Ok((
-                    search::first_flag($first_field.policy(), lower_flag, len, len)?.unwrap_or(len),
-                    search::first_flag($first_field.policy(), upper_flag, len, len)?.unwrap_or(len),
+                    search::first_flag(policy, lower_flag, len, len)?.unwrap_or(len),
+                    search::first_flag(policy, upper_flag, len, len)?.unwrap_or(len),
                 ))
             }
 
             fn lower_bound_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 value: Self::Item,
                 _less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 if len == 0 {
                     return Ok(0);
                 }
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 let first_value_handle = client.create_from_slice(
                     <<$first as KernelColumn>::Item as CubeElement>::as_bytes(&[value.$first_index])
@@ -961,25 +1294,26 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                Ok(search::first_flag($first_field.policy(), flag_handle, len, len)?
+                Ok(search::first_flag(policy, flag_handle, len, len)?
                     .unwrap_or(len))
             }
 
             fn upper_bound_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 value: Self::Item,
                 _less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 if len == 0 {
                     return Ok(0);
                 }
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 let first_value_handle = client.create_from_slice(
                     <<$first as KernelColumn>::Item as CubeElement>::as_bytes(&[value.$first_index])
@@ -1014,22 +1348,26 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                Ok(search::first_flag($first_field.policy(), flag_handle, len, len)?
+                Ok(search::first_flag(policy, flag_handle, len, len)?
                     .unwrap_or(len))
             }
 
-            fn is_sorted_until_input(self, _less: GpuOp<Less>) -> Result<usize, Error> {
+            fn is_sorted_until_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                _less: GpuOp<Less>,
+            ) -> Result<usize, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
                 let len = $first_field.len();
                 if len <= 1 {
                     return Ok(len);
                 }
                 let block_count_u32 = search_block_count(len)?;
-                let client = $first_field.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty(len * std::mem::size_of::<u32>());
                 unsafe {
                     $sorted_break_kernel::launch_unchecked::<
@@ -1048,13 +1386,17 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                Ok(search::first_flag($first_field.policy(), flag_handle, len, len)?
+                Ok(search::first_flag(policy, flag_handle, len, len)?
                     .unwrap_or(len))
             }
 
-            fn is_sorted_input(self, less: GpuOp<Less>) -> Result<bool, Error> {
+            fn is_sorted_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                less: GpuOp<Less>,
+            ) -> Result<bool, Error> {
                 let len = ReadOnlySoA::len(&self);
-                Ok(self.is_sorted_until_input(less)? == len)
+                Ok(self.is_sorted_until_input(policy, less)? == len)
             }
         }
 
@@ -1107,29 +1449,33 @@ macro_rules! impl_tuple_pair_search {
                 $( <$rest as KernelColumn>::Item ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
             fn equal_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: $name<$right_first, $( $right_rest ),+>,
                 op: GpuOp<Op>,
             ) -> Result<bool, Error> {
                 if ReadOnlySoA::len(&self) != ReadOnlySoA::len(&other) {
                     return Ok(false);
                 }
-                Ok(self.mismatch_input(other, op)?.is_none())
+                Ok(self.mismatch_input(policy, other, op)?.is_none())
             }
 
             fn mismatch_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
             ) -> Result<Option<usize>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $left_first = super::device_expr_collect(&self.$first_field)?;
-                let $right_first_value = super::device_expr_collect(&other.$first_field)?;
+                let $left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let $right_first_value = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $left_value = super::device_expr_collect(&self.$field)?;
-                    let $right_value = super::device_expr_collect(&other.$field)?;
+                    let $left_value = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $right_value = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
 
                 let min_len = $left_first.len().min($right_first_value.len());
@@ -1142,7 +1488,7 @@ macro_rules! impl_tuple_pair_search {
                 }
 
                 let block_count_u32 = search_block_count(min_len)?;
-                let client = $left_first.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
                 unsafe {
                     $mismatch_kernel::launch_unchecked::<
@@ -1166,9 +1512,7 @@ macro_rules! impl_tuple_pair_search {
                     );
                 }
 
-                if let Some(index) =
-                    search::first_flag($left_first.policy(), flag_handle, min_len, min_len)?
-                {
+                if let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? {
                     return Ok(Some(index));
                 }
                 if $left_first.len() == $right_first_value.len() {
@@ -1180,16 +1524,17 @@ macro_rules! impl_tuple_pair_search {
 
             fn find_first_of_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
             ) -> Result<Option<usize>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $left_first = super::device_expr_collect(&self.$first_field)?;
-                let $right_first_value = super::device_expr_collect(&other.$first_field)?;
+                let $left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let $right_first_value = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $left_value = super::device_expr_collect(&self.$field)?;
-                    let $right_value = super::device_expr_collect(&other.$field)?;
+                    let $left_value = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $right_value = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
 
                 if $left_first.len() == 0 || $right_first_value.len() == 0 {
@@ -1197,7 +1542,7 @@ macro_rules! impl_tuple_pair_search {
                 }
 
                 let block_count_u32 = search_block_count($left_first.len())?;
-                let client = $left_first.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty($left_first.len() * std::mem::size_of::<u32>());
                 unsafe {
                     $find_first_of_kernel::launch_unchecked::<
@@ -1221,7 +1566,7 @@ macro_rules! impl_tuple_pair_search {
                     );
                 }
                 search::first_flag(
-                    $left_first.policy(),
+                    policy,
                     flag_handle,
                     $left_first.len(),
                     $left_first.len(),
@@ -1230,16 +1575,17 @@ macro_rules! impl_tuple_pair_search {
 
             fn lexicographical_compare_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
             ) -> Result<bool, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $left_first = super::device_expr_collect(&self.$first_field)?;
-                let $right_first_value = super::device_expr_collect(&other.$first_field)?;
+                let $left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let $right_first_value = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $left_value = super::device_expr_collect(&self.$field)?;
-                    let $right_value = super::device_expr_collect(&other.$field)?;
+                    let $left_value = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $right_value = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
 
                 let min_len = $left_first.len().min($right_first_value.len());
@@ -1248,7 +1594,7 @@ macro_rules! impl_tuple_pair_search {
                 }
 
                 let block_count_u32 = search_block_count(min_len)?;
-                let client = $left_first.policy().client();
+                let client = policy.client();
                 let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
                 unsafe {
                     $lexicographical_diff_kernel::launch_unchecked::<
@@ -1272,9 +1618,7 @@ macro_rules! impl_tuple_pair_search {
                     );
                 }
 
-                let Some(index) =
-                    search::first_flag($left_first.policy(), flag_handle, min_len, min_len)?
-                else {
+                let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? else {
                     return Ok($left_first.len() < $right_first_value.len());
                 };
 
@@ -1322,58 +1666,82 @@ impl_tuple_pair_search!(SoA2<A, B; RA, RB> { left: left_a / right_a, right: left
 impl_tuple_pair_search!(SoA3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_flags_kernel, tuple3_find_first_of_flags_kernel, tuple3_lexicographical_diff_flags_kernel, tuple3_lexicographical_compare_at_kernel);
 
 /// Finds the minimum element index according to `Less`.
-pub fn min_element<Input, Less>(input: Input, _less: Less) -> Result<Option<usize>, Error>
+pub fn min_element<Input, Less>(
+    policy: &CubePolicy<<Input as MinMaxInput<Less>>::Runtime>,
+    input: Input,
+    _less: Less,
+) -> Result<Option<usize>, Error>
 where
     Input: MinMaxInput<Less>,
 {
-    input.min_element_input(GpuOp::<Less>::new())
+    input.min_element_input(policy, GpuOp::<Less>::new())
 }
 
 /// Finds the maximum element index according to `Less`.
-pub fn max_element<Input, Less>(input: Input, _less: Less) -> Result<Option<usize>, Error>
+pub fn max_element<Input, Less>(
+    policy: &CubePolicy<<Input as MinMaxInput<Less>>::Runtime>,
+    input: Input,
+    _less: Less,
+) -> Result<Option<usize>, Error>
 where
     Input: MinMaxInput<Less>,
 {
-    input.max_element_input(GpuOp::<Less>::new())
+    input.max_element_input(policy, GpuOp::<Less>::new())
 }
 
 /// Finds both minimum and maximum element indices according to `Less`.
 pub fn minmax_element<Input, Less>(
+    policy: &CubePolicy<<Input as MinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
 ) -> Result<Option<(usize, usize)>, Error>
 where
     Input: MinMaxInput<Less>,
 {
-    input.minmax_element_input(GpuOp::<Less>::new())
+    input.minmax_element_input(policy, GpuOp::<Less>::new())
 }
 
 /// Finds the first adjacent pair that satisfies `Pred`.
-pub fn adjacent_find<Input, Pred>(input: Input, _pred: Pred) -> Result<Option<usize>, Error>
+pub fn adjacent_find<Input, Pred>(
+    policy: &CubePolicy<<Input as AdjacentFindInput<Pred>>::Runtime>,
+    input: Input,
+    _pred: Pred,
+) -> Result<Option<usize>, Error>
 where
     Input: AdjacentFindInput<Pred>,
 {
-    input.adjacent_find_input(GpuOp::<Pred>::new())
+    input.adjacent_find_input(policy, GpuOp::<Pred>::new())
 }
 
 /// Returns whether two inputs are equal under `Eq`.
-pub fn equal<Left, Right, Eq>(left: Left, right: Right, _eq: Eq) -> Result<bool, Error>
+pub fn equal<Left, Right, Eq>(
+    policy: &CubePolicy<<Left as PairSearchInput<Right, Eq>>::Runtime>,
+    left: Left,
+    right: Right,
+    _eq: Eq,
+) -> Result<bool, Error>
 where
     Left: PairSearchInput<Right, Eq>,
 {
-    left.equal_input(right, GpuOp::<Eq>::new())
+    left.equal_input(policy, right, GpuOp::<Eq>::new())
 }
 
 /// Finds the first mismatch between two inputs.
-pub fn mismatch<Left, Right, Eq>(left: Left, right: Right, _eq: Eq) -> Result<Option<usize>, Error>
+pub fn mismatch<Left, Right, Eq>(
+    policy: &CubePolicy<<Left as PairSearchInput<Right, Eq>>::Runtime>,
+    left: Left,
+    right: Right,
+    _eq: Eq,
+) -> Result<Option<usize>, Error>
 where
     Left: PairSearchInput<Right, Eq>,
 {
-    left.mismatch_input(right, GpuOp::<Eq>::new())
+    left.mismatch_input(policy, right, GpuOp::<Eq>::new())
 }
 
 /// Finds the first input element equal to any value in `needles`.
 pub fn find_first_of<Input, Needles, Eq>(
+    policy: &CubePolicy<<Input as PairSearchInput<Needles, Eq>>::Runtime>,
     input: Input,
     needles: Needles,
     _eq: Eq,
@@ -1381,11 +1749,12 @@ pub fn find_first_of<Input, Needles, Eq>(
 where
     Input: PairSearchInput<Needles, Eq>,
 {
-    input.find_first_of_input(needles, GpuOp::<Eq>::new())
+    input.find_first_of_input(policy, needles, GpuOp::<Eq>::new())
 }
 
 /// Returns the equal range for `value` in a sorted input.
 pub fn equal_range<Input, Less>(
+    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
     input: Input,
     value: <Input as SortedSearchInput<Less>>::Item,
     _less: Less,
@@ -1393,11 +1762,12 @@ pub fn equal_range<Input, Less>(
 where
     Input: SortedSearchInput<Less>,
 {
-    input.equal_range_input(value, GpuOp::<Less>::new())
+    input.equal_range_input(policy, value, GpuOp::<Less>::new())
 }
 
 /// Finds the first sorted insertion point for `value`.
 pub fn lower_bound<Input, Less>(
+    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
     input: Input,
     value: <Input as SortedSearchInput<Less>>::Item,
     _less: Less,
@@ -1405,11 +1775,12 @@ pub fn lower_bound<Input, Less>(
 where
     Input: SortedSearchInput<Less>,
 {
-    input.lower_bound_input(value, GpuOp::<Less>::new())
+    input.lower_bound_input(policy, value, GpuOp::<Less>::new())
 }
 
 /// Finds the last sorted insertion point for `value`.
 pub fn upper_bound<Input, Less>(
+    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
     input: Input,
     value: <Input as SortedSearchInput<Less>>::Item,
     _less: Less,
@@ -1417,27 +1788,36 @@ pub fn upper_bound<Input, Less>(
 where
     Input: SortedSearchInput<Less>,
 {
-    input.upper_bound_input(value, GpuOp::<Less>::new())
+    input.upper_bound_input(policy, value, GpuOp::<Less>::new())
 }
 
 /// Returns the first position where the sorted order is broken.
-pub fn is_sorted_until<Input, Less>(input: Input, _less: Less) -> Result<usize, Error>
+pub fn is_sorted_until<Input, Less>(
+    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    input: Input,
+    _less: Less,
+) -> Result<usize, Error>
 where
     Input: SortedSearchInput<Less>,
 {
-    input.is_sorted_until_input(GpuOp::<Less>::new())
+    input.is_sorted_until_input(policy, GpuOp::<Less>::new())
 }
 
 /// Returns whether an input is sorted.
-pub fn is_sorted<Input, Less>(input: Input, _less: Less) -> Result<bool, Error>
+pub fn is_sorted<Input, Less>(
+    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    input: Input,
+    _less: Less,
+) -> Result<bool, Error>
 where
     Input: SortedSearchInput<Less>,
 {
-    input.is_sorted_input(GpuOp::<Less>::new())
+    input.is_sorted_input(policy, GpuOp::<Less>::new())
 }
 
 /// Lexicographically compares two inputs.
 pub fn lexicographical_compare<Left, Right, Less>(
+    policy: &CubePolicy<<Left as PairSearchInput<Right, Less>>::Runtime>,
     left: Left,
     right: Right,
     _less: Less,
@@ -1445,5 +1825,5 @@ pub fn lexicographical_compare<Left, Right, Less>(
 where
     Left: PairSearchInput<Right, Less>,
 {
-    left.lexicographical_compare_input(right, GpuOp::<Less>::new())
+    left.lexicographical_compare_input(policy, right, GpuOp::<Less>::new())
 }

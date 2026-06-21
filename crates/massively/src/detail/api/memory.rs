@@ -7,6 +7,7 @@ use crate::{
     expr::DeviceGpuExpr,
     kernels::*,
     op::UnaryOp,
+    policy::CubePolicy,
 };
 use cubecl::prelude::*;
 
@@ -58,7 +59,10 @@ where
     T: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = Self>,
 {
-    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+    fn run(
+        policy: &CubePolicy<R>,
+        input: DeviceColumnView<R, T>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
 impl<R, T, A, Op> TransformUnaryOutput<R, T, Op> for (A,)
@@ -68,9 +72,12 @@ where
     A: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = (A,)>,
 {
-    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    fn run(
+        policy: &CubePolicy<R>,
+        input: DeviceColumnView<R, T>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
-        let client = input.policy().client();
+        let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
@@ -97,7 +104,7 @@ where
             }
         }
         Ok(SoA1 {
-            source: DeviceVec::from_handle(input.policy().clone(), output_a, len),
+            source: DeviceVec::from_handle(policy.id(), output_a, len),
         })
     }
 }
@@ -110,9 +117,12 @@ where
     B: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = (A, B)>,
 {
-    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    fn run(
+        policy: &CubePolicy<R>,
+        input: DeviceColumnView<R, T>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
-        let client = input.policy().client();
+        let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
         let output_b = client.empty(len * std::mem::size_of::<B>());
         if len != 0 {
@@ -141,8 +151,8 @@ where
             }
         }
         Ok(SoA2 {
-            left: DeviceVec::from_handle(input.policy().clone(), output_a, len),
-            right: DeviceVec::from_handle(input.policy().clone(), output_b, len),
+            left: DeviceVec::from_handle(policy.id(), output_a, len),
+            right: DeviceVec::from_handle(policy.id(), output_b, len),
         })
     }
 }
@@ -156,9 +166,12 @@ where
     C: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = (A, B, C)>,
 {
-    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    fn run(
+        policy: &CubePolicy<R>,
+        input: DeviceColumnView<R, T>,
+    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
-        let client = input.policy().client();
+        let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
         let output_b = client.empty(len * std::mem::size_of::<B>());
         let output_c = client.empty(len * std::mem::size_of::<C>());
@@ -189,9 +202,9 @@ where
             }
         }
         Ok(SoA3 {
-            first: DeviceVec::from_handle(input.policy().clone(), output_a, len),
-            second: DeviceVec::from_handle(input.policy().clone(), output_b, len),
-            third: DeviceVec::from_handle(input.policy().clone(), output_c, len),
+            first: DeviceVec::from_handle(policy.id(), output_a, len),
+            second: DeviceVec::from_handle(policy.id(), output_b, len),
+            third: DeviceVec::from_handle(policy.id(), output_c, len),
         })
     }
 }
@@ -266,7 +279,7 @@ macro_rules! impl_transform_tuple_output {
                 }
                 Ok($soa {
                     $(
-                        $out_field: DeviceVec::from_handle(policy.clone(), $out_handle, len),
+                        $out_field: DeviceVec::from_handle(policy.id(), $out_handle, len),
                     )+
                 })
             }
@@ -378,7 +391,7 @@ where
             }
         }
         Ok(SoA1 {
-            source: DeviceVec::from_handle(policy.clone(), output_a, len),
+            source: DeviceVec::from_handle(policy.id(), output_a, len),
         })
     }
 }
@@ -430,8 +443,8 @@ where
             }
         }
         Ok(SoA2 {
-            left: DeviceVec::from_handle(policy.clone(), output_a, len),
-            right: DeviceVec::from_handle(policy.clone(), output_b, len),
+            left: DeviceVec::from_handle(policy.id(), output_a, len),
+            right: DeviceVec::from_handle(policy.id(), output_b, len),
         })
     }
 }
@@ -504,7 +517,7 @@ where
             }
         }
         Ok(SoA1 {
-            source: DeviceVec::from_handle(policy.clone(), output_a, len),
+            source: DeviceVec::from_handle(policy.id(), output_a, len),
         })
     }
 }
@@ -576,9 +589,9 @@ where
             }
         }
         Ok(SoA3 {
-            first: DeviceVec::from_handle(policy.clone(), output_a, len),
-            second: DeviceVec::from_handle(policy.clone(), output_b, len),
-            third: DeviceVec::from_handle(policy.clone(), output_c, len),
+            first: DeviceVec::from_handle(policy.id(), output_a, len),
+            second: DeviceVec::from_handle(policy.id(), output_b, len),
+            third: DeviceVec::from_handle(policy.id(), output_c, len),
         })
     }
 }
@@ -595,11 +608,13 @@ impl_transform_tuple_outputs!(
 /// Internal output that can be materialized into public owned device values.
 #[doc(hidden)]
 pub trait MaterializeOutput {
+    /// Runtime used by this output.
+    type Runtime: Runtime;
     /// Public output produced by materializing this internal output.
     type Output;
 
     /// Materializes this internal output.
-    fn materialize_output(self) -> Result<Self::Output, Error>;
+    fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error>;
 }
 
 impl<Left, Right> MaterializeOutput for SoA2<Left, Right>
@@ -614,15 +629,16 @@ where
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
 {
+    type Runtime = Left::Runtime;
     type Output = (
         DeviceVec<Left::Runtime, Left::Item>,
         DeviceVec<Left::Runtime, Right::Item>,
     );
 
-    fn materialize_output(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let left = super::device_expr_collect(&self.left)?;
-        let right = super::device_expr_collect(&self.right)?;
+        let left = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let right = super::device_expr_collect_with_policy(policy, &self.right)?;
         Ok((left, right))
     }
 }
@@ -634,11 +650,12 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = (DeviceVec<Source::Runtime, Source::Item>,);
 
-    fn materialize_output(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let source = super::device_expr_collect(&self.source)?;
+        let source = super::device_expr_collect_with_policy(policy, &self.source)?;
         Ok((source,))
     }
 }
@@ -648,9 +665,13 @@ where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
+    type Runtime = R;
     type Output = Self;
 
-    fn materialize_output(self) -> Result<Self::Output, Error> {
+    fn materialize_output(
+        self,
+        _policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<Self::Output, Error> {
         Ok(self)
     }
 }
@@ -672,17 +693,18 @@ where
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
 {
+    type Runtime = First::Runtime;
     type Output = (
         DeviceVec<First::Runtime, First::Item>,
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
     );
 
-    fn materialize_output(self) -> Result<Self::Output, Error> {
+    fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let first = super::device_expr_collect(&self.first)?;
-        let second = super::device_expr_collect(&self.second)?;
-        let third = super::device_expr_collect(&self.third)?;
+        let first = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let second = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let third = super::device_expr_collect_with_policy(policy, &self.third)?;
         Ok((first, second, third))
     }
 }
@@ -690,20 +712,25 @@ where
 impl<Left, Right> MaterializeOutput for (Left, Right)
 where
     Left: MaterializeOutput,
-    Right: MaterializeOutput,
+    Right: MaterializeOutput<Runtime = Left::Runtime>,
 {
+    type Runtime = Left::Runtime;
     type Output = (Left::Output, Right::Output);
 
-    fn materialize_output(self) -> Result<Self::Output, Error> {
-        Ok((self.0.materialize_output()?, self.1.materialize_output()?))
+    fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
+        Ok((
+            self.0.materialize_output(policy)?,
+            self.1.materialize_output(policy)?,
+        ))
     }
 }
 
 pub(crate) fn materialize<Source>(
+    policy: &CubePolicy<Source::Runtime>,
     source: Source,
 ) -> Result<<Source as MaterializeOutput>::Output, Error>
 where
     Source: MaterializeOutput,
 {
-    source.materialize_output()
+    source.materialize_output(policy)
 }

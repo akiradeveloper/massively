@@ -1,13 +1,13 @@
 mod common;
 
-use massively::{CubeWgpu, sort};
+use massively::{Executor, Wgpu, sort};
 
 fn main() -> common::Result {
-    let policy = CubeWgpu::cpu();
-    let values = policy.to_device(&[3.0_f32, 1.0, 2.0])?;
+    let exec = Executor::<Wgpu>::cpu();
+    let values = exec.to_device(&[3.0_f32, 1.0, 2.0])?;
 
-    let (output,) = sort((values.slice(..),), common::LessF32)?;
+    let (output,) = sort(&exec, (values.slice(..),), common::LessF32)?;
 
-    assert_eq!(output.to_vec()?, vec![1.0, 2.0, 3.0]);
+    assert_eq!(exec.to_host(&output)?, vec![1.0, 2.0, 3.0]);
     Ok(())
 }

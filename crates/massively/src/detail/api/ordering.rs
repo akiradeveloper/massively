@@ -8,13 +8,15 @@ use crate::{
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
+    policy::CubePolicy,
     primitives::{ordering, range as primitive_range, select},
 };
 use cubecl::prelude::*;
 
 const BLOCK_ORDERING_SIZE: u32 = 256;
 
-fn materialize_soa_view_one<Source>(
+fn materialize_soa_view_one_with_policy<Source>(
+    policy: &CubePolicy<Source::Runtime>,
     input: SoAView1<Source>,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
@@ -24,32 +26,53 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
     ReadOnlySoA::validate(&input)?;
-    let bindings = input.source.stage()?;
+    let bindings = input.source.stage(policy)?;
     if let Some(handle) = input.source.staged_value_handle(&bindings) {
         return Ok(DeviceVec::from_handle(
-            input.source.policy().clone(),
+            policy.id(),
             handle,
             input.source.len(),
         ));
     }
-    super::device_expr_collect(&input.source)
+    super::device_expr_collect_with_policy(policy, &input.source)
 }
 
 /// Pair input accepted by sorted binary ordering algorithms.
 #[doc(hidden)]
 pub trait PairOrderingInput<Other, Less> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
     /// Output produced by this algorithm.
     type Output;
 
     /// Merges two sorted inputs.
-    fn merge_input(self, other: Other, less: GpuOp<Less>) -> Result<Self::Output, Error>;
+    fn merge_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>;
     /// Computes the sorted set union.
-    fn set_union_input(self, other: Other, less: GpuOp<Less>) -> Result<Self::Output, Error>;
+    fn set_union_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>;
     /// Computes the sorted set intersection.
-    fn set_intersection_input(self, other: Other, less: GpuOp<Less>)
-    -> Result<Self::Output, Error>;
+    fn set_intersection_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>;
     /// Computes the sorted set difference.
-    fn set_difference_input(self, other: Other, less: GpuOp<Less>) -> Result<Self::Output, Error>;
+    fn set_difference_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        other: Other,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>;
 }
 
 impl<Left, Right, Less> PairOrderingInput<SoAView1<Right>, Less> for SoAView1<Left>
@@ -63,53 +86,68 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Less: BinaryPredicateOp<Left::Item>,
 {
+    type Runtime = Left::Runtime;
     type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
 
     fn merge_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: SoAView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        let left = materialize_soa_view_one(self)?;
-        let right = materialize_soa_view_one(other)?;
+        let left = materialize_soa_view_one_with_policy(policy, self)?;
+        let right = materialize_soa_view_one_with_policy(policy, other)?;
         Ok(SoA1 {
-            source: ordering::merge(&left, &right, GpuOp::<Less>::new())?,
+            source: ordering::merge_with_policy(policy, &left, &right, GpuOp::<Less>::new())?,
         })
     }
 
     fn set_union_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: SoAView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        let left = materialize_soa_view_one(self)?;
-        let right = materialize_soa_view_one(other)?;
+        let left = materialize_soa_view_one_with_policy(policy, self)?;
+        let right = materialize_soa_view_one_with_policy(policy, other)?;
         Ok(SoA1 {
-            source: ordering::set_union(&left, &right, GpuOp::<Less>::new())?,
+            source: ordering::set_union_with_policy(policy, &left, &right, GpuOp::<Less>::new())?,
         })
     }
 
     fn set_intersection_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: SoAView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        let left = materialize_soa_view_one(self)?;
-        let right = materialize_soa_view_one(other)?;
+        let left = materialize_soa_view_one_with_policy(policy, self)?;
+        let right = materialize_soa_view_one_with_policy(policy, other)?;
         Ok(SoA1 {
-            source: ordering::set_intersection(&left, &right, GpuOp::<Less>::new())?,
+            source: ordering::set_intersection_with_policy(
+                policy,
+                &left,
+                &right,
+                GpuOp::<Less>::new(),
+            )?,
         })
     }
 
     fn set_difference_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: SoAView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        let left = materialize_soa_view_one(self)?;
-        let right = materialize_soa_view_one(other)?;
+        let left = materialize_soa_view_one_with_policy(policy, self)?;
+        let right = materialize_soa_view_one_with_policy(policy, other)?;
         Ok(SoA1 {
-            source: ordering::set_difference(&left, &right, GpuOp::<Less>::new())?,
+            source: ordering::set_difference_with_policy(
+                policy,
+                &left,
+                &right,
+                GpuOp::<Less>::new(),
+            )?,
         })
     }
 }
@@ -123,19 +161,32 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Less: BinaryPredicateOp<Left::Item>,
 {
+    type Runtime = Left::Runtime;
     type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
 
-    fn merge_input(self, other: Right, less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn merge_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        other: Right,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::merge_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             less,
         )
     }
 
-    fn set_union_input(self, other: Right, less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn set_union_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        other: Right,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::set_union_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             less,
         )
@@ -143,19 +194,27 @@ where
 
     fn set_intersection_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::set_intersection_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             less,
         )
     }
 
-    fn set_difference_input(self, other: Right, less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn set_difference_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        other: Right,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::set_difference_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 { source: other },
             less,
         )
@@ -171,19 +230,32 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Less: BinaryPredicateOp<(Left::Item,)>,
 {
+    type Runtime = Left::Runtime;
     type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
 
-    fn merge_input(self, other: (Right,), _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn merge_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        other: (Right,),
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::merge_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
 
-    fn set_union_input(self, other: (Right,), _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn set_union_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        other: (Right,),
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::set_union_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
@@ -191,11 +263,13 @@ where
 
     fn set_intersection_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: (Right,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::set_intersection_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
@@ -203,11 +277,13 @@ where
 
     fn set_difference_input(
         self,
+        policy: &CubePolicy<Left::Runtime>,
         other: (Right,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::set_difference_input(
             self.0,
+            policy,
             other.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
@@ -220,13 +296,14 @@ macro_rules! tuple_membership_handles {
         ($first_item_ty:ty, $( $item_ty:ty ),+),
         $runtime_ty:ty,
         $less_ty:ty,
+        $policy:expr,
         ($first_candidate:ident, $( $candidate:ident ),+),
         ($first_sorted:ident, $( $sorted:ident ),+),
         $keep_present:expr
     ) => {{
         let len = $first_candidate.len();
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-        let client = $first_candidate.policy().client();
+        let client = $policy.client();
         let flag = client.empty(len * std::mem::size_of::<u32>());
 
         if len != 0 {
@@ -260,7 +337,7 @@ macro_rules! tuple_membership_handles {
         }
 
         select::handles_from_flags(
-            $first_candidate.policy(),
+            $policy,
             len,
             len_u32,
             flag,
@@ -273,19 +350,20 @@ macro_rules! compact_tuple_from_handles {
     (
         $name:ident,
         $runtime_ty:ty,
+        $policy:expr,
         $handles:ident,
         $count:ident,
         ($first_item_ty:ty, $( $item_ty:ty ),+),
         { $first_output_field:ident : $first_source:ident, $( $output_field:ident : $source:ident ),+ }
     ) => {{
         let $first_source = select::compact_with_count::<$runtime_ty, $first_item_ty>(
-            $first_source.policy(),
+            $policy,
             $handles.clone(),
             $count,
         )?;
         $(
             let $source = select::compact_with_count::<$runtime_ty, $item_ty>(
-                $source.policy(),
+                $policy,
                 select::handles_for_value(&$handles, $source.handle.clone()),
                 $count,
             )?;
@@ -334,6 +412,7 @@ macro_rules! impl_tuple_pair_ordering {
                 $( impl_tuple_pair_ordering!(@item_ty $rest) ),+
             )>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$first as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
@@ -341,24 +420,26 @@ macro_rules! impl_tuple_pair_ordering {
 
             fn merge_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let $right_first_var = super::device_expr_collect(&other.$first_field)?;
+                let $right_first_var = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $right_var = super::device_expr_collect(&other.$field)?;
+                    let $right_var = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
-                let $first_field = primitive_range::concat_device(&$first_field, &$right_first_var)?;
+                let $first_field = primitive_range::concat_device_with_policy(policy, &$first_field, &$right_first_var)?;
                 $(
-                    let $field = primitive_range::concat_device(&$field, &$right_var)?;
+                    let $field = primitive_range::concat_device_with_policy(policy, &$field, &$right_var)?;
                 )+
                 let ($first_field, $( $field ),+) = ordering::$sort_fn(
+                    policy,
                     &$first_field,
                     $( &$field, )+
                     GpuOp::<Less>::new(),
@@ -368,18 +449,19 @@ macro_rules! impl_tuple_pair_ordering {
 
             fn set_union_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let $right_first_var = super::device_expr_collect(&other.$first_field)?;
+                let $right_first_var = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $right_var = super::device_expr_collect(&other.$field)?;
+                    let $right_var = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
                 let handles = tuple_membership_handles!(
                     $membership_kernel,
@@ -389,14 +471,16 @@ macro_rules! impl_tuple_pair_ordering {
                     ),
                     <$first as KernelColumn>::Runtime,
                     Less,
+                    policy,
                     ($right_first_var, $( $right_var ),+),
                     ($first_field, $( $field ),+),
                     false
                 )?;
-                let count = select::selected_count($right_first_var.policy(), &handles)?;
+                let count = select::selected_count(policy, &handles)?;
                 let right_only = compact_tuple_from_handles!(
                     $output,
                     <$first as KernelColumn>::Runtime,
+                    policy,
                     handles,
                     count,
                     (
@@ -406,11 +490,12 @@ macro_rules! impl_tuple_pair_ordering {
                     { $first_field: $right_first_var, $( $field: $right_var ),+ }
                 );
                 let $output { $first_field: $right_first_var, $( $field: $right_var ),+ } = right_only;
-                let $first_field = primitive_range::concat_device(&$first_field, &$right_first_var)?;
+                let $first_field = primitive_range::concat_device_with_policy(policy, &$first_field, &$right_first_var)?;
                 $(
-                    let $field = primitive_range::concat_device(&$field, &$right_var)?;
+                    let $field = primitive_range::concat_device_with_policy(policy, &$field, &$right_var)?;
                 )+
                 let ($first_field, $( $field ),+) = ordering::$sort_fn(
+                    policy,
                     &$first_field,
                     $( &$field, )+
                     GpuOp::<Less>::new(),
@@ -420,18 +505,19 @@ macro_rules! impl_tuple_pair_ordering {
 
             fn set_intersection_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let $right_first_var = super::device_expr_collect(&other.$first_field)?;
+                let $right_first_var = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $right_var = super::device_expr_collect(&other.$field)?;
+                    let $right_var = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
                 let handles = tuple_membership_handles!(
                     $membership_kernel,
@@ -441,14 +527,16 @@ macro_rules! impl_tuple_pair_ordering {
                     ),
                     <$first as KernelColumn>::Runtime,
                     Less,
+                    policy,
                     ($first_field, $( $field ),+),
                     ($right_first_var, $( $right_var ),+),
                     true
                 )?;
-                let count = select::selected_count($first_field.policy(), &handles)?;
+                let count = select::selected_count(policy, &handles)?;
                 Ok(compact_tuple_from_handles!(
                     $output,
                     <$first as KernelColumn>::Runtime,
+                    policy,
                     handles,
                     count,
                     (
@@ -461,18 +549,19 @@ macro_rules! impl_tuple_pair_ordering {
 
             fn set_difference_input(
                 self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
+                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
                 )+
-                let $right_first_var = super::device_expr_collect(&other.$first_field)?;
+                let $right_first_var = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
                 $(
-                    let $right_var = super::device_expr_collect(&other.$field)?;
+                    let $right_var = super::device_expr_collect_with_policy(policy, &other.$field)?;
                 )+
                 let handles = tuple_membership_handles!(
                     $membership_kernel,
@@ -482,14 +571,16 @@ macro_rules! impl_tuple_pair_ordering {
                     ),
                     <$first as KernelColumn>::Runtime,
                     Less,
+                    policy,
                     ($first_field, $( $field ),+),
                     ($right_first_var, $( $right_var ),+),
                     false
                 )?;
-                let count = select::selected_count($first_field.policy(), &handles)?;
+                let count = select::selected_count(policy, &handles)?;
                 Ok(compact_tuple_from_handles!(
                     $output,
                     <$first as KernelColumn>::Runtime,
+                    policy,
                     handles,
                     count,
                     (
@@ -512,11 +603,14 @@ impl_tuple_pair_ordering!(SoA3 -> SoA3<A, B, C; RA, RB, RC> { first / right_firs
 /// Input accepted by [`reverse`].
 #[doc(hidden)]
 pub trait ReverseInput {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
+
     /// Output produced by reversing this input.
     type Output;
 
     /// Reverses this input.
-    fn reverse_input(self) -> Result<Self::Output, Error>;
+    fn reverse_input(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error>;
 }
 
 impl<Source> ReverseInput for SoA1<Source>
@@ -526,12 +620,13 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
+    fn reverse_input(self, policy: &CubePolicy<Source::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         Ok(SoA1 {
-            source: super::device_expr_reverse_collect(&self.source)?,
+            source: super::device_expr_reverse_collect(policy, &self.source)?,
         })
     }
 }
@@ -542,10 +637,11 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
-        <SoA1<Source> as ReverseInput>::reverse_input(SoA1 { source: self })
+    fn reverse_input(self, policy: &CubePolicy<Source::Runtime>) -> Result<Self::Output, Error> {
+        <SoA1<Source> as ReverseInput>::reverse_input(SoA1 { source: self }, policy)
     }
 }
 
@@ -555,10 +651,11 @@ where
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
-        <SoA1<Source> as ReverseInput>::reverse_input(SoA1 { source: self.0 })
+    fn reverse_input(self, policy: &CubePolicy<Source::Runtime>) -> Result<Self::Output, Error> {
+        <SoA1<Source> as ReverseInput>::reverse_input(SoA1 { source: self.0 }, policy)
     }
 }
 
@@ -568,13 +665,17 @@ where
     Left: KernelColumnAt<S0>,
     Right: KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
 {
+    type Runtime = <SoAView2<Left, Right> as ReverseInput>::Runtime;
     type Output = <SoAView2<Left, Right> as ReverseInput>::Output;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as ReverseInput>::reverse_input(SoAView2 {
-            left: self.0,
-            right: self.1,
-        })
+    fn reverse_input(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
+        <SoAView2<Left, Right> as ReverseInput>::reverse_input(
+            SoAView2 {
+                left: self.0,
+                right: self.1,
+            },
+            policy,
+        )
     }
 }
 
@@ -585,14 +686,18 @@ where
     Second: KernelColumnAt<<First as KernelColumnAt<S0>>::Next>,
     Third: KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
 {
+    type Runtime = <SoAView3<First, Second, Third> as ReverseInput>::Runtime;
     type Output = <SoAView3<First, Second, Third> as ReverseInput>::Output;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as ReverseInput>::reverse_input(SoAView3 {
-            first: self.0,
-            second: self.1,
-            third: self.2,
-        })
+    fn reverse_input(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
+        <SoAView3<First, Second, Third> as ReverseInput>::reverse_input(
+            SoAView3 {
+                first: self.0,
+                second: self.1,
+                third: self.2,
+            },
+            policy,
+        )
     }
 }
 
@@ -615,21 +720,27 @@ macro_rules! impl_reverse_input {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
             type Output = $name<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$first as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn reverse_input(self) -> Result<Self::Output, Error> {
+            fn reverse_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+            ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_reverse_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_reverse_collect(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_reverse_collect(&self.$field)?;
+                    let $field = super::device_expr_reverse_collect(policy, &self.$field)?;
                 )+
 
                 Ok($name { $first_field, $( $field ),+ })
             }
         }
+
     };
 }
 
@@ -648,13 +759,15 @@ where
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
 {
+    type Runtime = Left::Runtime;
+
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
+    fn reverse_input(self, policy: &CubePolicy<Left::Runtime>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(SoA2 {
-            left: super::device_expr_reverse_collect(&self.left)?,
-            right: super::device_expr_reverse_collect(&self.right)?,
+            left: super::device_expr_reverse_collect(policy, &self.left)?,
+            right: super::device_expr_reverse_collect(policy, &self.right)?,
         })
     }
 }
@@ -676,51 +789,80 @@ where
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
 {
+    type Runtime = First::Runtime;
+
     type Output = SoA3<
         DeviceVec<First::Runtime, First::Item>,
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
     >;
 
-    fn reverse_input(self) -> Result<Self::Output, Error> {
+    fn reverse_input(self, policy: &CubePolicy<First::Runtime>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(SoA3 {
-            first: super::device_expr_reverse_collect(&self.first)?,
-            second: super::device_expr_reverse_collect(&self.second)?,
-            third: super::device_expr_reverse_collect(&self.third)?,
+            first: super::device_expr_reverse_collect(policy, &self.first)?,
+            second: super::device_expr_reverse_collect(policy, &self.second)?,
+            third: super::device_expr_reverse_collect(policy, &self.third)?,
         })
     }
 }
 
 /// Reverses read-only SoA input and returns new device storage.
 pub fn reverse<Input>(
+    policy: &CubePolicy<<Input as ReverseInput>::Runtime>,
     input: Input,
 ) -> Result<<<Input as ReverseInput>::Output as MaterializeOutput>::Output, Error>
 where
     Input: ReverseInput,
-    <Input as ReverseInput>::Output: MaterializeOutput,
+    <Input as ReverseInput>::Output: MaterializeOutput<Runtime = <Input as ReverseInput>::Runtime>,
 {
-    materialize(input.reverse_input()?)
+    materialize(policy, input.reverse_input(policy)?)
 }
 
 /// Input accepted by [`sort`].
 #[doc(hidden)]
 pub trait SortInput<Less> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
     /// Output produced by sorting this input.
     type Output;
 
     /// Sorts this input.
-    fn sort_input(self, less: GpuOp<Less>) -> Result<Self::Output, Error>;
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>;
 }
 
 /// Key/value input accepted by [`sort_by_key`].
 #[doc(hidden)]
 pub trait SortByKeyInput<Values, Less> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
     /// Output produced by key-value sorting.
     type Output;
 
     /// Sorts key-value pairs by key.
-    fn sort_by_key_input(self, values: Values, less: GpuOp<Less>) -> Result<Self::Output, Error>;
+    fn sort_by_key_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        values: Values,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>;
+
+    /// Sorts key-value pairs by key with an explicit executor policy.
+    fn sort_by_key_input_with_policy(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        values: Values,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error>
+    where
+        Self: Sized,
+    {
+        self.sort_by_key_input(policy, values, less)
+    }
 }
 
 impl<KeySource, ValueSource, Less> SortByKeyInput<SoA1<ValueSource>, Less> for SoAView1<KeySource>
@@ -735,6 +877,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Less: BinaryPredicateOp<KeySource::Item>,
 {
+    type Runtime = KeySource::Runtime;
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
         SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>,
@@ -742,13 +885,18 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA1<ValueSource>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let (keys, values) =
-            ordering::sort_by_key_input(&self.source, &values.source, GpuOp::<Less>::new())?;
+        let (keys, values) = ordering::sort_by_key_input_with_policy(
+            policy,
+            &self.source,
+            &values.source,
+            GpuOp::<Less>::new(),
+        )?;
         Ok((SoA1 { source: keys }, SoA1 { source: values }))
     }
 }
@@ -763,6 +911,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Less: BinaryPredicateOp<KeySource::Item>,
 {
+    type Runtime = KeySource::Runtime;
     type Output = (
         SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
         SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>,
@@ -770,11 +919,13 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         op: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         <SoAView1<KeySource> as SortByKeyInput<SoA1<ValueSource>, Less>>::sort_by_key_input(
             SoAView1 { source: self },
+            policy,
             SoA1 { source: values },
             op,
         )
@@ -785,15 +936,18 @@ impl<KeySource, ValueSource, Less> SortByKeyInput<(ValueSource,), Less> for (Key
 where
     KeySource: SortByKeyInput<ValueSource, super::Tuple1Less<Less>>,
 {
+    type Runtime = <KeySource as SortByKeyInput<ValueSource, super::Tuple1Less<Less>>>::Runtime;
     type Output = <KeySource as SortByKeyInput<ValueSource, super::Tuple1Less<Less>>>::Output;
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: (ValueSource,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         <KeySource as SortByKeyInput<ValueSource, super::Tuple1Less<Less>>>::sort_by_key_input(
             self.0,
+            policy,
             values.0,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
@@ -826,6 +980,7 @@ macro_rules! impl_sort_by_key_input {
             )+
             Less: BinaryPredicateOp<KeySource::Item>,
         {
+            type Runtime = KeySource::Runtime;
             type Output = (
                 SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
                 $name<
@@ -836,17 +991,18 @@ macro_rules! impl_sort_by_key_input {
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $name<$first, $( $rest ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 SoA::validate(&values)?;
-                let indices = primitive_range::indices_u32(self.source.policy(), self.source.len())?;
+                let indices = primitive_range::indices_u32(policy, self.source.len())?;
                 let (out_keys, sorted_indices) =
-                    ordering::sort_by_key_input(&self.source, &indices, GpuOp::<Less>::new())?;
-                let $first_field = super::device_expr_gather(&values.$first_field, &sorted_indices)?;
+                    ordering::sort_by_key_input_with_policy(policy, &self.source, &indices, GpuOp::<Less>::new())?;
+                let $first_field = super::device_expr_gather_with_policy(policy, &values.$first_field, &sorted_indices)?;
                 $(
-                    let $field = super::device_expr_gather(&values.$field, &sorted_indices)?;
+                    let $field = super::device_expr_gather_with_policy(policy, &values.$field, &sorted_indices)?;
                 )+
                 Ok((SoA1 { source: out_keys }, $name { $first_field, $( $field ),+ }))
             }
@@ -865,15 +1021,19 @@ macro_rules! impl_sort_by_key_input_key_source {
             KeySource: KernelColumn + KernelColumnAt<S0>,
             SoAView1<KeySource>: SortByKeyInput<$name<$( $field_ty ),+>, Less>,
         {
+            type Runtime =
+                <SoAView1<KeySource> as SortByKeyInput<$name<$( $field_ty ),+>, Less>>::Runtime;
             type Output = <SoAView1<KeySource> as SortByKeyInput<$name<$( $field_ty ),+>, Less>>::Output;
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $name<$( $field_ty ),+>,
                 less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 <SoAView1<KeySource> as SortByKeyInput<$name<$( $field_ty ),+>, Less>>::sort_by_key_input(
                     SoAView1 { source: self },
+                    policy,
                     values,
                     less,
                 )
@@ -901,6 +1061,7 @@ macro_rules! impl_sort_by_key_view_values {
             $( <$value as KernelColumn>::Expr: GpuExpr<<$value as KernelColumn>::Item>, )+
             Less: BinaryPredicateOp<KeySource::Item>,
         {
+            type Runtime = KeySource::Runtime;
             type Output = (
                 SoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>,
                 $out<$( DeviceVec<KeySource::Runtime, <$value as KernelColumn>::Item> ),+>,
@@ -908,16 +1069,17 @@ macro_rules! impl_sort_by_key_view_values {
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $view<$( $value ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&values)?;
-                let indices = primitive_range::indices_u32(self.source.policy(), self.source.len())?;
+                let indices = primitive_range::indices_u32(policy, self.source.len())?;
                 let (out_keys, sorted_indices) =
-                    ordering::sort_by_key_input(&self.source, &indices, GpuOp::<Less>::new())?;
+                    ordering::sort_by_key_input_with_policy(policy, &self.source, &indices, GpuOp::<Less>::new())?;
                 $(
-                    let $field = super::device_expr_gather(&values.$field, &sorted_indices)?;
+                    let $field = super::device_expr_gather_with_policy(policy, &values.$field, &sorted_indices)?;
                 )+
                 Ok((SoA1 { source: out_keys }, $out { $( $field ),+ }))
             }
@@ -929,16 +1091,20 @@ macro_rules! impl_sort_by_key_view_values {
             KeySource: KernelColumn + KernelColumnAt<S0>,
             SoAView1<KeySource>: SortByKeyInput<$view<$( $value ),+>, Less>,
         {
+            type Runtime =
+                <SoAView1<KeySource> as SortByKeyInput<$view<$( $value ),+>, Less>>::Runtime;
             type Output =
                 <SoAView1<KeySource> as SortByKeyInput<$view<$( $value ),+>, Less>>::Output;
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $view<$( $value ),+>,
                 less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 <SoAView1<KeySource> as SortByKeyInput<$view<$( $value ),+>, Less>>::sort_by_key_input(
                     SoAView1 { source: self },
+                    policy,
                     values,
                     less,
                 )
@@ -964,6 +1130,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
         SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>,
@@ -971,12 +1138,14 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         values.validate()?;
         let (left, right, source) = ordering::sort_tuple2_by_key_input(
+            policy,
             &self.left,
             &self.right,
             &values,
@@ -1007,6 +1176,7 @@ where
     ValueB::Expr: GpuExpr<ValueB::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
         SoA2<DeviceVec<KeyA::Runtime, ValueA::Item>, DeviceVec<KeyA::Runtime, ValueB::Item>>,
@@ -1014,20 +1184,23 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA2<ValueA, ValueB>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let indices = primitive_range::indices_u32(self.left.policy(), self.left.len())?;
+        let indices = primitive_range::indices_u32(policy, self.left.len())?;
         let (left, right, sorted_indices) = ordering::sort_tuple2_by_key_input(
+            policy,
             &self.left,
             &self.right,
             &indices,
             GpuOp::<Less>::new(),
         )?;
-        let value_a = super::device_expr_gather(&values.left, &sorted_indices)?;
-        let value_b = super::device_expr_gather(&values.right, &sorted_indices)?;
+        let value_a = super::device_expr_gather_with_policy(policy, &values.left, &sorted_indices)?;
+        let value_b =
+            super::device_expr_gather_with_policy(policy, &values.right, &sorted_indices)?;
         Ok((
             SoA2 { left, right },
             SoA2 {
@@ -1063,6 +1236,7 @@ where
     ValueC::Expr: GpuExpr<ValueC::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA2<DeviceVec<KeyA::Runtime, KeyA::Item>, DeviceVec<KeyA::Runtime, KeyB::Item>>,
         SoA3<
@@ -1074,21 +1248,26 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA3<ValueA, ValueB, ValueC>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let indices = primitive_range::indices_u32(self.left.policy(), self.left.len())?;
+        let indices = primitive_range::indices_u32(policy, self.left.len())?;
         let (left, right, sorted_indices) = ordering::sort_tuple2_by_key_input(
+            policy,
             &self.left,
             &self.right,
             &indices,
             GpuOp::<Less>::new(),
         )?;
-        let value_a = super::device_expr_gather(&values.first, &sorted_indices)?;
-        let value_b = super::device_expr_gather(&values.second, &sorted_indices)?;
-        let value_c = super::device_expr_gather(&values.third, &sorted_indices)?;
+        let value_a =
+            super::device_expr_gather_with_policy(policy, &values.first, &sorted_indices)?;
+        let value_b =
+            super::device_expr_gather_with_policy(policy, &values.second, &sorted_indices)?;
+        let value_c =
+            super::device_expr_gather_with_policy(policy, &values.third, &sorted_indices)?;
         Ok((
             SoA2 { left, right },
             SoA3 {
@@ -1118,6 +1297,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<KeyA::Runtime, KeyA::Item>,
@@ -1129,17 +1309,24 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: ValueSource,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         values.validate()?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let values = super::device_expr_collect(&values)?;
-        let (first, second, third, source) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values, GpuOp::<Less>::new())?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let values = super::device_expr_collect_with_policy(policy, &values)?;
+        let (first, second, third, source) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values,
+            GpuOp::<Less>::new(),
+        )?;
         Ok((
             SoA3 {
                 first,
@@ -1173,6 +1360,7 @@ where
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<KeyA::Runtime, KeyA::Item>,
@@ -1184,20 +1372,33 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA2<ValueA, ValueB>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let value_a = super::device_expr_collect(&values.left)?;
-        let value_b = super::device_expr_collect(&values.right)?;
-        let (first, second, third, value_a) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &value_a, GpuOp::<Less>::new())?;
-        let (_, _, _, value_b) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &value_b, GpuOp::<Less>::new())?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
+        let (first, second, third, value_a) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &value_a,
+            GpuOp::<Less>::new(),
+        )?;
+        let (_, _, _, value_b) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &value_b,
+            GpuOp::<Less>::new(),
+        )?;
         Ok((
             SoA3 {
                 first,
@@ -1237,6 +1438,7 @@ where
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
+    type Runtime = KeyA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<KeyA::Runtime, KeyA::Item>,
@@ -1252,23 +1454,42 @@ where
 
     fn sort_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         values: SoA3<ValueA, ValueB, ValueC>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.first)?;
-        let key_b = super::device_expr_collect(&self.second)?;
-        let key_c = super::device_expr_collect(&self.third)?;
-        let value_a = super::device_expr_collect(&values.first)?;
-        let value_b = super::device_expr_collect(&values.second)?;
-        let value_c = super::device_expr_collect(&values.third)?;
-        let (first, second, third, value_a) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &value_a, GpuOp::<Less>::new())?;
-        let (_, _, _, value_b) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &value_b, GpuOp::<Less>::new())?;
-        let (_, _, _, value_c) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &value_c, GpuOp::<Less>::new())?;
+        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
+        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
+        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
+        let (first, second, third, value_a) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &value_a,
+            GpuOp::<Less>::new(),
+        )?;
+        let (_, _, _, value_b) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &value_b,
+            GpuOp::<Less>::new(),
+        )?;
+        let (_, _, _, value_c) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &value_c,
+            GpuOp::<Less>::new(),
+        )?;
         Ok((
             SoA3 {
                 first,
@@ -1306,6 +1527,7 @@ macro_rules! impl_sort_by_tuple_key_scalar_value {
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
             Less: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 $output<
                     DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -1316,16 +1538,17 @@ macro_rules! impl_sort_by_tuple_key_scalar_value {
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: ValueSource,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 $storage::validate(&self)?;
                 values.validate()?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let values = super::device_expr_collect(&values)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let values = super::device_expr_collect_with_policy(policy, &values)?;
                 let ($first_out, $( $out_field, )+ source) =
-                    ordering::$sort_fn(&$first_field, $( &$field, )+ &values, GpuOp::<Less>::new())?;
+                    ordering::$sort_fn(policy, &$first_field, $( &$field, )+ &values, GpuOp::<Less>::new())?;
                 Ok(($output { $first_field: $first_out, $( $field: $out_field ),+ }, SoA1 { source }))
             }
         }
@@ -1362,6 +1585,7 @@ macro_rules! impl_sort_by_tuple_key_soa2_values {
             ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
             Less: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 $output<
                     DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -1375,19 +1599,20 @@ macro_rules! impl_sort_by_tuple_key_soa2_values {
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: SoA2<ValueA, ValueB>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 $storage::validate(&self)?;
                 SoA::validate(&values)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let value_a = super::device_expr_collect(&values.left)?;
-                let value_b = super::device_expr_collect(&values.right)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
+                let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
                 let ($first_out, $( $out_field, )+ left) =
-                    ordering::$sort_fn(&$first_field, $( &$field, )+ &value_a, GpuOp::<Less>::new())?;
+                    ordering::$sort_fn(policy, &$first_field, $( &$field, )+ &value_a, GpuOp::<Less>::new())?;
                 let sorted_b =
-                    ordering::$sort_fn(&$first_field, $( &$field, )+ &value_b, GpuOp::<Less>::new())?;
+                    ordering::$sort_fn(policy, &$first_field, $( &$field, )+ &value_b, GpuOp::<Less>::new())?;
                 let right = sorted_b.$value_index;
                 Ok((
                     $output { $first_field: $first_out, $( $field: $out_field ),+ },
@@ -1434,6 +1659,7 @@ macro_rules! impl_sort_by_tuple_key_soa_view_values {
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
             Less: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
@@ -1447,21 +1673,22 @@ macro_rules! impl_sort_by_tuple_key_soa_view_values {
 
             fn sort_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 values: $values<$first_value, $( $value ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
                 $storage::validate(&self)?;
                 SoA::validate(&values)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
-                $( let $field = super::device_expr_collect(&self.$field)?; )+
-                let indices = primitive_range::indices_u32($first_field.policy(), $first_field.len)?;
+                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
+                let indices = primitive_range::indices_u32(policy, $first_field.len)?;
                 let ($first_out, $( $out_field, )+ sorted_indices) =
-                    ordering::$sort_fn(&$first_field, $( &$field, )+ &indices, GpuOp::<Less>::new())?;
-                let $first_value_field = super::device_expr_collect(&values.$first_value_field)?;
-                let $first_value_field = primitive_range::gather_device(&$first_value_field, &sorted_indices)?;
+                    ordering::$sort_fn(policy, &$first_field, $( &$field, )+ &indices, GpuOp::<Less>::new())?;
+                let $first_value_field = super::device_expr_collect_with_policy(policy, &values.$first_value_field)?;
+                let $first_value_field = primitive_range::gather_device_with_policy(policy, &$first_value_field, &sorted_indices)?;
                 $(
-                    let $value_field = super::device_expr_collect(&values.$value_field)?;
-                    let $value_field = primitive_range::gather_device(&$value_field, &sorted_indices)?;
+                    let $value_field = super::device_expr_collect_with_policy(policy, &values.$value_field)?;
+                    let $value_field = primitive_range::gather_device_with_policy(policy, &$value_field, &sorted_indices)?;
                 )+
                 Ok((
                     $out_keys { $first_field: $first_out, $( $field: $out_field ),+ },
@@ -1487,11 +1714,18 @@ macro_rules! impl_sort_by_key_tuple_keys {
         where
             $view<$( $ty ),+>: SortByKeyInput<Values, Less>,
         {
+            type Runtime = <$view<$( $ty ),+> as SortByKeyInput<Values, Less>>::Runtime;
             type Output = <$view<$( $ty ),+> as SortByKeyInput<Values, Less>>::Output;
 
-            fn sort_by_key_input(self, values: Values, less: GpuOp<Less>) -> Result<Self::Output, Error> {
+            fn sort_by_key_input(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                values: Values,
+                less: GpuOp<Less>,
+            ) -> Result<Self::Output, Error> {
                 <$view<$( $ty ),+> as SortByKeyInput<Values, Less>>::sort_by_key_input(
                     $view { $( $field: self.$index ),+ },
+                    policy,
                     values,
                     less,
                 )
@@ -1506,12 +1740,15 @@ impl_sort_by_key_tuple_keys!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }
 /// Key/value inputs accepted by [`merge_by_key`].
 #[doc(hidden)]
 pub trait MergeByKeyInput<LeftValues, RightKeys, RightValues, Less> {
+    /// Runtime used by this input.
+    type Runtime: Runtime;
     /// Output produced by key-value merge.
     type Output;
 
     /// Merges two sorted key-value ranges by key.
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: LeftValues,
         right_keys: RightKeys,
         right_values: RightValues,
@@ -1540,6 +1777,7 @@ where
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
     Less: BinaryPredicateOp<LeftKey::Item>,
 {
+    type Runtime = LeftKey::Runtime;
     type Output = (
         SoA1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>,
         SoA1<DeviceVec<LeftKey::Runtime, LeftValue::Item>>,
@@ -1547,16 +1785,18 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: SoAView1<LeftValue>,
         right_keys: SoAView1<RightKey>,
         right_values: SoAView1<RightValue>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        let left_keys = materialize_soa_view_one(self)?;
-        let left_values = materialize_soa_view_one(left_values)?;
-        let right_keys = materialize_soa_view_one(right_keys)?;
-        let right_values = materialize_soa_view_one(right_values)?;
-        let (keys, values) = ordering::merge_by_key(
+        let left_keys = materialize_soa_view_one_with_policy(policy, self)?;
+        let left_values = materialize_soa_view_one_with_policy(policy, left_values)?;
+        let right_keys = materialize_soa_view_one_with_policy(policy, right_keys)?;
+        let right_values = materialize_soa_view_one_with_policy(policy, right_values)?;
+        let (keys, values) = ordering::merge_by_key_with_policy(
+            policy,
             &left_keys,
             &left_values,
             &right_keys,
@@ -1606,6 +1846,7 @@ macro_rules! impl_merge_by_key_input {
             )+
             Less: BinaryPredicateOp<LeftKey::Item>,
         {
+            type Runtime = LeftKey::Runtime;
             type Output = (
                 SoA1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>,
                 $output<
@@ -1616,13 +1857,14 @@ macro_rules! impl_merge_by_key_input {
 
             fn merge_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 left_values: $name<$first_left, $( $left ),+>,
                 right_keys: SoAView1<RightKey>,
                 right_values: $right_name<$first_right, $( $right ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
-                let left_keys = materialize_soa_view_one(self)?;
-                let right_keys = materialize_soa_view_one(right_keys)?;
+                let left_keys = materialize_soa_view_one_with_policy(policy, self)?;
+                let right_keys = materialize_soa_view_one_with_policy(policy, right_keys)?;
                 left_values.$first_field.validate()?;
                 right_values.$first_field.validate()?;
                 $(
@@ -1633,19 +1875,20 @@ macro_rules! impl_merge_by_key_input {
                 // Compute merge-path control once and apply the same source
                 // side/index stream to every value column.
                 let (keys, control) =
-                    ordering::merge_by_key_control::<LeftKey::Runtime, LeftKey::Item, Less>(
+                    ordering::merge_by_key_control_with_policy::<LeftKey::Runtime, LeftKey::Item, Less>(
+                        policy,
                         &left_keys,
                         &right_keys,
                     )?;
-                let left_first = super::device_expr_collect(&left_values.$first_field)?;
-                let right_first = super::device_expr_collect(&right_values.$first_field)?;
+                let left_first = super::device_expr_collect_with_policy(policy, &left_values.$first_field)?;
+                let right_first = super::device_expr_collect_with_policy(policy, &right_values.$first_field)?;
                 let $first_field =
-                    ordering::merge_by_key_values_with_control(&left_first, &right_first, &control)?;
+                    ordering::merge_by_key_values_with_control_with_policy(policy, &left_first, &right_first, &control)?;
                 $(
-                    let left_value = super::device_expr_collect(&left_values.$field)?;
-                    let right_value = super::device_expr_collect(&right_values.$field)?;
+                    let left_value = super::device_expr_collect_with_policy(policy, &left_values.$field)?;
+                    let right_value = super::device_expr_collect_with_policy(policy, &right_values.$field)?;
                     let $field =
-                        ordering::merge_by_key_values_with_control(&left_value, &right_value, &control)?;
+                        ordering::merge_by_key_values_with_control_with_policy(policy, &left_value, &right_value, &control)?;
                 )+
 
                 Ok((SoA1 { source: keys }, $output { $first_field, $( $field ),+ }))
@@ -1677,6 +1920,12 @@ macro_rules! impl_merge_by_key_key_forward {
                 Less,
             >,
         {
+            type Runtime = <SoAView1<LeftKey> as MergeByKeyInput<
+                $left_values<$( $left ),+>,
+                SoAView1<RightKey>,
+                $right_values<$( $right ),+>,
+                Less,
+            >>::Runtime;
             type Output = <SoAView1<LeftKey> as MergeByKeyInput<
                 $left_values<$( $left ),+>,
                 SoAView1<RightKey>,
@@ -1686,6 +1935,7 @@ macro_rules! impl_merge_by_key_key_forward {
 
             fn merge_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 left_values: $left_values<$( $left ),+>,
                 right_keys: RightKey,
                 right_values: $right_values<$( $right ),+>,
@@ -1698,6 +1948,7 @@ macro_rules! impl_merge_by_key_key_forward {
                     Less,
                 >>::merge_by_key_input(
                     SoAView1 { source: self },
+                    policy,
                     left_values,
                     SoAView1 { source: right_keys },
                     right_values,
@@ -1754,6 +2005,7 @@ macro_rules! impl_merge_by_tuple_key_scalar_value {
             RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
             Less: BinaryPredicateOp<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first_left as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first_left as KernelColumn>::Runtime, <$first_left as KernelColumn>::Item>,
@@ -1764,6 +2016,7 @@ macro_rules! impl_merge_by_tuple_key_scalar_value {
 
             fn merge_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 left_values: LeftValue,
                 right_keys: $right_keys<$first_right, $( $right ),+>,
                 right_values: RightValue,
@@ -1773,21 +2026,21 @@ macro_rules! impl_merge_by_tuple_key_scalar_value {
                 $storage::validate(&right_keys)?;
                 left_values.validate()?;
                 right_values.validate()?;
-                let left_first = super::device_expr_collect(&self.$first_field)?;
-                let right_first = super::device_expr_collect(&right_keys.$first_field)?;
-                let $first_concat = primitive_range::concat_device(&left_first, &right_first)?;
+                let left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let right_first = super::device_expr_collect_with_policy(policy, &right_keys.$first_field)?;
+                let $first_concat = primitive_range::concat_device_with_policy(policy, &left_first, &right_first)?;
                 $(
-                    let left_key = super::device_expr_collect(&self.$field)?;
-                    let right_key = super::device_expr_collect(&right_keys.$field)?;
-                    let $concat = primitive_range::concat_device(&left_key, &right_key)?;
+                    let left_key = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let right_key = super::device_expr_collect_with_policy(policy, &right_keys.$field)?;
+                    let $concat = primitive_range::concat_device_with_policy(policy, &left_key, &right_key)?;
                 )+
-                let left_values = super::device_expr_collect(&left_values)?;
-                let right_values = super::device_expr_collect(&right_values)?;
+                let left_values = super::device_expr_collect_with_policy(policy, &left_values)?;
+                let right_values = super::device_expr_collect_with_policy(policy, &right_values)?;
                 super::ensure_same_len(left_values.len, left_first.len)?;
                 super::ensure_same_len(right_values.len, right_first.len)?;
-                let values = primitive_range::concat_device(&left_values, &right_values)?;
+                let values = primitive_range::concat_device_with_policy(policy, &left_values, &right_values)?;
                 let ($first_out, $( $out, )+ source) =
-                    ordering::$sort_fn(&$first_concat, $( &$concat, )+ &values, GpuOp::<Less>::new())?;
+                    ordering::$sort_fn(policy, &$first_concat, $( &$concat, )+ &values, GpuOp::<Less>::new())?;
                 Ok((
                     $out_keys { $first_field: $first_out, $( $field: $out ),+ },
                     SoA1 { source },
@@ -1835,6 +2088,7 @@ macro_rules! impl_merge_by_tuple_key_soa_view_values {
             $( <$right_value as KernelColumn>::Expr: DeviceGpuExpr<<$right_value as KernelColumn>::Item>, )+
             Less: BinaryPredicateOp<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first_left as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first_left as KernelColumn>::Runtime, <$first_left as KernelColumn>::Item>,
@@ -1845,6 +2099,7 @@ macro_rules! impl_merge_by_tuple_key_soa_view_values {
 
             fn merge_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 left_values: $values<$( $value ),+>,
                 right_keys: $right_keys<$first_right, $( $right ),+>,
                 right_values: $values<$( $right_value ),+>,
@@ -1854,24 +2109,24 @@ macro_rules! impl_merge_by_tuple_key_soa_view_values {
                 ReadOnlySoA::validate(&right_keys)?;
                 ReadOnlySoA::validate(&left_values)?;
                 ReadOnlySoA::validate(&right_values)?;
-                let left_first = super::device_expr_collect(&self.$first_field)?;
-                let right_first = super::device_expr_collect(&right_keys.$first_field)?;
-                let $first_concat = primitive_range::concat_device(&left_first, &right_first)?;
+                let left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let right_first = super::device_expr_collect_with_policy(policy, &right_keys.$first_field)?;
+                let $first_concat = primitive_range::concat_device_with_policy(policy, &left_first, &right_first)?;
                 $(
-                    let left_key = super::device_expr_collect(&self.$field)?;
-                    let right_key = super::device_expr_collect(&right_keys.$field)?;
-                    let $concat = primitive_range::concat_device(&left_key, &right_key)?;
+                    let left_key = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let right_key = super::device_expr_collect_with_policy(policy, &right_keys.$field)?;
+                    let $concat = primitive_range::concat_device_with_policy(policy, &left_key, &right_key)?;
                 )+
-                let indices = primitive_range::indices_u32($first_concat.policy(), $first_concat.len)?;
+                let indices = primitive_range::indices_u32(policy, $first_concat.len)?;
                 let ($first_out, $( $out, )+ sorted_indices) =
-                    ordering::$sort_fn(&$first_concat, $( &$concat, )+ &indices, GpuOp::<Less>::new())?;
+                    ordering::$sort_fn(policy, &$first_concat, $( &$concat, )+ &indices, GpuOp::<Less>::new())?;
                 $(
-                    let left_value = super::device_expr_collect(&left_values.$value_field)?;
-                    let right_value = super::device_expr_collect(&right_values.$value_field)?;
+                    let left_value = super::device_expr_collect_with_policy(policy, &left_values.$value_field)?;
+                    let right_value = super::device_expr_collect_with_policy(policy, &right_values.$value_field)?;
                     super::ensure_same_len(left_value.len, left_first.len)?;
                     super::ensure_same_len(right_value.len, right_first.len)?;
-                    let value = primitive_range::concat_device(&left_value, &right_value)?;
-                    let $value_field = primitive_range::gather_device(&value, &sorted_indices)?;
+                    let value = primitive_range::concat_device_with_policy(policy, &left_value, &right_value)?;
+                    let $value_field = primitive_range::gather_device_with_policy(policy, &value, &sorted_indices)?;
                 )+
                 Ok((
                     $out_keys { $first_field: $first_out, $( $field: $out ),+ },
@@ -1919,6 +2174,7 @@ macro_rules! impl_merge_by_tuple_key_soa_values {
             $( <$right_value as KernelColumn>::Expr: DeviceGpuExpr<<$right_value as KernelColumn>::Item>, )+
             Less: BinaryPredicateOp<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
         {
+            type Runtime = <$first_left as KernelColumn>::Runtime;
             type Output = (
                 $out_keys<
                     DeviceVec<<$first_left as KernelColumn>::Runtime, <$first_left as KernelColumn>::Item>,
@@ -1929,6 +2185,7 @@ macro_rules! impl_merge_by_tuple_key_soa_values {
 
             fn merge_by_key_input(
                 self,
+                policy: &CubePolicy<Self::Runtime>,
                 left_values: $values<$( $value ),+>,
                 right_keys: $right_keys<$first_right, $( $right ),+>,
                 right_values: $values<$( $right_value ),+>,
@@ -1938,24 +2195,24 @@ macro_rules! impl_merge_by_tuple_key_soa_values {
                 SoA::validate(&right_keys)?;
                 SoA::validate(&left_values)?;
                 SoA::validate(&right_values)?;
-                let left_first = super::device_expr_collect(&self.$first_field)?;
-                let right_first = super::device_expr_collect(&right_keys.$first_field)?;
-                let $first_concat = primitive_range::concat_device(&left_first, &right_first)?;
+                let left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let right_first = super::device_expr_collect_with_policy(policy, &right_keys.$first_field)?;
+                let $first_concat = primitive_range::concat_device_with_policy(policy, &left_first, &right_first)?;
                 $(
-                    let left_key = super::device_expr_collect(&self.$field)?;
-                    let right_key = super::device_expr_collect(&right_keys.$field)?;
-                    let $concat = primitive_range::concat_device(&left_key, &right_key)?;
+                    let left_key = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let right_key = super::device_expr_collect_with_policy(policy, &right_keys.$field)?;
+                    let $concat = primitive_range::concat_device_with_policy(policy, &left_key, &right_key)?;
                 )+
-                let indices = primitive_range::indices_u32($first_concat.policy(), $first_concat.len)?;
+                let indices = primitive_range::indices_u32(policy, $first_concat.len)?;
                 let ($first_out, $( $out, )+ sorted_indices) =
-                    ordering::$sort_fn(&$first_concat, $( &$concat, )+ &indices, GpuOp::<Less>::new())?;
+                    ordering::$sort_fn(policy, &$first_concat, $( &$concat, )+ &indices, GpuOp::<Less>::new())?;
                 $(
-                    let left_value = super::device_expr_collect(&left_values.$value_field)?;
-                    let right_value = super::device_expr_collect(&right_values.$value_field)?;
+                    let left_value = super::device_expr_collect_with_policy(policy, &left_values.$value_field)?;
+                    let right_value = super::device_expr_collect_with_policy(policy, &right_values.$value_field)?;
                     super::ensure_same_len(left_value.len, left_first.len)?;
                     super::ensure_same_len(right_value.len, right_first.len)?;
-                    let value = primitive_range::concat_device(&left_value, &right_value)?;
-                    let $value_field = primitive_range::gather_device(&value, &sorted_indices)?;
+                    let value = primitive_range::concat_device_with_policy(policy, &left_value, &right_value)?;
+                    let $value_field = primitive_range::gather_device_with_policy(policy, &value, &sorted_indices)?;
                 )+
                 Ok((
                     $out_keys { $first_field: $first_out, $( $field: $out ),+ },
@@ -2000,6 +2257,7 @@ where
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
     Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item)>,
 {
+    type Runtime = LeftA::Runtime;
     type Output = (
         SoA2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>,
         SoA1<DeviceVec<LeftA::Runtime, LeftValue::Item>>,
@@ -2007,6 +2265,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: LeftValue,
         right_keys: SoAView2<RightA, RightB>,
         right_values: RightValue,
@@ -2016,17 +2275,18 @@ where
         ReadOnlySoA::validate(&right_keys)?;
         left_values.validate()?;
         right_values.validate()?;
-        let left_a = super::device_expr_collect(&self.left)?;
-        let left_b = super::device_expr_collect(&self.right)?;
-        let left_values = super::device_expr_collect(&left_values)?;
-        let right_a = super::device_expr_collect(&right_keys.left)?;
-        let right_b = super::device_expr_collect(&right_keys.right)?;
-        let right_values = super::device_expr_collect(&right_values)?;
-        let key_a = primitive_range::concat_device(&left_a, &right_a)?;
-        let key_b = primitive_range::concat_device(&left_b, &right_b)?;
-        let values = primitive_range::concat_device(&left_values, &right_values)?;
+        let left_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let left_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let left_values = super::device_expr_collect_with_policy(policy, &left_values)?;
+        let right_a = super::device_expr_collect_with_policy(policy, &right_keys.left)?;
+        let right_b = super::device_expr_collect_with_policy(policy, &right_keys.right)?;
+        let right_values = super::device_expr_collect_with_policy(policy, &right_values)?;
+        let key_a = primitive_range::concat_device_with_policy(policy, &left_a, &right_a)?;
+        let key_b = primitive_range::concat_device_with_policy(policy, &left_b, &right_b)?;
+        let values =
+            primitive_range::concat_device_with_policy(policy, &left_values, &right_values)?;
         let (left, right, source) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &values, GpuOp::<Less>::new())?;
+            ordering::sort_tuple2_by_key(policy, &key_a, &key_b, &values, GpuOp::<Less>::new())?;
         Ok((SoA2 { left, right }, SoA1 { source }))
     }
 }
@@ -2070,6 +2330,7 @@ where
     RightValueB::Expr: DeviceGpuExpr<RightValueB::Item>,
     Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item)>,
 {
+    type Runtime = LeftA::Runtime;
     type Output = (
         SoA2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>,
         SoA2<
@@ -2080,6 +2341,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: SoAView2<LeftValueA, LeftValueB>,
         right_keys: SoAView2<RightA, RightB>,
         right_values: SoAView2<RightValueA, RightValueB>,
@@ -2089,24 +2351,26 @@ where
         ReadOnlySoA::validate(&right_keys)?;
         ReadOnlySoA::validate(&left_values)?;
         ReadOnlySoA::validate(&right_values)?;
-        let left_a = super::device_expr_collect(&self.left)?;
-        let left_b = super::device_expr_collect(&self.right)?;
-        let right_a = super::device_expr_collect(&right_keys.left)?;
-        let right_b = super::device_expr_collect(&right_keys.right)?;
-        let key_a = primitive_range::concat_device(&left_a, &right_a)?;
-        let key_b = primitive_range::concat_device(&left_b, &right_b)?;
+        let left_a = super::device_expr_collect_with_policy(policy, &self.left)?;
+        let left_b = super::device_expr_collect_with_policy(policy, &self.right)?;
+        let right_a = super::device_expr_collect_with_policy(policy, &right_keys.left)?;
+        let right_b = super::device_expr_collect_with_policy(policy, &right_keys.right)?;
+        let key_a = primitive_range::concat_device_with_policy(policy, &left_a, &right_a)?;
+        let key_b = primitive_range::concat_device_with_policy(policy, &left_b, &right_b)?;
 
-        let left_value_a = super::device_expr_collect(&left_values.left)?;
-        let right_value_a = super::device_expr_collect(&right_values.left)?;
-        let values_a = primitive_range::concat_device(&left_value_a, &right_value_a)?;
+        let left_value_a = super::device_expr_collect_with_policy(policy, &left_values.left)?;
+        let right_value_a = super::device_expr_collect_with_policy(policy, &right_values.left)?;
+        let values_a =
+            primitive_range::concat_device_with_policy(policy, &left_value_a, &right_value_a)?;
         let (left, right, value_a) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &values_a, GpuOp::<Less>::new())?;
+            ordering::sort_tuple2_by_key(policy, &key_a, &key_b, &values_a, GpuOp::<Less>::new())?;
 
-        let left_value_b = super::device_expr_collect(&left_values.right)?;
-        let right_value_b = super::device_expr_collect(&right_values.right)?;
-        let values_b = primitive_range::concat_device(&left_value_b, &right_value_b)?;
+        let left_value_b = super::device_expr_collect_with_policy(policy, &left_values.right)?;
+        let right_value_b = super::device_expr_collect_with_policy(policy, &right_values.right)?;
+        let values_b =
+            primitive_range::concat_device_with_policy(policy, &left_value_b, &right_value_b)?;
         let (_, _, value_b) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &values_b, GpuOp::<Less>::new())?;
+            ordering::sort_tuple2_by_key(policy, &key_a, &key_b, &values_b, GpuOp::<Less>::new())?;
 
         Ok((
             SoA2 { left, right },
@@ -2147,6 +2411,7 @@ where
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
     Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
+    type Runtime = LeftA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<LeftA::Runtime, LeftA::Item>,
@@ -2158,6 +2423,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: LeftValue,
         right_keys: SoAView3<RightA, RightB, RightC>,
         right_values: RightValue,
@@ -2167,20 +2433,27 @@ where
         ReadOnlySoA::validate(&right_keys)?;
         left_values.validate()?;
         right_values.validate()?;
-        let left_a = super::device_expr_collect(&self.first)?;
-        let left_b = super::device_expr_collect(&self.second)?;
-        let left_c = super::device_expr_collect(&self.third)?;
-        let left_values = super::device_expr_collect(&left_values)?;
-        let right_a = super::device_expr_collect(&right_keys.first)?;
-        let right_b = super::device_expr_collect(&right_keys.second)?;
-        let right_c = super::device_expr_collect(&right_keys.third)?;
-        let right_values = super::device_expr_collect(&right_values)?;
-        let key_a = primitive_range::concat_device(&left_a, &right_a)?;
-        let key_b = primitive_range::concat_device(&left_b, &right_b)?;
-        let key_c = primitive_range::concat_device(&left_c, &right_c)?;
-        let values = primitive_range::concat_device(&left_values, &right_values)?;
-        let (first, second, third, source) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values, GpuOp::<Less>::new())?;
+        let left_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let left_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let left_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let left_values = super::device_expr_collect_with_policy(policy, &left_values)?;
+        let right_a = super::device_expr_collect_with_policy(policy, &right_keys.first)?;
+        let right_b = super::device_expr_collect_with_policy(policy, &right_keys.second)?;
+        let right_c = super::device_expr_collect_with_policy(policy, &right_keys.third)?;
+        let right_values = super::device_expr_collect_with_policy(policy, &right_values)?;
+        let key_a = primitive_range::concat_device_with_policy(policy, &left_a, &right_a)?;
+        let key_b = primitive_range::concat_device_with_policy(policy, &left_b, &right_b)?;
+        let key_c = primitive_range::concat_device_with_policy(policy, &left_c, &right_c)?;
+        let values =
+            primitive_range::concat_device_with_policy(policy, &left_values, &right_values)?;
+        let (first, second, third, source) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values,
+            GpuOp::<Less>::new(),
+        )?;
         Ok((
             SoA3 {
                 first,
@@ -2248,6 +2521,7 @@ where
     RightValueB::Expr: DeviceGpuExpr<RightValueB::Item>,
     Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
+    type Runtime = LeftA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<LeftA::Runtime, LeftA::Item>,
@@ -2262,6 +2536,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: SoAView2<LeftValueA, LeftValueB>,
         right_keys: SoAView3<RightA, RightB, RightC>,
         right_values: SoAView2<RightValueA, RightValueB>,
@@ -2271,27 +2546,41 @@ where
         ReadOnlySoA::validate(&right_keys)?;
         ReadOnlySoA::validate(&left_values)?;
         ReadOnlySoA::validate(&right_values)?;
-        let left_a = super::device_expr_collect(&self.first)?;
-        let left_b = super::device_expr_collect(&self.second)?;
-        let left_c = super::device_expr_collect(&self.third)?;
-        let right_a = super::device_expr_collect(&right_keys.first)?;
-        let right_b = super::device_expr_collect(&right_keys.second)?;
-        let right_c = super::device_expr_collect(&right_keys.third)?;
-        let key_a = primitive_range::concat_device(&left_a, &right_a)?;
-        let key_b = primitive_range::concat_device(&left_b, &right_b)?;
-        let key_c = primitive_range::concat_device(&left_c, &right_c)?;
+        let left_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let left_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let left_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let right_a = super::device_expr_collect_with_policy(policy, &right_keys.first)?;
+        let right_b = super::device_expr_collect_with_policy(policy, &right_keys.second)?;
+        let right_c = super::device_expr_collect_with_policy(policy, &right_keys.third)?;
+        let key_a = primitive_range::concat_device_with_policy(policy, &left_a, &right_a)?;
+        let key_b = primitive_range::concat_device_with_policy(policy, &left_b, &right_b)?;
+        let key_c = primitive_range::concat_device_with_policy(policy, &left_c, &right_c)?;
 
-        let left_value_a = super::device_expr_collect(&left_values.left)?;
-        let right_value_a = super::device_expr_collect(&right_values.left)?;
-        let values_a = primitive_range::concat_device(&left_value_a, &right_value_a)?;
-        let (first, second, third, value_a) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values_a, GpuOp::<Less>::new())?;
+        let left_value_a = super::device_expr_collect_with_policy(policy, &left_values.left)?;
+        let right_value_a = super::device_expr_collect_with_policy(policy, &right_values.left)?;
+        let values_a =
+            primitive_range::concat_device_with_policy(policy, &left_value_a, &right_value_a)?;
+        let (first, second, third, value_a) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values_a,
+            GpuOp::<Less>::new(),
+        )?;
 
-        let left_value_b = super::device_expr_collect(&left_values.right)?;
-        let right_value_b = super::device_expr_collect(&right_values.right)?;
-        let values_b = primitive_range::concat_device(&left_value_b, &right_value_b)?;
-        let (_, _, _, value_b) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values_b, GpuOp::<Less>::new())?;
+        let left_value_b = super::device_expr_collect_with_policy(policy, &left_values.right)?;
+        let right_value_b = super::device_expr_collect_with_policy(policy, &right_values.right)?;
+        let values_b =
+            primitive_range::concat_device_with_policy(policy, &left_value_b, &right_value_b)?;
+        let (_, _, _, value_b) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values_b,
+            GpuOp::<Less>::new(),
+        )?;
 
         Ok((
             SoA3 {
@@ -2375,6 +2664,7 @@ where
     RightValueC::Expr: DeviceGpuExpr<RightValueC::Item>,
     Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
+    type Runtime = LeftA::Runtime;
     type Output = (
         SoA3<
             DeviceVec<LeftA::Runtime, LeftA::Item>,
@@ -2390,6 +2680,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: SoAView3<LeftValueA, LeftValueB, LeftValueC>,
         right_keys: SoAView3<RightA, RightB, RightC>,
         right_values: SoAView3<RightValueA, RightValueB, RightValueC>,
@@ -2399,33 +2690,54 @@ where
         ReadOnlySoA::validate(&right_keys)?;
         ReadOnlySoA::validate(&left_values)?;
         ReadOnlySoA::validate(&right_values)?;
-        let left_a = super::device_expr_collect(&self.first)?;
-        let left_b = super::device_expr_collect(&self.second)?;
-        let left_c = super::device_expr_collect(&self.third)?;
-        let right_a = super::device_expr_collect(&right_keys.first)?;
-        let right_b = super::device_expr_collect(&right_keys.second)?;
-        let right_c = super::device_expr_collect(&right_keys.third)?;
-        let key_a = primitive_range::concat_device(&left_a, &right_a)?;
-        let key_b = primitive_range::concat_device(&left_b, &right_b)?;
-        let key_c = primitive_range::concat_device(&left_c, &right_c)?;
+        let left_a = super::device_expr_collect_with_policy(policy, &self.first)?;
+        let left_b = super::device_expr_collect_with_policy(policy, &self.second)?;
+        let left_c = super::device_expr_collect_with_policy(policy, &self.third)?;
+        let right_a = super::device_expr_collect_with_policy(policy, &right_keys.first)?;
+        let right_b = super::device_expr_collect_with_policy(policy, &right_keys.second)?;
+        let right_c = super::device_expr_collect_with_policy(policy, &right_keys.third)?;
+        let key_a = primitive_range::concat_device_with_policy(policy, &left_a, &right_a)?;
+        let key_b = primitive_range::concat_device_with_policy(policy, &left_b, &right_b)?;
+        let key_c = primitive_range::concat_device_with_policy(policy, &left_c, &right_c)?;
 
-        let left_value_a = super::device_expr_collect(&left_values.first)?;
-        let right_value_a = super::device_expr_collect(&right_values.first)?;
-        let values_a = primitive_range::concat_device(&left_value_a, &right_value_a)?;
-        let (first, second, third, value_a) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values_a, GpuOp::<Less>::new())?;
+        let left_value_a = super::device_expr_collect_with_policy(policy, &left_values.first)?;
+        let right_value_a = super::device_expr_collect_with_policy(policy, &right_values.first)?;
+        let values_a =
+            primitive_range::concat_device_with_policy(policy, &left_value_a, &right_value_a)?;
+        let (first, second, third, value_a) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values_a,
+            GpuOp::<Less>::new(),
+        )?;
 
-        let left_value_b = super::device_expr_collect(&left_values.second)?;
-        let right_value_b = super::device_expr_collect(&right_values.second)?;
-        let values_b = primitive_range::concat_device(&left_value_b, &right_value_b)?;
-        let (_, _, _, value_b) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values_b, GpuOp::<Less>::new())?;
+        let left_value_b = super::device_expr_collect_with_policy(policy, &left_values.second)?;
+        let right_value_b = super::device_expr_collect_with_policy(policy, &right_values.second)?;
+        let values_b =
+            primitive_range::concat_device_with_policy(policy, &left_value_b, &right_value_b)?;
+        let (_, _, _, value_b) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values_b,
+            GpuOp::<Less>::new(),
+        )?;
 
-        let left_value_c = super::device_expr_collect(&left_values.third)?;
-        let right_value_c = super::device_expr_collect(&right_values.third)?;
-        let values_c = primitive_range::concat_device(&left_value_c, &right_value_c)?;
-        let (_, _, _, value_c) =
-            ordering::sort_tuple3_by_key(&key_a, &key_b, &key_c, &values_c, GpuOp::<Less>::new())?;
+        let left_value_c = super::device_expr_collect_with_policy(policy, &left_values.third)?;
+        let right_value_c = super::device_expr_collect_with_policy(policy, &right_values.third)?;
+        let values_c =
+            primitive_range::concat_device_with_policy(policy, &left_value_c, &right_value_c)?;
+        let (_, _, _, value_c) = ordering::sort_tuple3_by_key(
+            policy,
+            &key_a,
+            &key_b,
+            &key_c,
+            &values_c,
+            GpuOp::<Less>::new(),
+        )?;
 
         Ok((
             SoA3 {
@@ -2458,6 +2770,7 @@ where
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
     Less: BinaryPredicateOp<LeftKey::Item>,
 {
+    type Runtime = LeftKey::Runtime;
     type Output = (
         SoA1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>,
         SoA1<DeviceVec<LeftKey::Runtime, LeftValue::Item>>,
@@ -2465,6 +2778,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: LeftValue,
         right_keys: RightKey,
         right_values: RightValue,
@@ -2477,6 +2791,7 @@ where
             Less,
         >>::merge_by_key_input(
             SoAView1 { source: self },
+            policy,
             SoAView1 {
                 source: left_values,
             },
@@ -2494,6 +2809,12 @@ impl<LeftKey, LeftValue, RightKey, RightValue, Less>
 where
     LeftKey: MergeByKeyInput<LeftValue, RightKey, RightValue, super::Tuple1Less<Less>>,
 {
+    type Runtime = <LeftKey as MergeByKeyInput<
+        LeftValue,
+        RightKey,
+        RightValue,
+        super::Tuple1Less<Less>,
+    >>::Runtime;
     type Output = <LeftKey as MergeByKeyInput<
         LeftValue,
         RightKey,
@@ -2503,6 +2824,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: (LeftValue,),
         right_keys: (RightKey,),
         right_values: (RightValue,),
@@ -2515,6 +2837,7 @@ where
             super::Tuple1Less<Less>,
         >>::merge_by_key_input(
             self.0,
+            policy,
             left_values.0,
             right_keys.0,
             right_values.0,
@@ -2531,12 +2854,17 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         Ok(SoA1 {
-            source: ordering::sort_input(&self.source, GpuOp::<Less>::new())?,
+            source: ordering::sort_input_with_policy(policy, &self.source, GpuOp::<Less>::new())?,
         })
     }
 }
@@ -2548,10 +2876,15 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn sort_input(self, less: GpuOp<Less>) -> Result<Self::Output, Error> {
-        <SoA1<Source> as SortInput<Less>>::sort_input(SoA1 { source: self }, less)
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
+        <SoA1<Source> as SortInput<Less>>::sort_input(SoA1 { source: self }, policy, less)
     }
 }
 
@@ -2562,11 +2895,17 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<(Source::Item,)>,
 {
+    type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <SoA1<Source> as SortInput<super::Tuple1Less<Less>>>::sort_input(
             SoA1 { source: self.0 },
+            policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
         )
     }
@@ -2578,14 +2917,20 @@ where
     Left: KernelColumnAt<S0>,
     Right: KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
 {
+    type Runtime = <SoAView2<Left, Right> as SortInput<Less>>::Runtime;
     type Output = <SoAView2<Left, Right> as SortInput<Less>>::Output;
 
-    fn sort_input(self, less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <SoAView2<Left, Right> as SortInput<Less>>::sort_input(
             SoAView2 {
                 left: self.0,
                 right: self.1,
             },
+            policy,
             less,
         )
     }
@@ -2598,15 +2943,21 @@ where
     Second: KernelColumnAt<<First as KernelColumnAt<S0>>::Next>,
     Third: KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
 {
+    type Runtime = <SoAView3<First, Second, Third> as SortInput<Less>>::Runtime;
     type Output = <SoAView3<First, Second, Third> as SortInput<Less>>::Output;
 
-    fn sort_input(self, less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         <SoAView3<First, Second, Third> as SortInput<Less>>::sort_input(
             SoAView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
             },
+            policy,
             less,
         )
     }
@@ -2625,12 +2976,17 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
 {
+    type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
 
-    fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         let (first, second) =
-            ordering::sort_tuple2_input(&self.left, &self.right, GpuOp::<Less>::new())?;
+            ordering::sort_tuple2_input(policy, &self.left, &self.right, GpuOp::<Less>::new())?;
         Ok(SoA2 {
             left: first,
             right: second,
@@ -2656,15 +3012,21 @@ where
     Third::Expr: DeviceGpuExpr<Third::Item>,
     Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
 {
+    type Runtime = First::Runtime;
     type Output = SoA3<
         DeviceVec<First::Runtime, First::Item>,
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
     >;
 
-    fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<First::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         let (first, second, third) = ordering::sort_tuple3_input(
+            policy,
             &self.first,
             &self.second,
             &self.third,
@@ -2691,12 +3053,17 @@ where
     Right::Expr: DeviceGpuExpr<Right::Item>,
     Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
 {
+    type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
 
-    fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<Left::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         let (left, right) =
-            ordering::sort_tuple2_input(&self.left, &self.right, GpuOp::<Less>::new())?;
+            ordering::sort_tuple2_input(policy, &self.left, &self.right, GpuOp::<Less>::new())?;
         Ok(SoA2 { left, right })
     }
 }
@@ -2719,15 +3086,21 @@ where
     Third::Expr: DeviceGpuExpr<Third::Item>,
     Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
 {
+    type Runtime = First::Runtime;
     type Output = SoA3<
         DeviceVec<First::Runtime, First::Item>,
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
     >;
 
-    fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
+    fn sort_input(
+        self,
+        policy: &CubePolicy<First::Runtime>,
+        _less: GpuOp<Less>,
+    ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         let (first, second, third) = ordering::sort_tuple3_input(
+            policy,
             &self.first,
             &self.second,
             &self.third,
@@ -2742,44 +3115,56 @@ where
 }
 
 /// Sorts read-only SoA input and returns owned device storage.
-pub fn sort<Input, Less>(
+pub fn sort<R, Input, Less>(
+    policy: &CubePolicy<R>,
     input: Input,
     _less: Less,
 ) -> Result<<<Input as SortInput<Less>>::Output as MaterializeOutput>::Output, Error>
 where
-    Input: SortInput<Less>,
-    <Input as SortInput<Less>>::Output: MaterializeOutput,
+    R: Runtime,
+    Input: SortInput<Less, Runtime = R>,
+    <Input as SortInput<Less>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(input.sort_input(GpuOp::<Less>::new())?)
+    materialize(policy, input.sort_input(policy, GpuOp::<Less>::new())?)
 }
 
 /// Merges two sorted read-only inputs into owned device storage.
 ///
 /// This is a borrowing algorithm. Both inputs are read, and the merged output is
 /// newly materialized.
-pub fn merge<Left, Right, Less>(
+pub fn merge<R, Left, Right, Less>(
+    policy: &CubePolicy<R>,
     left: Left,
     right: Right,
     _less: Less,
 ) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
-    Left: PairOrderingInput<Right, Less>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput,
+    R: Runtime,
+    Left: PairOrderingInput<Right, Less, Runtime = R>,
+    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(left.merge_input(right, GpuOp::<Less>::new())?)
+    materialize(
+        policy,
+        left.merge_input(policy, right, GpuOp::<Less>::new())?,
+    )
 }
 
 /// Sorts read-only key-value pairs by key and returns owned SoA outputs.
-pub fn sort_by_key<Keys, Values, Less>(
+pub fn sort_by_key<R, Keys, Values, Less>(
+    policy: &CubePolicy<R>,
     keys: Keys,
     values: Values,
     _less: Less,
 ) -> Result<<<Keys as SortByKeyInput<Values, Less>>::Output as MaterializeOutput>::Output, Error>
 where
-    Keys: SortByKeyInput<Values, Less>,
-    <Keys as SortByKeyInput<Values, Less>>::Output: MaterializeOutput,
+    R: Runtime,
+    Keys: SortByKeyInput<Values, Less, Runtime = R>,
+    <Keys as SortByKeyInput<Values, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(keys.sort_by_key_input(values, GpuOp::<Less>::new())?)
+    materialize(
+        policy,
+        keys.sort_by_key_input_with_policy(policy, values, GpuOp::<Less>::new())?,
+    )
 }
 
 impl<LeftA, LeftB, LeftValue, RightA, RightB, RightValue, Less>
@@ -2787,6 +3172,12 @@ impl<LeftA, LeftB, LeftValue, RightA, RightB, RightValue, Less>
 where
     SoAView2<LeftA, LeftB>: MergeByKeyInput<LeftValue, SoAView2<RightA, RightB>, RightValue, Less>,
 {
+    type Runtime = <SoAView2<LeftA, LeftB> as MergeByKeyInput<
+        LeftValue,
+        SoAView2<RightA, RightB>,
+        RightValue,
+        Less,
+    >>::Runtime;
     type Output = <SoAView2<LeftA, LeftB> as MergeByKeyInput<
         LeftValue,
         SoAView2<RightA, RightB>,
@@ -2796,6 +3187,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: LeftValue,
         right_keys: (RightA, RightB),
         right_values: RightValue,
@@ -2811,6 +3203,7 @@ where
                 left: self.0,
                 right: self.1,
             },
+            policy,
             left_values,
             SoAView2 {
                 left: right_keys.0,
@@ -2837,6 +3230,12 @@ where
             Less,
         >,
 {
+    type Runtime = <SoAView2<LeftA, LeftB> as MergeByKeyInput<
+        SoAView2<LeftValueA, LeftValueB>,
+        SoAView2<RightA, RightB>,
+        SoAView2<RightValueA, RightValueB>,
+        Less,
+    >>::Runtime;
     type Output = <SoAView2<LeftA, LeftB> as MergeByKeyInput<
         SoAView2<LeftValueA, LeftValueB>,
         SoAView2<RightA, RightB>,
@@ -2846,6 +3245,7 @@ where
 
     fn merge_by_key_input(
         self,
+        policy: &CubePolicy<Self::Runtime>,
         left_values: (LeftValueA, LeftValueB),
         right_keys: SoAView2<RightA, RightB>,
         right_values: (RightValueA, RightValueB),
@@ -2858,6 +3258,7 @@ where
             Less,
         >>::merge_by_key_input(
             self,
+            policy,
             SoAView2 {
                 left: left_values.0,
                 right: left_values.1,
@@ -2873,7 +3274,8 @@ where
 }
 
 /// Merges two sorted key-value ranges by key.
-pub fn merge_by_key<LeftKeys, LeftValues, RightKeys, RightValues, Less>(
+pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less>(
+    policy: &CubePolicy<R>,
     left_keys: LeftKeys,
     left_values: LeftValues,
     right_keys: RightKeys,
@@ -2884,53 +3286,73 @@ pub fn merge_by_key<LeftKeys, LeftValues, RightKeys, RightValues, Less>(
     Error,
 >
 where
-    LeftKeys: MergeByKeyInput<LeftValues, RightKeys, RightValues, Less>,
+    R: Runtime,
+    LeftKeys: MergeByKeyInput<LeftValues, RightKeys, RightValues, Less, Runtime = R>,
     <LeftKeys as MergeByKeyInput<LeftValues, RightKeys, RightValues, Less>>::Output:
-        MaterializeOutput,
+        MaterializeOutput<Runtime = R>,
 {
-    materialize(left_keys.merge_by_key_input(
-        left_values,
-        right_keys,
-        right_values,
-        GpuOp::<Less>::new(),
-    )?)
+    materialize(
+        policy,
+        left_keys.merge_by_key_input(
+            policy,
+            left_values,
+            right_keys,
+            right_values,
+            GpuOp::<Less>::new(),
+        )?,
+    )
 }
 
 /// Computes the sorted set union of two sorted device vectors.
-pub fn set_union<Left, Right, Less>(
+pub fn set_union<R, Left, Right, Less>(
+    policy: &CubePolicy<R>,
     left: Left,
     right: Right,
     _less: Less,
 ) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
-    Left: PairOrderingInput<Right, Less>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput,
+    R: Runtime,
+    Left: PairOrderingInput<Right, Less, Runtime = R>,
+    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(left.set_union_input(right, GpuOp::<Less>::new())?)
+    materialize(
+        policy,
+        left.set_union_input(policy, right, GpuOp::<Less>::new())?,
+    )
 }
 
 /// Computes the sorted set intersection of two sorted device vectors.
-pub fn set_intersection<Left, Right, Less>(
+pub fn set_intersection<R, Left, Right, Less>(
+    policy: &CubePolicy<R>,
     left: Left,
     right: Right,
     _less: Less,
 ) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
-    Left: PairOrderingInput<Right, Less>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput,
+    R: Runtime,
+    Left: PairOrderingInput<Right, Less, Runtime = R>,
+    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(left.set_intersection_input(right, GpuOp::<Less>::new())?)
+    materialize(
+        policy,
+        left.set_intersection_input(policy, right, GpuOp::<Less>::new())?,
+    )
 }
 
 /// Computes the sorted set difference `left - right`.
-pub fn set_difference<Left, Right, Less>(
+pub fn set_difference<R, Left, Right, Less>(
+    policy: &CubePolicy<R>,
     left: Left,
     right: Right,
     _less: Less,
 ) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
-    Left: PairOrderingInput<Right, Less>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput,
+    R: Runtime,
+    Left: PairOrderingInput<Right, Less, Runtime = R>,
+    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
-    materialize(left.set_difference_input(right, GpuOp::<Less>::new())?)
+    materialize(
+        policy,
+        left.set_difference_input(policy, right, GpuOp::<Less>::new())?,
+    )
 }

@@ -1,20 +1,23 @@
-use crate::{error::Error, policy::CubePolicy};
+use crate::{
+    error::Error,
+    policy::{CubePolicy, CubePolicyId},
+};
 use cubecl::prelude::*;
 use std::marker::PhantomData;
 
 /// Device-resident vector storage.
 ///
 /// This is the ownership boundary for keeping data on the CubeCL device across
-/// multiple algorithm calls. Host transfer happens explicitly through
-/// [`CubePolicy::to_device`] and [`DeviceVec::to_vec`].
+/// multiple algorithm calls. The vector carries only storage identity; host
+/// transfers and kernel launches use an explicitly supplied executor.
 ///
 /// Algorithms take `DeviceSlice<T>` as a one-column SoA input and return
 /// `DeviceVec<T>` as one-column owned output storage.
 pub struct DeviceVec<R: Runtime, T> {
-    pub(crate) policy: CubePolicy<R>,
+    pub(crate) policy_id: CubePolicyId,
     pub(crate) handle: cubecl::server::Handle,
     pub(crate) len: usize,
-    _element: PhantomData<fn() -> T>,
+    _element: PhantomData<fn() -> (R, T)>,
 }
 
 impl<R, T> std::fmt::Debug for DeviceVec<R, T>
@@ -23,7 +26,7 @@ where
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DeviceVec")
-            .field("policy", &self.policy)
+            .field("policy_id", &self.policy_id)
             .field("len", &self.len)
             .finish_non_exhaustive()
     }
@@ -33,18 +36,13 @@ impl<R, T> DeviceVec<R, T>
 where
     R: Runtime,
 {
-    pub(crate) fn empty(policy: CubePolicy<R>) -> Self {
-        let handle = policy.empty_handle();
-        Self::from_handle(policy, handle, 0)
-    }
-
     pub(crate) fn from_handle(
-        policy: CubePolicy<R>,
+        policy_id: CubePolicyId,
         handle: cubecl::server::Handle,
         len: usize,
     ) -> Self {
         Self {
-            policy,
+            policy_id,
             handle,
             len,
             _element: PhantomData,
@@ -61,9 +59,8 @@ where
         self.len == 0
     }
 
-    /// Returns the execution policy associated with this device vector.
-    pub fn policy(&self) -> &CubePolicy<R> {
-        &self.policy
+    pub(crate) fn policy_id(&self) -> CubePolicyId {
+        self.policy_id
     }
 }
 
@@ -72,17 +69,12 @@ where
     R: Runtime,
     T: CubePrimitive + CubeElement,
 {
-    /// Copies this device vector back to host memory.
-    ///
-    /// This is an explicit device-to-host transfer boundary. It synchronizes
-    /// with the backend as needed to read the current device contents.
-    pub fn to_vec(&self) -> Result<Vec<T>, Error> {
+    pub(crate) fn read_to_host(&self, policy: &CubePolicy<R>) -> Result<Vec<T>, Error> {
         if self.len == 0 {
             return Ok(Vec::new());
         }
 
-        let bytes = self
-            .policy
+        let bytes = policy
             .client()
             .read_one(self.handle.clone())
             .map_err(|err| Error::Launch {

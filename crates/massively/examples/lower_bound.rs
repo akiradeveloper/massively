@@ -1,12 +1,12 @@
 mod common;
 
-use massively::{CubeWgpu, lower_bound};
+use massively::{Executor, Wgpu, lower_bound};
 
 fn main() -> common::Result {
-    let policy = CubeWgpu::cpu();
-    let sorted = policy.to_device(&[1.0_f32, 2.0, 2.0, 4.0])?;
+    let exec = Executor::<Wgpu>::cpu();
+    let sorted = exec.to_device(&[1.0_f32, 2.0, 2.0, 4.0])?;
 
-    let index = lower_bound((sorted.slice(..),), (2.0,), common::LessF32)?;
+    let index = lower_bound(&exec, (sorted.slice(..),), (2.0,), common::LessF32)?;
 
     assert_eq!(index, 1);
     Ok(())

@@ -1,13 +1,18 @@
 mod common;
 
-use massively::{CubeWgpu, equal};
+use massively::{Executor, Wgpu, equal};
 
 fn main() -> common::Result {
-    let policy = CubeWgpu::cpu();
-    let left = policy.to_device(&[1.0_f32, 2.0, 3.0])?;
-    let right = policy.to_device(&[1.0_f32, 2.0, 3.0])?;
+    let exec = Executor::<Wgpu>::cpu();
+    let left = exec.to_device(&[1.0_f32, 2.0, 3.0])?;
+    let right = exec.to_device(&[1.0_f32, 2.0, 3.0])?;
 
-    let result = equal((left.slice(..),), (right.slice(..),), common::EqualF32)?;
+    let result = equal(
+        &exec,
+        (left.slice(..),),
+        (right.slice(..),),
+        common::EqualF32,
+    )?;
 
     assert!(result);
     Ok(())

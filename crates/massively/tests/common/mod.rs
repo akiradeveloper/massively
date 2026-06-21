@@ -3,7 +3,7 @@
 pub(crate) use cubecl::prelude::*;
 pub(crate) use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
 pub(crate) use massively::{
-    CubeWgpu, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
+    Executor, Wgpu, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_if,
     inclusive_scan, inclusive_scan_by_key, inner_product, is_partitioned, is_sorted,
     is_sorted_until, lexicographical_compare, lower_bound, max_element, merge, merge_by_key,
@@ -12,8 +12,8 @@ pub(crate) use massively::{
     transform, unique, unique_by_key, upper_bound,
 };
 
-pub(crate) fn policy() -> CubeWgpu {
-    CubeWgpu::cpu()
+pub(crate) fn exec() -> Executor<Wgpu> {
+    Executor::<Wgpu>::cpu()
 }
 
 pub(crate) struct Sum;
