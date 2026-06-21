@@ -8,5 +8,12 @@ fn equal_accepts_borrowed_tuple_columns() {
     let c = policy.to_device(&[1.0_f32, 2.0]).unwrap();
     let d = policy.to_device(&[10_u32, 20]).unwrap();
 
-    assert!(equal((&a, &b), (&c, &d), MixedTupleEqual).unwrap());
+    assert!(
+        equal(
+            (a.slice(..), b.slice(..)),
+            (c.slice(..), d.slice(..)),
+            MixedTupleEqual
+        )
+        .unwrap()
+    );
 }

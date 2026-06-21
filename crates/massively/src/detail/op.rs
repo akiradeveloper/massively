@@ -49,8 +49,11 @@ pub trait BinaryOp<T: CubeType>: 'static + Send + Sync {
 }
 
 /// Compile-time predicate used by conditional algorithms such as
-/// [`copy_if`](crate::copy_if), [`remove_if`](crate::remove_if), and
-/// [`count_if`](crate::count_if).
+/// [`remove_if`](crate::remove_if), [`count_if`](crate::count_if), and
+/// [`find_if`](crate::find_if).
+///
+/// Stencil algorithms such as [`copy_if`](crate::copy_if) use a `u32` flag
+/// column in the public API instead of taking a predicate marker.
 ///
 /// ```no_run
 /// use cubecl::prelude::*;

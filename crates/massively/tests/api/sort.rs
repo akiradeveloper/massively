@@ -43,7 +43,7 @@ fn sort_returns_device_storage() {
     let policy = policy();
     let x = policy.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
 
-    let sorted = sort((&x,), Less).unwrap();
+    let sorted = sort((x.slice(..),), Less).unwrap();
     let (sorted,) = sorted;
 
     assert_eq!(sorted.to_vec().unwrap(), vec![1.0, 2.0, 3.0]);
@@ -56,7 +56,7 @@ fn tuple_sort_preserves_soa_components() {
     let x = policy.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
     let y = policy.to_device(&[30_u32, 10, 20]).unwrap();
 
-    let sorted = sort((&x, &y), MixedTupleLess).unwrap();
+    let sorted = sort((x.slice(..), y.slice(..)), MixedTupleLess).unwrap();
     let (x, y) = sorted;
 
     assert_eq!(x.to_vec().unwrap(), vec![1.0, 2.0, 3.0]);
@@ -69,7 +69,7 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
     let values = policy.to_device(&[2.0_f32, 1.0, 2.0, 3.0]).unwrap();
     let tags = policy.to_device(&[20_u32, 30, 10, 40]).unwrap();
 
-    let sorted = sort((&values, &tags), MixedTupleLess).unwrap();
+    let sorted = sort((values.slice(..), tags.slice(..)), MixedTupleLess).unwrap();
     let (values, tags) = sorted;
     assert_eq!(values.to_vec().unwrap(), vec![1.0, 2.0, 2.0, 3.0]);
     assert_eq!(tags.to_vec().unwrap(), vec![30, 10, 20, 40]);
@@ -78,7 +78,11 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
     let tags = policy.to_device(&[20_u32, 10, 20, 10]).unwrap();
     let payload = policy.to_device(&[200.0_f32, 100.0, 400.0, 300.0]).unwrap();
 
-    let sorted = sort((&values, &tags, &payload), MixedTuple3Less).unwrap();
+    let sorted = sort(
+        (values.slice(..), tags.slice(..), payload.slice(..)),
+        MixedTuple3Less,
+    )
+    .unwrap();
     let (values, tags, payload) = sorted;
     assert_eq!(values.to_vec().unwrap(), vec![1.0, 3.0, 2.0, 4.0]);
     assert_eq!(tags.to_vec().unwrap(), vec![10, 10, 20, 20]);
@@ -94,7 +98,11 @@ fn tuple_sort_accepts_wide_borrowed_soas() {
     let c = policy.to_device(&[300.0_f32, 100.0, 200.0]).unwrap();
     let d = policy.to_device(&[3000.0_f32, 1000.0, 2000.0]).unwrap();
 
-    let sorted = sort(zip4(&a, &b, &c, &d), Tuple4Less).unwrap();
+    let sorted = sort(
+        zip4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
+        Tuple4Less,
+    )
+    .unwrap();
     let (a, b, c, d) = sorted;
 
     assert_eq!(a.to_vec().unwrap(), vec![1.0, 2.0, 3.0]);
@@ -121,7 +129,20 @@ fn tuple_sort_accepts_soa12() {
     let l = policy.to_device(&[3000_u32, 1000, 2500, 2000]).unwrap();
 
     let sorted = sort(
-        zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+        zip12(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+            h.slice(..),
+            i.slice(..),
+            j.slice(..),
+            k.slice(..),
+            l.slice(..),
+        ),
         Tuple12MixedLess,
     )
     .unwrap();

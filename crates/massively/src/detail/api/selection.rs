@@ -987,7 +987,7 @@ macro_rules! impl_partition_tuple_input {
 impl_partition_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
 impl_partition_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
 
-/// Keeps values satisfying `Pred`.
+/// Keeps values whose staged stencil flag satisfies `Pred`.
 ///
 /// This is a borrowing algorithm. It reads the input and returns newly owned SoA
 /// storage containing the selected values.

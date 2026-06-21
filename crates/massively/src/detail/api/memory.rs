@@ -1,11 +1,22 @@
 use crate::{
-    device::{DeviceVec, KernelColumnAt, S0, SoA, SoA1, SoA2, SoA3, StorageKernelColumn},
+    device::{
+        DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, S0, SoA, SoA1, SoA2, SoA3,
+        StorageKernelColumn,
+    },
     error::Error,
     expr::DeviceGpuExpr,
     kernels::*,
     op::UnaryOp,
 };
 use cubecl::prelude::*;
+
+fn transform_offset_handle<R: Runtime>(
+    client: &ComputeClient<R>,
+    offset: usize,
+) -> Result<cubecl::server::Handle, Error> {
+    let offset = u32::try_from(offset).map_err(|_| Error::LengthTooLarge { len: offset })?;
+    Ok(client.create_from_slice(u32::as_bytes(&[offset])))
+}
 
 /// Storage shape used for a transformed device value.
 #[doc(hidden)]
@@ -47,7 +58,7 @@ where
     T: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = Self>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
 impl<R, T, A, Op> TransformUnaryOutput<R, T, Op> for (A,)
@@ -57,13 +68,16 @@ where
     A: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = (A,)>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
         let client = input.policy().client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let offset_u32 = u32::try_from(input.offset)
+                .map_err(|_| Error::LengthTooLarge { len: input.offset })?;
+            let offset_handle = client.create_from_slice(u32::as_bytes(&[offset_u32]));
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -73,7 +87,10 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(input.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(offset_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                 );
@@ -93,7 +110,7 @@ where
     B: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = (A, B)>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
         let client = input.policy().client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -101,6 +118,9 @@ where
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let offset_u32 = u32::try_from(input.offset)
+                .map_err(|_| Error::LengthTooLarge { len: input.offset })?;
+            let offset_handle = client.create_from_slice(u32::as_bytes(&[offset_u32]));
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -110,7 +130,10 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(input.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(offset_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                     unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -133,7 +156,7 @@ where
     C: CubePrimitive + CubeElement,
     Op: UnaryOp<(T,), Output = (A, B, C)>,
 {
-    fn run(input: &DeviceVec<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    fn run(input: DeviceColumnView<R, T>) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = input.len();
         let client = input.policy().client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -142,6 +165,9 @@ where
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let offset_u32 = u32::try_from(input.offset)
+                .map_err(|_| Error::LengthTooLarge { len: input.offset })?;
+            let offset_handle = client.create_from_slice(u32::as_bytes(&[offset_u32]));
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -151,7 +177,10 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(input.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(offset_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                     unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -185,8 +214,8 @@ macro_rules! impl_transform_tuple_output {
         {
             fn run(
                 policy: &crate::policy::CubePolicy<R>,
-                $first_arg: &DeviceVec<R, $first_in>,
-                $( $arg: &DeviceVec<R, $in_ty>, )+
+                $first_arg: DeviceColumnView<R, $first_in>,
+                $( $arg: DeviceColumnView<R, $in_ty>, )+
             ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
                 let len = $first_arg.len();
                 let client = policy.client();
@@ -208,9 +237,25 @@ macro_rules! impl_transform_tuple_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            unsafe { BufferArg::from_raw_parts($first_arg.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($first_arg.source.handle.clone(), $first_arg.source.len()) },
                             $(
-                                unsafe { BufferArg::from_raw_parts($arg.handle.clone(), len) },
+                                unsafe { BufferArg::from_raw_parts($arg.source.handle.clone(), $arg.source.len()) },
+                            )+
+                            unsafe {
+                                BufferArg::from_raw_parts({
+                                    let offset = u32::try_from($first_arg.offset)
+                                        .map_err(|_| Error::LengthTooLarge { len: $first_arg.offset })?;
+                                    client.create_from_slice(u32::as_bytes(&[offset]))
+                                }, 1)
+                            },
+                            $(
+                                unsafe {
+                                    BufferArg::from_raw_parts({
+                                        let offset = u32::try_from($arg.offset)
+                                            .map_err(|_| Error::LengthTooLarge { len: $arg.offset })?;
+                                        client.create_from_slice(u32::as_bytes(&[offset]))
+                                    }, 1)
+                                },
                             )+
                             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                             $(
@@ -284,8 +329,8 @@ where
 {
     fn run(
         policy: &crate::policy::CubePolicy<R>,
-        left: &DeviceVec<R, InA>,
-        right: &DeviceVec<R, InB>,
+        left: DeviceColumnView<R, InA>,
+        right: DeviceColumnView<R, InB>,
     ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
@@ -299,8 +344,8 @@ where
 {
     fn run(
         policy: &crate::policy::CubePolicy<R>,
-        left: &DeviceVec<R, InA>,
-        right: &DeviceVec<R, InB>,
+        left: DeviceColumnView<R, InA>,
+        right: DeviceColumnView<R, InB>,
     ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
@@ -308,6 +353,8 @@ where
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let left_offset = transform_offset_handle(client, left.offset)?;
+            let right_offset = transform_offset_handle(client, right.offset)?;
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -317,8 +364,14 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(left.handle.clone(), len) },
-                    unsafe { BufferArg::from_raw_parts(right.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(left.source.handle.clone(), left.source.len())
+                    },
+                    unsafe {
+                        BufferArg::from_raw_parts(right.source.handle.clone(), right.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(left_offset.clone(), 1) },
+                    unsafe { BufferArg::from_raw_parts(right_offset.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                 );
@@ -341,8 +394,8 @@ where
 {
     fn run(
         policy: &crate::policy::CubePolicy<R>,
-        left: &DeviceVec<R, InA>,
-        right: &DeviceVec<R, InB>,
+        left: DeviceColumnView<R, InA>,
+        right: DeviceColumnView<R, InB>,
     ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
@@ -351,6 +404,8 @@ where
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let left_offset = transform_offset_handle(client, left.offset)?;
+            let right_offset = transform_offset_handle(client, right.offset)?;
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -360,8 +415,14 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(left.handle.clone(), len) },
-                    unsafe { BufferArg::from_raw_parts(right.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(left.source.handle.clone(), left.source.len())
+                    },
+                    unsafe {
+                        BufferArg::from_raw_parts(right.source.handle.clone(), right.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(left_offset.clone(), 1) },
+                    unsafe { BufferArg::from_raw_parts(right_offset.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                     unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },
@@ -386,9 +447,9 @@ where
 {
     fn run(
         policy: &crate::policy::CubePolicy<R>,
-        first: &DeviceVec<R, InA>,
-        second: &DeviceVec<R, InB>,
-        third: &DeviceVec<R, InC>,
+        first: DeviceColumnView<R, InA>,
+        second: DeviceColumnView<R, InB>,
+        third: DeviceColumnView<R, InC>,
     ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
 }
 
@@ -403,9 +464,9 @@ where
 {
     fn run(
         policy: &crate::policy::CubePolicy<R>,
-        first: &DeviceVec<R, InA>,
-        second: &DeviceVec<R, InB>,
-        third: &DeviceVec<R, InC>,
+        first: DeviceColumnView<R, InA>,
+        second: DeviceColumnView<R, InB>,
+        third: DeviceColumnView<R, InC>,
     ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
@@ -413,6 +474,9 @@ where
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let first_offset = transform_offset_handle(client, first.offset)?;
+            let second_offset = transform_offset_handle(client, second.offset)?;
+            let third_offset = transform_offset_handle(client, third.offset)?;
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -422,9 +486,18 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(first.handle.clone(), len) },
-                    unsafe { BufferArg::from_raw_parts(second.handle.clone(), len) },
-                    unsafe { BufferArg::from_raw_parts(third.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(first.source.handle.clone(), first.source.len())
+                    },
+                    unsafe {
+                        BufferArg::from_raw_parts(second.source.handle.clone(), second.source.len())
+                    },
+                    unsafe {
+                        BufferArg::from_raw_parts(third.source.handle.clone(), third.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(first_offset.clone(), 1) },
+                    unsafe { BufferArg::from_raw_parts(second_offset.clone(), 1) },
+                    unsafe { BufferArg::from_raw_parts(third_offset.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                 );
@@ -450,9 +523,9 @@ where
 {
     fn run(
         policy: &crate::policy::CubePolicy<R>,
-        first: &DeviceVec<R, InA>,
-        second: &DeviceVec<R, InB>,
-        third: &DeviceVec<R, InC>,
+        first: DeviceColumnView<R, InA>,
+        second: DeviceColumnView<R, InB>,
+        third: DeviceColumnView<R, InC>,
     ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
@@ -462,6 +535,9 @@ where
         if len != 0 {
             let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let first_offset = transform_offset_handle(client, first.offset)?;
+            let second_offset = transform_offset_handle(client, second.offset)?;
+            let third_offset = transform_offset_handle(client, third.offset)?;
             let block_size = 256_u32;
             let block_count = len.div_ceil(block_size as usize);
             let block_count_u32 = u32::try_from(block_count)
@@ -480,9 +556,18 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    unsafe { BufferArg::from_raw_parts(first.handle.clone(), len) },
-                    unsafe { BufferArg::from_raw_parts(second.handle.clone(), len) },
-                    unsafe { BufferArg::from_raw_parts(third.handle.clone(), len) },
+                    unsafe {
+                        BufferArg::from_raw_parts(first.source.handle.clone(), first.source.len())
+                    },
+                    unsafe {
+                        BufferArg::from_raw_parts(second.source.handle.clone(), second.source.len())
+                    },
+                    unsafe {
+                        BufferArg::from_raw_parts(third.source.handle.clone(), third.source.len())
+                    },
+                    unsafe { BufferArg::from_raw_parts(first_offset.clone(), 1) },
+                    unsafe { BufferArg::from_raw_parts(second_offset.clone(), 1) },
+                    unsafe { BufferArg::from_raw_parts(third_offset.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(output_a.clone(), len) },
                     unsafe { BufferArg::from_raw_parts(output_b.clone(), len) },

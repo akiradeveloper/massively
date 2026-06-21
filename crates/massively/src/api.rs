@@ -5,6 +5,10 @@
 
 use std::any::Any;
 use std::marker::PhantomData;
+use std::ops::{Bound, RangeBounds};
+
+use crate::detail::device::KernelColumn;
+use cubecl::frontend::PartialOrdExpand;
 
 pub use crate::detail::Error;
 pub use crate::detail::op;
@@ -36,6 +40,32 @@ mod sealed {
             &self,
         ) -> Option<&crate::detail::DeviceVec<<B as Backend>::Runtime, T>> {
             None
+        }
+
+        fn column_vec_inner<T: 'static>(
+            &self,
+        ) -> Result<Option<crate::detail::DeviceVec<<B as Backend>::Runtime, T>>, Error>
+        where
+            T: super::Scalar<B>,
+        {
+            Ok(self
+                .column_view_inner::<T>()?
+                .map(|view| view.materialize())
+                .transpose()?)
+        }
+
+        fn column_view_inner<T: 'static>(
+            &self,
+        ) -> Result<
+            Option<crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, T>>,
+            Error,
+        >
+        where
+            T: super::Scalar<B>,
+        {
+            Ok(self
+                .column_inner::<T>()
+                .map(crate::detail::device::DeviceColumnView::from_column))
         }
 
         fn transform_dispatch<Op, Output, Y>(self, op: Op) -> Result<Output, Error>
@@ -148,18 +178,16 @@ mod sealed {
             Indices: MIter<B, Item = (u32,)>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
-        fn gather_if_dispatch<Indices, Stencil, Pred, Output>(
+        fn gather_if_dispatch<Indices, Stencil, Output>(
             self,
             _indices: Indices,
             _default: <Self as MIter<B>>::Item,
             _stencil: Stencil,
-            _pred: Pred,
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
             Indices: MIter<B, Item = (u32,)>,
-            Stencil: MIter<B>,
-            Pred: op::PredicateOp<Stencil::Item>,
+            Stencil: MIter<B, Item = (u32,)>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
@@ -183,19 +211,17 @@ mod sealed {
             })
         }
 
-        fn scatter_if_dispatch<Indices, Stencil, Pred, Output>(
+        fn scatter_if_dispatch<Indices, Stencil, Output>(
             self,
             _indices: Indices,
             _len: usize,
             _default: <Self as MIter<B>>::Item,
             _stencil: Stencil,
-            _pred: Pred,
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
             Indices: MIter<B, Item = (u32,)>,
-            Stencil: MIter<B>,
-            Pred: op::PredicateOp<Stencil::Item>,
+            Stencil: MIter<B, Item = (u32,)>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
@@ -234,15 +260,10 @@ mod sealed {
             Op: op::BinaryOp<<Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
-        fn copy_if_dispatch<Stencil, Pred, Output>(
-            self,
-            _stencil: Stencil,
-            _pred: Pred,
-        ) -> Result<Output, Error>
+        fn copy_if_dispatch<Stencil, Output>(self, _stencil: Stencil) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Stencil: MIter<B>,
-            Pred: op::PredicateOp<Stencil::Item>,
+            Stencil: MIter<B, Item = (u32,)>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn remove_if_dispatch<Pred, Output>(self, pred: Pred) -> Result<Output, Error>
@@ -287,16 +308,14 @@ mod sealed {
             Self: MIter<B>,
             Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
 
-        fn replace_if_dispatch<Stencil, Pred, Output>(
+        fn replace_if_dispatch<Stencil, Output>(
             self,
             replacement: <Self as MIter<B>>::Item,
             _stencil: Stencil,
-            _pred: Pred,
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Stencil: MIter<B>,
-            Pred: op::PredicateOp<Stencil::Item>,
+            Stencil: MIter<B, Item = (u32,)>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         #[doc(hidden)]
@@ -644,7 +663,7 @@ mod sealed {
 
     pub trait StorageOutputDispatch<B: super::Backend>: Sized {
         fn transform_unary<Input, Op>(
-            input: &crate::detail::DeviceVec<<B as Backend>::Runtime, Input>,
+            input: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Input>,
             op: Op,
         ) -> Result<<Self as super::StorageOutput<B>>::Inner, Error>
         where
@@ -654,8 +673,8 @@ mod sealed {
 
         fn transform_binary<Left, Right, Op>(
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-            left: &crate::detail::DeviceVec<<B as Backend>::Runtime, Left>,
-            right: &crate::detail::DeviceVec<<B as Backend>::Runtime, Right>,
+            left: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Left>,
+            right: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Right>,
             op: Op,
         ) -> Result<<Self as super::StorageOutput<B>>::Inner, Error>
         where
@@ -666,9 +685,9 @@ mod sealed {
 
         fn transform_ternary<First, Second, Third, Op>(
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-            first: &crate::detail::DeviceVec<<B as Backend>::Runtime, First>,
-            second: &crate::detail::DeviceVec<<B as Backend>::Runtime, Second>,
-            third: &crate::detail::DeviceVec<<B as Backend>::Runtime, Third>,
+            first: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, First>,
+            second: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Second>,
+            third: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Third>,
             op: Op,
         ) -> Result<<Self as super::StorageOutput<B>>::Inner, Error>
         where
@@ -809,6 +828,22 @@ where
         self.inner.is_empty()
     }
 
+    /// Returns a read-only device slice for the given range.
+    ///
+    /// The range is checked like a Rust slice range and panics if it is out of
+    /// bounds or if the start is greater than the end.
+    pub fn slice<R>(&self, range: R) -> DeviceSlice<'_, B, T>
+    where
+        R: RangeBounds<usize>,
+    {
+        let (offset, len) = resolve_slice_range(self.len(), range);
+        DeviceSlice {
+            source: self,
+            offset,
+            len,
+        }
+    }
+
     /// Copies this device column to host memory.
     pub fn to_vec(&self) -> Result<Vec<T>, Error>
     where
@@ -816,6 +851,86 @@ where
     {
         self.inner.to_vec()
     }
+}
+
+/// Read-only view into a contiguous range of a [`DeviceVec`].
+#[derive(Debug)]
+pub struct DeviceSlice<'a, B: Backend, T> {
+    source: &'a DeviceVec<B, T>,
+    offset: usize,
+    len: usize,
+}
+
+impl<'a, B, T> Copy for DeviceSlice<'a, B, T> where B: Backend {}
+
+impl<'a, B, T> Clone for DeviceSlice<'a, B, T>
+where
+    B: Backend,
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, B, T> DeviceSlice<'a, B, T>
+where
+    B: Backend,
+{
+    /// Returns the number of elements in this slice.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Returns whether this slice is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    fn materialize(&self) -> Result<DeviceVec<B, T>, Error>
+    where
+        T: Scalar<B>,
+    {
+        Ok(DeviceVec::from_inner(
+            crate::detail::primitives::range::copy_slice(
+                &self.source.inner,
+                self.offset,
+                self.len,
+            )?,
+        ))
+    }
+
+    /// Copies this device slice to host memory.
+    pub fn to_vec(&self) -> Result<Vec<T>, Error>
+    where
+        T: Scalar<B>,
+    {
+        self.materialize()?.to_vec()
+    }
+}
+
+fn resolve_slice_range<R>(len: usize, range: R) -> (usize, usize)
+where
+    R: RangeBounds<usize>,
+{
+    let start = match range.start_bound() {
+        Bound::Included(&start) => start,
+        Bound::Excluded(&start) => start.checked_add(1).expect("slice start overflow"),
+        Bound::Unbounded => 0,
+    };
+    let end = match range.end_bound() {
+        Bound::Included(&end) => end.checked_add(1).expect("slice end overflow"),
+        Bound::Excluded(&end) => end,
+        Bound::Unbounded => len,
+    };
+    assert!(
+        start <= end,
+        "slice start ({start}) is greater than slice end ({end})"
+    );
+    assert!(
+        end <= len,
+        "slice end ({end}) is out of bounds for DeviceVec of length {len}"
+    );
+    (start, end - start)
 }
 
 /// Storage materialization for owned outputs.
@@ -851,95 +966,43 @@ where
 
 fn gather_index_inner<B, Indices>(
     indices: &Indices,
-) -> Result<(&crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, u32>,), Error>
+) -> Result<crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, u32>, Error>
 where
     B: Backend,
     Indices: MIter<B, Item = (u32,)>,
 {
-    <Indices as sealed::MIterDispatch<B>>::index_inner(indices).ok_or_else(|| Error::Launch {
-        message: "gather indices must be backed by one u32 DeviceVec".to_string(),
+    <Indices as sealed::MIterDispatch<B>>::column_vec_inner::<u32>(indices)?.ok_or_else(|| {
+        Error::Launch {
+            message: "gather indices must be backed by one u32 DeviceVec or DeviceSlice"
+                .to_string(),
+        }
     })
 }
 
-#[allow(dead_code)]
-trait MergeBySingleKeyValues<B, RightValues, K, Less>: MIter<B>
+fn single_column_inner<B, Input, T>(
+    input: &Input,
+    message: &'static str,
+) -> Result<crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>, Error>
 where
     B: Backend,
-    Self::Item: StorageOutput<B>,
+    Input: MIter<B, Item = (T,)>,
+    T: Scalar<B> + 'static,
 {
-    fn merge_by_single_key_values(
-        self,
-        left_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        right_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        right_values: RightValues,
-    ) -> Result<
-        (
-            (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,),
-            <Self::Item as StorageOutput<B>>::Inner,
-        ),
-        Error,
-    >;
-}
-
-trait PairSearchValues<B, Right, Op>: MIter<B>
-where
-    B: Backend,
-{
-    fn equal_values(self, right: Right, op: Op) -> Result<bool, Error>;
-    fn mismatch_values(self, right: Right, op: Op) -> Result<Option<usize>, Error>;
-    fn find_first_of_values(self, needles: Right, op: Op) -> Result<Option<usize>, Error>;
-    fn lexicographical_compare_values(self, right: Right, op: Op) -> Result<bool, Error>;
-}
-
-trait PairOrderingValues<B, Right, Less>: MIter<B>
-where
-    B: Backend,
-    Self::Item: StorageOutput<B>,
-{
-    fn merge_values(
-        self,
-        right: Right,
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error>;
-    fn set_union_values(
-        self,
-        right: Right,
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error>;
-    fn set_intersection_values(
-        self,
-        right: Right,
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error>;
-    fn set_difference_values(
-        self,
-        right: Right,
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error>;
+    <Input as sealed::MIterDispatch<B>>::column_vec_inner::<T>(input)?.ok_or_else(|| {
+        Error::Launch {
+            message: message.to_string(),
+        }
+    })
 }
 
 #[doc(hidden)]
-pub struct NoPredicate;
+pub struct StencilFlag;
 
 #[cubecl::cube]
-impl op::PredicateOp<(u32,)> for NoPredicate {
-    fn apply(_input: (u32,)) -> bool {
-        true
+impl op::PredicateOp<(u32,)> for StencilFlag {
+    fn apply(input: (u32,)) -> bool {
+        input.0 > 0
     }
-}
-
-#[allow(dead_code)]
-trait InnerProductValues<B, Right, TransformOp, ReduceOp>: MIter<B>
-where
-    B: Backend,
-{
-    fn inner_product_values(
-        self,
-        right: Right,
-        transform_op: TransformOp,
-        init: Self::Item,
-        reduce_op: ReduceOp,
-    ) -> Result<Self::Item, Error>;
 }
 
 macro_rules! impl_storage_output_tuple {
@@ -975,7 +1038,10 @@ macro_rules! impl_storage_output_tuple {
             $( $ty: Scalar<B>, )+
         {
             fn transform_unary<Input, Op>(
-                input: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, Input>,
+                input: crate::detail::device::DeviceColumnView<
+                    <B as sealed::Backend>::Runtime,
+                    Input,
+                >,
                 op: Op,
             ) -> Result<<Self as StorageOutput<B>>::Inner, Error>
             where
@@ -1006,8 +1072,14 @@ macro_rules! impl_storage_output_tuple {
 
             fn transform_binary<Left, Right, Op>(
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                left: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, Left>,
-                right: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, Right>,
+                left: crate::detail::device::DeviceColumnView<
+                    <B as sealed::Backend>::Runtime,
+                    Left,
+                >,
+                right: crate::detail::device::DeviceColumnView<
+                    <B as sealed::Backend>::Runtime,
+                    Right,
+                >,
                 op: Op,
             ) -> Result<<Self as StorageOutput<B>>::Inner, Error>
             where
@@ -1041,9 +1113,18 @@ macro_rules! impl_storage_output_tuple {
 
             fn transform_ternary<First, Second, Third, Op>(
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                first: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, First>,
-                second: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, Second>,
-                third: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, Third>,
+                first: crate::detail::device::DeviceColumnView<
+                    <B as sealed::Backend>::Runtime,
+                    First,
+                >,
+                second: crate::detail::device::DeviceColumnView<
+                    <B as sealed::Backend>::Runtime,
+                    Second,
+                >,
+                third: crate::detail::device::DeviceColumnView<
+                    <B as sealed::Backend>::Runtime,
+                    Third,
+                >,
                 op: Op,
             ) -> Result<<Self as StorageOutput<B>>::Inner, Error>
             where
@@ -1109,44 +1190,53 @@ pub trait MIter<B: Backend>: sealed::MIterDispatch<B> + Sized {
     }
 }
 
-impl<'a, B, T> MIter<B> for (&'a DeviceVec<B, T>,)
+impl<'a, B, T> MIter<B> for (DeviceSlice<'a, B, T>,)
 where
     B: Backend,
     T: Scalar<B> + 'static,
     (T,): StorageOutput<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
 {
     type Item = (T,);
-    type Inner = (&'a crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,);
+    type Inner = (crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, T>,);
 
     fn len(&self) -> usize {
-        self.0.inner.len()
+        self.0.len()
     }
 
     fn into_inner(self) -> Self::Inner {
-        (&self.0.inner,)
+        (crate::detail::device::DeviceColumnView::from_slice(
+            &self.0.source.inner,
+            self.0.offset,
+            self.0.len,
+        ),)
     }
 }
 
-impl<'a, B, T> sealed::MIterDispatch<B> for (&'a DeviceVec<B, T>,)
+impl<'a, B, T> sealed::MIterDispatch<B> for (DeviceSlice<'a, B, T>,)
 where
     B: Backend,
     T: Scalar<B> + 'static,
     (T,): StorageOutput<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
 {
-    fn index_inner(
+    fn column_view_inner<U: 'static>(
         &self,
-    ) -> Option<(&crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, u32>,)> {
-        let column = self.0 as &dyn Any;
-        let column = column.downcast_ref::<DeviceVec<B, u32>>()?;
-        Some((&column.inner,))
-    }
-
-    fn column_inner<U: 'static>(
-        &self,
-    ) -> Option<&crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, U>> {
-        let column = self.0 as &dyn Any;
-        let column = column.downcast_ref::<DeviceVec<B, U>>()?;
-        Some(&column.inner)
+    ) -> Result<
+        Option<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, U>>,
+        Error,
+    >
+    where
+        U: Scalar<B>,
+    {
+        let source = self.0.source as &dyn Any;
+        let source = match source.downcast_ref::<DeviceVec<B, U>>() {
+            Some(source) => source,
+            None => return Ok(None),
+        };
+        Ok(Some(crate::detail::device::DeviceColumnView::from_slice(
+            &source.inner,
+            self.0.offset,
+            self.0.len,
+        )))
     }
 
     fn selection_stencil_dispatch<Pred>(
@@ -1166,8 +1256,8 @@ where
         Y: StorageOutput<B>,
         Output: MVec<B, Item = Y>,
     {
-        let input = self.into_inner();
-        let inner = <Y as sealed::StorageOutputDispatch<B>>::transform_unary(input.0, op)?;
+        let input = self.into_inner().0;
+        let inner = <Y as sealed::StorageOutputDispatch<B>>::transform_unary(input, op)?;
         Ok(array_from_inner::<B, Y, Output>(inner))
     }
 
@@ -1179,12 +1269,12 @@ where
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
-    fn sort_dispatch<Less, Output>(self, _less: Less) -> Result<Output, Error>
+    fn sort_dispatch<Less, Output>(self, less: Less) -> Result<Output, Error>
     where
         Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::sort(self.into_inner(), _less)?;
+        let inner = crate::detail::sort(self.into_inner(), less)?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1295,11 +1385,15 @@ where
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
+        let left_value = self.into_inner().0;
+        let right_value = right_values.into_inner().0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
-            left_keys,
-            &self.0.inner,
-            right_keys,
-            &right_values.0.inner,
+            crate::detail::device::SoAView1 { source: left_keys },
+            crate::detail::device::SoAView1 { source: left_value },
+            crate::detail::device::SoAView1 { source: right_keys },
+            crate::detail::device::SoAView1 {
+                source: right_value,
+            },
             crate::detail::api::Tuple1Less::<Less>::default(),
         )?;
         Ok((
@@ -1314,66 +1408,7 @@ where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
         let indices = gather_index_inner::<B, Indices>(&indices)?;
-        let inner = crate::detail::gather(self.into_inner(), indices)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn gather_if_dispatch<Indices, Stencil, Pred, Output>(
-        self,
-        indices: Indices,
-        default: <Self as MIter<B>>::Item,
-        stencil: Stencil,
-        pred: Pred,
-    ) -> Result<Output, Error>
-    where
-        Indices: MIter<B, Item = (u32,)>,
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-    {
-        let indices = gather_index_inner::<B, Indices>(&indices)?;
-        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(
-            &stencil, false,
-        )?;
-        let inner = crate::detail::gather_if(self.into_inner(), indices, stencil, default, pred)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn scatter_dispatch<Indices, Output>(
-        self,
-        indices: Indices,
-        len: usize,
-        default: <Self as MIter<B>>::Item,
-    ) -> Result<Output, Error>
-    where
-        Indices: MIter<B, Item = (u32,)>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-    {
-        let indices = gather_index_inner::<B, Indices>(&indices)?;
-        let inner = crate::detail::scatter(self.into_inner(), indices, len, default.0)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn scatter_if_dispatch<Indices, Stencil, Pred, Output>(
-        self,
-        indices: Indices,
-        len: usize,
-        default: <Self as MIter<B>>::Item,
-        stencil: Stencil,
-        pred: Pred,
-    ) -> Result<Output, Error>
-    where
-        Indices: MIter<B, Item = (u32,)>,
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-    {
-        let indices = gather_index_inner::<B, Indices>(&indices)?;
-        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(
-            &stencil, false,
-        )?;
-        let inner =
-            crate::detail::scatter_if(self.into_inner(), indices, len, default.0, stencil, pred)?;
+        let inner = crate::detail::gather(self.into_inner(), (&indices,))?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1419,20 +1454,15 @@ where
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
-    fn copy_if_dispatch<Stencil, Pred, Output>(
-        self,
-        stencil: Stencil,
-        pred: Pred,
-    ) -> Result<Output, Error>
+    fn copy_if_dispatch<Stencil, Output>(self, stencil: Stencil) -> Result<Output, Error>
     where
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
+        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(
-            &stencil, false,
-        )?;
-        let inner = crate::detail::copy_if(self.into_inner(), stencil, pred)?;
+        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<
+            StencilFlag,
+        >(&stencil, false)?;
+        let inner = crate::detail::copy_if(self.into_inner(), stencil, StencilFlag)?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1499,21 +1529,20 @@ where
         crate::detail::is_partitioned(self.into_inner(), pred)
     }
 
-    fn replace_if_dispatch<Stencil, Pred, Output>(
+    fn replace_if_dispatch<Stencil, Output>(
         self,
         replacement: <Self as MIter<B>>::Item,
         stencil: Stencil,
-        pred: Pred,
     ) -> Result<Output, Error>
     where
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
+        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(
-            &stencil, false,
-        )?;
-        let inner = crate::detail::replace_if(self.into_inner(), replacement, stencil, pred)?;
+        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<
+            StencilFlag,
+        >(&stencil, false)?;
+        let inner =
+            crate::detail::replace_if(self.into_inner(), replacement, stencil, StencilFlag)?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1552,50 +1581,6 @@ where
         Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
         crate::detail::adjacent_find(self.into_inner(), pred)
-    }
-
-    fn equal_dispatch<Right, Eq>(self, right: Right, eq: Eq) -> Result<bool, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "equal right input must be backed by one DeviceVec".to_string(),
-                }
-            })?;
-        crate::detail::equal(self.into_inner(), (right,), eq)
-    }
-
-    fn mismatch_dispatch<Right, Eq>(self, right: Right, eq: Eq) -> Result<Option<usize>, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "mismatch right input must be backed by one DeviceVec".to_string(),
-                }
-            })?;
-        crate::detail::mismatch(self.into_inner(), (right,), eq)
-    }
-
-    fn find_first_of_dispatch<Needles, Eq>(
-        self,
-        needles: Needles,
-        eq: Eq,
-    ) -> Result<Option<usize>, Error>
-    where
-        Needles: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let needles = <Needles as sealed::MIterDispatch<B>>::column_inner::<T>(&needles)
-            .ok_or_else(|| Error::Launch {
-                message: "find_first_of needles must be backed by one DeviceVec".to_string(),
-            })?;
-        crate::detail::find_first_of(self.into_inner(), (needles,), eq)
     }
 
     fn lower_bound_dispatch<Less>(
@@ -1645,151 +1630,92 @@ where
         crate::detail::is_sorted(self.into_inner(), less)
     }
 
-    fn lexicographical_compare_dispatch<Right, Less>(
+    fn gather_if_dispatch<Indices, Stencil, Output>(
         self,
-        right: Right,
-        less: Less,
-    ) -> Result<bool, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "lexicographical_compare right input must be backed by one DeviceVec"
-                        .to_string(),
-                }
-            })?;
-        crate::detail::lexicographical_compare(self.into_inner(), (right,), less)
-    }
-
-    fn merge_dispatch<Right, Output, Less>(self, right: Right, less: Less) -> Result<Output, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "merge right input must be backed by one DeviceVec".to_string(),
-                }
-            })?;
-        let inner = crate::detail::merge(self.into_inner(), (right,), less)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn set_union_dispatch<Right, Output, Less>(
-        self,
-        right: Right,
-        less: Less,
+        indices: Indices,
+        default: <Self as MIter<B>>::Item,
+        stencil: Stencil,
     ) -> Result<Output, Error>
     where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Indices: MIter<B, Item = (u32,)>,
+        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "set_union right input must be backed by one DeviceVec".to_string(),
-                }
-            })?;
-        let inner = crate::detail::set_union(self.into_inner(), (right,), less)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn set_intersection_dispatch<Right, Output, Less>(
-        self,
-        right: Right,
-        less: Less,
-    ) -> Result<Output, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "set_intersection right input must be backed by one DeviceVec"
-                        .to_string(),
-                }
-            })?;
-        let inner = crate::detail::set_intersection(self.into_inner(), (right,), less)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn set_difference_dispatch<Right, Output, Less>(
-        self,
-        right: Right,
-        less: Less,
-    ) -> Result<Output, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "set_difference right input must be backed by one DeviceVec"
-                        .to_string(),
-                }
-            })?;
-        let inner = crate::detail::set_difference(self.into_inner(), (right,), less)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn inner_product_dispatch<Right, TransformOp, ReduceOp>(
-        self,
-        right: Right,
-        _transform_op: TransformOp,
-        init: <Self as MIter<B>>::Item,
-        _reduce_op: ReduceOp,
-    ) -> Result<<Self as MIter<B>>::Item, Error>
-    where
-        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        TransformOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-        ReduceOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-    {
-        let right =
-            <Right as sealed::MIterDispatch<B>>::column_inner::<T>(&right).ok_or_else(|| {
-                Error::Launch {
-                    message: "inner_product right input must be backed by one DeviceVec"
-                        .to_string(),
-                }
-            })?;
-        let value = crate::detail::inner_product(
-            &self.0.inner,
-            right,
-            crate::detail::api::Tuple1BinaryOp::<TransformOp>::default(),
-            init.0,
-            crate::detail::api::Tuple1BinaryOp::<ReduceOp>::default(),
+        let indices = gather_index_inner::<B, Indices>(&indices)?;
+        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<
+            StencilFlag,
+        >(&stencil, false)?;
+        let inner = crate::detail::gather_if(
+            self.into_inner(),
+            (&indices,),
+            stencil,
+            default,
+            StencilFlag,
         )?;
-        Ok((value,))
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn scatter_dispatch<Indices, Output>(
+        self,
+        indices: Indices,
+        len: usize,
+        default: <Self as MIter<B>>::Item,
+    ) -> Result<Output, Error>
+    where
+        Indices: MIter<B, Item = (u32,)>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+    {
+        let indices = gather_index_inner::<B, Indices>(&indices)?;
+        let inner = crate::detail::scatter(self.into_inner(), (&indices,), len, default.0)?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn scatter_if_dispatch<Indices, Stencil, Output>(
+        self,
+        indices: Indices,
+        len: usize,
+        default: <Self as MIter<B>>::Item,
+        stencil: Stencil,
+    ) -> Result<Output, Error>
+    where
+        Indices: MIter<B, Item = (u32,)>,
+        Stencil: MIter<B, Item = (u32,)>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+    {
+        let indices = gather_index_inner::<B, Indices>(&indices)?;
+        let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<
+            StencilFlag,
+        >(&stencil, false)?;
+        let inner = crate::detail::scatter_if(
+            self.into_inner(),
+            (&indices,),
+            len,
+            default.0,
+            stencil,
+            StencilFlag,
+        )?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn equal_same_dispatch<Eq>(self, right: Self, eq: Eq) -> Result<bool, Error>
     where
         Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.equal_dispatch(right, eq)
+        crate::detail::equal(self.into_inner(), right.into_inner(), eq)
     }
 
     fn mismatch_same_dispatch<Eq>(self, right: Self, eq: Eq) -> Result<Option<usize>, Error>
     where
         Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.mismatch_dispatch(right, eq)
+        crate::detail::mismatch(self.into_inner(), right.into_inner(), eq)
     }
 
     fn find_first_of_same_dispatch<Eq>(self, needles: Self, eq: Eq) -> Result<Option<usize>, Error>
     where
         Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.find_first_of_dispatch(needles, eq)
+        crate::detail::find_first_of(self.into_inner(), needles.into_inner(), eq)
     }
 
     fn lexicographical_compare_same_dispatch<Less>(
@@ -1800,7 +1726,7 @@ where
     where
         Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.lexicographical_compare_dispatch(right, less)
+        crate::detail::lexicographical_compare(self.into_inner(), right.into_inner(), less)
     }
 
     fn merge_same_dispatch<Output, Less>(self, right: Self, less: Less) -> Result<Output, Error>
@@ -1808,7 +1734,8 @@ where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
         Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.merge_dispatch(right, less)
+        let inner = crate::detail::merge(self.into_inner(), right.into_inner(), less)?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn set_union_same_dispatch<Output, Less>(self, right: Self, less: Less) -> Result<Output, Error>
@@ -1816,7 +1743,8 @@ where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
         Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.set_union_dispatch(right, less)
+        let inner = crate::detail::set_union(self.into_inner(), right.into_inner(), less)?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn set_intersection_same_dispatch<Output, Less>(
@@ -1828,7 +1756,8 @@ where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
         Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.set_intersection_dispatch(right, less)
+        let inner = crate::detail::set_intersection(self.into_inner(), right.into_inner(), less)?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn set_difference_same_dispatch<Output, Less>(
@@ -1840,66 +1769,112 @@ where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
         Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
     {
-        self.set_difference_dispatch(right, less)
+        let inner = crate::detail::set_difference(self.into_inner(), right.into_inner(), less)?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn inner_product_same_dispatch<TransformOp, ReduceOp>(
         self,
         right: Self,
-        transform_op: TransformOp,
+        _transform_op: TransformOp,
         init: <Self as MIter<B>>::Item,
-        reduce_op: ReduceOp,
+        _reduce_op: ReduceOp,
     ) -> Result<<Self as MIter<B>>::Item, Error>
     where
         TransformOp: op::BinaryOp<<Self as MIter<B>>::Item>,
         ReduceOp: op::BinaryOp<<Self as MIter<B>>::Item>,
     {
-        self.inner_product_dispatch(right, transform_op, init, reduce_op)
+        let (left,) = self.into_inner();
+        let (right,) = right.into_inner();
+        let value = crate::detail::inner_product(
+            left,
+            right,
+            crate::detail::api::Tuple1BinaryOp::<TransformOp>::default(),
+            init.0,
+            crate::detail::api::Tuple1BinaryOp::<ReduceOp>::default(),
+        )?;
+        Ok((value,))
     }
 }
 
-macro_rules! impl_miter_tuple {
-    ($( $ty:ident : $idx:tt ),+ => $transform:ident) => {
-        impl<'a, B, $( $ty ),+> MIter<B> for ($( &'a DeviceVec<B, $ty>, )+)
+macro_rules! impl_miter_view {
+    ($input:ident; 0, 1) => {
+        crate::detail::device::SoAView2 {
+            left: $input.0,
+            right: $input.1,
+        }
+    };
+
+    ($input:ident; 0, 1, 2) => {
+        crate::detail::device::SoAView3 {
+            first: $input.0,
+            second: $input.1,
+            third: $input.2,
+        }
+    };
+}
+
+macro_rules! impl_miter_slice_tuple {
+    ($( $ty:ident : $idx:tt : $tmp:ident ),+ => $transform:ident) => {
+        impl<'a, B, $( $ty ),+> MIter<B> for ($( DeviceSlice<'a, B, $ty>, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar<B> + 'static, )+
             ($( $ty, )+): StorageOutput<
                 B,
                 Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
             >,
         {
             type Item = ($( $ty, )+);
-            type Inner = ($( &'a crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, $ty>, )+);
 
             fn len(&self) -> usize {
-                self.0.inner.len()
+                self.0.len()
             }
 
             fn into_inner(self) -> Self::Inner {
-                ($( &self.$idx.inner, )+)
+                ($(
+                    crate::detail::device::DeviceColumnView::from_slice(
+                        &self.$idx.source.inner,
+                        self.$idx.offset,
+                        self.$idx.len,
+                    ),
+                )+)
             }
         }
 
-        impl<'a, B, $( $ty ),+> sealed::MIterDispatch<B> for ($( &'a DeviceVec<B, $ty>, )+)
+        impl<'a, B, $( $ty ),+> sealed::MIterDispatch<B> for ($( DeviceSlice<'a, B, $ty>, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar<B> + 'static, )+
             ($( $ty, )+): StorageOutput<
                 B,
                 Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
             >,
         {
+            fn selection_stencil_dispatch<Pred>(
+                &self,
+                invert: bool,
+            ) -> Result<crate::detail::api::PrecomputedSelection<<B as sealed::Backend>::Runtime>, Error>
+            where
+                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+            {
+                let stencil = self.into_inner();
+                let stencil = impl_miter_view!(stencil; $( $idx ),+);
+                crate::detail::api::PrecomputedSelection::from_stencil::<_, Pred>(&stencil, invert)
+            }
+
             fn transform_dispatch<Op, Output, Y>(self, op: Op) -> Result<Output, Error>
             where
                 Op: op::UnaryOp<<Self as MIter<B>>::Item, Output = Y>,
                 Y: StorageOutput<B>,
                 Output: MVec<B, Item = Y>,
             {
-                let inner_input = self.into_inner();
+                let input = self.into_inner();
+                let policy = input.0.policy().clone();
                 let inner = <Y as sealed::StorageOutputDispatch<B>>::$transform(
-                    inner_input.0.policy(),
-                    $( inner_input.$idx, )+
+                    &policy,
+                    $( input.$idx, )+
                     op,
                 )?;
                 Ok(array_from_inner::<B, Y, Output>(inner))
@@ -1909,7 +1884,8 @@ macro_rules! impl_miter_tuple {
             where
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::reverse(self.into_inner())?;
+                let input = self.into_inner();
+                let inner = crate::detail::reverse(impl_miter_view!(input; $( $idx ),+))?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -1918,7 +1894,8 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::sort(self.into_inner(), less)?;
+                let input = self.into_inner();
+                let inner = crate::detail::sort(impl_miter_view!(input; $( $idx ),+), less)?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -1934,7 +1911,7 @@ macro_rules! impl_miter_tuple {
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
-                let values = impl_miter_tuple!(@view values; $( $idx ),+);
+                let values = impl_miter_view!(values; $( $idx ),+);
                 let (key_inner, value_inner) = crate::detail::sort_by_key((keys,), (values,), less)?;
                 Ok((
                     array_from_inner::<B, (K,), KeyOutput>(key_inner),
@@ -1954,7 +1931,7 @@ macro_rules! impl_miter_tuple {
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
-                let values = impl_miter_tuple!(@view values; $( $idx ),+);
+                let values = impl_miter_view!(values; $( $idx ),+);
                 let (key_inner, value_inner) =
                     crate::detail::unique_by_key((keys,), (values,), eq)?;
                 Ok((
@@ -1976,7 +1953,7 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
-                let values = impl_miter_tuple!(@view values; $( $idx ),+);
+                let values = impl_miter_view!(values; $( $idx ),+);
                 let inner = crate::detail::inclusive_scan_by_key(
                     keys,
                     values,
@@ -2000,7 +1977,7 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
-                let values = impl_miter_tuple!(@view values; $( $idx ),+);
+                let values = impl_miter_view!(values; $( $idx ),+);
                 let inner = crate::detail::exclusive_scan_by_key(
                     keys,
                     values,
@@ -2026,7 +2003,7 @@ macro_rules! impl_miter_tuple {
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
-                let values = impl_miter_tuple!(@view values; $( $idx ),+);
+                let values = impl_miter_view!(values; $( $idx ),+);
                 let (key_inner, value_inner) = crate::detail::reduce_by_key(
                     keys,
                     values,
@@ -2055,13 +2032,11 @@ macro_rules! impl_miter_tuple {
             {
                 let left_values = self.into_inner();
                 let right_values = right_values.into_inner();
-                let left_values = impl_miter_tuple!(@view left_values; $( $idx ),+);
-                let right_values = impl_miter_tuple!(@view right_values; $( $idx ),+);
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
-                    left_keys,
-                    left_values,
-                    right_keys,
-                    right_values,
+                    crate::detail::device::SoAView1 { source: left_keys },
+                    impl_miter_view!(left_values; $( $idx ),+),
+                    crate::detail::device::SoAView1 { source: right_keys },
+                    impl_miter_view!(right_values; $( $idx ),+),
                     crate::detail::api::Tuple1Less::<Less>::default(),
                 )?;
                 Ok((
@@ -2076,19 +2051,12 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let indices = gather_index_inner::<B, Indices>(&indices)?;
-                let inner = crate::detail::gather(self.into_inner(), indices)?;
+                let input = self.into_inner();
+                let inner = crate::detail::gather(
+                    impl_miter_view!(input; $( $idx ),+),
+                    &indices,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
-            }
-
-            fn selection_stencil_dispatch<Pred>(
-                &self,
-                invert: bool,
-            ) -> Result<crate::detail::api::PrecomputedSelection<<B as sealed::Backend>::Runtime>, Error>
-            where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
-            {
-                let stencil = (*self).into_inner();
-                crate::detail::api::PrecomputedSelection::from_stencil::<_, Pred>(&stencil, invert)
             }
 
             fn reduce_dispatch<Op>(
@@ -2099,7 +2067,8 @@ macro_rules! impl_miter_tuple {
             where
                 Op: op::BinaryOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::reduce(self.into_inner(), init, op)
+                let input = self.into_inner();
+                crate::detail::reduce(impl_miter_view!(input; $( $idx ),+), init, op)
             }
 
             fn inclusive_scan_dispatch<Op, Output>(self, op: Op) -> Result<Output, Error>
@@ -2107,7 +2076,11 @@ macro_rules! impl_miter_tuple {
                 Op: op::BinaryOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::inclusive_scan(self.into_inner(), op)?;
+                let input = self.into_inner();
+                let inner = crate::detail::inclusive_scan(
+                    impl_miter_view!(input; $( $idx ),+),
+                    op,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2120,7 +2093,12 @@ macro_rules! impl_miter_tuple {
                 Op: op::BinaryOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::exclusive_scan(self.into_inner(), init, op)?;
+                let input = self.into_inner();
+                let inner = crate::detail::exclusive_scan(
+                    impl_miter_view!(input; $( $idx ),+),
+                    init,
+                    op,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2129,22 +2107,32 @@ macro_rules! impl_miter_tuple {
                 Op: op::BinaryOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::adjacent_difference(self.into_inner(), op)?;
+                let input = self.into_inner();
+                let inner = crate::detail::adjacent_difference(
+                    impl_miter_view!(input; $( $idx ),+),
+                    op,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
-            fn copy_if_dispatch<Stencil, Pred, Output>(
+            fn copy_if_dispatch<Stencil, Output>(
                 self,
                 stencil: Stencil,
-                pred: Pred,
             ) -> Result<Output, Error>
             where
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Stencil: MIter<B, Item = (u32,)>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(&stencil, false)?;
-                let inner = crate::detail::copy_if(self.into_inner(), stencil, pred)?;
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, false,
+                    )?;
+                let input = self.into_inner();
+                let inner = crate::detail::copy_if(
+                    impl_miter_view!(input; $( $idx ),+),
+                    stencil,
+                    StencilFlag,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2153,7 +2141,11 @@ macro_rules! impl_miter_tuple {
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::remove_if(self.into_inner(), pred)?;
+                let input = self.into_inner();
+                let inner = crate::detail::remove_if(
+                    impl_miter_view!(input; $( $idx ),+),
+                    pred,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2161,35 +2153,40 @@ macro_rules! impl_miter_tuple {
             where
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::count_if(self.into_inner(), pred)
+                let input = self.into_inner();
+                crate::detail::count_if(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
             fn all_of_dispatch<Pred>(self, pred: Pred) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::all_of(self.into_inner(), pred)
+                let input = self.into_inner();
+                crate::detail::all_of(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
             fn any_of_dispatch<Pred>(self, pred: Pred) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::any_of(self.into_inner(), pred)
+                let input = self.into_inner();
+                crate::detail::any_of(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
             fn none_of_dispatch<Pred>(self, pred: Pred) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::none_of(self.into_inner(), pred)
+                let input = self.into_inner();
+                crate::detail::none_of(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
             fn find_if_dispatch<Pred>(self, pred: Pred) -> Result<Option<usize>, Error>
             where
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::find_if(self.into_inner(), pred)
+                let input = self.into_inner();
+                crate::detail::find_if(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
             fn partition_dispatch<Pred, Output>(self, pred: Pred) -> Result<(Output, Output), Error>
@@ -2197,7 +2194,11 @@ macro_rules! impl_miter_tuple {
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let (matching, failing) = crate::detail::partition(self.into_inner(), pred)?;
+                let input = self.into_inner();
+                let (matching, failing) = crate::detail::partition(
+                    impl_miter_view!(input; $( $idx ),+),
+                    pred,
+                )?;
                 Ok((
                     array_from_inner::<B, ($( $ty, )+), Output>(matching),
                     array_from_inner::<B, ($( $ty, )+), Output>(failing),
@@ -2208,22 +2209,30 @@ macro_rules! impl_miter_tuple {
             where
                 Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
             {
-                crate::detail::is_partitioned(self.into_inner(), pred)
+                let input = self.into_inner();
+                crate::detail::is_partitioned(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
-            fn replace_if_dispatch<Stencil, Pred, Output>(
+            fn replace_if_dispatch<Stencil, Output>(
                 self,
                 replacement: <Self as MIter<B>>::Item,
                 stencil: Stencil,
-                pred: Pred,
             ) -> Result<Output, Error>
             where
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Stencil: MIter<B, Item = (u32,)>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(&stencil, false)?;
-                let inner = crate::detail::replace_if(self.into_inner(), replacement, stencil, pred)?;
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, false,
+                    )?;
+                let input = self.into_inner();
+                let inner = crate::detail::replace_if(
+                    impl_miter_view!(input; $( $idx ),+),
+                    replacement,
+                    stencil,
+                    StencilFlag,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2232,7 +2241,11 @@ macro_rules! impl_miter_tuple {
                 Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let inner = crate::detail::unique(self.into_inner(), pred)?;
+                let input = self.into_inner();
+                let inner = crate::detail::unique(
+                    impl_miter_view!(input; $( $idx ),+),
+                    pred,
+                )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2241,8 +2254,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::min_element(input, less)
+                crate::detail::min_element(impl_miter_view!(input; $( $idx ),+), less)
             }
 
             fn max_element_dispatch<Less>(self, less: Less) -> Result<Option<usize>, Error>
@@ -2250,8 +2262,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::max_element(input, less)
+                crate::detail::max_element(impl_miter_view!(input; $( $idx ),+), less)
             }
 
             fn minmax_element_dispatch<Less>(
@@ -2262,8 +2273,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::minmax_element(input, less)
+                crate::detail::minmax_element(impl_miter_view!(input; $( $idx ),+), less)
             }
 
             fn adjacent_find_dispatch<Pred>(self, pred: Pred) -> Result<Option<usize>, Error>
@@ -2271,8 +2281,7 @@ macro_rules! impl_miter_tuple {
                 Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::adjacent_find(input, pred)
+                crate::detail::adjacent_find(impl_miter_view!(input; $( $idx ),+), pred)
             }
 
             fn lower_bound_dispatch<Less>(
@@ -2284,8 +2293,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::lower_bound(input, value, less)
+                crate::detail::lower_bound(impl_miter_view!(input; $( $idx ),+), value, less)
             }
 
             fn upper_bound_dispatch<Less>(
@@ -2297,8 +2305,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::upper_bound(input, value, less)
+                crate::detail::upper_bound(impl_miter_view!(input; $( $idx ),+), value, less)
             }
 
             fn equal_range_dispatch<Less>(
@@ -2310,8 +2317,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::equal_range(input, value, less)
+                crate::detail::equal_range(impl_miter_view!(input; $( $idx ),+), value, less)
             }
 
             fn is_sorted_until_dispatch<Less>(self, less: Less) -> Result<usize, Error>
@@ -2319,8 +2325,7 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::is_sorted_until(input, less)
+                crate::detail::is_sorted_until(impl_miter_view!(input; $( $idx ),+), less)
             }
 
             fn is_sorted_dispatch<Less>(self, less: Less) -> Result<bool, Error>
@@ -2328,37 +2333,32 @@ macro_rules! impl_miter_tuple {
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let input = impl_miter_tuple!(@view input; $( $idx ),+);
-                crate::detail::is_sorted(input, less)
+                crate::detail::is_sorted(impl_miter_view!(input; $( $idx ),+), less)
             }
 
-            fn gather_if_dispatch<Indices, Stencil, Pred, Output>(
+            fn gather_if_dispatch<Indices, Stencil, Output>(
                 self,
                 indices: Indices,
                 default: <Self as MIter<B>>::Item,
                 stencil: Stencil,
-                pred: Pred,
             ) -> Result<Output, Error>
             where
                 Indices: MIter<B, Item = (u32,)>,
-                Stencil: MIter<B>,
-                Pred: op::PredicateOp<Stencil::Item>,
+                Stencil: MIter<B, Item = (u32,)>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let indices =
-                    <Indices as sealed::MIterDispatch<B>>::column_inner::<u32>(&indices).ok_or_else(|| {
-                        Error::Launch {
-                            message: "gather_if indices must be backed by one u32 DeviceVec".to_string(),
-                        }
-                    })?;
-                let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(&stencil, false)?;
+                let indices = gather_index_inner::<B, Indices>(&indices)?;
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, false,
+                    )?;
                 let input = self.into_inner();
                 let inner = crate::detail::gather_if(
-                    impl_miter_tuple!(@view input; $( $idx ),+),
-                    indices,
+                    impl_miter_view!(input; $( $idx ),+),
+                    &indices,
                     stencil,
                     default,
-                    pred,
+                    StencilFlag,
                 )?;
                 Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
             }
@@ -2373,51 +2373,42 @@ macro_rules! impl_miter_tuple {
                 Indices: MIter<B, Item = (u32,)>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let indices =
-                    <Indices as sealed::MIterDispatch<B>>::column_inner::<u32>(&indices).ok_or_else(|| {
-                        Error::Launch {
-                            message: "scatter indices must be backed by one u32 DeviceVec".to_string(),
-                        }
-                    })?;
+                let indices = gather_index_inner::<B, Indices>(&indices)?;
                 let input = self.into_inner();
                 let inner = crate::detail::scatter(
-                    impl_miter_tuple!(@view input; $( $idx ),+),
-                    indices,
+                    impl_miter_view!(input; $( $idx ),+),
+                    &indices,
                     len,
                     default,
                 )?;
                 Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
             }
 
-            fn scatter_if_dispatch<Indices, Stencil, Pred, Output>(
+            fn scatter_if_dispatch<Indices, Stencil, Output>(
                 self,
                 indices: Indices,
                 len: usize,
                 default: <Self as MIter<B>>::Item,
                 stencil: Stencil,
-                pred: Pred,
             ) -> Result<Output, Error>
             where
                 Indices: MIter<B, Item = (u32,)>,
-        Stencil: MIter<B>,
-        Pred: op::PredicateOp<Stencil::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Stencil: MIter<B, Item = (u32,)>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
-                let indices =
-                    <Indices as sealed::MIterDispatch<B>>::column_inner::<u32>(&indices).ok_or_else(|| {
-                        Error::Launch {
-                            message: "scatter_if indices must be backed by one u32 DeviceVec".to_string(),
-                        }
-                    })?;
-                let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<Pred>(&stencil, false)?;
+                let indices = gather_index_inner::<B, Indices>(&indices)?;
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, false,
+                    )?;
                 let input = self.into_inner();
                 let inner = crate::detail::scatter_if(
-                    impl_miter_tuple!(@view input; $( $idx ),+),
-                    indices,
+                    impl_miter_view!(input; $( $idx ),+),
+                    &indices,
                     len,
                     default,
                     stencil,
-                    pred,
+                    StencilFlag,
                 )?;
                 Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
             }
@@ -2426,14 +2417,26 @@ macro_rules! impl_miter_tuple {
             where
                 Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                self.equal_values(right, eq)
+                let left = self.into_inner();
+                let right = right.into_inner();
+                crate::detail::equal(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    eq,
+                )
             }
 
             fn mismatch_same_dispatch<Eq>(self, right: Self, eq: Eq) -> Result<Option<usize>, Error>
             where
                 Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                self.mismatch_values(right, eq)
+                let left = self.into_inner();
+                let right = right.into_inner();
+                crate::detail::mismatch(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    eq,
+                )
             }
 
             fn find_first_of_same_dispatch<Eq>(
@@ -2444,7 +2447,13 @@ macro_rules! impl_miter_tuple {
             where
                 Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                self.find_first_of_values(needles, eq)
+                let input = self.into_inner();
+                let needles = needles.into_inner();
+                crate::detail::find_first_of(
+                    impl_miter_view!(input; $( $idx ),+),
+                    impl_miter_view!(needles; $( $idx ),+),
+                    eq,
+                )
             }
 
             fn lexicographical_compare_same_dispatch<Less>(
@@ -2455,7 +2464,13 @@ macro_rules! impl_miter_tuple {
             where
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                self.lexicographical_compare_values(right, less)
+                let left = self.into_inner();
+                let right = right.into_inner();
+                crate::detail::lexicographical_compare(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    less,
+                )
             }
 
             fn merge_same_dispatch<Output, Less>(
@@ -2467,8 +2482,14 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                let inner = self.merge_values(right, less)?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                let left = self.into_inner();
+                let right = right.into_inner();
+                let inner = crate::detail::merge(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    less,
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
             fn set_union_same_dispatch<Output, Less>(
@@ -2480,8 +2501,14 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                let inner = self.set_union_values(right, less)?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                let left = self.into_inner();
+                let right = right.into_inner();
+                let inner = crate::detail::set_union(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    less,
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
             fn set_intersection_same_dispatch<Output, Less>(
@@ -2493,8 +2520,14 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                let inner = self.set_intersection_values(right, less)?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                let left = self.into_inner();
+                let right = right.into_inner();
+                let inner = crate::detail::set_intersection(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    less,
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
             fn set_difference_same_dispatch<Output, Less>(
@@ -2506,8 +2539,14 @@ macro_rules! impl_miter_tuple {
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
                 Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
             {
-                let inner = self.set_difference_values(right, less)?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                let left = self.into_inner();
+                let right = right.into_inner();
+                let inner = crate::detail::set_difference(
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    less,
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
             fn inner_product_same_dispatch<TransformOp, ReduceOp>(
@@ -2528,374 +2567,11 @@ macro_rules! impl_miter_tuple {
                 })
             }
         }
-
-    };
-
-    (@view $input:ident; 0, 1) => {
-        crate::detail::device::SoAView2 {
-            left: $input.0,
-            right: $input.1,
-        }
-    };
-
-    (@view $input:ident; 0, 1, 2) => {
-        crate::detail::device::SoAView3 {
-            first: $input.0,
-            second: $input.1,
-            third: $input.2,
-        }
-    };
-
-}
-
-impl_miter_tuple!(A: 0, C: 1 => transform_binary);
-impl_miter_tuple!(A: 0, C: 1, D: 2 => transform_ternary);
-
-impl<'a, 'b, B, T, Op> PairSearchValues<B, (&'b DeviceVec<B, T>,), Op> for (&'a DeviceVec<B, T>,)
-where
-    B: Backend,
-    T: Scalar<B> + 'static,
-    Op: op::BinaryPredicateOp<(T,)>,
-{
-    fn equal_values(self, right: (&'b DeviceVec<B, T>,), op: Op) -> Result<bool, Error> {
-        crate::detail::equal((&self.0.inner,), (&right.0.inner,), op)
-    }
-
-    fn mismatch_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        op: Op,
-    ) -> Result<Option<usize>, Error> {
-        crate::detail::mismatch((&self.0.inner,), (&right.0.inner,), op)
-    }
-
-    fn find_first_of_values(
-        self,
-        needles: (&'b DeviceVec<B, T>,),
-        op: Op,
-    ) -> Result<Option<usize>, Error> {
-        crate::detail::find_first_of((&self.0.inner,), (&needles.0.inner,), op)
-    }
-
-    fn lexicographical_compare_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        op: Op,
-    ) -> Result<bool, Error> {
-        crate::detail::lexicographical_compare((&self.0.inner,), (&right.0.inner,), op)
-    }
-}
-
-impl<'a, 'b, B, T, Less> PairOrderingValues<B, (&'b DeviceVec<B, T>,), Less>
-    for (&'a DeviceVec<B, T>,)
-where
-    B: Backend,
-    T: Scalar<B> + 'static,
-    Less: op::BinaryPredicateOp<(T,)>,
-{
-    fn merge_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-        crate::detail::merge((&self.0.inner,), (&right.0.inner,), less)
-    }
-
-    fn set_union_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-        crate::detail::set_union((&self.0.inner,), (&right.0.inner,), less)
-    }
-
-    fn set_intersection_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-        crate::detail::set_intersection((&self.0.inner,), (&right.0.inner,), less)
-    }
-
-    fn set_difference_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        less: Less,
-    ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-        crate::detail::set_difference((&self.0.inner,), (&right.0.inner,), less)
-    }
-}
-
-impl<'a, 'b, B, T, TransformOp, ReduceOp>
-    InnerProductValues<B, (&'b DeviceVec<B, T>,), TransformOp, ReduceOp> for (&'a DeviceVec<B, T>,)
-where
-    B: Backend,
-    T: Scalar<B> + 'static,
-    TransformOp: op::BinaryOp<(T,)>,
-    ReduceOp: op::BinaryOp<(T,)>,
-{
-    fn inner_product_values(
-        self,
-        right: (&'b DeviceVec<B, T>,),
-        _transform_op: TransformOp,
-        init: Self::Item,
-        _reduce_op: ReduceOp,
-    ) -> Result<Self::Item, Error> {
-        let value = crate::detail::inner_product(
-            &self.0.inner,
-            &right.0.inner,
-            crate::detail::api::Tuple1BinaryOp::<TransformOp>::default(),
-            init.0,
-            crate::detail::api::Tuple1BinaryOp::<ReduceOp>::default(),
-        )?;
-        Ok((value,))
-    }
-}
-
-macro_rules! impl_pair_values_tuple {
-    ($( $ty:ident : $idx:tt ),+) => {
-        impl<'a, 'b, B, Op, $( $ty ),+>
-            PairSearchValues<B, ($( &'b DeviceVec<B, $ty>, )+), Op>
-            for ($( &'a DeviceVec<B, $ty>, )+)
-        where
-            B: Backend,
-            $( $ty: Scalar<B>, )+
-            Op: op::BinaryPredicateOp<($( $ty, )+)>,
-        {
-            fn equal_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                op: Op,
-            ) -> Result<bool, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::equal(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    op,
-                )
-            }
-
-            fn mismatch_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                op: Op,
-            ) -> Result<Option<usize>, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::mismatch(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    op,
-                )
-            }
-
-            fn find_first_of_values(
-                self,
-                needles: ($( &'b DeviceVec<B, $ty>, )+),
-                op: Op,
-            ) -> Result<Option<usize>, Error> {
-                let input = self.into_inner();
-                let needles = needles.into_inner();
-                crate::detail::find_first_of(
-                    impl_miter_tuple!(@view input; $( $idx ),+),
-                    impl_miter_tuple!(@view needles; $( $idx ),+),
-                    op,
-                )
-            }
-
-            fn lexicographical_compare_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                op: Op,
-            ) -> Result<bool, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::lexicographical_compare(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    op,
-                )
-            }
-        }
-
-        impl<'a, 'b, B, Less, $( $ty ),+>
-            PairOrderingValues<B, ($( &'b DeviceVec<B, $ty>, )+), Less>
-            for ($( &'a DeviceVec<B, $ty>, )+)
-        where
-            B: Backend,
-            $( $ty: Scalar<B>, )+
-            Less: op::BinaryPredicateOp<($( $ty, )+)>,
-            ($( $ty, )+): StorageOutput<
-                B,
-                Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
-            >,
-        {
-            fn merge_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                less: Less,
-            ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::merge(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    less,
-                )
-            }
-
-            fn set_union_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                less: Less,
-            ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::set_union(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    less,
-                )
-            }
-
-            fn set_intersection_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                less: Less,
-            ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::set_intersection(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    less,
-                )
-            }
-
-            fn set_difference_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                less: Less,
-            ) -> Result<<Self::Item as StorageOutput<B>>::Inner, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::set_difference(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    less,
-                )
-            }
-        }
-
-        impl<'a, 'b, B, TransformOp, ReduceOp, $( $ty ),+>
-            InnerProductValues<B, ($( &'b DeviceVec<B, $ty>, )+), TransformOp, ReduceOp>
-            for ($( &'a DeviceVec<B, $ty>, )+)
-        where
-            B: Backend,
-            $( $ty: Scalar<B>, )+
-            TransformOp: $( op::BinaryOp<$ty> + )+,
-            ReduceOp: $( op::BinaryOp<$ty> + )+,
-        {
-            fn inner_product_values(
-                self,
-                right: ($( &'b DeviceVec<B, $ty>, )+),
-                transform_op: TransformOp,
-                init: Self::Item,
-                reduce_op: ReduceOp,
-            ) -> Result<Self::Item, Error> {
-                let left = self.into_inner();
-                let right = right.into_inner();
-                crate::detail::inner_product(
-                    impl_miter_tuple!(@view left; $( $idx ),+),
-                    impl_miter_tuple!(@view right; $( $idx ),+),
-                    transform_op,
-                    init,
-                    reduce_op,
-                )
-            }
-        }
     };
 }
 
-impl_pair_values_tuple!(A: 0, C: 1);
-impl_pair_values_tuple!(A: 0, C: 1, D: 2);
-
-impl<'a, B, T, K, Less> MergeBySingleKeyValues<B, (&'a DeviceVec<B, T>,), K, Less>
-    for (&'a DeviceVec<B, T>,)
-where
-    B: Backend,
-    T: Scalar<B> + 'static,
-    K: Scalar<B> + 'static,
-    Less: op::BinaryPredicateOp<(K,)>,
-{
-    fn merge_by_single_key_values(
-        self,
-        left_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        right_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        right_values: (&'a DeviceVec<B, T>,),
-    ) -> Result<
-        (
-            (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,),
-            <Self::Item as StorageOutput<B>>::Inner,
-        ),
-        Error,
-    > {
-        crate::detail::merge_by_key(
-            left_keys,
-            &self.0.inner,
-            right_keys,
-            &right_values.0.inner,
-            crate::detail::api::Tuple1Less::<Less>::default(),
-        )
-    }
-}
-
-macro_rules! impl_merge_by_single_key_values_tuple {
-    ($( $ty:ident : $idx:tt ),+) => {
-        impl<'a, B, K, Less, $( $ty ),+>
-            MergeBySingleKeyValues<B, ($( &'a DeviceVec<B, $ty>, )+), K, Less>
-            for ($( &'a DeviceVec<B, $ty>, )+)
-        where
-            B: Backend,
-            K: Scalar<B> + 'static,
-            Less: op::BinaryPredicateOp<(K,)>,
-            $( $ty: Scalar<B>, )+
-            ($( $ty, )+): StorageOutput<
-                B,
-                Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
-            >,
-        {
-            fn merge_by_single_key_values(
-                self,
-                left_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-                right_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-                right_values: ($( &'a DeviceVec<B, $ty>, )+),
-            ) -> Result<
-                (
-                    (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,),
-                    <Self::Item as StorageOutput<B>>::Inner,
-                ),
-                Error,
-            > {
-                let left_values = self.into_inner();
-                let right_values = right_values.into_inner();
-                let left_values = impl_miter_tuple!(@view left_values; $( $idx ),+);
-                let right_values = impl_miter_tuple!(@view right_values; $( $idx ),+);
-                crate::detail::merge_by_key(
-                    left_keys,
-                    left_values,
-                    right_keys,
-                    right_values,
-                    crate::detail::api::Tuple1Less::<Less>::default(),
-                )
-            }
-        }
-    };
-}
-
-impl_merge_by_single_key_values_tuple!(A: 0, C: 1);
-impl_merge_by_single_key_values_tuple!(A: 0, C: 1, D: 2);
+impl_miter_slice_tuple!(A: 0: a, C: 1: c => transform_binary);
+impl_miter_slice_tuple!(A: 0: a, C: 1: c, D: 2: d => transform_ternary);
 
 /// Applies a unary transform to a massively iterator.
 pub fn transform<B, Input, Output, Op>(source: Input, op: Op) -> Result<Output, Error>
@@ -2987,20 +2663,19 @@ where
     <Input as sealed::MIterDispatch<B>>::adjacent_difference_dispatch(source, op)
 }
 
-/// Copies elements whose stencil value satisfies `pred`.
-pub fn copy_if<B, Input, Stencil, Output, Pred>(
-    source: Input,
-    stencil: Stencil,
-    pred: Pred,
-) -> Result<Output, Error>
+/// Copies elements whose one-column `u32` stencil flag is non-zero.
+///
+/// The stencil must be an `MIter` whose item is `(u32,)`. For predicate-based
+/// filtering over the input values themselves, use [`remove_if`] or
+/// [`partition`].
+pub fn copy_if<B, Input, Stencil, Output>(source: Input, stencil: Stencil) -> Result<Output, Error>
 where
     B: Backend,
     Input: MIter<B>,
-    Stencil: MIter<B>,
+    Stencil: MIter<B, Item = (u32,)>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<Stencil::Item>,
 {
-    <Input as sealed::MIterDispatch<B>>::copy_if_dispatch(source, stencil, pred)
+    <Input as sealed::MIterDispatch<B>>::copy_if_dispatch(source, stencil)
 }
 
 /// Removes elements satisfying `pred`.
@@ -3088,21 +2763,19 @@ where
     <Input as sealed::MIterDispatch<B>>::is_partitioned_dispatch(source, pred)
 }
 
-/// Replaces elements whose stencil value satisfies `pred`.
-pub fn replace_if<B, Input, Stencil, Output, Pred>(
+/// Replaces elements whose one-column `u32` stencil flag is non-zero.
+pub fn replace_if<B, Input, Stencil, Output>(
     source: Input,
     replacement: Input::Item,
     stencil: Stencil,
-    pred: Pred,
 ) -> Result<Output, Error>
 where
     B: Backend,
     Input: MIter<B>,
-    Stencil: MIter<B>,
+    Stencil: MIter<B, Item = (u32,)>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<Stencil::Item>,
 {
-    <Input as sealed::MIterDispatch<B>>::replace_if_dispatch(source, replacement, stencil, pred)
+    <Input as sealed::MIterDispatch<B>>::replace_if_dispatch(source, replacement, stencil)
 }
 
 /// Removes consecutive duplicates under `pred`.
@@ -3127,23 +2800,21 @@ where
     sort(source, less)
 }
 
-/// Gathers selected elements.
-pub fn gather_if<B, Input, Indices, Stencil, Output, Pred>(
+/// Gathers elements whose one-column `u32` stencil flag is non-zero.
+pub fn gather_if<B, Input, Indices, Stencil, Output>(
     source: Input,
     indices: Indices,
     default: Input::Item,
     stencil: Stencil,
-    pred: Pred,
 ) -> Result<Output, Error>
 where
     B: Backend,
     Input: MIter<B>,
     Indices: MIter<B, Item = (u32,)>,
-    Stencil: MIter<B>,
+    Stencil: MIter<B, Item = (u32,)>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<Stencil::Item>,
 {
-    <Input as sealed::MIterDispatch<B>>::gather_if_dispatch(source, indices, default, stencil, pred)
+    <Input as sealed::MIterDispatch<B>>::gather_if_dispatch(source, indices, default, stencil)
 }
 
 /// Scatters values into a newly allocated output.
@@ -3162,26 +2833,22 @@ where
     <Input as sealed::MIterDispatch<B>>::scatter_dispatch(source, indices, len, default)
 }
 
-/// Scatters selected values into a newly allocated output.
-pub fn scatter_if<B, Input, Indices, Stencil, Output, Pred>(
+/// Scatters values whose one-column `u32` stencil flag is non-zero into a newly allocated output.
+pub fn scatter_if<B, Input, Indices, Stencil, Output>(
     source: Input,
     indices: Indices,
     len: usize,
     default: Input::Item,
     stencil: Stencil,
-    pred: Pred,
 ) -> Result<Output, Error>
 where
     B: Backend,
     Input: MIter<B>,
     Indices: MIter<B, Item = (u32,)>,
-    Stencil: MIter<B>,
+    Stencil: MIter<B, Item = (u32,)>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<Stencil::Item>,
 {
-    <Input as sealed::MIterDispatch<B>>::scatter_if_dispatch(
-        source, indices, len, default, stencil, pred,
-    )
+    <Input as sealed::MIterDispatch<B>>::scatter_if_dispatch(source, indices, len, default, stencil)
 }
 
 /// Finds the first adjacent pair satisfying `pred`.
@@ -3432,13 +3099,12 @@ where
     Op: op::BinaryOp<Values::Item>,
     Output: MVec<B, Item = Values::Item>,
 {
-    let keys = <Keys as sealed::MIterDispatch<B>>::column_inner::<K>(&keys).ok_or_else(|| {
-        Error::Launch {
-            message: "inclusive_scan_by_key keys must be backed by one DeviceVec".to_string(),
-        }
-    })?;
+    let keys = single_column_inner::<B, Keys, K>(
+        &keys,
+        "inclusive_scan_by_key keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
     <Values as sealed::MIterDispatch<B>>::inclusive_scan_by_single_key_dispatch(
-        values, keys, key_eq, op,
+        values, &keys, key_eq, op,
     )
 }
 
@@ -3459,13 +3125,12 @@ where
     Op: op::BinaryOp<Values::Item>,
     Output: MVec<B, Item = Values::Item>,
 {
-    let keys = <Keys as sealed::MIterDispatch<B>>::column_inner::<K>(&keys).ok_or_else(|| {
-        Error::Launch {
-            message: "exclusive_scan_by_key keys must be backed by one DeviceVec".to_string(),
-        }
-    })?;
+    let keys = single_column_inner::<B, Keys, K>(
+        &keys,
+        "exclusive_scan_by_key keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
     <Values as sealed::MIterDispatch<B>>::exclusive_scan_by_single_key_dispatch(
-        values, keys, key_eq, init, op,
+        values, &keys, key_eq, init, op,
     )
 }
 
@@ -3487,13 +3152,12 @@ where
     KeyOutput: MVec<B, Item = (K,)>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
-    let keys = <Keys as sealed::MIterDispatch<B>>::column_inner::<K>(&keys).ok_or_else(|| {
-        Error::Launch {
-            message: "reduce_by_key keys must be backed by one DeviceVec".to_string(),
-        }
-    })?;
+    let keys = single_column_inner::<B, Keys, K>(
+        &keys,
+        "reduce_by_key keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
     <Values as sealed::MIterDispatch<B>>::reduce_by_single_key_dispatch(
-        values, keys, key_eq, init, op,
+        values, &keys, key_eq, init, op,
     )
 }
 
@@ -3512,12 +3176,11 @@ where
     KeyOutput: MVec<B, Item = (K,)>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
-    let keys = <Keys as sealed::MIterDispatch<B>>::column_inner::<K>(&keys).ok_or_else(|| {
-        Error::Launch {
-            message: "unique_by_key keys must be backed by one DeviceVec".to_string(),
-        }
-    })?;
-    <Values as sealed::MIterDispatch<B>>::unique_by_single_key_dispatch(values, keys, eq)
+    let keys = single_column_inner::<B, Keys, K>(
+        &keys,
+        "unique_by_key keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
+    <Values as sealed::MIterDispatch<B>>::unique_by_single_key_dispatch(values, &keys, eq)
 }
 
 /// Sorts key-value pairs by key.
@@ -3535,12 +3198,11 @@ where
     KeyOutput: MVec<B, Item = (K,)>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
-    let keys = <Keys as sealed::MIterDispatch<B>>::column_inner::<K>(&keys).ok_or_else(|| {
-        Error::Launch {
-            message: "sort_by_key keys must be backed by one DeviceVec".to_string(),
-        }
-    })?;
-    <Values as sealed::MIterDispatch<B>>::sort_by_single_key_dispatch(values, keys, less)
+    let keys = single_column_inner::<B, Keys, K>(
+        &keys,
+        "sort_by_key keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
+    <Values as sealed::MIterDispatch<B>>::sort_by_single_key_dispatch(values, &keys, less)
 }
 
 /// Stable key-value sort. The current lower implementation is stable.
@@ -3579,18 +3241,18 @@ where
     KeyOutput: MVec<B, Item = (K,)>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
-    let left_keys = <LeftKeys as sealed::MIterDispatch<B>>::column_inner::<K>(&left_keys)
-        .ok_or_else(|| Error::Launch {
-            message: "merge_by_key left keys must be backed by one DeviceVec".to_string(),
-        })?;
-    let right_keys = <RightKeys as sealed::MIterDispatch<B>>::column_inner::<K>(&right_keys)
-        .ok_or_else(|| Error::Launch {
-            message: "merge_by_key right keys must be backed by one DeviceVec".to_string(),
-        })?;
+    let left_keys = single_column_inner::<B, LeftKeys, K>(
+        &left_keys,
+        "merge_by_key left keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
+    let right_keys = single_column_inner::<B, RightKeys, K>(
+        &right_keys,
+        "merge_by_key right keys must be backed by one DeviceVec or DeviceSlice",
+    )?;
     <Values as sealed::MIterDispatch<B>>::merge_by_single_key_same_dispatch(
         left_values,
-        left_keys,
-        right_keys,
+        &left_keys,
+        &right_keys,
         right_values,
         less,
     )

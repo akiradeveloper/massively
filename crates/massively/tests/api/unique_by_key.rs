@@ -8,7 +8,12 @@ fn unique_by_key_accepts_tuple_values() {
     let b = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let c = policy.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let (keys, values) = unique_by_key((&keys,), (&a, &b, &c), EqualU32).unwrap();
+    let (keys, values) = unique_by_key(
+        (keys.slice(..),),
+        (a.slice(..), b.slice(..), c.slice(..)),
+        EqualU32,
+    )
+    .unwrap();
     let (keys,) = keys;
     let (a, b, c) = values;
 
@@ -30,7 +35,12 @@ fn unique_by_key_accepts_tuple_values_with_multiple_runs() {
         .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
         .unwrap();
 
-    let (keys, values) = unique_by_key((&keys,), (&a, &b, &c), EqualU32).unwrap();
+    let (keys, values) = unique_by_key(
+        (keys.slice(..),),
+        (a.slice(..), b.slice(..), c.slice(..)),
+        EqualU32,
+    )
+    .unwrap();
     let (keys,) = keys;
     let (a, b, c) = values;
 
@@ -48,7 +58,8 @@ fn unique_by_key_accepts_borrowed_tuple_keys() {
     let key_b = policy.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
     let values = policy.to_device(&[100_u32, 101, 200, 201, 300]).unwrap();
 
-    let (keys, values) = unique_by_key((&key_a, &key_b), values, MixedTupleEqual).unwrap();
+    let (keys, values) =
+        unique_by_key((key_a.slice(..), key_b.slice(..)), values, MixedTupleEqual).unwrap();
     let (key_a, key_b) = keys;
     let (values,) = values;
 
@@ -69,8 +80,13 @@ fn unique_by_tuple_key_reports_value_length_mismatch_for_wide_values() {
     let value_d = policy.to_device(&[1000.0_f32, 2000.0]).unwrap();
 
     let err = unique_by_key(
-        zip(&key_a, &key_b),
-        zip4(&value_a, &value_b, &value_c, &value_d),
+        zip(key_a.slice(..), key_b.slice(..)),
+        zip4(
+            value_a.slice(..),
+            value_b.slice(..),
+            value_c.slice(..),
+            value_d.slice(..),
+        ),
         MixedTupleEqual,
     )
     .unwrap_err();
@@ -98,8 +114,13 @@ fn unique_by_tuple_key_with_wide_values_uses_supplied_key_equality() {
         .unwrap();
 
     let (keys, values) = unique_by_key(
-        zip(&key_a, &key_b),
-        zip4(&value_a, &value_b, &value_c, &value_d),
+        zip(key_a.slice(..), key_b.slice(..)),
+        zip4(
+            value_a.slice(..),
+            value_b.slice(..),
+            value_c.slice(..),
+            value_d.slice(..),
+        ),
         MixedTupleFirstEqual,
     )
     .unwrap();

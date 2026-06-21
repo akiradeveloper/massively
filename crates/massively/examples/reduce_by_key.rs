@@ -8,8 +8,8 @@ fn main() -> common::Result {
     let values = policy.to_device(&[1.0_f32, 2.0, 10.0, 20.0, 30.0])?;
 
     let ((out_keys,), (out_values,)) = reduce_by_key(
-        (&keys,),
-        (&values,),
+        (keys.slice(..),),
+        (values.slice(..),),
         common::EqualU32,
         (0.0,),
         common::SumF32,

@@ -28,13 +28,33 @@ pub(crate) fn device_collect_expr_block_kernel<T: CubePrimitive, Expr: DeviceGpu
     slot1: &[T],
     slot2: &[T],
     slot3: &[T],
+    slot_offsets: &[u32],
     len: &[u32],
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        output[global] = Expr::eval(slot0, slot1, slot2, slot3, global);
+        output[global] = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn device_collect_expr_reverse_block_kernel<T: CubePrimitive, Expr: DeviceGpuExpr<T>>(
+    output: &mut [T],
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
+    len: &[u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let source_index = (len[0] as usize) - 1usize - global;
+        output[global] = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, source_index);
     }
 }
 
@@ -45,6 +65,7 @@ pub(crate) fn transform_unary_tuple1_kernel<
     Op: UnaryOp<(T,), Output = (A,)>,
 >(
     input: &[T],
+    input_offset: &[u32],
     len: &[u32],
     output_a: &mut [A],
 ) {
@@ -52,7 +73,7 @@ pub(crate) fn transform_unary_tuple1_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let output = Op::apply((input[global],));
+        let output = Op::apply((input[input_offset[0] as usize + global],));
         output_a[global] = output.0;
     }
 }
@@ -65,6 +86,7 @@ pub(crate) fn transform_unary_tuple2_kernel<
     Op: UnaryOp<(T,), Output = (A, B)>,
 >(
     input: &[T],
+    input_offset: &[u32],
     len: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
@@ -73,7 +95,7 @@ pub(crate) fn transform_unary_tuple2_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let output = Op::apply((input[global],));
+        let output = Op::apply((input[input_offset[0] as usize + global],));
         output_a[global] = output.0;
         output_b[global] = output.1;
     }
@@ -88,6 +110,7 @@ pub(crate) fn transform_unary_tuple3_kernel<
     Op: UnaryOp<(T,), Output = (A, B, C)>,
 >(
     input: &[T],
+    input_offset: &[u32],
     len: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
@@ -97,7 +120,7 @@ pub(crate) fn transform_unary_tuple3_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let output = Op::apply((input[global],));
+        let output = Op::apply((input[input_offset[0] as usize + global],));
         output_a[global] = output.0;
         output_b[global] = output.1;
         output_c[global] = output.2;
@@ -107,7 +130,7 @@ pub(crate) fn transform_unary_tuple3_kernel<
 macro_rules! define_transform_tuple_to_tuple_kernel {
     (
         $fn_name:ident,
-        ($( $in_ty:ident : $input:ident ),+),
+        ($( $in_ty:ident : $input:ident : $input_offset:ident ),+),
         ($( $out_ty:ident : $output:ident : $field:tt ),+)
     ) => {
         #[allow(dead_code)]
@@ -118,6 +141,7 @@ macro_rules! define_transform_tuple_to_tuple_kernel {
             Op: UnaryOp<($( $in_ty, )+), Output = ($( $out_ty, )+)>,
         >(
             $( $input: &[$in_ty], )+
+            $( $input_offset: &[u32], )+
             len: &[u32],
             $( $output: &mut [$out_ty], )+
         ) {
@@ -126,7 +150,7 @@ macro_rules! define_transform_tuple_to_tuple_kernel {
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < (len[0] as usize) {
                 let output = Op::apply((
-                    $( $input[global], )+
+                    $( $input[$input_offset[0] as usize + global], )+
                 ));
                 $(
                     $output[global] = output.$field;
@@ -138,32 +162,32 @@ macro_rules! define_transform_tuple_to_tuple_kernel {
 
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple2_to_tuple1_kernel,
-    (TyA: input_a, TyB: input_b),
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
     (OutA: output_a: 0)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple2_to_tuple2_kernel,
-    (TyA: input_a, TyB: input_b),
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
     (OutA: output_a: 0, OutB: output_b: 1)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple2_to_tuple3_kernel,
-    (TyA: input_a, TyB: input_b),
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple3_to_tuple1_kernel,
-    (TyA: input_a, TyB: input_b, TyC: input_c),
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
     (OutA: output_a: 0)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple3_to_tuple2_kernel,
-    (TyA: input_a, TyB: input_b, TyC: input_c),
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
     (OutA: output_a: 0, OutB: output_b: 1)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple3_to_tuple3_kernel,
-    (TyA: input_a, TyB: input_b, TyC: input_c),
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 
@@ -1145,6 +1169,7 @@ pub(crate) fn tuple1_device_inclusive_scan_expr_block_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [A],
     block_sums_a: &mut [A],
@@ -1158,7 +1183,7 @@ pub(crate) fn tuple1_device_inclusive_scan_expr_block_kernel<
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
     if global < logical_len {
-        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global);
+        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, global);
         valid[unit] = 1u32;
     } else {
         valid[unit] = 0u32;
@@ -1296,10 +1321,12 @@ pub(crate) fn tuple2_device_inclusive_scan_expr_block_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     b_slot0: &[B],
     b_slot1: &[B],
     b_slot2: &[B],
     b_slot3: &[B],
+    b_slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
@@ -1316,8 +1343,8 @@ pub(crate) fn tuple2_device_inclusive_scan_expr_block_kernel<
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
     if global < logical_len {
-        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global);
-        values_b[unit] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, global);
+        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, global);
+        values_b[unit] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, global);
         valid[unit] = 1u32;
     } else {
         valid[unit] = 0u32;
@@ -1509,14 +1536,17 @@ pub(crate) fn tuple3_device_inclusive_scan_expr_block_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     b_slot0: &[B],
     b_slot1: &[B],
     b_slot2: &[B],
     b_slot3: &[B],
+    b_slot_offsets: &[u32],
     c_slot0: &[C],
     c_slot1: &[C],
     c_slot2: &[C],
     c_slot3: &[C],
+    c_slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
@@ -1536,9 +1566,9 @@ pub(crate) fn tuple3_device_inclusive_scan_expr_block_kernel<
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
     if global < logical_len {
-        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global);
-        values_b[unit] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, global);
-        values_c[unit] = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, global);
+        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, global);
+        values_b[unit] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, global);
+        values_c[unit] = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, global);
         valid[unit] = 1u32;
     } else {
         valid[unit] = 0u32;
@@ -1766,6 +1796,60 @@ pub(crate) fn compact_scatter_kernel<T: CubePrimitive>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceGpuExpr<T>>(
+    flags: &[u32],
+    positions: &[u32],
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        let position = positions[global];
+        output[(position - 1u32) as usize] =
+            Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn unique_by_key_device_expr_flags_kernel<
+    K: CubePrimitive,
+    Expr: DeviceGpuExpr<K>,
+    Pred: BinaryPredicateOp<K>,
+>(
+    slot0: &[K],
+    slot1: &[K],
+    slot2: &[K],
+    slot3: &[K],
+    slot_offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    if global < logical_len {
+        if global == 0 {
+            flags[global] = 1u32;
+        } else {
+            let previous = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global - 1usize);
+            let current = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+            if Pred::apply(previous, current) {
+                flags[global] = 0u32;
+            } else {
+                flags[global] = 1u32;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn compact_rejected_scatter_kernel<T: CubePrimitive>(
     flags: &[u32],
     positions: &[u32],
@@ -1804,13 +1888,14 @@ pub(crate) fn compact_scatter_pair_kernel<A: CubePrimitive, B: CubePrimitive>(
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn adjacent_difference_expr_kernel<
     T: CubePrimitive,
-    Expr: GpuExpr<T>,
+    Expr: DeviceGpuExpr<T>,
     Op: BinaryOp<T>,
 >(
-    input: &[T],
-    indices: &[u32],
-    rhs: &[T],
-    rhs_indices: &[u32],
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
     len: &[u32],
     output: &mut [T],
 ) {
@@ -1819,11 +1904,11 @@ pub(crate) fn adjacent_difference_expr_kernel<
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
         if global == 0usize {
-            output[global] = Expr::eval(input, indices, rhs, rhs_indices, global);
+            output[global] = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
         } else {
             output[global] = Op::apply(
-                Expr::eval(input, indices, rhs, rhs_indices, global),
-                Expr::eval(input, indices, rhs, rhs_indices, global - 1usize),
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global),
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global - 1usize),
             );
         }
     }
@@ -1841,10 +1926,12 @@ pub(crate) fn tuple2_adjacent_difference_expr_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     b_slot0: &[B],
     b_slot1: &[B],
     b_slot2: &[B],
     b_slot3: &[B],
+    b_slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
@@ -1854,8 +1941,8 @@ pub(crate) fn tuple2_adjacent_difference_expr_kernel<
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
         let current = (
-            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global),
-            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, global),
+            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, global),
+            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, global),
         );
         let output = if global == 0usize {
             current
@@ -1863,8 +1950,22 @@ pub(crate) fn tuple2_adjacent_difference_expr_kernel<
             Op::apply(
                 current,
                 (
-                    ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global - 1usize),
-                    ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, global - 1usize),
+                    ExprA::eval(
+                        a_slot0,
+                        a_slot1,
+                        a_slot2,
+                        a_slot3,
+                        a_slot_offsets,
+                        global - 1usize,
+                    ),
+                    ExprB::eval(
+                        b_slot0,
+                        b_slot1,
+                        b_slot2,
+                        b_slot3,
+                        b_slot_offsets,
+                        global - 1usize,
+                    ),
                 ),
             )
         };
@@ -1887,14 +1988,17 @@ pub(crate) fn tuple3_adjacent_difference_expr_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     b_slot0: &[B],
     b_slot1: &[B],
     b_slot2: &[B],
     b_slot3: &[B],
+    b_slot_offsets: &[u32],
     c_slot0: &[C],
     c_slot1: &[C],
     c_slot2: &[C],
     c_slot3: &[C],
+    c_slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
@@ -1905,9 +2009,9 @@ pub(crate) fn tuple3_adjacent_difference_expr_kernel<
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
         let current = (
-            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global),
-            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, global),
-            ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, global),
+            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, global),
+            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, global),
+            ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, global),
         );
         let output = if global == 0usize {
             current
@@ -1915,9 +2019,30 @@ pub(crate) fn tuple3_adjacent_difference_expr_kernel<
             Op::apply(
                 current,
                 (
-                    ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, global - 1usize),
-                    ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, global - 1usize),
-                    ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, global - 1usize),
+                    ExprA::eval(
+                        a_slot0,
+                        a_slot1,
+                        a_slot2,
+                        a_slot3,
+                        a_slot_offsets,
+                        global - 1usize,
+                    ),
+                    ExprB::eval(
+                        b_slot0,
+                        b_slot1,
+                        b_slot2,
+                        b_slot3,
+                        b_slot_offsets,
+                        global - 1usize,
+                    ),
+                    ExprC::eval(
+                        c_slot0,
+                        c_slot1,
+                        c_slot2,
+                        c_slot3,
+                        c_slot_offsets,
+                        global - 1usize,
+                    ),
                 ),
             )
         };
@@ -2211,10 +2336,12 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     b_slot0: &[B],
     b_slot1: &[B],
     b_slot2: &[B],
     b_slot3: &[B],
+    b_slot_offsets: &[u32],
     len: &[u32],
     partial_a: &mut [A],
     partial_b: &mut [B],
@@ -2229,13 +2356,27 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partial_a.len();
     let has_value = RuntimeCell::<u32>::new(0u32);
-    let acc_a = RuntimeCell::<A>::new(ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, 0));
-    let acc_b = RuntimeCell::<B>::new(ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, 0));
+    let acc_a = RuntimeCell::<A>::new(ExprA::eval(
+        a_slot0,
+        a_slot1,
+        a_slot2,
+        a_slot3,
+        a_slot_offsets,
+        0,
+    ));
+    let acc_b = RuntimeCell::<B>::new(ExprB::eval(
+        b_slot0,
+        b_slot1,
+        b_slot2,
+        b_slot3,
+        b_slot_offsets,
+        0,
+    ));
 
     while i.read() < logical_len {
         let value = (
-            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, i.read()),
-            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, i.read()),
+            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, i.read()),
+            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, i.read()),
         );
         if has_value.read() != 0 {
             let acc = Op::apply((acc_a.read(), acc_b.read()), value);
@@ -2398,14 +2539,17 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
     a_slot1: &[A],
     a_slot2: &[A],
     a_slot3: &[A],
+    a_slot_offsets: &[u32],
     b_slot0: &[B],
     b_slot1: &[B],
     b_slot2: &[B],
     b_slot3: &[B],
+    b_slot_offsets: &[u32],
     c_slot0: &[C],
     c_slot1: &[C],
     c_slot2: &[C],
     c_slot3: &[C],
+    c_slot_offsets: &[u32],
     len: &[u32],
     partial_a: &mut [A],
     partial_b: &mut [B],
@@ -2422,15 +2566,36 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partial_a.len();
     let has_value = RuntimeCell::<u32>::new(0u32);
-    let acc_a = RuntimeCell::<A>::new(ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, 0));
-    let acc_b = RuntimeCell::<B>::new(ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, 0));
-    let acc_c = RuntimeCell::<C>::new(ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, 0));
+    let acc_a = RuntimeCell::<A>::new(ExprA::eval(
+        a_slot0,
+        a_slot1,
+        a_slot2,
+        a_slot3,
+        a_slot_offsets,
+        0,
+    ));
+    let acc_b = RuntimeCell::<B>::new(ExprB::eval(
+        b_slot0,
+        b_slot1,
+        b_slot2,
+        b_slot3,
+        b_slot_offsets,
+        0,
+    ));
+    let acc_c = RuntimeCell::<C>::new(ExprC::eval(
+        c_slot0,
+        c_slot1,
+        c_slot2,
+        c_slot3,
+        c_slot_offsets,
+        0,
+    ));
 
     while i.read() < logical_len {
         let value = (
-            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, i.read()),
-            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, i.read()),
-            ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, i.read()),
+            ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, i.read()),
+            ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, i.read()),
+            ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, i.read()),
         );
         if has_value.read() != 0 {
             let acc = Op::apply((acc_a.read(), acc_b.read(), acc_c.read()), value);

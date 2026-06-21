@@ -19,7 +19,20 @@ fn minmax_element_accepts_borrowed_heterogeneous_soa12() {
 
     assert_eq!(
         min_element(
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
             Tuple12MixedTailLess,
         )
         .unwrap(),
@@ -27,7 +40,20 @@ fn minmax_element_accepts_borrowed_heterogeneous_soa12() {
     );
     assert_eq!(
         max_element(
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
             Tuple12MixedTailLess,
         )
         .unwrap(),
@@ -35,7 +61,20 @@ fn minmax_element_accepts_borrowed_heterogeneous_soa12() {
     );
     assert_eq!(
         minmax_element(
-            zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+            zip12(
+                a.slice(..),
+                b.slice(..),
+                c.slice(..),
+                d.slice(..),
+                e.slice(..),
+                f.slice(..),
+                g.slice(..),
+                h.slice(..),
+                i.slice(..),
+                j.slice(..),
+                k.slice(..),
+                l.slice(..)
+            ),
             Tuple12MixedTailLess,
         )
         .unwrap(),

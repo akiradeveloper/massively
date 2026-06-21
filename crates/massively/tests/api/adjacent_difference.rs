@@ -7,7 +7,7 @@ fn adjacent_difference_accepts_three_tuple_columns() {
     let b = policy.to_device(&[10_u32, 30, 60, 100]).unwrap();
     let c = policy.to_device(&[2.0_f32, 5.0, 9.0, 14.0]).unwrap();
 
-    let output = adjacent_difference((&a, &b, &c), TupleSum).unwrap();
+    let output = adjacent_difference((a.slice(..), b.slice(..), c.slice(..)), TupleSum).unwrap();
     let (a_out, b_out, c_out) = output;
 
     assert_eq!(a_out.to_vec().unwrap(), vec![1.0, 4.0, 9.0, 16.0]);

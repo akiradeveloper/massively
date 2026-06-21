@@ -621,8 +621,8 @@ impl_scatter_if_input_sources!(SoA3<A, B, C>);
 ///
 /// The output is allocated with `len` elements, initialized with `default`, and
 /// then updated by the scatter. For multiple value columns, pass borrowed
-/// columns as a tuple, such as `(&values, &tags)`, and use the same tuple shape
-/// for `default`.
+/// columns as a tuple, such as `(values.slice(..), tags.slice(..))`, and use
+/// the same tuple shape for `default`.
 pub fn scatter<Values, Indices>(
     values: Values,
     indices: Indices,

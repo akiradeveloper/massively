@@ -5,7 +5,7 @@ use crate::{
         SoA2, SoA3, SoAView1, SoAView2, SoAView3,
     },
     error::Error,
-    expr::DeviceGpuExpr,
+    expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
     op::{BinaryPredicateOp, GpuOp},
     primitives::{ordering, range as primitive_range, select},
@@ -13,18 +13,6 @@ use crate::{
 use cubecl::prelude::*;
 
 const BLOCK_ORDERING_SIZE: u32 = 256;
-
-fn materialize_one<Source>(
-    input: SoA1<Source>,
-) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
-where
-    Source: KernelColumn + KernelColumnAt<S0>,
-    Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: DeviceGpuExpr<Source::Item>,
-{
-    input.source.validate()?;
-    super::device_expr_collect(&input.source)
-}
 
 fn materialize_soa_view_one<Source>(
     input: SoAView1<Source>,
@@ -521,37 +509,6 @@ impl_tuple_pair_ordering!(SoA2 -> SoA2<A, B; RA, RB> { left / right_left, right 
 impl_tuple_pair_ordering!(SoAView3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, sort_tuple3, tuple3_membership_flags_kernel);
 impl_tuple_pair_ordering!(SoA3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, sort_tuple3, tuple3_membership_flags_kernel);
 
-/// Reverses a device vector and returns new device storage.
-fn reverse_device_vec<R, T>(input: &DeviceVec<R, T>) -> Result<DeviceVec<R, T>, Error>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-{
-    let num_blocks = input.len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let client = input.policy.client();
-    let output_handle = client.empty(input.len * std::mem::size_of::<T>());
-
-    if input.len != 0 {
-        unsafe {
-            reverse_kernel::launch_unchecked::<T, R>(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-                unsafe { BufferArg::from_raw_parts(input.handle.clone(), input.len) },
-                unsafe { BufferArg::from_raw_parts(output_handle.clone(), input.len) },
-            );
-        }
-    }
-
-    Ok(DeviceVec::from_handle(
-        input.policy.clone(),
-        output_handle,
-        input.len,
-    ))
-}
-
 /// Input accepted by [`reverse`].
 #[doc(hidden)]
 pub trait ReverseInput {
@@ -573,9 +530,8 @@ where
 
     fn reverse_input(self) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let input = super::device_expr_collect(&self.source)?;
         Ok(SoA1 {
-            source: reverse_device_vec(&input)?,
+            source: super::device_expr_reverse_collect(&self.source)?,
         })
     }
 }
@@ -666,14 +622,9 @@ macro_rules! impl_reverse_input {
 
             fn reverse_input(self) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect(&self.$first_field)?;
+                let $first_field = super::device_expr_reverse_collect(&self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect(&self.$field)?;
-                )+
-
-                let $first_field = reverse_device_vec(&$first_field)?;
-                $(
-                    let $field = reverse_device_vec(&$field)?;
+                    let $field = super::device_expr_reverse_collect(&self.$field)?;
                 )+
 
                 Ok($name { $first_field, $( $field ),+ })
@@ -701,11 +652,9 @@ where
 
     fn reverse_input(self) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let left = super::device_expr_collect(&self.left)?;
-        let right = super::device_expr_collect(&self.right)?;
         Ok(SoA2 {
-            left: reverse_device_vec(&left)?,
-            right: reverse_device_vec(&right)?,
+            left: super::device_expr_reverse_collect(&self.left)?,
+            right: super::device_expr_reverse_collect(&self.right)?,
         })
     }
 }
@@ -735,13 +684,10 @@ where
 
     fn reverse_input(self) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_collect(&self.first)?;
-        let second = super::device_expr_collect(&self.second)?;
-        let third = super::device_expr_collect(&self.third)?;
         Ok(SoA3 {
-            first: reverse_device_vec(&first)?,
-            second: reverse_device_vec(&second)?,
-            third: reverse_device_vec(&third)?,
+            first: super::device_expr_reverse_collect(&self.first)?,
+            second: super::device_expr_reverse_collect(&self.second)?,
+            third: super::device_expr_reverse_collect(&self.third)?,
         })
     }
 }
@@ -799,9 +745,10 @@ where
         values: SoA1<ValueSource>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        let keys = materialize_soa_view_one(self)?;
-        let values = materialize_one(values)?;
-        let (keys, values) = ordering::sort_by_key(&keys, &values, GpuOp::<Less>::new())?;
+        ReadOnlySoA::validate(&self)?;
+        SoA::validate(&values)?;
+        let (keys, values) =
+            ordering::sort_by_key_input(&self.source, &values.source, GpuOp::<Less>::new())?;
         Ok((SoA1 { source: keys }, SoA1 { source: values }))
     }
 }
@@ -872,8 +819,10 @@ macro_rules! impl_sort_by_key_input {
             )+
             KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
+            <$first as KernelColumn>::Expr: GpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
+                <$rest as KernelColumn>::Expr: GpuExpr<<$rest as KernelColumn>::Item>,
             )+
             Less: BinaryPredicateOp<KeySource::Item>,
         {
@@ -892,14 +841,12 @@ macro_rules! impl_sort_by_key_input {
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 SoA::validate(&values)?;
-                let keys = super::device_expr_collect(&self.source)?;
-                let (out_keys, permutation) =
-                    ordering::sort_by_key_permutation(&keys, GpuOp::<Less>::new())?;
-                let $first_field = super::device_expr_collect(&values.$first_field)?;
-                let $first_field = primitive_range::gather_device(&$first_field, permutation.indices())?;
+                let indices = primitive_range::indices_u32(self.source.policy(), self.source.len())?;
+                let (out_keys, sorted_indices) =
+                    ordering::sort_by_key_input(&self.source, &indices, GpuOp::<Less>::new())?;
+                let $first_field = super::device_expr_gather(&values.$first_field, &sorted_indices)?;
                 $(
-                    let $field = super::device_expr_collect(&values.$field)?;
-                    let $field = primitive_range::gather_device(&$field, permutation.indices())?;
+                    let $field = super::device_expr_gather(&values.$field, &sorted_indices)?;
                 )+
                 Ok((SoA1 { source: out_keys }, $name { $first_field, $( $field ),+ }))
             }
@@ -951,6 +898,7 @@ macro_rules! impl_sort_by_key_view_values {
             $( <$value as KernelColumn>::Item: CubePrimitive + CubeElement, )+
             KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
+            $( <$value as KernelColumn>::Expr: GpuExpr<<$value as KernelColumn>::Item>, )+
             Less: BinaryPredicateOp<KeySource::Item>,
         {
             type Output = (
@@ -965,12 +913,11 @@ macro_rules! impl_sort_by_key_view_values {
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&values)?;
-                let keys = super::device_expr_collect(&self.source)?;
-                let (out_keys, permutation) =
-                    ordering::sort_by_key_permutation(&keys, GpuOp::<Less>::new())?;
+                let indices = primitive_range::indices_u32(self.source.policy(), self.source.len())?;
+                let (out_keys, sorted_indices) =
+                    ordering::sort_by_key_input(&self.source, &indices, GpuOp::<Less>::new())?;
                 $(
-                    let $field = super::device_expr_collect(&values.$field)?;
-                    let $field = primitive_range::gather_device(&$field, permutation.indices())?;
+                    let $field = super::device_expr_gather(&values.$field, &sorted_indices)?;
                 )+
                 Ok((SoA1 { source: out_keys }, $out { $( $field ),+ }))
             }
@@ -1029,11 +976,12 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         values.validate()?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let values = super::device_expr_collect(&values)?;
-        let (left, right, source) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &values, GpuOp::<Less>::new())?;
+        let (left, right, source) = ordering::sort_tuple2_by_key_input(
+            &self.left,
+            &self.right,
+            &values,
+            GpuOp::<Less>::new(),
+        )?;
         Ok((SoA2 { left, right }, SoA1 { source }))
     }
 }
@@ -1054,7 +1002,9 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueA::Expr: GpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    ValueB::Expr: GpuExpr<ValueB::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
     type Output = (
@@ -1069,14 +1019,15 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let value_a = super::device_expr_collect(&values.left)?;
-        let value_b = super::device_expr_collect(&values.right)?;
-        let (left, right, value_a) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &value_a, GpuOp::<Less>::new())?;
-        let (_, _, value_b) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &value_b, GpuOp::<Less>::new())?;
+        let indices = primitive_range::indices_u32(self.left.policy(), self.left.len())?;
+        let (left, right, sorted_indices) = ordering::sort_tuple2_by_key_input(
+            &self.left,
+            &self.right,
+            &indices,
+            GpuOp::<Less>::new(),
+        )?;
+        let value_a = super::device_expr_gather(&values.left, &sorted_indices)?;
+        let value_b = super::device_expr_gather(&values.right, &sorted_indices)?;
         Ok((
             SoA2 { left, right },
             SoA2 {
@@ -1105,8 +1056,11 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+    ValueA::Expr: GpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+    ValueB::Expr: GpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
+    ValueC::Expr: GpuExpr<ValueC::Item>,
     Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
 {
     type Output = (
@@ -1125,17 +1079,16 @@ where
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         SoA::validate(&values)?;
-        let key_a = super::device_expr_collect(&self.left)?;
-        let key_b = super::device_expr_collect(&self.right)?;
-        let value_a = super::device_expr_collect(&values.first)?;
-        let value_b = super::device_expr_collect(&values.second)?;
-        let value_c = super::device_expr_collect(&values.third)?;
-        let (left, right, value_a) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &value_a, GpuOp::<Less>::new())?;
-        let (_, _, value_b) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &value_b, GpuOp::<Less>::new())?;
-        let (_, _, value_c) =
-            ordering::sort_tuple2_by_key(&key_a, &key_b, &value_c, GpuOp::<Less>::new())?;
+        let indices = primitive_range::indices_u32(self.left.policy(), self.left.len())?;
+        let (left, right, sorted_indices) = ordering::sort_tuple2_by_key_input(
+            &self.left,
+            &self.right,
+            &indices,
+            GpuOp::<Less>::new(),
+        )?;
+        let value_a = super::device_expr_gather(&values.first, &sorted_indices)?;
+        let value_b = super::device_expr_gather(&values.second, &sorted_indices)?;
+        let value_c = super::device_expr_gather(&values.third, &sorted_indices)?;
         Ok((
             SoA2 { left, right },
             SoA3 {
@@ -2582,9 +2535,8 @@ where
 
     fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let source = super::device_expr_collect(&self.source)?;
         Ok(SoA1 {
-            source: ordering::sort(&source, GpuOp::<Less>::new())?,
+            source: ordering::sort_input(&self.source, GpuOp::<Less>::new())?,
         })
     }
 }
@@ -2677,9 +2629,8 @@ where
 
     fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let left = super::device_expr_collect(&self.left)?;
-        let right = super::device_expr_collect(&self.right)?;
-        let (first, second) = ordering::sort_tuple2(&left, &right, GpuOp::<Less>::new())?;
+        let (first, second) =
+            ordering::sort_tuple2_input(&self.left, &self.right, GpuOp::<Less>::new())?;
         Ok(SoA2 {
             left: first,
             right: second,
@@ -2713,11 +2664,12 @@ where
 
     fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_collect(&self.first)?;
-        let second = super::device_expr_collect(&self.second)?;
-        let third = super::device_expr_collect(&self.third)?;
-        let (first, second, third) =
-            ordering::sort_tuple3(&first, &second, &third, GpuOp::<Less>::new())?;
+        let (first, second, third) = ordering::sort_tuple3_input(
+            &self.first,
+            &self.second,
+            &self.third,
+            GpuOp::<Less>::new(),
+        )?;
         Ok(SoA3 {
             first,
             second,
@@ -2743,9 +2695,8 @@ where
 
     fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let left = super::device_expr_collect(&self.left)?;
-        let right = super::device_expr_collect(&self.right)?;
-        let (left, right) = ordering::sort_tuple2(&left, &right, GpuOp::<Less>::new())?;
+        let (left, right) =
+            ordering::sort_tuple2_input(&self.left, &self.right, GpuOp::<Less>::new())?;
         Ok(SoA2 { left, right })
     }
 }
@@ -2776,11 +2727,12 @@ where
 
     fn sort_input(self, _less: GpuOp<Less>) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_collect(&self.first)?;
-        let second = super::device_expr_collect(&self.second)?;
-        let third = super::device_expr_collect(&self.third)?;
-        let (first, second, third) =
-            ordering::sort_tuple3(&first, &second, &third, GpuOp::<Less>::new())?;
+        let (first, second, third) = ordering::sort_tuple3_input(
+            &self.first,
+            &self.second,
+            &self.third,
+            GpuOp::<Less>::new(),
+        )?;
         Ok(SoA3 {
             first,
             second,

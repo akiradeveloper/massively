@@ -26,7 +26,20 @@ fn partition_accepts_borrowed_heterogeneous_soa12() {
     let l = policy.to_device(&[6000_u32, 2000, 8000, 0, 4000]).unwrap();
 
     let (matching, failing) = partition(
-        zip12(&a, &b, &c, &d, &e, &f, &g, &h, &i, &j, &k, &l),
+        zip12(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+            h.slice(..),
+            i.slice(..),
+            j.slice(..),
+            k.slice(..),
+            l.slice(..),
+        ),
         Tuple12MixedFirstGreaterThanOne,
     )
     .unwrap();

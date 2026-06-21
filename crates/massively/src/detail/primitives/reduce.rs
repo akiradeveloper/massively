@@ -291,6 +291,8 @@ where
     let b1 = b.slots.get(1).unwrap_or(b0);
     let b2 = b.slots.get(2).unwrap_or(b0);
     let b3 = b.slots.get(3).unwrap_or(b0);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
 
     unsafe {
         tuple2_device_reduce_expr_partials_kernel::launch_unchecked::<A, B, ExprA, ExprB, Op, R>(
@@ -301,10 +303,12 @@ where
             unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
             unsafe { BufferArg::from_raw_parts(a2.0.clone(), a2.1) },
             unsafe { BufferArg::from_raw_parts(a3.0.clone(), a3.1) },
+            unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(b0.0.clone(), b0.1) },
             unsafe { BufferArg::from_raw_parts(b1.0.clone(), b1.1) },
             unsafe { BufferArg::from_raw_parts(b2.0.clone(), b2.1) },
             unsafe { BufferArg::from_raw_parts(b3.0.clone(), b3.1) },
+            unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(partial_a.clone(), partial_len) },
             unsafe { BufferArg::from_raw_parts(partial_b.clone(), partial_len) },
@@ -405,6 +409,9 @@ where
     let c1 = c.slots.get(1).unwrap_or(c0);
     let c2 = c.slots.get(2).unwrap_or(c0);
     let c3 = c.slots.get(3).unwrap_or(c0);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
+    let c_offsets = c.slot_offsets_handle(client)?;
 
     unsafe {
         tuple3_device_reduce_expr_partials_kernel::launch_unchecked::<
@@ -424,14 +431,17 @@ where
             unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
             unsafe { BufferArg::from_raw_parts(a2.0.clone(), a2.1) },
             unsafe { BufferArg::from_raw_parts(a3.0.clone(), a3.1) },
+            unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(b0.0.clone(), b0.1) },
             unsafe { BufferArg::from_raw_parts(b1.0.clone(), b1.1) },
             unsafe { BufferArg::from_raw_parts(b2.0.clone(), b2.1) },
             unsafe { BufferArg::from_raw_parts(b3.0.clone(), b3.1) },
+            unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(c0.0.clone(), c0.1) },
             unsafe { BufferArg::from_raw_parts(c1.0.clone(), c1.1) },
             unsafe { BufferArg::from_raw_parts(c2.0.clone(), c2.1) },
             unsafe { BufferArg::from_raw_parts(c3.0.clone(), c3.1) },
+            unsafe { BufferArg::from_raw_parts(c_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(partial_a.clone(), partial_len) },
             unsafe { BufferArg::from_raw_parts(partial_b.clone(), partial_len) },
@@ -893,146 +903,4 @@ where
     }
 
     Ok(output_handle)
-}
-
-pub(crate) fn reduce_by_key_expr_handle<R, K, T, Expr, KeyEq, Op>(
-    policy: &CubePolicy<R>,
-    keys: &DeviceVec<R, K>,
-    input_handle: cubecl::server::Handle,
-    input_len: usize,
-    rhs_handle: cubecl::server::Handle,
-    rhs_len: usize,
-    init: T,
-) -> Result<(DeviceVec<R, K>, DeviceVec<R, T>), Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    Expr: GpuExpr<T>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
-{
-    let len = keys.len();
-    let value_handle = collect_reduce_by_key_expr_handle::<R, T, Expr>(
-        policy,
-        len,
-        input_handle,
-        input_len,
-        rhs_handle,
-        rhs_len,
-    )?;
-
-    reduce_by_key_handle::<R, K, T, KeyEq, Op>(policy, keys, value_handle, init)
-}
-
-pub(crate) fn reduce_by_key_expr_handle_with_control<R, K, T, Expr, KeyEq, Op>(
-    policy: &CubePolicy<R>,
-    keys: &DeviceVec<R, K>,
-    input_handle: cubecl::server::Handle,
-    input_len: usize,
-    rhs_handle: cubecl::server::Handle,
-    rhs_len: usize,
-    init: T,
-) -> Result<(DeviceVec<R, K>, DeviceVec<R, T>, ReduceByKeyControl), Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    Expr: GpuExpr<T>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
-{
-    let len = keys.len();
-    let value_handle = collect_reduce_by_key_expr_handle::<R, T, Expr>(
-        policy,
-        len,
-        input_handle,
-        input_len,
-        rhs_handle,
-        rhs_len,
-    )?;
-
-    reduce_by_key_handle_with_control::<R, K, T, KeyEq, Op>(policy, keys, value_handle, init)
-}
-
-pub(crate) fn reduce_by_key_expr_handle_with_existing_control<R, K, T, Expr, KeyEq, Op>(
-    policy: &CubePolicy<R>,
-    keys: &DeviceVec<R, K>,
-    input_handle: cubecl::server::Handle,
-    input_len: usize,
-    rhs_handle: cubecl::server::Handle,
-    rhs_len: usize,
-    init: T,
-    control: &ReduceByKeyControl,
-) -> Result<DeviceVec<R, T>, Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    Expr: GpuExpr<T>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
-{
-    let len = keys.len();
-    let value_handle = collect_reduce_by_key_expr_handle::<R, T, Expr>(
-        policy,
-        len,
-        input_handle,
-        input_len,
-        rhs_handle,
-        rhs_len,
-    )?;
-
-    reduce_by_key_handle_with_existing_control::<R, K, T, KeyEq, Op>(
-        policy,
-        keys,
-        value_handle,
-        init,
-        control,
-    )
-}
-
-fn collect_reduce_by_key_expr_handle<R, T, Expr>(
-    policy: &CubePolicy<R>,
-    len: usize,
-    input_handle: cubecl::server::Handle,
-    input_len: usize,
-    rhs_handle: cubecl::server::Handle,
-    rhs_len: usize,
-) -> Result<cubecl::server::Handle, Error>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-    Expr: GpuExpr<T>,
-{
-    if len == 0 {
-        return Ok(policy.empty_handle());
-    }
-
-    let client = policy.client();
-    let workspace = Workspace::new(policy);
-    let value_handle = workspace.alloc::<T>(len);
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let block_size = 256_u32;
-    let block_count = len.div_ceil(block_size as usize);
-    let block_count_u32 =
-        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
-    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let dummy_indices = [0_u32];
-    let dummy_index_handle = client.create_from_slice(u32::as_bytes(&dummy_indices));
-    unsafe {
-        collect_expr_block_kernel::launch_unchecked::<T, Expr, R>(
-            client,
-            CubeCount::Static(block_count_u32, 1, 1),
-            CubeDim::new_1d(block_size),
-            unsafe { BufferArg::from_raw_parts(value_handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(input_handle.clone(), input_len) },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
-            unsafe { BufferArg::from_raw_parts(rhs_handle.clone(), rhs_len) },
-            unsafe { BufferArg::from_raw_parts(dummy_index_handle.clone(), dummy_indices.len()) },
-            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-        );
-    }
-
-    Ok(value_handle)
 }

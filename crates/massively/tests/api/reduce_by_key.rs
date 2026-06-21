@@ -6,7 +6,14 @@ fn reduce_by_key_uses_supplied_key_equality() {
     let keys = policy.to_device(&[0_u32, 2, 4, 1, 3]).unwrap();
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0, 5.0]).unwrap();
 
-    let (keys, values) = reduce_by_key((&keys,), (&values,), SameParityU32, (0.0,), Sum).unwrap();
+    let (keys, values) = reduce_by_key(
+        (keys.slice(..),),
+        (values.slice(..),),
+        SameParityU32,
+        (0.0,),
+        Sum,
+    )
+    .unwrap();
     let (keys,) = keys;
     let (values,) = values;
     assert_eq!(keys.to_vec().unwrap(), vec![4, 3]);
@@ -21,8 +28,8 @@ fn reduce_by_key_accepts_tuple_values() {
     let ids = policy.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
 
     let (keys, values) = reduce_by_key(
-        (&keys,),
-        (&values, &ids),
+        (keys.slice(..),),
+        (values.slice(..), ids.slice(..)),
         EqualU32,
         (0.0_f32, 0_u32),
         TupleSum,
@@ -35,6 +42,32 @@ fn reduce_by_key_accepts_tuple_values() {
     assert_eq!(ids.to_vec().unwrap(), vec![30, 120]);
 }
 
+#[test]
+fn reduce_by_key_accepts_three_tuple_values() {
+    let policy = policy();
+    let keys = policy.to_device(&[1_u32, 1, 2, 2, 2]).unwrap();
+    let a = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0, 5.0]).unwrap();
+    let b = policy.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
+    let c = policy
+        .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0])
+        .unwrap();
+
+    let (keys, values) = reduce_by_key(
+        (keys.slice(..),),
+        (a.slice(..), b.slice(..), c.slice(..)),
+        EqualU32,
+        (0.0_f32, 0_u32, 0.0_f32),
+        TupleSum,
+    )
+    .unwrap();
+    let (keys,) = keys;
+    let (a, b, c) = values;
+    assert_eq!(keys.to_vec().unwrap(), vec![1, 2]);
+    assert_eq!(a.to_vec().unwrap(), vec![3.0, 12.0]);
+    assert_eq!(b.to_vec().unwrap(), vec![30, 120]);
+    assert_eq!(c.to_vec().unwrap(), vec![300.0, 1200.0]);
+}
+
 #[cfg(any())]
 #[test]
 fn reduce_by_key_accepts_tuple_keys() {
@@ -43,8 +76,14 @@ fn reduce_by_key_accepts_tuple_keys() {
     let key_b = policy.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
     let values = policy.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
 
-    let (keys, values) =
-        reduce_by_key((&key_a, &key_b), &values, MixedTupleEqual, 0_u32, Sum).unwrap();
+    let (keys, values) = reduce_by_key(
+        (key_a.slice(..), key_b.slice(..)),
+        (values.slice(..),),
+        MixedTupleEqual,
+        0_u32,
+        Sum,
+    )
+    .unwrap();
     let (key_a, key_b) = keys;
     let (values,) = values;
     assert_eq!(key_a.to_vec().unwrap(), vec![1.0, 2.0, 2.0]);

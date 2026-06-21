@@ -30,7 +30,7 @@ fn keys(len: usize) -> Vec<u32> {
 
 fn check_reduce(policy: &CubeWgpu) {
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
-    let output = reduce((&values,), (0.0,), Sum).unwrap();
+    let output = reduce((values.slice(..),), (0.0,), Sum).unwrap();
     assert_eq!(output, (10.0,));
 }
 
@@ -38,7 +38,7 @@ fn check_reduce_by_key(policy: &CubeWgpu) {
     let keys = policy.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = policy.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
     let ((out_keys,), (out_values,)) =
-        reduce_by_key((&keys,), (&values,), KeyEq, (0.0,), Sum).unwrap();
+        reduce_by_key((keys.slice(..),), (values.slice(..),), KeyEq, (0.0,), Sum).unwrap();
     assert_eq!(out_keys.to_vec().unwrap(), vec![0, 1]);
     assert_eq!(out_values.to_vec().unwrap(), vec![3.0, 30.0]);
 }
@@ -54,7 +54,7 @@ fn bench_reduce(c: &mut Criterion) {
             sync(&policy);
             reduce_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output = reduce(black_box((&values,)), (0.0,), Sum).unwrap();
+                    let output = reduce((black_box(values.slice(..)),), (0.0,), Sum).unwrap();
                     sync(&policy);
                     black_box(output)
                 })
@@ -75,8 +75,8 @@ fn bench_reduce(c: &mut Criterion) {
             reduce_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: ((DeviceVec<Wgpu, u32>,), (DeviceVec<Wgpu, f32>,)) = reduce_by_key(
-                        black_box((&keys,)),
-                        black_box((&values,)),
+                        (black_box(keys.slice(..)),),
+                        (black_box(values.slice(..)),),
                         KeyEq,
                         (0.0,),
                         Sum,

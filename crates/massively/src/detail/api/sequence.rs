@@ -19,6 +19,54 @@ fn sequence_block_count(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
+fn key_run_flags<KeySource, Eq>(keys: &KeySource) -> Result<cubecl::server::Handle, Error>
+where
+    KeySource: ReadOnlyKernelColumn + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+    Eq: BinaryPredicateOp<KeySource::Item>,
+{
+    keys.validate()?;
+    let len = keys.len();
+    let client = keys.policy().client();
+    if len == 0 {
+        return Ok(keys.policy().empty_handle());
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let bindings = keys.stage()?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let block_count_u32 = sequence_block_count(len)?;
+
+    unsafe {
+        unique_by_key_device_expr_flags_kernel::launch_unchecked::<
+            KeySource::Item,
+            KeySource::Expr,
+            Eq,
+            KeySource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEQUENCE_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(flag_handle)
+}
+
 #[doc(hidden)]
 pub trait ReplaceIfInput<Stencil, Pred> {
     type Item;
@@ -316,9 +364,10 @@ where
     ) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
         SoA::validate(&values)?;
-        let keys = super::device_expr_collect(&self.source)?;
-        let values = super::device_expr_collect(&values.source)?;
-        let (keys, values) = unique_by_key_device_vec(&keys, &values, GpuOp::<Eq>::new())?;
+        super::ensure_same_len(values.source.len(), self.source.len())?;
+        let flags = key_run_flags::<KeySource, Eq>(&self.source)?;
+        let keys = super::device_expr_compact_with_flags(&self.source, flags.clone())?;
+        let values = super::device_expr_compact_with_flags(&values.source, flags)?;
         Ok((SoA1 { source: keys }, SoA1 { source: values }))
     }
 }
@@ -372,29 +421,24 @@ macro_rules! impl_unique_by_key_view_values {
             ) -> Result<Self::Output, Error> {
                 self.validate()?;
                 ReadOnlySoA::validate(&values)?;
-                let keys = super::device_expr_collect(&self)?;
+                let flags = key_run_flags::<KeySource, Eq>(&self)?;
                 $(
-                    let $field = super::device_expr_collect(&values.$field)?;
-                    super::ensure_same_len($field.len, keys.len)?;
+                    super::ensure_same_len(values.$field.len(), self.len())?;
                 )+
-                if keys.len == 0 {
+                if self.len() == 0 {
                     return Ok((
                         SoA1 {
-                            source: DeviceVec::empty(keys.policy.clone()),
+                            source: DeviceVec::empty(self.policy().clone()),
                         },
                         $out {
-                            $( $field: DeviceVec::empty($field.policy.clone()), )+
+                            $( $field: DeviceVec::empty(values.$field.policy().clone()), )+
                         },
                     ));
                 }
 
-                let control = segmented::key_run_control::<KeySource::Runtime, KeySource::Item, Eq>(&keys)?;
-                let out_keys = control.compact_first::<KeySource::Runtime, KeySource::Item>(keys.policy())?;
+                let out_keys = super::device_expr_compact_with_flags(&self, flags.clone())?;
                 $(
-                    let $field = control.compact_value::<KeySource::Runtime, <$value as KernelColumn>::Item>(
-                        $field.policy(),
-                        $field.handle.clone(),
-                    )?;
+                    let $field = super::device_expr_compact_with_flags(&values.$field, flags.clone())?;
                 )+
 
                 Ok((SoA1 { source: out_keys }, $out { $( $field ),+ }))
@@ -1869,7 +1913,7 @@ where
     ))
 }
 
-/// Replaces elements whose stencil satisfies `Pred`.
+/// Replaces elements whose staged stencil flag satisfies `Pred`.
 pub fn replace_if<Input, Stencil, Pred>(
     input: Input,
     replacement: <Input as ReplaceIfInput<Stencil, Pred>>::Item,
@@ -1893,32 +1937,6 @@ where
     <Input as UniqueInput<Pred>>::Output: MaterializeOutput,
 {
     materialize(input.unique_input(GpuOp::<Pred>::new())?)
-}
-
-fn unique_by_key_device_vec<R, K, T, Eq>(
-    keys: &DeviceVec<R, K>,
-    values: &DeviceVec<R, T>,
-    _eq: GpuOp<Eq>,
-) -> Result<(DeviceVec<R, K>, DeviceVec<R, T>), Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    Eq: BinaryPredicateOp<K>,
-{
-    super::ensure_same_len(values.len, keys.len)?;
-    if keys.len == 0 {
-        return Ok((
-            DeviceVec::empty(keys.policy.clone()),
-            DeviceVec::empty(values.policy.clone()),
-        ));
-    }
-
-    let control = segmented::key_run_control::<R, K, Eq>(keys)?;
-    let out_keys = control.compact_first::<R, K>(keys.policy())?;
-    let out_values = control.compact_value::<R, T>(values.policy(), values.handle.clone())?;
-
-    Ok((out_keys, out_values))
 }
 
 /// Removes consecutive duplicate keys and carries the first value for each key.

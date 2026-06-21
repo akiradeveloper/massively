@@ -10,6 +10,8 @@ mod adjacent_find;
 mod copy_if;
 #[path = "api/count_if.rs"]
 mod count_if;
+#[path = "api/device_slice.rs"]
+mod device_slice;
 #[path = "api/equal.rs"]
 mod equal;
 #[path = "api/equal_range.rs"]

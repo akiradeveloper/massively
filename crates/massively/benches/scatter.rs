@@ -20,7 +20,7 @@ impl UnaryOp<(f32,)> for MulTwo {
 fn check_scatter(policy: &CubeWgpu) {
     let values = policy.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let indices = policy.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let (output,) = scatter((&values,), (&indices,), 4, (0.0_f32,)).unwrap();
+    let (output,) = scatter((values.slice(..),), (indices.slice(..),), 4, (0.0_f32,)).unwrap();
     assert_eq!(output.to_vec().unwrap(), vec![4.0, 3.0, 2.0, 1.0]);
 }
 
@@ -33,13 +33,13 @@ fn bench_scatter(c: &mut Criterion) {
         for &len in SIZES {
             let input = policy.to_device(&dense_f32(len)).unwrap();
             let indices = policy.to_device(&reverse_indices(len)).unwrap();
-            let (values,) = transform((&input,), MulTwo).unwrap();
+            let (values,) = transform((input.slice(..),), MulTwo).unwrap();
             sync(&policy);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = scatter(
-                        black_box((&values,)),
-                        black_box((&indices,)),
+                        (black_box(values.slice(..)),),
+                        (black_box(indices.slice(..)),),
                         len,
                         (0.0_f32,),
                     )

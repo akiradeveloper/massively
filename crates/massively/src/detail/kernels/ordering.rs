@@ -1,4 +1,4 @@
-use crate::op::BinaryPredicateOp;
+use crate::{expr::DeviceGpuExpr, op::BinaryPredicateOp};
 use cubecl::prelude::*;
 
 #[cube(launch_unchecked, explicit_define)]
@@ -198,6 +198,409 @@ pub(crate) fn merge_sort_pass_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T
                 output[out] = input[left_start + lhs_index];
             } else {
                 output[out] = input[right_start + rhs_index];
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_expr_first_pass_kernel<
+    T: CubePrimitive,
+    Expr: DeviceGpuExpr<T>,
+    Less: BinaryPredicateOp<T>,
+>(
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output: &mut [T],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output[out] = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, out);
+        } else {
+            let left_value = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, pair_start);
+            let right_value = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, right);
+            let take_right_first = Less::apply(right_value, left_value);
+            if out == pair_start {
+                if take_right_first {
+                    output[out] = right_value;
+                } else {
+                    output[out] = left_value;
+                }
+            } else if take_right_first {
+                output[out] = left_value;
+            } else {
+                output[out] = right_value;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_by_key_expr_first_pass_kernel<
+    K: CubePrimitive,
+    T: CubePrimitive,
+    KeyExpr: DeviceGpuExpr<K>,
+    ValueExpr: DeviceGpuExpr<T>,
+    Less: BinaryPredicateOp<K>,
+>(
+    key_slot0: &[K],
+    key_slot1: &[K],
+    key_slot2: &[K],
+    key_slot3: &[K],
+    key_slot_offsets: &[u32],
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_slot_offsets: &[u32],
+    len: &[u32],
+    output_keys: &mut [K],
+    output_values: &mut [T],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output_keys[out] = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                out,
+            );
+            output_values[out] = ValueExpr::eval(
+                value_slot0,
+                value_slot1,
+                value_slot2,
+                value_slot3,
+                value_slot_offsets,
+                out,
+            );
+        } else {
+            let left_key = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                pair_start,
+            );
+            let left_value = ValueExpr::eval(
+                value_slot0,
+                value_slot1,
+                value_slot2,
+                value_slot3,
+                value_slot_offsets,
+                pair_start,
+            );
+            let right_key = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                right,
+            );
+            let right_value = ValueExpr::eval(
+                value_slot0,
+                value_slot1,
+                value_slot2,
+                value_slot3,
+                value_slot_offsets,
+                right,
+            );
+            let take_right_first = Less::apply(right_key, left_key);
+            if out == pair_start {
+                if take_right_first {
+                    output_keys[out] = right_key;
+                    output_values[out] = right_value;
+                } else {
+                    output_keys[out] = left_key;
+                    output_values[out] = left_value;
+                }
+            } else if take_right_first {
+                output_keys[out] = left_key;
+                output_values[out] = left_value;
+            } else {
+                output_keys[out] = right_key;
+                output_values[out] = right_value;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple2_expr_first_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    Less: BinaryPredicateOp<(A, B)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_slot_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output_a[out] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, out);
+            output_b[out] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, out);
+        } else {
+            let left_a = ExprA::eval(
+                a_slot0,
+                a_slot1,
+                a_slot2,
+                a_slot3,
+                a_slot_offsets,
+                pair_start,
+            );
+            let left_b = ExprB::eval(
+                b_slot0,
+                b_slot1,
+                b_slot2,
+                b_slot3,
+                b_slot_offsets,
+                pair_start,
+            );
+            let right_a = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, right);
+            let right_b = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, right);
+            let take_right_first = Less::apply((right_a, right_b), (left_a, left_b));
+            if out == pair_start {
+                if take_right_first {
+                    output_a[out] = right_a;
+                    output_b[out] = right_b;
+                } else {
+                    output_a[out] = left_a;
+                    output_b[out] = left_b;
+                }
+            } else if take_right_first {
+                output_a[out] = left_a;
+                output_b[out] = left_b;
+            } else {
+                output_a[out] = right_a;
+                output_b[out] = right_b;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple2_by_key_expr_first_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    T: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ValueExpr: DeviceGpuExpr<T>,
+    Less: BinaryPredicateOp<(A, B)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_slot_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_slot_offsets: &[u32],
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_values: &mut [T],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output_a[out] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, out);
+            output_b[out] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, out);
+            output_values[out] = ValueExpr::eval(
+                value_slot0,
+                value_slot1,
+                value_slot2,
+                value_slot3,
+                value_slot_offsets,
+                out,
+            );
+        } else {
+            let left_a = ExprA::eval(
+                a_slot0,
+                a_slot1,
+                a_slot2,
+                a_slot3,
+                a_slot_offsets,
+                pair_start,
+            );
+            let left_b = ExprB::eval(
+                b_slot0,
+                b_slot1,
+                b_slot2,
+                b_slot3,
+                b_slot_offsets,
+                pair_start,
+            );
+            let left_value = ValueExpr::eval(
+                value_slot0,
+                value_slot1,
+                value_slot2,
+                value_slot3,
+                value_slot_offsets,
+                pair_start,
+            );
+            let right_a = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, right);
+            let right_b = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, right);
+            let right_value = ValueExpr::eval(
+                value_slot0,
+                value_slot1,
+                value_slot2,
+                value_slot3,
+                value_slot_offsets,
+                right,
+            );
+            let take_right_first = Less::apply((right_a, right_b), (left_a, left_b));
+            if out == pair_start {
+                if take_right_first {
+                    output_a[out] = right_a;
+                    output_b[out] = right_b;
+                    output_values[out] = right_value;
+                } else {
+                    output_a[out] = left_a;
+                    output_b[out] = left_b;
+                    output_values[out] = left_value;
+                }
+            } else if take_right_first {
+                output_a[out] = left_a;
+                output_b[out] = left_b;
+                output_values[out] = left_value;
+            } else {
+                output_a[out] = right_a;
+                output_b[out] = right_b;
+                output_values[out] = right_value;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple3_expr_first_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    Less: BinaryPredicateOp<(A, B, C)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_slot_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_slot_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output_a[out] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, out);
+            output_b[out] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, out);
+            output_c[out] = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, out);
+        } else {
+            let left_a = ExprA::eval(
+                a_slot0,
+                a_slot1,
+                a_slot2,
+                a_slot3,
+                a_slot_offsets,
+                pair_start,
+            );
+            let left_b = ExprB::eval(
+                b_slot0,
+                b_slot1,
+                b_slot2,
+                b_slot3,
+                b_slot_offsets,
+                pair_start,
+            );
+            let left_c = ExprC::eval(
+                c_slot0,
+                c_slot1,
+                c_slot2,
+                c_slot3,
+                c_slot_offsets,
+                pair_start,
+            );
+            let right_a = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, right);
+            let right_b = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, right);
+            let right_c = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, right);
+            let take_right_first =
+                Less::apply((right_a, right_b, right_c), (left_a, left_b, left_c));
+            if out == pair_start {
+                if take_right_first {
+                    output_a[out] = right_a;
+                    output_b[out] = right_b;
+                    output_c[out] = right_c;
+                } else {
+                    output_a[out] = left_a;
+                    output_b[out] = left_b;
+                    output_c[out] = left_c;
+                }
+            } else if take_right_first {
+                output_a[out] = left_a;
+                output_b[out] = left_b;
+                output_c[out] = left_c;
+            } else {
+                output_a[out] = right_a;
+                output_b[out] = right_b;
+                output_c[out] = right_c;
             }
         }
     }

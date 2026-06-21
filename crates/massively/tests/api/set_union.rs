@@ -46,7 +46,12 @@ fn set_union_accepts_borrowed_tuple_columns() {
     let right_a = policy.to_device(&[2.0_f32, 3.0]).unwrap();
     let right_b = policy.to_device(&[20_u32, 30]).unwrap();
 
-    let output = set_union((&left_a, &left_b), (&right_a, &right_b), MixedTupleLess).unwrap();
+    let output = set_union(
+        (left_a.slice(..), left_b.slice(..)),
+        (right_a.slice(..), right_b.slice(..)),
+        MixedTupleLess,
+    )
+    .unwrap();
     let (a, b) = output;
 
     assert_eq!(a.to_vec().unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
@@ -84,8 +89,34 @@ fn set_union_accepts_borrowed_heterogeneous_soa12() {
     let rl = policy.to_device(&[22000_u32, 23000, 25000]).unwrap();
 
     let output = set_union(
-        zip12(&la, &lb, &lc, &ld, &le, &lf, &lg, &lh, &li, &lj, &lk, &ll),
-        zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
+        zip12(
+            la.slice(..),
+            lb.slice(..),
+            lc.slice(..),
+            ld.slice(..),
+            le.slice(..),
+            lf.slice(..),
+            lg.slice(..),
+            lh.slice(..),
+            li.slice(..),
+            lj.slice(..),
+            lk.slice(..),
+            ll.slice(..),
+        ),
+        zip12(
+            ra.slice(..),
+            rb.slice(..),
+            rc.slice(..),
+            rd.slice(..),
+            re.slice(..),
+            rf.slice(..),
+            rg.slice(..),
+            rh.slice(..),
+            ri.slice(..),
+            rj.slice(..),
+            rk.slice(..),
+            rl.slice(..),
+        ),
         Tuple12MixedLess,
     )
     .unwrap();
@@ -119,8 +150,34 @@ fn set_union_preserves_multiplicity_for_borrowed_heterogeneous_soa12() {
     let (ra, rb, rc, rd, re, rf, rg, rh, ri, rj, rk, rl) = soa12_rows!(policy; [2, 2, 2, 3]);
 
     let output = set_union(
-        zip12(&la, &lb, &lc, &ld, &le, &lf, &lg, &lh, &li, &lj, &lk, &ll),
-        zip12(&ra, &rb, &rc, &rd, &re, &rf, &rg, &rh, &ri, &rj, &rk, &rl),
+        zip12(
+            la.slice(..),
+            lb.slice(..),
+            lc.slice(..),
+            ld.slice(..),
+            le.slice(..),
+            lf.slice(..),
+            lg.slice(..),
+            lh.slice(..),
+            li.slice(..),
+            lj.slice(..),
+            lk.slice(..),
+            ll.slice(..),
+        ),
+        zip12(
+            ra.slice(..),
+            rb.slice(..),
+            rc.slice(..),
+            rd.slice(..),
+            re.slice(..),
+            rf.slice(..),
+            rg.slice(..),
+            rh.slice(..),
+            ri.slice(..),
+            rj.slice(..),
+            rk.slice(..),
+            rl.slice(..),
+        ),
         Tuple12MixedLess,
     )
     .unwrap();

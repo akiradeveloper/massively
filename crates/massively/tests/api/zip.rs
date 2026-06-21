@@ -27,7 +27,7 @@ fn tuple_flattens_single_column_inputs() {
     let right = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = policy.to_device(&[0_u32, 1, 2]).unwrap();
 
-    let (left, right) = gather((&left, &right), (&indices,)).unwrap();
+    let (left, right) = gather((left.slice(..), right.slice(..)), (indices.slice(..),)).unwrap();
 
     assert_eq!(left.to_vec().unwrap(), vec![1.0, 2.0, 3.0]);
     assert_eq!(right.to_vec().unwrap(), vec![10, 20, 30]);
@@ -40,7 +40,7 @@ fn tuple_materializes_heterogeneous_columns() {
     let ids = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = policy.to_device(&[0_u32, 1, 2]).unwrap();
 
-    let (values, ids) = gather((&values, &ids), (&indices,)).unwrap();
+    let (values, ids) = gather((values.slice(..), ids.slice(..)), (indices.slice(..),)).unwrap();
 
     assert_eq!(values.to_vec().unwrap(), vec![1.5, 2.5, 3.5]);
     assert_eq!(ids.to_vec().unwrap(), vec![10, 20, 30]);
@@ -53,7 +53,7 @@ fn tuple_gather_accepts_borrowed_heterogeneous_columns() {
     let ids = policy.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let indices = policy.to_device(&[3_u32, 1, 0]).unwrap();
 
-    let gathered = gather((&values, &ids), (&indices,)).unwrap();
+    let gathered = gather((values.slice(..), ids.slice(..)), (indices.slice(..),)).unwrap();
     let (values, ids) = gathered;
 
     assert_eq!(values.to_vec().unwrap(), vec![4.0, 2.0, 1.0]);
@@ -67,7 +67,7 @@ fn tuple_gather_accepts_heterogeneous_columns() {
     let ids = policy.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let indices = policy.to_device(&[3_u32, 1, 0]).unwrap();
 
-    let gathered = gather((&values, &ids), (&indices,)).unwrap();
+    let gathered = gather((values.slice(..), ids.slice(..)), (indices.slice(..),)).unwrap();
     let (values, ids) = gathered;
 
     assert_eq!(values.to_vec().unwrap(), vec![4.0, 2.0, 1.0]);
@@ -82,7 +82,11 @@ fn tuple_concatenates_borrowed_columns() {
     let c = policy.to_device(&[100.0_f32, 200.0]).unwrap();
 
     let indices = policy.to_device(&[0_u32, 1]).unwrap();
-    let (a, b, c) = gather((&a, &b, &c), (&indices,)).unwrap();
+    let (a, b, c) = gather(
+        (a.slice(..), b.slice(..), c.slice(..)),
+        (indices.slice(..),),
+    )
+    .unwrap();
 
     assert_eq!(a.to_vec().unwrap(), vec![1.0, 2.0]);
     assert_eq!(b.to_vec().unwrap(), vec![10, 20]);
@@ -97,7 +101,11 @@ fn tuple_concatenates_column_and_columns() {
     let c = policy.to_device(&[100.0_f32, 200.0]).unwrap();
 
     let indices = policy.to_device(&[0_u32, 1]).unwrap();
-    let (a, b, c) = gather((&a, &b, &c), (&indices,)).unwrap();
+    let (a, b, c) = gather(
+        (a.slice(..), b.slice(..), c.slice(..)),
+        (indices.slice(..),),
+    )
+    .unwrap();
 
     assert_eq!(a.to_vec().unwrap(), vec![1.0, 2.0]);
     assert_eq!(b.to_vec().unwrap(), vec![10, 20]);

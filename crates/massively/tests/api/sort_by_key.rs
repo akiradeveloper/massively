@@ -8,7 +8,12 @@ fn sort_by_key_accepts_borrowed_tuple_keys() {
     let key_b = policy.to_device(&[30_u32, 10, 20]).unwrap();
     let values = policy.to_device(&[30_u32, 10, 20]).unwrap();
 
-    let (keys, values) = sort_by_key((&key_a, &key_b), &values, MixedTupleLess).unwrap();
+    let (keys, values) = sort_by_key(
+        (key_a.slice(..), key_b.slice(..)),
+        (values.slice(..),),
+        MixedTupleLess,
+    )
+    .unwrap();
     let (key_a, key_b) = keys;
     let (values,) = values;
     assert_eq!(key_a.to_vec().unwrap(), vec![1.0, 2.0, 3.0]);
@@ -24,7 +29,12 @@ fn sort_by_key_accepts_tuple_values() {
     let b = policy.to_device(&[30.0_f32, 10.0, 20.0]).unwrap();
     let c = policy.to_device(&[300_u32, 100, 200]).unwrap();
 
-    let (keys, values) = sort_by_key((&keys,), (&a, &b, &c), LessU32).unwrap();
+    let (keys, values) = sort_by_key(
+        (keys.slice(..),),
+        (a.slice(..), b.slice(..), c.slice(..)),
+        LessU32,
+    )
+    .unwrap();
     let (keys,) = keys;
     let (a, b, c) = values;
     assert_eq!(keys.to_vec().unwrap(), vec![1, 2, 3]);
@@ -41,6 +51,11 @@ fn sort_by_key_reports_value_length_mismatch() {
     let key_b = policy.to_device(&[10_u32, 20, 30]).unwrap();
     let values = policy.to_device(&[1_u32, 2]).unwrap();
 
-    let err = sort_by_key((&key_a, &key_b), &values, MixedTupleLess).unwrap_err();
+    let err = sort_by_key(
+        (key_a.slice(..), key_b.slice(..)),
+        (values.slice(..),),
+        MixedTupleLess,
+    )
+    .unwrap_err();
     assert!(matches!(err, massively::Error::LengthMismatch { .. }));
 }
