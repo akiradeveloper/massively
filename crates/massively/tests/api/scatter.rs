@@ -9,8 +9,8 @@ fn scatter_accepts_heterogeneous_columns() {
 
     let scattered = scatter(
         &exec,
-        (values.slice(..), ids.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(values.slice(..), ids.slice(..)),
+        indices.slice(..),
         4,
         (0.0_f32, 0_u32),
     )
@@ -55,7 +55,7 @@ fn scatter_accepts_soa12_values() {
             k.slice(..),
             l.slice(..),
         ),
-        (indices.slice(..),),
+        indices.slice(..),
         3,
         (
             0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32,

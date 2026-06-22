@@ -11,8 +11,8 @@ fn find_first_of_accepts_borrowed_tuple_columns() {
     assert_eq!(
         find_first_of(
             &exec,
-            (a.slice(..), b.slice(..)),
-            (needle_a.slice(..), needle_b.slice(..)),
+            massively::SoA2(a.slice(..), b.slice(..)),
+            massively::SoA2(needle_a.slice(..), needle_b.slice(..)),
             MixedTupleEqual
         )
         .unwrap(),

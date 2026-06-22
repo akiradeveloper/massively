@@ -27,8 +27,8 @@ GPU上のデータ領域を表す。
 GPUで計算を行うに当たって、AoSよりSoAの方が性能上有利。
 DeviceSliceをTupleでまとめ、MIterにした上で計算に使う。
 
-MIter<n> = (DeviceSlice, DeviceSlice, ...)
-MIterMut<n> = (DeviceSliceMut, DeviceSliceMut, ...)
+MIter<n> = SoAn(DeviceSlice, DeviceSlice, ...)
+MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 
 ## アルゴリズム
 
@@ -37,59 +37,63 @@ MIterMut<n> = (DeviceSliceMut, DeviceSliceMut, ...)
 ### 記法
 
 - &[]nはMIter<n>を表す。
-- &[T]はMIter<1>を表す。
+- &[T]1はMIter<1>を表す。 
 - &mut[T]はMIterMut<n>を表す。
 - T?は、Option<T>を表す。
 - []nはOwnedなDeviceVecのTupleを表す。MVec<n>と呼ぶ。
-- [T]はMVec<1>を表す。
+- &[T]はDeviceSlice<Item=T>を表す。
 
 ### リスト
 
-- adjacent_difference(xs: &[]n, sum: n->n->n) -> []n
-- adjacent_find: (xs: &[]n, eq: n->n->bool) -> int?
-- all_of(xs: &[]n, p: n->bool) -> bool
-- any_of(xs: &[]n, p: n->bool) -> bool
-- copy_if(xs: &[]n, stencil: &[u32]) -> []n
-- count_if(xs: &[]n, p: n->bool) -> int
-- equal(xs: &[]n, ys: &[]n, eq: n->n->bool) -> bool
-- equal_range(xs: &[]n, v: n, cmp: n->n->bool) -> int
-- exclusive_scan(xs: &[]n, zero: n, sum: n->n->n) -> []n
-- exclusive_scan_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, zero: n, sum: n->n->n) -> []n
-- find_first_of(xs: &[]n, needles: &[]n, eq: n->n->bool) -> int?
-- find_if(xs: &[]n, p: n->bool) -> int?
-- gather(xs: &[]n, indices: &[u32]) -> []n
-- gather_if(xs: &[]n, indices: &[u32], default: n, stencil: &[u32]) -> []n
-- inclusive_scan(xs: &[]n, op: n->n->n) -> []n
-- inclusive_scan_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, sum: n->n->n) -> []n
-- inner_product(xs: &[]n, ys: &[]m, zipper: n->m->l, zero: l, sum: l->l->l) -> l
-- is_partitioned(xs: &[]n, p: n->bool) -> bool
-- is_sorted_until(xs: &[]n, cmp: n->n->bool) -> int
-- is_sorted(xs: &[]n, cmp: n->n->bool) -> bool
-- lexicographical_compare(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> bool
-- lower_bound(xs: &[]n, v: n, cmp: n->n->bool) -> int
-- max_element(xs: &[]n, cmp: n->n->bool) -> int?
-- merge(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n
-- merge_by_key(keys1: &[]m, values1: &[]n, keys2: &[]m, values2: &[]n, cmp: m->m->bool) -> ([]m, []n)
-- min_element(xs: &[]n, cmp: n->n->bool) -> int?
-- minmax_element(xs: &[]n, cmp: n->n->bool) -> (int,int)?
-- mismatch(xs: &[]n, ys: &[]n, eq: n->n->bool) -> int?
-- none_of(xs: &[]n, p: n->bool) -> bool
-- partition(xs: &[]n, p: n->bool) -> ([]n, []n)
-- reduce(xs: &[]n, zero: n, sum: n->n->n) -> n
-- reduce_by_key(keys: &[]m, values: &[]n, eq: m->m->bool, zero: n, sum: n->n->n) -> ([]m, []n)
-- remove_if(xs: &[]n, p: n->bool) -> []n
-- replace_if(xs: &[]n, v: n, stencil: &[u32]) -> []n
-- reverse(xs: &[]n) -> []n
-- scatter(xs: &[]n, indices: &[u32], len: int, default: n) -> []n
-- scatter_if(xs: &[]n, indices: &[u32], len: int, default: n, stencil: &[u32]) -> []n
-- set_difference(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n
-- set_intersection(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n
-- set_union(xs: &[]n, ys: &[]n, cmp: n->n->bool) -> []n
-- sort(xs: &[]n, cmp: n->n->bool) -> []n
-- sort_by_key(keys: &[]m, values: &[]n, cmp: m->m->bool) -> ([]m, []n)
-- stable_sort(xs: &[]n, cmp: n->n->bool) -> []n
-- stable_sort_by_key(keys: &[]m, values: &[]n, cmp: m->m->bool) -> ([]m, []n)
-- transform(xs: &[]n, op: n->m) -> []m
-- unique(xs: &[]n, eq: n->n->bool) -> []n
-- unique_by_key(keys: &[]m, values: &[]n, cmp: m->m->bool) -> ([]m, []n)
-- upper_bound(xs: &[]n, v: n, cmp: n->n->bool) -> int
+以下の場合を実装すればOK
+- k <= 1
+- a,b,c <= 3
+
+- adjacent_difference(xs: &[]a, sum: a->a->a) -> []a
+- adjacent_find: (xs: &[]a, eq: a->a->bool) -> int?
+- all_of(xs: &[]a, p: a->bool) -> bool
+- any_of(xs: &[]a, p: a->bool) -> bool
+- copy_if(xs: &[]a, stencil: &[u32]) -> []a
+- count_if(xs: &[]a, p: a->bool) -> int
+- equal(xs: &[]a, ys: &[]a, eq: a->a->bool) -> bool
+- equal_range(xs: &[]a, v: a, cmp: a->a->bool) -> int
+- exclusive_scan(xs: &[]a, zero: a, sum: a->a->a) -> []a
+- exclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, zero: a, sum: a->a->a) -> []a
+- find_first_of(xs: &[]a, needles: &[]a, eq: a->a->bool) -> int?
+- find_if(xs: &[]a, p: a->bool) -> int?
+- gather(xs: &[]a, indices: &[u32]) -> []a
+- gather_if(xs: &[]a, indices: &[u32], default: a, stencil: &[u32]) -> []a
+- inclusive_scan(xs: &[]a, op: a->a->a) -> []a
+- inclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, sum: a->a->a) -> []a
+- inner_product(xs: &[]a, ys: &[]b, zipper: a->b->c, zero: c, sum: c->c->c) -> c
+- is_partitioned(xs: &[]a, p: a->bool) -> bool
+- is_sorted_until(xs: &[]a, cmp: a->a->bool) -> int
+- is_sorted(xs: &[]a, cmp: a->a->bool) -> bool
+- lexicographical_compare(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> bool
+- lower_bound(xs: &[]a, v: a, cmp: a->a->bool) -> int
+- max_element(xs: &[]a, cmp: a->a->bool) -> int?
+- merge(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
+- merge_by_key(keys1: &[]k, values1: &[]a, keys2: &[]k, values2: &[]a, cmp: k->k->bool) -> ([]k, []a)
+- min_element(xs: &[]a, cmp: a->a->bool) -> int?
+- minmax_element(xs: &[]a, cmp: a->a->bool) -> (int,int)?
+- mismatch(xs: &[]a, ys: &[]a, eq: a->a->bool) -> int?
+- none_of(xs: &[]a, p: a->bool) -> bool
+- partition(xs: &[]a, p: a->bool) -> ([]a, []a)
+- reduce(xs: &[]a, zero: a, sum: a->a->a) -> a
+- reduce_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, zero: a, sum: a->a->a) -> ([]k, []a)
+- remove_if(xs: &[]a, p: a->bool) -> []a
+- replace_if(xs: &[]a, v: a, stencil: &[u32]) -> []a
+- reverse(xs: &[]a) -> []a
+- scatter(xs: &[]a, indices: &[u32], len: usize, default: a) -> []a
+- scatter_if(xs: &[]a, indices: &[u32], len: usize, default: a, stencil: &[u32]) -> []a
+- set_difference(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
+- set_intersection(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
+- set_union(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
+- sort(xs: &[]a, cmp: a->a->bool) -> []a
+- sort_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
+- stable_sort(xs: &[]a, cmp: a->a->bool) -> []a
+- stable_sort_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
+- transform(xs: &[]a, op: a->b) -> []b
+- unique(xs: &[]a, eq: a->a->bool) -> []a
+- unique_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
+- upper_bound(xs: &[]a, v: a, cmp: a->a->bool) -> int

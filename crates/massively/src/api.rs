@@ -78,6 +78,23 @@ mod sealed {
                 .map(crate::detail::device::DeviceColumnView::from_column))
         }
 
+        fn column_view_by_index_inner<T: 'static>(
+            &self,
+            index: usize,
+        ) -> Result<
+            Option<crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, T>>,
+            Error,
+        >
+        where
+            T: super::Scalar<B>,
+        {
+            if index == 0 {
+                self.column_view_inner::<T>()
+            } else {
+                Ok(None)
+            }
+        }
+
         fn transform_dispatch<Op, Output, Y>(
             self,
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
@@ -85,8 +102,8 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Op: op::UnaryOp<<Self as MIter<B>>::Item, Output = Y>,
-            Y: super::StorageOutput<B>,
+            Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Y>,
+            Y: super::MItem<B>,
             Output: MVec<B, Item = Y>;
 
         fn reverse_dispatch<Output>(
@@ -104,7 +121,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn sort_by_single_key_dispatch<K, Less, KeyOutput, ValueOutput>(
@@ -116,9 +133,28 @@ mod sealed {
         where
             Self: MIter<B>,
             K: super::Scalar<B> + 'static,
-            Less: op::BinaryPredicateOp<(K,)>,
+            Less: op::PredicateOp2<B, (K,)>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
+
+        fn sort_by_key_dispatch<Values, Less, KeyOutput, ValueOutput>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _values: Values,
+            _less: Less,
+        ) -> Result<(KeyOutput, ValueOutput), Error>
+        where
+            Self: MIter<B>,
+            Values: MIter<B>,
+            <Self as MIter<B>>::Item: super::sealed::Value,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+            ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
+        {
+            Err(Error::Launch {
+                message: "sort_by_key is not supported for this key iterator shape".to_string(),
+            })
+        }
 
         fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
             self,
@@ -129,9 +165,28 @@ mod sealed {
         where
             Self: MIter<B>,
             K: super::Scalar<B> + 'static,
-            Eq: op::BinaryPredicateOp<(K,)>,
+            Eq: op::PredicateOp2<B, (K,)>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
+
+        fn unique_by_key_dispatch<Values, Eq, KeyOutput, ValueOutput>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _values: Values,
+            _eq: Eq,
+        ) -> Result<(KeyOutput, ValueOutput), Error>
+        where
+            Self: MIter<B>,
+            Values: MIter<B>,
+            <Self as MIter<B>>::Item: super::sealed::Value,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+            ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
+        {
+            Err(Error::Launch {
+                message: "unique_by_key is not supported for this key iterator shape".to_string(),
+            })
+        }
 
         fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
             self,
@@ -143,9 +198,30 @@ mod sealed {
         where
             Self: MIter<B>,
             K: super::Scalar<B> + 'static,
-            KeyEq: op::BinaryPredicateOp<(K,)>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+            KeyEq: op::PredicateOp2<B, (K,)>,
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
+
+        fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _values: Values,
+            _key_eq: KeyEq,
+            _op: Op,
+        ) -> Result<Output, Error>
+        where
+            Self: MIter<B>,
+            Values: MIter<B>,
+            <Self as MIter<B>>::Item: super::sealed::Value,
+            KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+            Output: MVec<B, Item = <Values as MIter<B>>::Item>,
+        {
+            Err(Error::Launch {
+                message: "inclusive_scan_by_key is not supported for this key iterator shape"
+                    .to_string(),
+            })
+        }
 
         fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
             self,
@@ -158,9 +234,31 @@ mod sealed {
         where
             Self: MIter<B>,
             K: super::Scalar<B> + 'static,
-            KeyEq: op::BinaryPredicateOp<(K,)>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+            KeyEq: op::PredicateOp2<B, (K,)>,
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
+
+        fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _values: Values,
+            _key_eq: KeyEq,
+            _init: <Values as MIter<B>>::Item,
+            _op: Op,
+        ) -> Result<Output, Error>
+        where
+            Self: MIter<B>,
+            Values: MIter<B>,
+            <Self as MIter<B>>::Item: super::sealed::Value,
+            KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+            Output: MVec<B, Item = <Values as MIter<B>>::Item>,
+        {
+            Err(Error::Launch {
+                message: "exclusive_scan_by_key is not supported for this key iterator shape"
+                    .to_string(),
+            })
+        }
 
         fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
             self,
@@ -173,23 +271,46 @@ mod sealed {
         where
             Self: MIter<B>,
             K: super::Scalar<B> + 'static,
-            KeyEq: op::BinaryPredicateOp<(K,)>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+            KeyEq: op::PredicateOp2<B, (K,)>,
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
 
-        fn merge_by_single_key_same_dispatch<K, Less, KeyOutput, ValueOutput>(
+        fn reduce_by_key_dispatch<Values, KeyEq, Op, KeyOutput, ValueOutput>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _values: Values,
+            _key_eq: KeyEq,
+            _init: <Values as MIter<B>>::Item,
+            _op: Op,
+        ) -> Result<(KeyOutput, ValueOutput), Error>
+        where
+            Self: MIter<B>,
+            Values: MIter<B>,
+            <Self as MIter<B>>::Item: super::sealed::Value,
+            KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+            KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+            ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
+        {
+            Err(Error::Launch {
+                message: "reduce_by_key is not supported for this key iterator shape".to_string(),
+            })
+        }
+
+        fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
             self,
             _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             left_keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
             right_keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
-            _right_values: Self,
+            _right_values: RightValues,
             _less: Less,
         ) -> Result<(KeyOutput, ValueOutput), Error>
         where
             Self: MIter<B>,
+            RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
             K: super::Scalar<B> + 'static,
-            Less: op::BinaryPredicateOp<(K,)>,
+            Less: op::PredicateOp2<B, (K,)>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         {
@@ -271,7 +392,7 @@ mod sealed {
         ) -> Result<<Self as MIter<B>>::Item, Error>
         where
             Self: MIter<B>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>;
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>;
 
         fn inclusive_scan_dispatch<Op, Output>(
             self,
@@ -280,7 +401,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn exclusive_scan_dispatch<Op, Output>(
@@ -291,7 +412,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn adjacent_difference_dispatch<Op, Output>(
@@ -301,7 +422,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+            Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn copy_if_dispatch<Stencil, Output>(
@@ -321,7 +442,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn count_if_dispatch<Pred>(
@@ -331,7 +452,7 @@ mod sealed {
         ) -> Result<usize, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
 
         fn all_of_dispatch<Pred>(
             self,
@@ -340,7 +461,7 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
 
         fn any_of_dispatch<Pred>(
             self,
@@ -349,7 +470,7 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
 
         fn none_of_dispatch<Pred>(
             self,
@@ -358,7 +479,7 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
 
         fn find_if_dispatch<Pred>(
             self,
@@ -367,7 +488,7 @@ mod sealed {
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
 
         fn partition_dispatch<Pred, Output>(
             self,
@@ -376,7 +497,7 @@ mod sealed {
         ) -> Result<(Output, Output), Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn is_partitioned_dispatch<Pred>(
@@ -386,7 +507,7 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
 
         fn replace_if_dispatch<Stencil, Output>(
             self,
@@ -407,7 +528,7 @@ mod sealed {
         ) -> Result<crate::detail::api::PrecomputedSelection<<B as Backend>::Runtime>, Error>
         where
             Self: MIter<B>,
-            Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+            Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "stencil is not supported for this iterator shape".to_string(),
@@ -421,7 +542,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
         fn min_element_dispatch<Less>(
@@ -431,7 +552,7 @@ mod sealed {
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn max_element_dispatch<Less>(
             self,
@@ -440,7 +561,7 @@ mod sealed {
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn minmax_element_dispatch<Less>(
             self,
@@ -449,7 +570,7 @@ mod sealed {
         ) -> Result<Option<(usize, usize)>, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn adjacent_find_dispatch<Pred>(
             self,
@@ -458,13 +579,18 @@ mod sealed {
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
-            Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
-        fn equal_dispatch<Right, Eq>(self, _right: Right, _eq: Eq) -> Result<bool, Error>
+        fn equal_dispatch<Right, Eq>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _right: Right,
+            _eq: Eq,
+        ) -> Result<bool, Error>
         where
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-            Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "equal is not supported for this iterator shape".to_string(),
@@ -473,13 +599,14 @@ mod sealed {
 
         fn mismatch_dispatch<Right, Eq>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _eq: Eq,
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-            Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "mismatch is not supported for this iterator shape".to_string(),
@@ -488,13 +615,14 @@ mod sealed {
 
         fn find_first_of_dispatch<Needles, Eq>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _needles: Needles,
             _eq: Eq,
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
             Needles: MIter<B, Item = <Self as MIter<B>>::Item>,
-            Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "find_first_of is not supported for this iterator shape".to_string(),
@@ -509,7 +637,7 @@ mod sealed {
         ) -> Result<usize, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn upper_bound_dispatch<Less>(
             self,
@@ -519,7 +647,7 @@ mod sealed {
         ) -> Result<usize, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn equal_range_dispatch<Less>(
             self,
@@ -529,7 +657,7 @@ mod sealed {
         ) -> Result<(usize, usize), Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn is_sorted_until_dispatch<Less>(
             self,
@@ -538,7 +666,7 @@ mod sealed {
         ) -> Result<usize, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn is_sorted_dispatch<Less>(
             self,
@@ -547,17 +675,18 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>;
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
 
         fn lexicographical_compare_dispatch<Right, Less>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _less: Less,
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "lexicographical_compare is not supported for this iterator shape"
@@ -567,6 +696,7 @@ mod sealed {
 
         fn merge_dispatch<Right, Output, Less>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _less: Less,
         ) -> Result<Output, Error>
@@ -574,7 +704,7 @@ mod sealed {
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "merge is not supported for this iterator shape".to_string(),
@@ -583,6 +713,7 @@ mod sealed {
 
         fn set_union_dispatch<Right, Output, Less>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _less: Less,
         ) -> Result<Output, Error>
@@ -590,7 +721,7 @@ mod sealed {
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "set_union is not supported for this iterator shape".to_string(),
@@ -599,6 +730,7 @@ mod sealed {
 
         fn set_intersection_dispatch<Right, Output, Less>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _less: Less,
         ) -> Result<Output, Error>
@@ -606,7 +738,7 @@ mod sealed {
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "set_intersection is not supported for this iterator shape".to_string(),
@@ -615,6 +747,7 @@ mod sealed {
 
         fn set_difference_dispatch<Right, Output, Less>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _less: Less,
         ) -> Result<Output, Error>
@@ -622,25 +755,32 @@ mod sealed {
             Self: MIter<B>,
             Right: MIter<B, Item = <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "set_difference is not supported for this iterator shape".to_string(),
             })
         }
 
-        fn inner_product_dispatch<Right, TransformOp, ReduceOp>(
+        fn inner_product_dispatch<Right, TransformOp, ReduceOp, Output>(
             self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Right,
             _transform_op: TransformOp,
-            _init: <Self as MIter<B>>::Item,
+            _init: Output,
             _reduce_op: ReduceOp,
-        ) -> Result<<Self as MIter<B>>::Item, Error>
+        ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-            TransformOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-            ReduceOp: op::BinaryOp<<Self as MIter<B>>::Item>,
+            Right: MIter<B>,
+            TransformOp: op::BinaryOp2<
+                    B,
+                    <Self as MIter<B>>::Item,
+                    <Right as MIter<B>>::Item,
+                    Output = Output,
+                >,
+            Output: super::MItem<B>,
+            ReduceOp: op::BinaryOp1<B, Output>,
         {
             Err(Error::Launch {
                 message: "inner_product is not supported for this iterator shape".to_string(),
@@ -655,7 +795,7 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "equal is not supported for this iterator shape".to_string(),
@@ -670,7 +810,7 @@ mod sealed {
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
-            Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "mismatch is not supported for this iterator shape".to_string(),
@@ -685,7 +825,7 @@ mod sealed {
         ) -> Result<Option<usize>, Error>
         where
             Self: MIter<B>,
-            Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "find_first_of is not supported for this iterator shape".to_string(),
@@ -700,7 +840,7 @@ mod sealed {
         ) -> Result<bool, Error>
         where
             Self: MIter<B>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "lexicographical_compare is not supported for this iterator shape"
@@ -717,7 +857,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "merge is not supported for this iterator shape".to_string(),
@@ -733,7 +873,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "set_union is not supported for this iterator shape".to_string(),
@@ -749,7 +889,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "set_intersection is not supported for this iterator shape".to_string(),
@@ -765,54 +905,95 @@ mod sealed {
         where
             Self: MIter<B>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-            Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         {
             Err(Error::Launch {
                 message: "set_difference is not supported for this iterator shape".to_string(),
             })
         }
 
-        fn inner_product_same_dispatch<TransformOp, ReduceOp>(
+        fn inner_product_same_dispatch<TransformOp, ReduceOp, Output>(
             self,
             _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             _right: Self,
             _transform_op: TransformOp,
-            _init: <Self as MIter<B>>::Item,
+            _init: Output,
             _reduce_op: ReduceOp,
-        ) -> Result<<Self as MIter<B>>::Item, Error>
+        ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            TransformOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-            ReduceOp: op::BinaryOp<<Self as MIter<B>>::Item>,
+            TransformOp: op::BinaryOp2<
+                    B,
+                    <Self as MIter<B>>::Item,
+                    <Self as MIter<B>>::Item,
+                    Output = Output,
+                >,
+            Output: super::MItem<B>,
+            ReduceOp: op::BinaryOp1<B, Output>,
         {
             Err(Error::Launch {
                 message: "inner_product is not supported for this iterator shape".to_string(),
             })
         }
+
+        fn merge_by_key_dispatch<RightKeys, LeftValues, RightValues, Less, KeyOutput, ValueOutput>(
+            self,
+            _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            _right_keys: RightKeys,
+            _left_values: LeftValues,
+            _right_values: RightValues,
+            _less: Less,
+        ) -> Result<(KeyOutput, ValueOutput), Error>
+        where
+            Self: MIter<B>,
+            RightKeys: MIter<B, Item = <Self as MIter<B>>::Item>,
+            LeftValues: MIter<B>,
+            RightValues: MIter<B, Item = <LeftValues as MIter<B>>::Item>,
+            <Self as MIter<B>>::Item: super::sealed::Value,
+            Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+            ValueOutput: MVec<B, Item = <LeftValues as MIter<B>>::Item>,
+        {
+            Err(Error::Launch {
+                message: "merge_by_key is not supported for this key iterator shape".to_string(),
+            })
+        }
     }
 
-    pub trait StorageOutputDispatch<B: super::Backend>: Sized {
+    pub trait MItemDispatch<B: super::Backend>: Sized {
         fn transform_unary<Input, Op>(
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             input: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Input>,
             op: Op,
-        ) -> Result<<Self as super::StorageOutput<B>>::Inner, Error>
+        ) -> Result<<Self as super::MItem<B>>::Inner, Error>
         where
-            Self: super::StorageOutput<B>,
+            Self: super::MItem<B>,
             Input: super::Scalar<B>,
-            Op: op::UnaryOp<(Input,), Output = Self>;
+            Op: op::UnaryOp<B, (Input,), Output = Self>,
+        {
+            let _ = (policy, input, op);
+            Err(Error::Launch {
+                message: "transform is not supported for this output item shape".to_string(),
+            })
+        }
 
         fn transform_binary<Left, Right, Op>(
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
             left: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Left>,
             right: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Right>,
             op: Op,
-        ) -> Result<<Self as super::StorageOutput<B>>::Inner, Error>
+        ) -> Result<<Self as super::MItem<B>>::Inner, Error>
         where
-            Self: super::StorageOutput<B>,
+            Self: super::MItem<B>,
             Left: super::Scalar<B>,
             Right: super::Scalar<B>,
-            Op: op::UnaryOp<(Left, Right), Output = Self>;
+            Op: op::UnaryOp<B, (Left, Right), Output = Self>,
+        {
+            let _ = (policy, left, right, op);
+            Err(Error::Launch {
+                message: "transform is not supported for this output item shape".to_string(),
+            })
+        }
 
         fn transform_ternary<First, Second, Third, Op>(
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
@@ -820,13 +1001,87 @@ mod sealed {
             second: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Second>,
             third: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Third>,
             op: Op,
-        ) -> Result<<Self as super::StorageOutput<B>>::Inner, Error>
+        ) -> Result<<Self as super::MItem<B>>::Inner, Error>
         where
-            Self: super::StorageOutput<B>,
+            Self: super::MItem<B>,
             First: super::Scalar<B>,
             Second: super::Scalar<B>,
             Third: super::Scalar<B>,
-            Op: op::UnaryOp<(First, Second, Third), Output = Self>;
+            Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
+        {
+            let _ = (policy, first, second, third, op);
+            Err(Error::Launch {
+                message: "transform is not supported for this output item shape".to_string(),
+            })
+        }
+
+        fn reduce_inner<Op>(
+            policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            input: <Self as super::MItem<B>>::Inner,
+            init: Self,
+            op: Op,
+        ) -> Result<Self, Error>
+        where
+            Self: super::MItem<B>,
+            Op: op::BinaryOp1<B, Self>,
+        {
+            let _ = (policy, input, init, op);
+            Err(Error::Launch {
+                message: "reduce is not supported for this item shape".to_string(),
+            })
+        }
+
+        fn inner_product_with_right_item<LeftIter, RightIter, TransformOp, ReduceOp, Output>(
+            policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            left: LeftIter,
+            right: RightIter,
+            transform_op: TransformOp,
+            init: Output,
+            reduce_op: ReduceOp,
+        ) -> Result<Output, Error>
+        where
+            Self: super::MItem<B>,
+            LeftIter: MIter<B, Item = Self>,
+            RightIter: MIter<B>,
+            TransformOp: op::BinaryOp2<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
+            Output: super::MItem<B>,
+            ReduceOp: op::BinaryOp1<B, Output>,
+        {
+            let _ = (policy, left, right, transform_op, init, reduce_op);
+            Err(Error::Launch {
+                message: "inner_product is not supported for this iterator shape".to_string(),
+            })
+        }
+
+        fn inner_product_with_left_scalar<
+            LeftIter,
+            RightIter,
+            LeftScalar,
+            TransformOp,
+            ReduceOp,
+            Output,
+        >(
+            policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+            left: LeftIter,
+            right: RightIter,
+            transform_op: TransformOp,
+            init: Output,
+            reduce_op: ReduceOp,
+        ) -> Result<Output, Error>
+        where
+            Self: super::MItem<B>,
+            LeftScalar: super::Scalar<B> + 'static,
+            LeftIter: MIter<B, Item = (LeftScalar,)>,
+            RightIter: MIter<B, Item = Self>,
+            TransformOp: op::BinaryOp2<B, (LeftScalar,), Self, Output = Output>,
+            Output: super::MItem<B>,
+            ReduceOp: op::BinaryOp1<B, Output>,
+        {
+            let _ = (policy, left, right, transform_op, init, reduce_op);
+            Err(Error::Launch {
+                message: "inner_product is not supported for this iterator shape".to_string(),
+            })
+        }
     }
 }
 
@@ -836,21 +1091,12 @@ mod sealed {
 /// implementation layer.
 pub trait Backend: sealed::Backend + Copy + Clone + Default + 'static {}
 
-/// Value that can appear as one logical device item.
-pub trait Value<B: Backend>: sealed::Value {}
-impl<B, T> Value<B> for T
-where
-    B: Backend,
-    T: sealed::Value,
-{
-}
-
 /// Scalar value that can be stored in one device column.
-pub trait Scalar<B: Backend>: Value<B> + sealed::Scalar {}
+pub trait Scalar<B: Backend>: sealed::Value + sealed::Scalar {}
 impl<B, T> Scalar<B> for T
 where
     B: Backend,
-    T: Value<B> + sealed::Scalar,
+    T: sealed::Value + sealed::Scalar,
 {
 }
 
@@ -899,6 +1145,7 @@ impl<B: Backend> Clone for Executor<B> {
 }
 
 impl<B: Backend> Executor<B> {
+    #[cfg(any(feature = "cuda", feature = "hip", feature = "wgpu"))]
     fn from_inner(inner: crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>) -> Self {
         Self {
             inner,
@@ -1093,6 +1340,36 @@ where
     }
 }
 
+/// Single-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA1<A>(pub A);
+
+/// Two-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA2<A, B>(pub A, pub B);
+
+/// Three-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA3<A, B, C>(pub A, pub B, pub C);
+
+impl<A> From<(A,)> for SoA1<A> {
+    fn from(value: (A,)) -> Self {
+        Self(value.0)
+    }
+}
+
+impl<A, B> From<(A, B)> for SoA2<A, B> {
+    fn from(value: (A, B)) -> Self {
+        Self(value.0, value.1)
+    }
+}
+
+impl<A, B, C> From<(A, B, C)> for SoA3<A, B, C> {
+    fn from(value: (A, B, C)) -> Self {
+        Self(value.0, value.1, value.2)
+    }
+}
+
 fn resolve_slice_range<R>(len: usize, range: R) -> (usize, usize)
 where
     R: RangeBounds<usize>,
@@ -1118,18 +1395,22 @@ where
     (start, end - start)
 }
 
-/// Storage materialization for owned outputs.
-pub trait StorageOutput<B: Backend>: sealed::StorageOutputDispatch<B> + Value<B> + Sized {
+/// Logical item handled by massively algorithms.
+///
+/// An `MItem` is one element of an [`MIter`] or [`MVec`]. The current public
+/// model represents items as tuples such as `(T,)`, `(T, U)`, and `(T, U, V)`;
+/// internally those tuples are stored as SoA device columns for backend `B`.
+pub trait MItem<B: Backend>: sealed::MItemDispatch<B> + sealed::Value + Sized + 'static {
     #[doc(hidden)]
     type Inner;
 }
 
 /// Owned massively vector for a logical item.
 pub trait MVec<B: Backend>: Sized {
-    type Item: StorageOutput<B>;
+    type Item: MItem<B>;
 
     #[doc(hidden)]
-    fn from_inner(inner: <Self::Item as StorageOutput<B>>::Inner) -> Self;
+    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self;
 
     /// Returns the logical length.
     fn len(&self) -> usize;
@@ -1140,10 +1421,10 @@ pub trait MVec<B: Backend>: Sized {
     }
 }
 
-fn array_from_inner<B, Item, Output>(inner: <Item as StorageOutput<B>>::Inner) -> Output
+fn array_from_inner<B, Item, Output>(inner: <Item as MItem<B>>::Inner) -> Output
 where
     B: Backend,
-    Item: StorageOutput<B>,
+    Item: MItem<B>,
     Output: MVec<B, Item = Item>,
 {
     <Output as MVec<B>>::from_inner(inner)
@@ -1165,21 +1446,21 @@ where
     )
 }
 
-fn single_column_inner<B, Input, T>(
-    policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-    input: &Input,
-    message: &'static str,
-) -> Result<crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>, Error>
+fn column_view_at<B, Iter, T>(
+    iter: &Iter,
+    index: usize,
+    algorithm: &str,
+) -> Result<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, T>, Error>
 where
     B: Backend,
-    Input: MIter<B, Item = (T,)>,
+    Iter: MIter<B>,
     T: Scalar<B> + 'static,
 {
-    <Input as sealed::MIterDispatch<B>>::column_vec_inner::<T>(input, policy)?.ok_or_else(|| {
-        Error::Launch {
-            message: message.to_string(),
-        }
-    })
+    <Iter as sealed::MIterDispatch<B>>::column_view_by_index_inner::<T>(iter, index)?.ok_or_else(
+        || Error::Launch {
+            message: format!("{algorithm} is not supported for this iterator shape"),
+        },
+    )
 }
 
 fn validate_input<B, Input>(exec: &Executor<B>, input: &Input) -> Result<(), Error>
@@ -1190,19 +1471,217 @@ where
     <Input as sealed::MIterDispatch<B>>::validate_executor(input, exec)
 }
 
+fn validate_slice<B, T>(exec: &Executor<B>, slice: &DeviceSlice<'_, B, T>) -> Result<(), Error>
+where
+    B: Backend,
+{
+    exec.ensure_policy_id(slice.source.inner.policy_id())
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KernelOp<B, Op>(PhantomData<fn() -> (B, Op)>);
+
+impl<B, Op> KernelOp<B, Op> {
+    fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KernelTuple1Op<B, Op>(PhantomData<fn() -> (B, Op)>);
+
+impl<B, Op> KernelTuple1Op<B, Op> {
+    fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KernelTuple1InnerProductOp<B, Op, Output>(PhantomData<fn() -> (B, Op, Output)>);
+
+impl<B, Op, Output> KernelTuple1InnerProductOp<B, Op, Output> {
+    fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+#[cubecl::cube]
+impl<B, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<B, Op>
+where
+    B: Backend,
+    T: Scalar<B>,
+    Op: op::UnaryOp<B, (T,), Output = (T,)>,
+{
+    type Output = T;
+
+    fn apply(input: T) -> T {
+        Op::apply((input,)).0
+    }
+}
+
+#[cubecl::cube]
+impl<B, T, Op> crate::detail::op::kernel::BinaryOp2<T> for KernelTuple1Op<B, Op>
+where
+    B: Backend,
+    T: Scalar<B>,
+    Op: op::BinaryOp1<B, (T,)>,
+{
+    fn apply(lhs: T, rhs: T) -> T {
+        Op::apply((lhs,), (rhs,)).0
+    }
+}
+
+#[cubecl::cube]
+impl<B, T, Op> crate::detail::op::kernel::PredicateOp1<T> for KernelTuple1Op<B, Op>
+where
+    B: Backend,
+    T: Scalar<B>,
+    Op: op::PredicateOp1<B, (T,)>,
+{
+    fn apply(input: T) -> bool {
+        Op::apply((input,))
+    }
+}
+
+#[cubecl::cube]
+impl<B, T, Op> crate::detail::op::kernel::PredicateOp2<T> for KernelTuple1Op<B, Op>
+where
+    B: Backend,
+    T: Scalar<B>,
+    Op: op::PredicateOp2<B, (T,)>,
+{
+    fn apply(lhs: T, rhs: T) -> bool {
+        Op::apply((lhs,), (rhs,))
+    }
+}
+
+#[cubecl::cube]
+impl<B, Left, Right, Op, Output> op::UnaryOp<B, (Left, Right)>
+    for KernelTuple1InnerProductOp<B, Op, Output>
+where
+    B: Backend,
+    Left: Scalar<B>,
+    Right: Scalar<B>,
+    Output: MItem<B>,
+    Output: 'static,
+    Op: op::BinaryOp2<B, (Left,), (Right,), Output = Output>,
+{
+    type Output = Output;
+
+    fn apply(input: (Left, Right)) -> Self::Output {
+        Op::apply((input.0,), (input.1,))
+    }
+}
+
+#[cubecl::cube]
+impl<B, Input, Op> crate::detail::op::kernel::UnaryOp<Input> for KernelOp<B, Op>
+where
+    B: Backend,
+    Input: MItem<B>,
+    Op: op::UnaryOp<B, Input>,
+{
+    type Output = Op::Output;
+
+    fn apply(input: Input) -> Self::Output {
+        Op::apply(input)
+    }
+}
+
+#[cubecl::cube]
+impl<B, Item, Op> crate::detail::op::kernel::BinaryOp2<Item> for KernelOp<B, Op>
+where
+    B: Backend,
+    Item: MItem<B>,
+    Op: op::BinaryOp1<B, Item>,
+{
+    fn apply(lhs: Item, rhs: Item) -> Item {
+        Op::apply(lhs, rhs)
+    }
+}
+
+#[cubecl::cube]
+impl<B, Item, Op> crate::detail::op::kernel::PredicateOp1<Item> for KernelOp<B, Op>
+where
+    B: Backend,
+    Item: MItem<B>,
+    Op: op::PredicateOp1<B, Item>,
+{
+    fn apply(input: Item) -> bool {
+        Op::apply(input)
+    }
+}
+
+#[cubecl::cube]
+impl<B, Item, Op> crate::detail::op::kernel::PredicateOp2<Item> for KernelOp<B, Op>
+where
+    B: Backend,
+    Item: MItem<B>,
+    Op: op::PredicateOp2<B, Item>,
+{
+    fn apply(lhs: Item, rhs: Item) -> bool {
+        Op::apply(lhs, rhs)
+    }
+}
+
 #[doc(hidden)]
 pub struct StencilFlag;
 
 #[cubecl::cube]
-impl op::PredicateOp<(u32,)> for StencilFlag {
+impl<B> op::PredicateOp1<B, (u32,)> for StencilFlag
+where
+    B: Backend,
+{
     fn apply(input: (u32,)) -> bool {
         input.0 > 0
     }
 }
 
-macro_rules! impl_storage_output_tuple {
+macro_rules! inner_product_left_item_body {
+    ($B:ident; ($left_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+        <<RightIter as MIter<$B>>::Item as sealed::MItemDispatch<$B>>::inner_product_with_left_scalar::<
+            LeftIter,
+            RightIter,
+            $left_ty,
+            TransformOp,
+            ReduceOp,
+            Output,
+        >($policy, $left, $right, $transform_op, $init, $reduce_op)
+    }};
+    ($B:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+        let _ = ($policy, $left, $right, $transform_op, $init, $reduce_op);
+        Err(Error::Launch {
+            message: "inner_product is not supported for this iterator shape".to_string(),
+        })
+    }};
+}
+
+macro_rules! inner_product_right_item_body {
+    ($B:ident; ($right_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+        let left = column_view_at::<$B, LeftIter, LeftScalar>(&$left, 0, "inner_product")?;
+        let right = column_view_at::<$B, RightIter, $right_ty>(&$right, 0, "inner_product")?;
+        let transformed = <Output as sealed::MItemDispatch<$B>>::transform_binary(
+            $policy,
+            left,
+            right,
+            KernelTuple1InnerProductOp::<$B, TransformOp, Output>::new(),
+        )?;
+        let _ = $transform_op;
+        <Output as sealed::MItemDispatch<$B>>::reduce_inner($policy, transformed, $init, $reduce_op)
+    }};
+    ($B:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+        let _ = ($policy, $left, $right, $transform_op, $init, $reduce_op);
+        Err(Error::Launch {
+            message: "inner_product is not supported for this iterator shape".to_string(),
+        })
+    }};
+}
+
+macro_rules! impl_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
-        impl<B, $( $ty ),+> StorageOutput<B> for ($( $ty, )+)
+        impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
         where
             B: Backend,
             $( $ty: Scalar<B>, )+
@@ -1217,7 +1696,7 @@ macro_rules! impl_storage_output_tuple {
         {
             type Item = ($( $ty, )+);
 
-            fn from_inner(inner: <Self::Item as StorageOutput<B>>::Inner) -> Self {
+            fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
                 let ($( $var, )+) = inner;
                 ($( DeviceVec::from_inner($var), )+)
             }
@@ -1227,7 +1706,7 @@ macro_rules! impl_storage_output_tuple {
             }
         }
 
-        impl<B, $( $ty ),+> sealed::StorageOutputDispatch<B> for ($( $ty, )+)
+        impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
         where
             B: Backend,
             $( $ty: Scalar<B>, )+
@@ -1239,16 +1718,16 @@ macro_rules! impl_storage_output_tuple {
                     Input,
                 >,
                 op: Op,
-            ) -> Result<<Self as StorageOutput<B>>::Inner, Error>
+            ) -> Result<<Self as MItem<B>>::Inner, Error>
             where
                 Input: Scalar<B>,
-                Op: op::UnaryOp<(Input,), Output = Self>,
+                Op: op::UnaryOp<B, (Input,), Output = Self>,
                 Self: crate::detail::TransformUnaryOutput<
                     <B as sealed::Backend>::Runtime,
                     Input,
-                    Op,
+                    KernelOp<B, Op>,
                 >,
-                <Self as crate::detail::StorageOutput<
+                <Self as crate::detail::MItemStorage<
                     <B as sealed::Backend>::Runtime,
                 >>::Storage: crate::detail::MaterializeOutput<
                     Runtime = <B as sealed::Backend>::Runtime,
@@ -1262,7 +1741,7 @@ macro_rules! impl_storage_output_tuple {
                     <Self as crate::detail::TransformUnaryOutput<
                         <B as sealed::Backend>::Runtime,
                         Input,
-                        Op,
+                        KernelOp<B, Op>,
                     >>::run(policy, input)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
@@ -1278,18 +1757,18 @@ macro_rules! impl_storage_output_tuple {
                     Right,
                 >,
                 op: Op,
-            ) -> Result<<Self as StorageOutput<B>>::Inner, Error>
+            ) -> Result<<Self as MItem<B>>::Inner, Error>
             where
                 Left: Scalar<B>,
                 Right: Scalar<B>,
-                Op: op::UnaryOp<(Left, Right), Output = Self>,
+                Op: op::UnaryOp<B, (Left, Right), Output = Self>,
                 Self: crate::detail::TransformSoA2Output<
                     <B as sealed::Backend>::Runtime,
                     Left,
                     Right,
-                    Op,
+                    KernelOp<B, Op>,
                 >,
-                <Self as crate::detail::StorageOutput<
+                <Self as crate::detail::MItemStorage<
                     <B as sealed::Backend>::Runtime,
                 >>::Storage: crate::detail::MaterializeOutput<
                     Runtime = <B as sealed::Backend>::Runtime,
@@ -1304,7 +1783,7 @@ macro_rules! impl_storage_output_tuple {
                         <B as sealed::Backend>::Runtime,
                         Left,
                         Right,
-                        Op,
+                        KernelOp<B, Op>,
                     >>::run(policy, left, right)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
@@ -1324,20 +1803,20 @@ macro_rules! impl_storage_output_tuple {
                     Third,
                 >,
                 op: Op,
-            ) -> Result<<Self as StorageOutput<B>>::Inner, Error>
+            ) -> Result<<Self as MItem<B>>::Inner, Error>
             where
                 First: Scalar<B>,
                 Second: Scalar<B>,
                 Third: Scalar<B>,
-                Op: op::UnaryOp<(First, Second, Third), Output = Self>,
+                Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
                 Self: crate::detail::TransformSoA3Output<
                     <B as sealed::Backend>::Runtime,
                     First,
                     Second,
                     Third,
-                    Op,
+                    KernelOp<B, Op>,
                 >,
-                <Self as crate::detail::StorageOutput<
+                <Self as crate::detail::MItemStorage<
                     <B as sealed::Backend>::Runtime,
                 >>::Storage: crate::detail::MaterializeOutput<
                     Runtime = <B as sealed::Backend>::Runtime,
@@ -1353,26 +1832,225 @@ macro_rules! impl_storage_output_tuple {
                         First,
                         Second,
                         Third,
-                        Op,
+                        KernelOp<B, Op>,
                     >>::run(
                         policy,
                         first,
                         second,
                         third,
-                    )?;
+                )?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
+            fn reduce_inner<Op>(
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                input: <Self as MItem<B>>::Inner,
+                init: Self,
+                op: Op,
+            ) -> Result<Self, Error>
+            where
+                Op: op::BinaryOp1<B, Self>,
+            {
+                let _ = op;
+                crate::detail::reduce(policy, input, init, KernelOp::<B, Op>::new())
+            }
+
+            fn inner_product_with_right_item<
+                LeftIter,
+                RightIter,
+                TransformOp,
+                ReduceOp,
+                Output,
+            >(
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                left: LeftIter,
+                right: RightIter,
+                transform_op: TransformOp,
+                init: Output,
+                reduce_op: ReduceOp,
+            ) -> Result<Output, Error>
+            where
+                LeftIter: MIter<B, Item = Self>,
+                RightIter: MIter<B>,
+                TransformOp:
+                    op::BinaryOp2<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
+                Output: MItem<B>,
+                ReduceOp: op::BinaryOp1<B, Output>,
+            {
+                inner_product_left_item_body!(
+                    B;
+                    ($( $ty ),+);
+                    policy,
+                    left,
+                    right,
+                    transform_op,
+                    init,
+                    reduce_op
+                )
+            }
+
+            fn inner_product_with_left_scalar<
+                LeftIter,
+                RightIter,
+                LeftScalar,
+                TransformOp,
+                ReduceOp,
+                Output,
+            >(
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                left: LeftIter,
+                right: RightIter,
+                transform_op: TransformOp,
+                init: Output,
+                reduce_op: ReduceOp,
+            ) -> Result<Output, Error>
+            where
+                LeftScalar: Scalar<B> + 'static,
+                LeftIter: MIter<B, Item = (LeftScalar,)>,
+                RightIter: MIter<B, Item = Self>,
+                TransformOp: op::BinaryOp2<B, (LeftScalar,), Self, Output = Output>,
+                Output: MItem<B>,
+                ReduceOp: op::BinaryOp1<B, Output>,
+            {
+                inner_product_right_item_body!(
+                    B;
+                    ($( $ty ),+);
+                    policy,
+                    left,
+                    right,
+                    transform_op,
+                    init,
+                    reduce_op
+                )
             }
         }
     };
 }
 
-impl_storage_output_tuple!(A: a);
-impl_storage_output_tuple!(A: a, B0: b);
-impl_storage_output_tuple!(A: a, B0: b, C: c);
+impl_mitem_tuple!(A: a);
+impl_mitem_tuple!(A: a, B0: b);
+impl_mitem_tuple!(A: a, B0: b, C: c);
+
+macro_rules! impl_wide_mitem_tuple {
+    ($( $ty:ident : $var:ident ),+) => {
+        impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
+        where
+            B: Backend,
+            $( $ty: Scalar<B>, )+
+        {
+            type Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+);
+        }
+
+        impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
+        where
+            B: Backend,
+            $( $ty: Scalar<B>, )+
+        {
+        }
+
+        impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
+        where
+            B: Backend,
+            $( $ty: Scalar<B>, )+
+        {
+            type Item = ($( $ty, )+);
+
+            fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+                let ($( $var, )+) = inner;
+                ($( DeviceVec::from_inner($var), )+)
+            }
+
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+        }
+    };
+}
+
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j);
+impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k);
+impl_wide_mitem_tuple!(
+    A: a,
+    B0: b,
+    C: c,
+    D: d,
+    E: e,
+    F: f,
+    G: g,
+    H: h,
+    I: i,
+    J: j,
+    K: k,
+    L: l
+);
+
+impl<B, T> MVec<B> for SoA1<DeviceVec<B, T>>
+where
+    B: Backend,
+    T: Scalar<B>,
+{
+    type Item = (T,);
+
+    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+        Self(DeviceVec::from_inner(inner.0))
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<B, A, C> MVec<B> for SoA2<DeviceVec<B, A>, DeviceVec<B, C>>
+where
+    B: Backend,
+    A: Scalar<B>,
+    C: Scalar<B>,
+{
+    type Item = (A, C);
+
+    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+        Self(
+            DeviceVec::from_inner(inner.0),
+            DeviceVec::from_inner(inner.1),
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl<B, A, C, D> MVec<B> for SoA3<DeviceVec<B, A>, DeviceVec<B, C>, DeviceVec<B, D>>
+where
+    B: Backend,
+    A: Scalar<B>,
+    C: Scalar<B>,
+    D: Scalar<B>,
+{
+    type Item = (A, C, D);
+
+    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+        Self(
+            DeviceVec::from_inner(inner.0),
+            DeviceVec::from_inner(inner.1),
+            DeviceVec::from_inner(inner.2),
+        )
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+}
 
 /// Massively iterator.
 pub trait MIter<B: Backend>: sealed::MIterDispatch<B> + Sized {
-    type Item: StorageOutput<B>;
+    type Item: MItem<B>;
 
     #[doc(hidden)]
     type Inner;
@@ -1389,11 +2067,11 @@ pub trait MIter<B: Backend>: sealed::MIterDispatch<B> + Sized {
     }
 }
 
-impl<'a, B, T> MIter<B> for (DeviceSlice<'a, B, T>,)
+impl<'a, B, T> MIter<B> for SoA1<DeviceSlice<'a, B, T>>
 where
     B: Backend,
     T: Scalar<B> + 'static,
-    (T,): StorageOutput<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
+    (T,): MItem<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
 {
     type Item = (T,);
     type Inner = (crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, T>,);
@@ -1411,11 +2089,11 @@ where
     }
 }
 
-impl<'a, B, T> sealed::MIterDispatch<B> for (DeviceSlice<'a, B, T>,)
+impl<'a, B, T> sealed::MIterDispatch<B> for SoA1<DeviceSlice<'a, B, T>>
 where
     B: Backend,
     T: Scalar<B> + 'static,
-    (T,): StorageOutput<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
+    (T,): MItem<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
         exec.ensure_policy_id(self.0.source.inner.policy_id())
@@ -1448,10 +2126,10 @@ where
         invert: bool,
     ) -> Result<crate::detail::api::PrecomputedSelection<<B as sealed::Backend>::Runtime>, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
         let stencil = self.into_inner();
-        crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, Pred>(
+        crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, KernelOp<B, Pred>>(
             policy, &stencil, invert,
         )
     }
@@ -1462,12 +2140,12 @@ where
         op: Op,
     ) -> Result<Output, Error>
     where
-        Op: op::UnaryOp<<Self as MIter<B>>::Item, Output = Y>,
-        Y: StorageOutput<B>,
+        Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Y>,
+        Y: MItem<B>,
         Output: MVec<B, Item = Y>,
     {
         let input = self.into_inner().0;
-        let inner = <Y as sealed::StorageOutputDispatch<B>>::transform_unary(policy, input, op)?;
+        let inner = <Y as sealed::MItemDispatch<B>>::transform_unary(policy, input, op)?;
         Ok(array_from_inner::<B, Y, Output>(inner))
     }
 
@@ -1485,13 +2163,13 @@ where
     fn sort_dispatch<Less, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        less: Less,
+        _less: Less,
     ) -> Result<Output, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::sort(policy, self.into_inner(), less)?;
+        let inner = crate::detail::sort(policy, self.into_inner(), KernelOp::<B, Less>::new())?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1499,124 +2177,279 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        less: Less,
+        _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         K: Scalar<B> + 'static,
-        Less: op::BinaryPredicateOp<(K,)>,
+        Less: op::PredicateOp2<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let (key_inner, value_inner) =
-            crate::detail::sort_by_key(policy, (keys,), self.into_inner(), less)?;
+        let (key_inner, value_inner) = crate::detail::sort_by_key(
+            policy,
+            (keys,),
+            self.into_inner(),
+            KernelOp::<B, Less>::new(),
+        )?;
         Ok((
             array_from_inner::<B, (K,), KeyOutput>(key_inner),
             array_from_inner::<B, (T,), ValueOutput>(value_inner),
         ))
+    }
+
+    fn sort_by_key_dispatch<Values, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        values: Values,
+        less: Less,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        Values: MIter<B>,
+        <Self as MIter<B>>::Item: sealed::Value,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+        ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
+    {
+        let keys = self
+            .column_vec_inner::<T>(policy)?
+            .ok_or_else(|| Error::Launch {
+                message: "sort_by_key keys must be backed by one DeviceVec or DeviceSlice"
+                    .to_string(),
+            })?;
+        <Values as sealed::MIterDispatch<B>>::sort_by_single_key_dispatch(
+            values, policy, &keys, less,
+        )
     }
 
     fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        eq: Eq,
+        _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         K: Scalar<B> + 'static,
-        Eq: op::BinaryPredicateOp<(K,)>,
+        Eq: op::PredicateOp2<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let (key_inner, value_inner) =
-            crate::detail::unique_by_key(policy, (keys,), self.into_inner(), eq)?;
+        let (key_inner, value_inner) = crate::detail::unique_by_key(
+            policy,
+            (keys,),
+            self.into_inner(),
+            KernelOp::<B, Eq>::new(),
+        )?;
         Ok((
             array_from_inner::<B, (K,), KeyOutput>(key_inner),
             array_from_inner::<B, (T,), ValueOutput>(value_inner),
         ))
+    }
+
+    fn unique_by_key_dispatch<Values, Eq, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        values: Values,
+        eq: Eq,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        Values: MIter<B>,
+        <Self as MIter<B>>::Item: sealed::Value,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+        ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
+    {
+        let keys = self
+            .column_vec_inner::<T>(policy)?
+            .ok_or_else(|| Error::Launch {
+                message: "unique_by_key keys must be backed by one DeviceVec or DeviceSlice"
+                    .to_string(),
+            })?;
+        <Values as sealed::MIterDispatch<B>>::unique_by_single_key_dispatch(
+            values, policy, &keys, eq,
+        )
     }
 
     fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
+        _key_eq: KeyEq,
+        _op: Op,
+    ) -> Result<Output, Error>
+    where
+        K: Scalar<B> + 'static,
+        KeyEq: op::PredicateOp2<B, (K,)>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+    {
+        let inner = crate::detail::inclusive_scan_by_key(
+            policy,
+            (keys,),
+            self.into_inner(),
+            KernelOp::<B, KeyEq>::new(),
+            KernelOp::<B, Op>::new(),
+        )?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        values: Values,
         key_eq: KeyEq,
         op: Op,
     ) -> Result<Output, Error>
     where
-        K: Scalar<B> + 'static,
-        KeyEq: op::BinaryPredicateOp<(K,)>,
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Values: MIter<B>,
+        <Self as MIter<B>>::Item: sealed::Value,
+        KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Values as MIter<B>>::Item>,
     {
-        let inner =
-            crate::detail::inclusive_scan_by_key(policy, (keys,), self.into_inner(), key_eq, op)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
+        let keys = self
+            .column_vec_inner::<T>(policy)?
+            .ok_or_else(|| Error::Launch {
+                message:
+                    "inclusive_scan_by_key keys must be backed by one DeviceVec or DeviceSlice"
+                        .to_string(),
+            })?;
+        <Values as sealed::MIterDispatch<B>>::inclusive_scan_by_single_key_dispatch(
+            values, policy, &keys, key_eq, op,
+        )
     }
 
     fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        key_eq: KeyEq,
+        _key_eq: KeyEq,
         init: <Self as MIter<B>>::Item,
-        op: Op,
+        _op: Op,
     ) -> Result<Output, Error>
     where
         K: Scalar<B> + 'static,
-        KeyEq: op::BinaryPredicateOp<(K,)>,
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+        KeyEq: op::PredicateOp2<B, (K,)>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
         let inner = crate::detail::exclusive_scan_by_key(
             policy,
             (keys,),
             self.into_inner(),
-            key_eq,
+            KernelOp::<B, KeyEq>::new(),
             init,
-            op,
+            KernelOp::<B, Op>::new(),
         )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        values: Values,
+        key_eq: KeyEq,
+        init: <Values as MIter<B>>::Item,
+        op: Op,
+    ) -> Result<Output, Error>
+    where
+        Values: MIter<B>,
+        <Self as MIter<B>>::Item: sealed::Value,
+        KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Values as MIter<B>>::Item>,
+    {
+        let keys = self
+            .column_vec_inner::<T>(policy)?
+            .ok_or_else(|| Error::Launch {
+                message:
+                    "exclusive_scan_by_key keys must be backed by one DeviceVec or DeviceSlice"
+                        .to_string(),
+            })?;
+        <Values as sealed::MIterDispatch<B>>::exclusive_scan_by_single_key_dispatch(
+            values, policy, &keys, key_eq, init, op,
+        )
     }
 
     fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        key_eq: KeyEq,
+        _key_eq: KeyEq,
         init: <Self as MIter<B>>::Item,
-        op: Op,
+        _op: Op,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         K: Scalar<B> + 'static,
-        KeyEq: op::BinaryPredicateOp<(K,)>,
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+        KeyEq: op::PredicateOp2<B, (K,)>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let (key_inner, value_inner) =
-            crate::detail::reduce_by_key(policy, (keys,), self.into_inner(), key_eq, init, op)?;
+        let (key_inner, value_inner) = crate::detail::reduce_by_key(
+            policy,
+            (keys,),
+            self.into_inner(),
+            KernelOp::<B, KeyEq>::new(),
+            init,
+            KernelOp::<B, Op>::new(),
+        )?;
         Ok((
             array_from_inner::<B, (K,), KeyOutput>(key_inner),
             array_from_inner::<B, (T,), ValueOutput>(value_inner),
         ))
     }
 
-    fn merge_by_single_key_same_dispatch<K, Less, KeyOutput, ValueOutput>(
+    fn reduce_by_key_dispatch<Values, KeyEq, Op, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        values: Values,
+        key_eq: KeyEq,
+        init: <Values as MIter<B>>::Item,
+        op: Op,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        Values: MIter<B>,
+        <Self as MIter<B>>::Item: sealed::Value,
+        KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+        KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+        ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
+    {
+        let keys = self
+            .column_vec_inner::<T>(policy)?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key keys must be backed by one DeviceVec or DeviceSlice"
+                    .to_string(),
+            })?;
+        <Values as sealed::MIterDispatch<B>>::reduce_by_single_key_dispatch(
+            values, policy, &keys, key_eq, init, op,
+        )
+    }
+
+    fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         left_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
         right_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-        right_values: Self,
+        right_values: RightValues,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
+        RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
         K: Scalar<B> + 'static,
-        Less: op::BinaryPredicateOp<(K,)>,
+        Less: op::PredicateOp2<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
         let left_value = self.into_inner().0;
-        let right_value = right_values.into_inner().0;
+        let right_value =
+            <RightValues as sealed::MIterDispatch<B>>::column_view_by_index_inner::<T>(
+                &right_values,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key right values must match left value shape".to_string(),
+            })?;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             crate::detail::device::SoAView1 { source: left_keys },
@@ -1625,12 +2458,52 @@ where
             crate::detail::device::SoAView1 {
                 source: right_value,
             },
-            crate::detail::api::Tuple1Less::<Less>::default(),
+            KernelTuple1Op::<B, Less>::new(),
         )?;
         Ok((
             array_from_inner::<B, (K,), KeyOutput>(key_inner),
             array_from_inner::<B, (T,), ValueOutput>(value_inner),
         ))
+    }
+
+    fn merge_by_key_dispatch<RightKeys, LeftValues, RightValues, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right_keys: RightKeys,
+        left_values: LeftValues,
+        right_values: RightValues,
+        less: Less,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        RightKeys: MIter<B, Item = <Self as MIter<B>>::Item>,
+        LeftValues: MIter<B>,
+        RightValues: MIter<B, Item = <LeftValues as MIter<B>>::Item>,
+        <Self as MIter<B>>::Item: sealed::Value,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
+        ValueOutput: MVec<B, Item = <LeftValues as MIter<B>>::Item>,
+    {
+        let left_keys = self
+            .column_vec_inner::<T>(policy)?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key left keys must be backed by one DeviceVec or DeviceSlice"
+                    .to_string(),
+            })?;
+        let right_keys =
+            <RightKeys as sealed::MIterDispatch<B>>::column_vec_inner::<T>(&right_keys, policy)?
+                .ok_or_else(|| Error::Launch {
+                    message:
+                        "merge_by_key right keys must be backed by one DeviceVec or DeviceSlice"
+                            .to_string(),
+                })?;
+        <LeftValues as sealed::MIterDispatch<B>>::merge_by_single_key_same_dispatch(
+            left_values,
+            policy,
+            &left_keys,
+            &right_keys,
+            right_values,
+            less,
+        )
     }
 
     fn gather_dispatch<Indices, Output>(
@@ -1651,24 +2524,25 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         init: <Self as MIter<B>>::Item,
-        op: Op,
+        _op: Op,
     ) -> Result<<Self as MIter<B>>::Item, Error>
     where
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::reduce(policy, self.into_inner(), init, op)
+        crate::detail::reduce(policy, self.into_inner(), init, KernelOp::<B, Op>::new())
     }
 
     fn inclusive_scan_dispatch<Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        op: Op,
+        _op: Op,
     ) -> Result<Output, Error>
     where
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::inclusive_scan(policy, self.into_inner(), op)?;
+        let inner =
+            crate::detail::inclusive_scan(policy, self.into_inner(), KernelOp::<B, Op>::new())?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1676,26 +2550,35 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         init: <Self as MIter<B>>::Item,
-        op: Op,
+        _op: Op,
     ) -> Result<Output, Error>
     where
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::exclusive_scan(policy, self.into_inner(), init, op)?;
+        let inner = crate::detail::exclusive_scan(
+            policy,
+            self.into_inner(),
+            init,
+            KernelOp::<B, Op>::new(),
+        )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn adjacent_difference_dispatch<Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        op: Op,
+        _op: Op,
     ) -> Result<Output, Error>
     where
-        Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::adjacent_difference(policy, self.into_inner(), op)?;
+        let inner = crate::detail::adjacent_difference(
+            policy,
+            self.into_inner(),
+            KernelOp::<B, Op>::new(),
+        )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -1711,88 +2594,95 @@ where
         let stencil = <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<
             StencilFlag,
         >(&stencil, policy, false)?;
-        let inner = crate::detail::copy_if(policy, self.into_inner(), stencil, StencilFlag)?;
+        let inner = crate::detail::copy_if(
+            policy,
+            self.into_inner(),
+            stencil,
+            KernelOp::<B, StencilFlag>::new(),
+        )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn remove_if_dispatch<Pred, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<Output, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::remove_if(policy, self.into_inner(), pred)?;
+        let inner =
+            crate::detail::remove_if(policy, self.into_inner(), KernelOp::<B, Pred>::new())?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn count_if_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<usize, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::count_if(policy, self.into_inner(), pred)
+        crate::detail::count_if(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn all_of_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<bool, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::all_of(policy, self.into_inner(), pred)
+        crate::detail::all_of(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn any_of_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<bool, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::any_of(policy, self.into_inner(), pred)
+        crate::detail::any_of(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn none_of_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<bool, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::none_of(policy, self.into_inner(), pred)
+        crate::detail::none_of(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn find_if_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<Option<usize>, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::find_if(policy, self.into_inner(), pred)
+        crate::detail::find_if(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn partition_dispatch<Pred, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<(Output, Output), Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let (matching, failing) = crate::detail::partition(policy, self.into_inner(), pred)?;
+        let (matching, failing) =
+            crate::detail::partition(policy, self.into_inner(), KernelOp::<B, Pred>::new())?;
         Ok((
             array_from_inner::<B, (T,), Output>(matching),
             array_from_inner::<B, (T,), Output>(failing),
@@ -1802,12 +2692,12 @@ where
     fn is_partitioned_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<bool, Error>
     where
-        Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::is_partitioned(policy, self.into_inner(), pred)
+        crate::detail::is_partitioned(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn replace_if_dispatch<Stencil, Output>(
@@ -1828,7 +2718,7 @@ where
             self.into_inner(),
             replacement,
             stencil,
-            StencilFlag,
+            KernelOp::<B, StencilFlag>::new(),
         )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
@@ -1836,116 +2726,116 @@ where
     fn unique_dispatch<Pred, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<Output, Error>
     where
-        Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::unique(policy, self.into_inner(), pred)?;
+        let inner = crate::detail::unique(policy, self.into_inner(), KernelOp::<B, Pred>::new())?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
     fn min_element_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        less: Less,
+        _less: Less,
     ) -> Result<Option<usize>, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::min_element(policy, self.into_inner(), less)
+        crate::detail::min_element(policy, self.into_inner(), KernelOp::<B, Less>::new())
     }
 
     fn max_element_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        less: Less,
+        _less: Less,
     ) -> Result<Option<usize>, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::max_element(policy, self.into_inner(), less)
+        crate::detail::max_element(policy, self.into_inner(), KernelOp::<B, Less>::new())
     }
 
     fn minmax_element_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        less: Less,
+        _less: Less,
     ) -> Result<Option<(usize, usize)>, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::minmax_element(policy, self.into_inner(), less)
+        crate::detail::minmax_element(policy, self.into_inner(), KernelOp::<B, Less>::new())
     }
 
     fn adjacent_find_dispatch<Pred>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        pred: Pred,
+        _pred: Pred,
     ) -> Result<Option<usize>, Error>
     where
-        Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::adjacent_find(policy, self.into_inner(), pred)
+        crate::detail::adjacent_find(policy, self.into_inner(), KernelOp::<B, Pred>::new())
     }
 
     fn lower_bound_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         value: <Self as MIter<B>>::Item,
-        less: Less,
+        _less: Less,
     ) -> Result<usize, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::lower_bound(policy, self.into_inner(), value, less)
+        crate::detail::lower_bound(policy, self.into_inner(), value, KernelOp::<B, Less>::new())
     }
 
     fn upper_bound_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         value: <Self as MIter<B>>::Item,
-        less: Less,
+        _less: Less,
     ) -> Result<usize, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::upper_bound(policy, self.into_inner(), value, less)
+        crate::detail::upper_bound(policy, self.into_inner(), value, KernelOp::<B, Less>::new())
     }
 
     fn equal_range_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         value: <Self as MIter<B>>::Item,
-        less: Less,
+        _less: Less,
     ) -> Result<(usize, usize), Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::equal_range(policy, self.into_inner(), value, less)
+        crate::detail::equal_range(policy, self.into_inner(), value, KernelOp::<B, Less>::new())
     }
 
     fn is_sorted_until_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        less: Less,
+        _less: Less,
     ) -> Result<usize, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::is_sorted_until(policy, self.into_inner(), less)
+        crate::detail::is_sorted_until(policy, self.into_inner(), KernelOp::<B, Less>::new())
     }
 
     fn is_sorted_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        less: Less,
+        _less: Less,
     ) -> Result<bool, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::is_sorted(policy, self.into_inner(), less)
+        crate::detail::is_sorted(policy, self.into_inner(), KernelOp::<B, Less>::new())
     }
 
     fn gather_if_dispatch<Indices, Stencil, Output>(
@@ -1970,7 +2860,7 @@ where
             (&indices,),
             stencil,
             default,
-            StencilFlag,
+            KernelOp::<B, StencilFlag>::new(),
         )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
@@ -2015,8 +2905,144 @@ where
             len,
             default.0,
             stencil,
-            StencilFlag,
+            KernelOp::<B, StencilFlag>::new(),
         )?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn equal_dispatch<Right, Eq>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _eq: Eq,
+    ) -> Result<bool, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "equal")?;
+        crate::detail::equal(policy, (left,), (right,), KernelOp::<B, Eq>::new())
+    }
+
+    fn mismatch_dispatch<Right, Eq>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _eq: Eq,
+    ) -> Result<Option<usize>, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "mismatch")?;
+        crate::detail::mismatch(policy, (left,), (right,), KernelOp::<B, Eq>::new())
+    }
+
+    fn find_first_of_dispatch<Needles, Eq>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        needles: Needles,
+        _eq: Eq,
+    ) -> Result<Option<usize>, Error>
+    where
+        Needles: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (input,) = self.into_inner();
+        let needles = column_view_at::<B, Needles, T>(&needles, 0, "find_first_of")?;
+        crate::detail::find_first_of(policy, (input,), (needles,), KernelOp::<B, Eq>::new())
+    }
+
+    fn lexicographical_compare_dispatch<Right, Less>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _less: Less,
+    ) -> Result<bool, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "lexicographical_compare")?;
+        crate::detail::lexicographical_compare(
+            policy,
+            (left,),
+            (right,),
+            KernelOp::<B, Less>::new(),
+        )
+    }
+
+    fn merge_dispatch<Right, Output, Less>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _less: Less,
+    ) -> Result<Output, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "merge")?;
+        let inner = crate::detail::merge(policy, (left,), (right,), KernelOp::<B, Less>::new())?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn set_union_dispatch<Right, Output, Less>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _less: Less,
+    ) -> Result<Output, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "set_union")?;
+        let inner =
+            crate::detail::set_union(policy, (left,), (right,), KernelOp::<B, Less>::new())?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn set_intersection_dispatch<Right, Output, Less>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _less: Less,
+    ) -> Result<Output, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "set_intersection")?;
+        let inner =
+            crate::detail::set_intersection(policy, (left,), (right,), KernelOp::<B, Less>::new())?;
+        Ok(array_from_inner::<B, (T,), Output>(inner))
+    }
+
+    fn set_difference_dispatch<Right, Output, Less>(
+        self,
+        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        right: Right,
+        _less: Less,
+    ) -> Result<Output, Error>
+    where
+        Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+    {
+        let (left,) = self.into_inner();
+        let right = column_view_at::<B, Right, T>(&right, 0, "set_difference")?;
+        let inner =
+            crate::detail::set_difference(policy, (left,), (right,), KernelOp::<B, Less>::new())?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -2024,61 +3050,86 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        eq: Eq,
+        _eq: Eq,
     ) -> Result<bool, Error>
     where
-        Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::equal(policy, self.into_inner(), right.into_inner(), eq)
+        crate::detail::equal(
+            policy,
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Eq>::new(),
+        )
     }
 
     fn mismatch_same_dispatch<Eq>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        eq: Eq,
+        _eq: Eq,
     ) -> Result<Option<usize>, Error>
     where
-        Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::mismatch(policy, self.into_inner(), right.into_inner(), eq)
+        crate::detail::mismatch(
+            policy,
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Eq>::new(),
+        )
     }
 
     fn find_first_of_same_dispatch<Eq>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         needles: Self,
-        eq: Eq,
+        _eq: Eq,
     ) -> Result<Option<usize>, Error>
     where
-        Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::find_first_of(policy, self.into_inner(), needles.into_inner(), eq)
+        crate::detail::find_first_of(
+            policy,
+            self.into_inner(),
+            needles.into_inner(),
+            KernelOp::<B, Eq>::new(),
+        )
     }
 
     fn lexicographical_compare_same_dispatch<Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        less: Less,
+        _less: Less,
     ) -> Result<bool, Error>
     where
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        crate::detail::lexicographical_compare(policy, self.into_inner(), right.into_inner(), less)
+        crate::detail::lexicographical_compare(
+            policy,
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Less>::new(),
+        )
     }
 
     fn merge_same_dispatch<Output, Less>(
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        less: Less,
+        _less: Less,
     ) -> Result<Output, Error>
     where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::merge(policy, self.into_inner(), right.into_inner(), less)?;
+        let inner = crate::detail::merge(
+            policy,
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Less>::new(),
+        )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -2086,13 +3137,18 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        less: Less,
+        _less: Less,
     ) -> Result<Output, Error>
     where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        let inner = crate::detail::set_union(policy, self.into_inner(), right.into_inner(), less)?;
+        let inner = crate::detail::set_union(
+            policy,
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Less>::new(),
+        )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -2100,14 +3156,18 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        less: Less,
+        _less: Less,
     ) -> Result<Output, Error>
     where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        let inner =
-            crate::detail::set_intersection(policy, self.into_inner(), right.into_inner(), less)?;
+        let inner = crate::detail::set_intersection(
+            policy,
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Less>::new(),
+        )?;
         Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 
@@ -2115,40 +3175,19 @@ where
         self,
         policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
         right: Self,
-        less: Less,
+        _less: Less,
     ) -> Result<Output, Error>
     where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
     {
-        let inner =
-            crate::detail::set_difference(policy, self.into_inner(), right.into_inner(), less)?;
-        Ok(array_from_inner::<B, (T,), Output>(inner))
-    }
-
-    fn inner_product_same_dispatch<TransformOp, ReduceOp>(
-        self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        right: Self,
-        _transform_op: TransformOp,
-        init: <Self as MIter<B>>::Item,
-        _reduce_op: ReduceOp,
-    ) -> Result<<Self as MIter<B>>::Item, Error>
-    where
-        TransformOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-        ReduceOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-    {
-        let (left,) = self.into_inner();
-        let (right,) = right.into_inner();
-        let value = crate::detail::inner_product(
+        let inner = crate::detail::set_difference(
             policy,
-            left,
-            right,
-            crate::detail::api::Tuple1BinaryOp::<TransformOp>::default(),
-            init.0,
-            crate::detail::api::Tuple1BinaryOp::<ReduceOp>::default(),
+            self.into_inner(),
+            right.into_inner(),
+            KernelOp::<B, Less>::new(),
         )?;
-        Ok((value,))
+        Ok(array_from_inner::<B, (T,), Output>(inner))
     }
 }
 
@@ -2169,13 +3208,13 @@ macro_rules! impl_miter_view {
     };
 }
 
-macro_rules! impl_miter_slice_tuple {
-    ($( $ty:ident : $idx:tt : $tmp:ident ),+ => $transform:ident) => {
-        impl<'a, B, $( $ty ),+> MIter<B> for ($( DeviceSlice<'a, B, $ty>, )+)
+macro_rules! impl_miter_soa {
+    ($name:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+ => $transform:ident) => {
+        impl<'a, B, $( $ty ),+> MIter<B> for $name<$( DeviceSlice<'a, B, $ty> ),+>
         where
             B: Backend,
             $( $ty: Scalar<B> + 'static, )+
-            ($( $ty, )+): StorageOutput<
+            ($( $ty, )+): MItem<
                 B,
                 Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
             >,
@@ -2198,11 +3237,11 @@ macro_rules! impl_miter_slice_tuple {
             }
         }
 
-        impl<'a, B, $( $ty ),+> sealed::MIterDispatch<B> for ($( DeviceSlice<'a, B, $ty>, )+)
+        impl<'a, B, $( $ty ),+> sealed::MIterDispatch<B> for $name<$( DeviceSlice<'a, B, $ty> ),+>
         where
             B: Backend,
             $( $ty: Scalar<B> + 'static, )+
-            ($( $ty, )+): StorageOutput<
+            ($( $ty, )+): MItem<
                 B,
                 Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
             >,
@@ -2214,17 +3253,47 @@ macro_rules! impl_miter_slice_tuple {
                 Ok(())
             }
 
+            fn column_view_by_index_inner<T: 'static>(
+                &self,
+                index: usize,
+            ) -> Result<
+                Option<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, T>>,
+                Error,
+            >
+            where
+                T: Scalar<B>,
+            {
+                $(
+                    if index == $idx {
+                        let source = self.$idx.source as &dyn Any;
+                        let source = match source.downcast_ref::<DeviceVec<B, T>>() {
+                            Some(source) => source,
+                            None => return Ok(None),
+                        };
+                        return Ok(Some(crate::detail::device::DeviceColumnView::from_slice(
+                            &source.inner,
+                            self.$idx.offset,
+                            self.$idx.len,
+                        )));
+                    }
+                )+
+                Ok(None)
+            }
+
             fn selection_stencil_dispatch<Pred>(
                 &self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 invert: bool,
             ) -> Result<crate::detail::api::PrecomputedSelection<<B as sealed::Backend>::Runtime>, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let stencil = self.into_inner();
                 let stencil = impl_miter_view!(stencil; $( $idx ),+);
-                crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, Pred>(
+                crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<
+                    _,
+                    KernelOp<B, Pred>,
+                >(
                     policy,
                     &stencil,
                     invert,
@@ -2237,12 +3306,12 @@ macro_rules! impl_miter_slice_tuple {
                 op: Op,
             ) -> Result<Output, Error>
             where
-                Op: op::UnaryOp<<Self as MIter<B>>::Item, Output = Y>,
-                Y: StorageOutput<B>,
+                Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Y>,
+                Y: MItem<B>,
                 Output: MVec<B, Item = Y>,
             {
                 let input = self.into_inner();
-                let inner = <Y as sealed::StorageOutputDispatch<B>>::$transform(
+                let inner = <Y as sealed::MItemDispatch<B>>::$transform(
                     policy,
                     $( input.$idx, )+
                     op,
@@ -2265,14 +3334,14 @@ macro_rules! impl_miter_slice_tuple {
             fn sort_dispatch<Less, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                let inner = crate::detail::sort(policy, impl_miter_view!(input; $( $idx ),+), less)?;
+                let inner = crate::detail::sort(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
@@ -2280,17 +3349,17 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-                less: Less,
+                _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 K: Scalar<B> + 'static,
-                Less: op::BinaryPredicateOp<(K,)>,
+                Less: op::PredicateOp2<B, (K,)>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
                 let values = impl_miter_view!(values; $( $idx ),+);
-                let (key_inner, value_inner) = crate::detail::sort_by_key(policy, (keys,), (values,), less)?;
+                let (key_inner, value_inner) = crate::detail::sort_by_key(policy, (keys,), (values,), KernelOp::<B, Less>::new())?;
                 Ok((
                     array_from_inner::<B, (K,), KeyOutput>(key_inner),
                     array_from_inner::<B, ($( $ty, )+), ValueOutput>(value_inner),
@@ -2301,18 +3370,18 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-                eq: Eq,
+                _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 K: Scalar<B> + 'static,
-                Eq: op::BinaryPredicateOp<(K,)>,
+                Eq: op::PredicateOp2<B, (K,)>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
                 let values = impl_miter_view!(values; $( $idx ),+);
                 let (key_inner, value_inner) =
-                    crate::detail::unique_by_key(policy, (keys,), (values,), eq)?;
+                    crate::detail::unique_by_key(policy, (keys,), (values,), KernelOp::<B, Eq>::new())?;
                 Ok((
                     array_from_inner::<B, (K,), KeyOutput>(key_inner),
                     array_from_inner::<B, ($( $ty, )+), ValueOutput>(value_inner),
@@ -2324,12 +3393,12 @@ macro_rules! impl_miter_slice_tuple {
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
                 _key_eq: KeyEq,
-                op: Op,
+                _op: Op,
             ) -> Result<Output, Error>
             where
                 K: Scalar<B> + 'static,
-                KeyEq: op::BinaryPredicateOp<(K,)>,
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                KeyEq: op::PredicateOp2<B, (K,)>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
@@ -2338,8 +3407,8 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     keys,
                     values,
-                    crate::detail::api::Tuple1Less::<KeyEq>::default(),
-                    op,
+                    KernelTuple1Op::<B, KeyEq>::new(),
+                    KernelOp::<B, Op>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2350,12 +3419,12 @@ macro_rules! impl_miter_slice_tuple {
                 keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
                 _key_eq: KeyEq,
                 init: <Self as MIter<B>>::Item,
-                op: Op,
+                _op: Op,
             ) -> Result<Output, Error>
             where
                 K: Scalar<B> + 'static,
-                KeyEq: op::BinaryPredicateOp<(K,)>,
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                KeyEq: op::PredicateOp2<B, (K,)>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let values = self.into_inner();
@@ -2364,9 +3433,9 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     keys,
                     values,
-                    crate::detail::api::Tuple1Less::<KeyEq>::default(),
+                    KernelTuple1Op::<B, KeyEq>::new(),
                     init,
-                    op,
+                    KernelOp::<B, Op>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2377,12 +3446,12 @@ macro_rules! impl_miter_slice_tuple {
                 keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
                 _key_eq: KeyEq,
                 init: <Self as MIter<B>>::Item,
-                op: Op,
+                _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 K: Scalar<B> + 'static,
-                KeyEq: op::BinaryPredicateOp<(K,)>,
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                KeyEq: op::PredicateOp2<B, (K,)>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
@@ -2392,9 +3461,9 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     keys,
                     values,
-                    crate::detail::api::Tuple1Less::<KeyEq>::default(),
+                    KernelTuple1Op::<B, KeyEq>::new(),
                     init,
-                    op,
+                    KernelOp::<B, Op>::new(),
                 )?;
                 Ok((
                     array_from_inner::<B, (K,), KeyOutput>(key_inner),
@@ -2402,29 +3471,38 @@ macro_rules! impl_miter_slice_tuple {
                 ))
             }
 
-            fn merge_by_single_key_same_dispatch<K, Less, KeyOutput, ValueOutput>(
+            fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 left_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
                 right_keys: &crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, K>,
-                right_values: Self,
+                right_values: RightValues,
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
+                RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
                 K: Scalar<B> + 'static,
-                Less: op::BinaryPredicateOp<(K,)>,
+                Less: op::PredicateOp2<B, (K,)>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let left_values = self.into_inner();
-                let right_values = right_values.into_inner();
+                let right_values = ($(
+                    <RightValues as sealed::MIterDispatch<B>>::column_view_by_index_inner::<$ty>(
+                        &right_values,
+                        $idx,
+                    )?
+                    .ok_or_else(|| Error::Launch {
+                        message: "merge_by_key right values must match left value shape".to_string(),
+                    })?,
+                )+);
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     crate::detail::device::SoAView1 { source: left_keys },
                     impl_miter_view!(left_values; $( $idx ),+),
                     crate::detail::device::SoAView1 { source: right_keys },
                     impl_miter_view!(right_values; $( $idx ),+),
-                    crate::detail::api::Tuple1Less::<Less>::default(),
+                    KernelTuple1Op::<B, Less>::new(),
                 )?;
                 Ok((
                     array_from_inner::<B, (K,), KeyOutput>(key_inner),
@@ -2455,29 +3533,29 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 init: <Self as MIter<B>>::Item,
-                op: Op,
+                _op: Op,
             ) -> Result<<Self as MIter<B>>::Item, Error>
             where
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::reduce(policy, impl_miter_view!(input; $( $idx ),+), init, op)
+                crate::detail::reduce(policy, impl_miter_view!(input; $( $idx ),+), init, KernelOp::<B, Op>::new())
             }
 
             fn inclusive_scan_dispatch<Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                op: Op,
+                _op: Op,
             ) -> Result<Output, Error>
             where
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
                 let inner = crate::detail::inclusive_scan(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
-                    op,
+                    KernelOp::<B, Op>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2486,10 +3564,10 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 init: <Self as MIter<B>>::Item,
-                op: Op,
+                _op: Op,
             ) -> Result<Output, Error>
             where
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
@@ -2497,7 +3575,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     init,
-                    op,
+                    KernelOp::<B, Op>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2505,17 +3583,17 @@ macro_rules! impl_miter_slice_tuple {
             fn adjacent_difference_dispatch<Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                op: Op,
+                _op: Op,
             ) -> Result<Output, Error>
             where
-                Op: op::BinaryOp<<Self as MIter<B>>::Item>,
+                Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
                 let inner = crate::detail::adjacent_difference(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
-                    op,
+                    KernelOp::<B, Op>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2538,7 +3616,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     stencil,
-                    StencilFlag,
+                    KernelOp::<B, StencilFlag>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2546,17 +3624,17 @@ macro_rules! impl_miter_slice_tuple {
             fn remove_if_dispatch<Pred, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<Output, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
                 let inner = crate::detail::remove_if(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
-                    pred,
+                    KernelOp::<B, Pred>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2564,77 +3642,77 @@ macro_rules! impl_miter_slice_tuple {
             fn count_if_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<usize, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::count_if(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::count_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn all_of_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<bool, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::all_of(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::all_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn any_of_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<bool, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::any_of(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::any_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn none_of_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<bool, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::none_of(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::none_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn find_if_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<Option<usize>, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::find_if(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::find_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn partition_dispatch<Pred, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<(Output, Output), Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
                 let (matching, failing) = crate::detail::partition(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
-                    pred,
+                    KernelOp::<B, Pred>::new(),
                 )?;
                 Ok((
                     array_from_inner::<B, ($( $ty, )+), Output>(matching),
@@ -2645,13 +3723,13 @@ macro_rules! impl_miter_slice_tuple {
             fn is_partitioned_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<bool, Error>
             where
-                Pred: op::PredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::is_partitioned(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::is_partitioned(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn replace_if_dispatch<Stencil, Output>(
@@ -2674,7 +3752,7 @@ macro_rules! impl_miter_slice_tuple {
                     impl_miter_view!(input; $( $idx ),+),
                     replacement,
                     stencil,
-                    StencilFlag,
+                    KernelOp::<B, StencilFlag>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2682,17 +3760,17 @@ macro_rules! impl_miter_slice_tuple {
             fn unique_dispatch<Pred, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<Output, Error>
             where
-                Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
                 let inner = crate::detail::unique(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
-                    pred,
+                    KernelOp::<B, Pred>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2700,112 +3778,112 @@ macro_rules! impl_miter_slice_tuple {
             fn min_element_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                less: Less,
+                _less: Less,
             ) -> Result<Option<usize>, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::min_element(policy, impl_miter_view!(input; $( $idx ),+), less)
+                crate::detail::min_element(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())
             }
 
             fn max_element_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                less: Less,
+                _less: Less,
             ) -> Result<Option<usize>, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::max_element(policy, impl_miter_view!(input; $( $idx ),+), less)
+                crate::detail::max_element(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())
             }
 
             fn minmax_element_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                less: Less,
+                _less: Less,
             ) -> Result<Option<(usize, usize)>, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::minmax_element(policy, impl_miter_view!(input; $( $idx ),+), less)
+                crate::detail::minmax_element(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())
             }
 
             fn adjacent_find_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                pred: Pred,
+                _pred: Pred,
             ) -> Result<Option<usize>, Error>
             where
-                Pred: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::adjacent_find(policy, impl_miter_view!(input; $( $idx ),+), pred)
+                crate::detail::adjacent_find(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
             fn lower_bound_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 value: <Self as MIter<B>>::Item,
-                less: Less,
+                _less: Less,
             ) -> Result<usize, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::lower_bound(policy, impl_miter_view!(input; $( $idx ),+), value, less)
+                crate::detail::lower_bound(policy, impl_miter_view!(input; $( $idx ),+), value, KernelOp::<B, Less>::new())
             }
 
             fn upper_bound_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 value: <Self as MIter<B>>::Item,
-                less: Less,
+                _less: Less,
             ) -> Result<usize, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::upper_bound(policy, impl_miter_view!(input; $( $idx ),+), value, less)
+                crate::detail::upper_bound(policy, impl_miter_view!(input; $( $idx ),+), value, KernelOp::<B, Less>::new())
             }
 
             fn equal_range_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 value: <Self as MIter<B>>::Item,
-                less: Less,
+                _less: Less,
             ) -> Result<(usize, usize), Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::equal_range(policy, impl_miter_view!(input; $( $idx ),+), value, less)
+                crate::detail::equal_range(policy, impl_miter_view!(input; $( $idx ),+), value, KernelOp::<B, Less>::new())
             }
 
             fn is_sorted_until_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                less: Less,
+                _less: Less,
             ) -> Result<usize, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::is_sorted_until(policy, impl_miter_view!(input; $( $idx ),+), less)
+                crate::detail::is_sorted_until(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())
             }
 
             fn is_sorted_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                less: Less,
+                _less: Less,
             ) -> Result<bool, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
-                crate::detail::is_sorted(policy, impl_miter_view!(input; $( $idx ),+), less)
+                crate::detail::is_sorted(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())
             }
 
             fn gather_if_dispatch<Indices, Stencil, Output>(
@@ -2832,7 +3910,7 @@ macro_rules! impl_miter_slice_tuple {
                     &indices,
                     stencil,
                     default,
-                    StencilFlag,
+                    KernelOp::<B, StencilFlag>::new(),
                 )?;
                 Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
             }
@@ -2886,19 +3964,187 @@ macro_rules! impl_miter_slice_tuple {
                     len,
                     default,
                     stencil,
-                    StencilFlag,
+                    KernelOp::<B, StencilFlag>::new(),
                 )?;
                 Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+            }
+
+            fn equal_dispatch<Right, Eq>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _eq: Eq,
+            ) -> Result<bool, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "equal")?, )+);
+                crate::detail::equal(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Eq>::new(),
+                )
+            }
+
+            fn mismatch_dispatch<Right, Eq>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _eq: Eq,
+            ) -> Result<Option<usize>, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "mismatch")?, )+);
+                crate::detail::mismatch(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Eq>::new(),
+                )
+            }
+
+            fn find_first_of_dispatch<Needles, Eq>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                needles: Needles,
+                _eq: Eq,
+            ) -> Result<Option<usize>, Error>
+            where
+                Needles: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let input = self.into_inner();
+                let needles = ($( column_view_at::<B, Needles, $ty>(&needles, $idx, "find_first_of")?, )+);
+                crate::detail::find_first_of(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    impl_miter_view!(needles; $( $idx ),+),
+                    KernelOp::<B, Eq>::new(),
+                )
+            }
+
+            fn lexicographical_compare_dispatch<Right, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _less: Less,
+            ) -> Result<bool, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "lexicographical_compare")?, )+);
+                crate::detail::lexicographical_compare(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Less>::new(),
+                )
+            }
+
+            fn merge_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "merge")?, )+);
+                let inner = crate::detail::merge(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Less>::new(),
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
+            }
+
+            fn set_union_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "set_union")?, )+);
+                let inner = crate::detail::set_union(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Less>::new(),
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
+            }
+
+            fn set_intersection_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "set_intersection")?, )+);
+                let inner = crate::detail::set_intersection(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Less>::new(),
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
+            }
+
+            fn set_difference_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                right: Right,
+                _less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<B, Item = <Self as MIter<B>>::Item>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+            {
+                let left = self.into_inner();
+                let right = ($( column_view_at::<B, Right, $ty>(&right, $idx, "set_difference")?, )+);
+                let inner = crate::detail::set_difference(
+                    policy,
+                    impl_miter_view!(left; $( $idx ),+),
+                    impl_miter_view!(right; $( $idx ),+),
+                    KernelOp::<B, Less>::new(),
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
             fn equal_same_dispatch<Eq>(
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                eq: Eq,
+                _eq: Eq,
             ) -> Result<bool, Error>
             where
-                Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -2906,7 +4152,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    eq,
+                    KernelOp::<B, Eq>::new(),
                 )
             }
 
@@ -2914,10 +4160,10 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                eq: Eq,
+                _eq: Eq,
             ) -> Result<Option<usize>, Error>
             where
-                Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -2925,7 +4171,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    eq,
+                    KernelOp::<B, Eq>::new(),
                 )
             }
 
@@ -2933,10 +4179,10 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 needles: Self,
-                eq: Eq,
+                _eq: Eq,
             ) -> Result<Option<usize>, Error>
             where
-                Eq: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let input = self.into_inner();
                 let needles = needles.into_inner();
@@ -2944,7 +4190,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     impl_miter_view!(needles; $( $idx ),+),
-                    eq,
+                    KernelOp::<B, Eq>::new(),
                 )
             }
 
@@ -2952,10 +4198,10 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                less: Less,
+                _less: Less,
             ) -> Result<bool, Error>
             where
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -2963,7 +4209,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    less,
+                    KernelOp::<B, Less>::new(),
                 )
             }
 
@@ -2971,11 +4217,11 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -2983,7 +4229,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    less,
+                    KernelOp::<B, Less>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -2992,11 +4238,11 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -3004,7 +4250,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    less,
+                    KernelOp::<B, Less>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -3013,11 +4259,11 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -3025,7 +4271,7 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    less,
+                    KernelOp::<B, Less>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -3034,11 +4280,11 @@ macro_rules! impl_miter_slice_tuple {
                 self,
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
                 right: Self,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-                Less: op::BinaryPredicateOp<<Self as MIter<B>>::Item>,
+                Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             {
                 let left = self.into_inner();
                 let right = right.into_inner();
@@ -3046,38 +4292,20 @@ macro_rules! impl_miter_slice_tuple {
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
-                    less,
+                    KernelOp::<B, Less>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
-            fn inner_product_same_dispatch<TransformOp, ReduceOp>(
-                self,
-                _policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-                right: Self,
-                transform_op: TransformOp,
-                init: <Self as MIter<B>>::Item,
-                reduce_op: ReduceOp,
-            ) -> Result<<Self as MIter<B>>::Item, Error>
-            where
-                TransformOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-                ReduceOp: op::BinaryOp<<Self as MIter<B>>::Item>,
-            {
-                let _ = (right, transform_op, init, reduce_op);
-                Err(Error::Launch {
-                    message: "inner_product for tuple inputs requires tuple-valued detail support"
-                        .to_string(),
-                })
-            }
         }
     };
 }
 
-impl_miter_slice_tuple!(A: 0: a, C: 1: c => transform_binary);
-impl_miter_slice_tuple!(A: 0: a, C: 1: c, D: 2: d => transform_ternary);
+impl_miter_soa!(SoA2; A: 0: a, C: 1: c => transform_binary);
+impl_miter_soa!(SoA3; A: 0: a, C: 1: c, D: 2: d => transform_ternary);
 
-/// Applies a unary transform to a massively iterator.
-pub fn transform<B, Input, Output, Op>(
+/// Computes adjacent differences.
+pub fn adjacent_difference<B, Input, Output, Op>(
     exec: &Executor<B>,
     source: Input,
     op: Op,
@@ -3085,87 +4313,113 @@ pub fn transform<B, Input, Output, Op>(
 where
     B: Backend,
     Input: MIter<B>,
-    Output: MVec<B>,
-    Op: op::UnaryOp<Input::Item, Output = Output::Item>,
+    Output: MVec<B, Item = Input::Item>,
+    Op: op::BinaryOp1<B, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::transform_dispatch(source, exec.policy(), op)
+    <Input as sealed::MIterDispatch<B>>::adjacent_difference_dispatch(source, exec.policy(), op)
 }
 
-/// Reverses a massively iterator into an owned vector.
-pub fn reverse<B, Input, Output>(exec: &Executor<B>, source: Input) -> Result<Output, Error>
+/// Finds the first adjacent pair satisfying `pred`.
+pub fn adjacent_find<B, Input, Pred>(
+    exec: &Executor<B>,
+    source: Input,
+    pred: Pred,
+) -> Result<Option<usize>, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Pred: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::adjacent_find_dispatch(source, exec.policy(), pred)
+}
+
+/// Returns whether all elements satisfy `pred`.
+pub fn all_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Pred: op::PredicateOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::all_of_dispatch(source, exec.policy(), pred)
+}
+
+/// Returns whether any element satisfies `pred`.
+pub fn any_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Pred: op::PredicateOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::any_of_dispatch(source, exec.policy(), pred)
+}
+
+/// Copies elements whose `u32` stencil flag is non-zero.
+pub fn copy_if<B, Input, Output>(
+    exec: &Executor<B>,
+    source: Input,
+    stencil: DeviceSlice<'_, B, u32>,
+) -> Result<Output, Error>
 where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::reverse_dispatch(source, exec.policy())
+    validate_slice(exec, &stencil)?;
+    <Input as sealed::MIterDispatch<B>>::copy_if_dispatch(source, exec.policy(), SoA1(stencil))
 }
 
-/// Sorts a massively iterator into an owned vector.
-pub fn sort<B, Input, Output, Less>(
+/// Counts elements satisfying `pred`.
+pub fn count_if<B, Input, Pred>(
     exec: &Executor<B>,
     source: Input,
+    pred: Pred,
+) -> Result<usize, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Pred: op::PredicateOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::count_if_dispatch(source, exec.policy(), pred)
+}
+
+/// Returns whether two inputs are equal under `eq`.
+pub fn equal<B, Left, Right, Eq>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    eq: Eq,
+) -> Result<bool, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Eq: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::equal_dispatch(left, exec.policy(), right, eq)
+}
+
+/// Finds the equal range of `value` in a sorted input.
+pub fn equal_range<B, Input, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    value: Input::Item,
     less: Less,
-) -> Result<Output, Error>
+) -> Result<(usize, usize), Error>
 where
     B: Backend,
     Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Less: op::BinaryPredicateOp<Input::Item>,
+    Less: op::PredicateOp2<B, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::sort_dispatch(source, exec.policy(), less)
-}
-
-/// Gathers a massively iterator at index positions into an owned vector.
-pub fn gather<B, Input, Indices, Output>(
-    exec: &Executor<B>,
-    source: Input,
-    indices: Indices,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Indices: MIter<B, Item = (u32,)>,
-    Output: MVec<B, Item = Input::Item>,
-{
-    validate_input(exec, &source)?;
-    validate_input(exec, &indices)?;
-    <Input as sealed::MIterDispatch<B>>::gather_dispatch(source, exec.policy(), indices)
-}
-
-/// Reduces a massively iterator to one host item.
-pub fn reduce<B, Input, Op>(
-    exec: &Executor<B>,
-    source: Input,
-    init: Input::Item,
-    op: Op,
-) -> Result<Input::Item, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Op: op::BinaryOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::reduce_dispatch(source, exec.policy(), init, op)
-}
-
-/// Computes an inclusive scan.
-pub fn inclusive_scan<B, Input, Output, Op>(
-    exec: &Executor<B>,
-    source: Input,
-    op: Op,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Op: op::BinaryOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::inclusive_scan_dispatch(source, exec.policy(), op)
+    <Input as sealed::MIterDispatch<B>>::equal_range_dispatch(source, exec.policy(), value, less)
 }
 
 /// Computes an exclusive scan.
@@ -3179,111 +4433,57 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Op: op::BinaryOp<Input::Item>,
+    Op: op::BinaryOp1<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::exclusive_scan_dispatch(source, exec.policy(), init, op)
 }
 
-/// Computes adjacent differences.
-pub fn adjacent_difference<B, Input, Output, Op>(
+/// Exclusive scan by key.
+pub fn exclusive_scan_by_key<B, Keys, Values, KeyEq, Op, Output>(
     exec: &Executor<B>,
-    source: Input,
+    keys: Keys,
+    values: Values,
+    key_eq: KeyEq,
+    init: Values::Item,
     op: Op,
 ) -> Result<Output, Error>
 where
     B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Op: op::BinaryOp<Input::Item>,
+    Keys: MIter<B>,
+    Values: MIter<B>,
+    KeyEq: op::PredicateOp2<B, Keys::Item>,
+    Op: op::BinaryOp1<B, Values::Item>,
+    Output: MVec<B, Item = Values::Item>,
 {
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::adjacent_difference_dispatch(source, exec.policy(), op)
+    validate_input(exec, &keys)?;
+    validate_input(exec, &values)?;
+    <Keys as sealed::MIterDispatch<B>>::exclusive_scan_by_key_dispatch(
+        keys,
+        exec.policy(),
+        values,
+        key_eq,
+        init,
+        op,
+    )
 }
 
-/// Copies elements whose one-column `u32` stencil flag is non-zero.
-///
-/// The stencil must be an `MIter` whose item is `(u32,)`. For predicate-based
-/// filtering over the input values themselves, use [`remove_if`] or
-/// [`partition`].
-pub fn copy_if<B, Input, Stencil, Output>(
+/// Finds the first input element equal to any needle.
+pub fn find_first_of<B, Input, Needles, Eq>(
     exec: &Executor<B>,
     source: Input,
-    stencil: Stencil,
-) -> Result<Output, Error>
+    needles: Needles,
+    eq: Eq,
+) -> Result<Option<usize>, Error>
 where
     B: Backend,
     Input: MIter<B>,
-    Stencil: MIter<B, Item = (u32,)>,
-    Output: MVec<B, Item = Input::Item>,
+    Needles: MIter<B, Item = Input::Item>,
+    Eq: op::PredicateOp2<B, Input::Item>,
 {
     validate_input(exec, &source)?;
-    validate_input(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::copy_if_dispatch(source, exec.policy(), stencil)
-}
-
-/// Removes elements satisfying `pred`.
-pub fn remove_if<B, Input, Output, Pred>(
-    exec: &Executor<B>,
-    source: Input,
-    pred: Pred,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::remove_if_dispatch(source, exec.policy(), pred)
-}
-
-/// Counts elements satisfying `pred`.
-pub fn count_if<B, Input, Pred>(
-    exec: &Executor<B>,
-    source: Input,
-    pred: Pred,
-) -> Result<usize, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Pred: op::PredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::count_if_dispatch(source, exec.policy(), pred)
-}
-
-/// Returns whether all elements satisfy `pred`.
-pub fn all_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Pred: op::PredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::all_of_dispatch(source, exec.policy(), pred)
-}
-
-/// Returns whether any element satisfies `pred`.
-pub fn any_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Pred: op::PredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::any_of_dispatch(source, exec.policy(), pred)
-}
-
-/// Returns whether no elements satisfy `pred`.
-pub fn none_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Pred: op::PredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::none_of_dispatch(source, exec.policy(), pred)
+    validate_input(exec, &needles)?;
+    <Input as sealed::MIterDispatch<B>>::find_first_of_dispatch(source, exec.policy(), needles, eq)
 }
 
 /// Finds the first element satisfying `pred`.
@@ -3295,26 +4495,121 @@ pub fn find_if<B, Input, Pred>(
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp<Input::Item>,
+    Pred: op::PredicateOp1<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::find_if_dispatch(source, exec.policy(), pred)
 }
 
-/// Partitions elements by `pred`.
-pub fn partition<B, Input, Output, Pred>(
+/// Gathers a massively iterator at index positions into an owned vector.
+pub fn gather<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
-    pred: Pred,
-) -> Result<(Output, Output), Error>
+    indices: DeviceSlice<'_, B, u32>,
+) -> Result<Output, Error>
 where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::partition_dispatch(source, exec.policy(), pred)
+    validate_slice(exec, &indices)?;
+    <Input as sealed::MIterDispatch<B>>::gather_dispatch(source, exec.policy(), SoA1(indices))
+}
+
+/// Gathers elements whose `u32` stencil flag is non-zero.
+pub fn gather_if<B, Input, Output>(
+    exec: &Executor<B>,
+    source: Input,
+    indices: DeviceSlice<'_, B, u32>,
+    default: Input::Item,
+    stencil: DeviceSlice<'_, B, u32>,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+{
+    validate_input(exec, &source)?;
+    validate_slice(exec, &indices)?;
+    validate_slice(exec, &stencil)?;
+    <Input as sealed::MIterDispatch<B>>::gather_if_dispatch(
+        source,
+        exec.policy(),
+        SoA1(indices),
+        default,
+        SoA1(stencil),
+    )
+}
+
+/// Computes an inclusive scan.
+pub fn inclusive_scan<B, Input, Output, Op>(
+    exec: &Executor<B>,
+    source: Input,
+    op: Op,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+    Op: op::BinaryOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::inclusive_scan_dispatch(source, exec.policy(), op)
+}
+
+/// Inclusive scan by key.
+pub fn inclusive_scan_by_key<B, Keys, Values, KeyEq, Op, Output>(
+    exec: &Executor<B>,
+    keys: Keys,
+    values: Values,
+    key_eq: KeyEq,
+    op: Op,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Keys: MIter<B>,
+    Values: MIter<B>,
+    KeyEq: op::PredicateOp2<B, Keys::Item>,
+    Op: op::BinaryOp1<B, Values::Item>,
+    Output: MVec<B, Item = Values::Item>,
+{
+    validate_input(exec, &keys)?;
+    validate_input(exec, &values)?;
+    <Keys as sealed::MIterDispatch<B>>::inclusive_scan_by_key_dispatch(
+        keys,
+        exec.policy(),
+        values,
+        key_eq,
+        op,
+    )
+}
+
+/// Applies a binary transform over two inputs and reduces the result.
+pub fn inner_product<B, Left, Right, ZipperOp, ReduceOp>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    transform_op: ZipperOp,
+    init: ZipperOp::Output,
+    reduce_op: ReduceOp,
+) -> Result<ZipperOp::Output, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B>,
+    ZipperOp: op::BinaryOp2<B, Left::Item, Right::Item>,
+    ReduceOp: op::BinaryOp1<B, ZipperOp::Output>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left::Item as sealed::MItemDispatch<B>>::inner_product_with_right_item::<
+        Left,
+        Right,
+        ZipperOp,
+        ReduceOp,
+        ZipperOp::Output,
+    >(exec.policy(), left, right, transform_op, init, reduce_op)
 }
 
 /// Returns whether input is partitioned by `pred`.
@@ -3326,261 +4621,63 @@ pub fn is_partitioned<B, Input, Pred>(
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp<Input::Item>,
+    Pred: op::PredicateOp1<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::is_partitioned_dispatch(source, exec.policy(), pred)
 }
 
-/// Replaces elements whose one-column `u32` stencil flag is non-zero.
-pub fn replace_if<B, Input, Stencil, Output>(
-    exec: &Executor<B>,
-    source: Input,
-    replacement: Input::Item,
-    stencil: Stencil,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Stencil: MIter<B, Item = (u32,)>,
-    Output: MVec<B, Item = Input::Item>,
-{
-    validate_input(exec, &source)?;
-    validate_input(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::replace_if_dispatch(
-        source,
-        exec.policy(),
-        replacement,
-        stencil,
-    )
-}
-
-/// Removes consecutive duplicates under `pred`.
-pub fn unique<B, Input, Output, Pred>(
-    exec: &Executor<B>,
-    source: Input,
-    pred: Pred,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Pred: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::unique_dispatch(source, exec.policy(), pred)
-}
-
-/// Stable sort. The current lower implementation is stable.
-pub fn stable_sort<B, Input, Output, Less>(
+/// Returns whether input is sorted.
+pub fn is_sorted<B, Input, Less>(
     exec: &Executor<B>,
     source: Input,
     less: Less,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    sort(exec, source, less)
-}
-
-/// Gathers elements whose one-column `u32` stencil flag is non-zero.
-pub fn gather_if<B, Input, Indices, Stencil, Output>(
-    exec: &Executor<B>,
-    source: Input,
-    indices: Indices,
-    default: Input::Item,
-    stencil: Stencil,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Indices: MIter<B, Item = (u32,)>,
-    Stencil: MIter<B, Item = (u32,)>,
-    Output: MVec<B, Item = Input::Item>,
-{
-    validate_input(exec, &source)?;
-    validate_input(exec, &indices)?;
-    validate_input(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::gather_if_dispatch(
-        source,
-        exec.policy(),
-        indices,
-        default,
-        stencil,
-    )
-}
-
-/// Scatters values into a newly allocated output.
-pub fn scatter<B, Input, Indices, Output>(
-    exec: &Executor<B>,
-    source: Input,
-    indices: Indices,
-    len: usize,
-    default: Input::Item,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Indices: MIter<B, Item = (u32,)>,
-    Output: MVec<B, Item = Input::Item>,
-{
-    validate_input(exec, &source)?;
-    validate_input(exec, &indices)?;
-    <Input as sealed::MIterDispatch<B>>::scatter_dispatch(
-        source,
-        exec.policy(),
-        indices,
-        len,
-        default,
-    )
-}
-
-/// Scatters values whose one-column `u32` stencil flag is non-zero into a newly allocated output.
-pub fn scatter_if<B, Input, Indices, Stencil, Output>(
-    exec: &Executor<B>,
-    source: Input,
-    indices: Indices,
-    len: usize,
-    default: Input::Item,
-    stencil: Stencil,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Indices: MIter<B, Item = (u32,)>,
-    Stencil: MIter<B, Item = (u32,)>,
-    Output: MVec<B, Item = Input::Item>,
-{
-    validate_input(exec, &source)?;
-    validate_input(exec, &indices)?;
-    validate_input(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::scatter_if_dispatch(
-        source,
-        exec.policy(),
-        indices,
-        len,
-        default,
-        stencil,
-    )
-}
-
-/// Finds the first adjacent pair satisfying `pred`.
-pub fn adjacent_find<B, Input, Pred>(
-    exec: &Executor<B>,
-    source: Input,
-    pred: Pred,
-) -> Result<Option<usize>, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Pred: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::adjacent_find_dispatch(source, exec.policy(), pred)
-}
-
-/// Returns whether two inputs are equal under `eq`.
-pub fn equal<B, Input, Eq>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    eq: Eq,
 ) -> Result<bool, Error>
 where
     B: Backend,
     Input: MIter<B>,
-    Eq: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::equal_same_dispatch(left, exec.policy(), right, eq)
-}
-
-/// Finds the first mismatch between two inputs.
-pub fn mismatch<B, Input, Eq>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    eq: Eq,
-) -> Result<Option<usize>, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Eq: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::mismatch_same_dispatch(left, exec.policy(), right, eq)
-}
-
-/// Finds the first input element equal to any needle.
-pub fn find_first_of<B, Input, Eq>(
-    exec: &Executor<B>,
-    source: Input,
-    needles: Input,
-    eq: Eq,
-) -> Result<Option<usize>, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Eq: op::BinaryPredicateOp<Input::Item>,
+    Less: op::PredicateOp2<B, Input::Item>,
 {
     validate_input(exec, &source)?;
-    validate_input(exec, &needles)?;
-    <Input as sealed::MIterDispatch<B>>::find_first_of_same_dispatch(
-        source,
+    <Input as sealed::MIterDispatch<B>>::is_sorted_dispatch(source, exec.policy(), less)
+}
+
+/// Returns the first position where sorted order is broken.
+pub fn is_sorted_until<B, Input, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    less: Less,
+) -> Result<usize, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Less: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::is_sorted_until_dispatch(source, exec.policy(), less)
+}
+
+/// Lexicographically compares two inputs.
+pub fn lexicographical_compare<B, Left, Right, Less>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    less: Less,
+) -> Result<bool, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Less: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::lexicographical_compare_dispatch(
+        left,
         exec.policy(),
-        needles,
-        eq,
+        right,
+        less,
     )
-}
-
-/// Finds the minimum element index.
-pub fn min_element<B, Input, Less>(
-    exec: &Executor<B>,
-    source: Input,
-    less: Less,
-) -> Result<Option<usize>, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::min_element_dispatch(source, exec.policy(), less)
-}
-
-/// Finds the maximum element index.
-pub fn max_element<B, Input, Less>(
-    exec: &Executor<B>,
-    source: Input,
-    less: Less,
-) -> Result<Option<usize>, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::max_element_dispatch(source, exec.policy(), less)
-}
-
-/// Finds both minimum and maximum element indices.
-pub fn minmax_element<B, Input, Less>(
-    exec: &Executor<B>,
-    source: Input,
-    less: Less,
-) -> Result<Option<(usize, usize)>, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::minmax_element_dispatch(source, exec.policy(), less)
 }
 
 /// Finds the lower bound of `value` in a sorted input.
@@ -3593,10 +4690,475 @@ pub fn lower_bound<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
+    Less: op::PredicateOp2<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::lower_bound_dispatch(source, exec.policy(), value, less)
+}
+
+/// Finds the maximum element index.
+pub fn max_element<B, Input, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    less: Less,
+) -> Result<Option<usize>, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Less: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::max_element_dispatch(source, exec.policy(), less)
+}
+
+/// Merges two sorted inputs.
+pub fn merge<B, Left, Right, Output, Less>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    less: Less,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Output: MVec<B, Item = Left::Item>,
+    Less: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::merge_dispatch(left, exec.policy(), right, less)
+}
+
+/// Merges two sorted key-value ranges by key.
+pub fn merge_by_key<B, LeftKeys, LeftValues, RightKeys, RightValues, Less, KeyOutput, ValueOutput>(
+    exec: &Executor<B>,
+    left_keys: LeftKeys,
+    left_values: LeftValues,
+    right_keys: RightKeys,
+    right_values: RightValues,
+    less: Less,
+) -> Result<(KeyOutput, ValueOutput), Error>
+where
+    B: Backend,
+    LeftKeys: MIter<B>,
+    RightKeys: MIter<B, Item = LeftKeys::Item>,
+    LeftValues: MIter<B>,
+    RightValues: MIter<B, Item = LeftValues::Item>,
+    Less: op::PredicateOp2<B, LeftKeys::Item>,
+    KeyOutput: MVec<B, Item = LeftKeys::Item>,
+    ValueOutput: MVec<B, Item = LeftValues::Item>,
+{
+    validate_input(exec, &left_keys)?;
+    validate_input(exec, &left_values)?;
+    validate_input(exec, &right_keys)?;
+    validate_input(exec, &right_values)?;
+    <LeftKeys as sealed::MIterDispatch<B>>::merge_by_key_dispatch(
+        left_keys,
+        exec.policy(),
+        right_keys,
+        left_values,
+        right_values,
+        less,
+    )
+}
+/// Finds the minimum element index.
+pub fn min_element<B, Input, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    less: Less,
+) -> Result<Option<usize>, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Less: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::min_element_dispatch(source, exec.policy(), less)
+}
+
+/// Finds both minimum and maximum element indices.
+pub fn minmax_element<B, Input, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    less: Less,
+) -> Result<Option<(usize, usize)>, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Less: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::minmax_element_dispatch(source, exec.policy(), less)
+}
+
+/// Finds the first mismatch between two inputs.
+pub fn mismatch<B, Left, Right, Eq>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    eq: Eq,
+) -> Result<Option<usize>, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Eq: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::mismatch_dispatch(left, exec.policy(), right, eq)
+}
+
+/// Returns whether no elements satisfy `pred`.
+pub fn none_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Pred: op::PredicateOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::none_of_dispatch(source, exec.policy(), pred)
+}
+
+/// Partitions elements by `pred`.
+pub fn partition<B, Input, Output, Pred>(
+    exec: &Executor<B>,
+    source: Input,
+    pred: Pred,
+) -> Result<(Output, Output), Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+    Pred: op::PredicateOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::partition_dispatch(source, exec.policy(), pred)
+}
+
+/// Reduces a massively iterator to one host item.
+pub fn reduce<B, Input, Op>(
+    exec: &Executor<B>,
+    source: Input,
+    init: Input::Item,
+    op: Op,
+) -> Result<Input::Item, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Op: op::BinaryOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::reduce_dispatch(source, exec.policy(), init, op)
+}
+
+/// Reduces consecutive values with equal keys.
+pub fn reduce_by_key<B, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
+    exec: &Executor<B>,
+    keys: Keys,
+    values: Values,
+    key_eq: KeyEq,
+    init: Values::Item,
+    op: Op,
+) -> Result<(KeyOutput, ValueOutput), Error>
+where
+    B: Backend,
+    Keys: MIter<B>,
+    Values: MIter<B>,
+    KeyEq: op::PredicateOp2<B, Keys::Item>,
+    Op: op::BinaryOp1<B, Values::Item>,
+    KeyOutput: MVec<B, Item = Keys::Item>,
+    ValueOutput: MVec<B, Item = Values::Item>,
+{
+    validate_input(exec, &keys)?;
+    validate_input(exec, &values)?;
+    <Keys as sealed::MIterDispatch<B>>::reduce_by_key_dispatch(
+        keys,
+        exec.policy(),
+        values,
+        key_eq,
+        init,
+        op,
+    )
+}
+
+/// Removes elements satisfying `pred`.
+pub fn remove_if<B, Input, Output, Pred>(
+    exec: &Executor<B>,
+    source: Input,
+    pred: Pred,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+    Pred: op::PredicateOp1<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::remove_if_dispatch(source, exec.policy(), pred)
+}
+
+/// Replaces elements whose `u32` stencil flag is non-zero.
+pub fn replace_if<B, Input, Output>(
+    exec: &Executor<B>,
+    source: Input,
+    replacement: Input::Item,
+    stencil: DeviceSlice<'_, B, u32>,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+{
+    validate_input(exec, &source)?;
+    validate_slice(exec, &stencil)?;
+    <Input as sealed::MIterDispatch<B>>::replace_if_dispatch(
+        source,
+        exec.policy(),
+        replacement,
+        SoA1(stencil),
+    )
+}
+
+/// Reverses a massively iterator into an owned vector.
+pub fn reverse<B, Input, Output>(exec: &Executor<B>, source: Input) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::reverse_dispatch(source, exec.policy())
+}
+
+/// Scatters values into a newly allocated output.
+pub fn scatter<B, Input, Output>(
+    exec: &Executor<B>,
+    source: Input,
+    indices: DeviceSlice<'_, B, u32>,
+    len: usize,
+    default: Input::Item,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+{
+    validate_input(exec, &source)?;
+    validate_slice(exec, &indices)?;
+    <Input as sealed::MIterDispatch<B>>::scatter_dispatch(
+        source,
+        exec.policy(),
+        SoA1(indices),
+        len,
+        default,
+    )
+}
+
+/// Scatters values whose `u32` stencil flag is non-zero into a newly allocated output.
+pub fn scatter_if<B, Input, Output>(
+    exec: &Executor<B>,
+    source: Input,
+    indices: DeviceSlice<'_, B, u32>,
+    len: usize,
+    default: Input::Item,
+    stencil: DeviceSlice<'_, B, u32>,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+{
+    validate_input(exec, &source)?;
+    validate_slice(exec, &indices)?;
+    validate_slice(exec, &stencil)?;
+    <Input as sealed::MIterDispatch<B>>::scatter_if_dispatch(
+        source,
+        exec.policy(),
+        SoA1(indices),
+        len,
+        default,
+        SoA1(stencil),
+    )
+}
+
+/// Computes the sorted set difference of two sorted inputs.
+pub fn set_difference<B, Left, Right, Output, Less>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    less: Less,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Output: MVec<B, Item = Left::Item>,
+    Less: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::set_difference_dispatch(left, exec.policy(), right, less)
+}
+
+/// Computes the sorted set intersection of two sorted inputs.
+pub fn set_intersection<B, Left, Right, Output, Less>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    less: Less,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Output: MVec<B, Item = Left::Item>,
+    Less: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::set_intersection_dispatch(left, exec.policy(), right, less)
+}
+
+/// Computes the sorted set union of two sorted inputs.
+pub fn set_union<B, Left, Right, Output, Less>(
+    exec: &Executor<B>,
+    left: Left,
+    right: Right,
+    less: Less,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Left: MIter<B>,
+    Right: MIter<B, Item = Left::Item>,
+    Output: MVec<B, Item = Left::Item>,
+    Less: op::PredicateOp2<B, Left::Item>,
+{
+    validate_input(exec, &left)?;
+    validate_input(exec, &right)?;
+    <Left as sealed::MIterDispatch<B>>::set_union_dispatch(left, exec.policy(), right, less)
+}
+
+/// Sorts a massively iterator into an owned vector.
+pub fn sort<B, Input, Output, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    less: Less,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+    Less: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::sort_dispatch(source, exec.policy(), less)
+}
+
+/// Sorts key-value pairs by key.
+pub fn sort_by_key<B, Keys, Values, Less, KeyOutput, ValueOutput>(
+    exec: &Executor<B>,
+    keys: Keys,
+    values: Values,
+    less: Less,
+) -> Result<(KeyOutput, ValueOutput), Error>
+where
+    B: Backend,
+    Keys: MIter<B>,
+    Values: MIter<B>,
+    Less: op::PredicateOp2<B, Keys::Item>,
+    KeyOutput: MVec<B, Item = Keys::Item>,
+    ValueOutput: MVec<B, Item = Values::Item>,
+{
+    validate_input(exec, &keys)?;
+    validate_input(exec, &values)?;
+    <Keys as sealed::MIterDispatch<B>>::sort_by_key_dispatch(keys, exec.policy(), values, less)
+}
+
+/// Stable sort. The current lower implementation is stable.
+pub fn stable_sort<B, Input, Output, Less>(
+    exec: &Executor<B>,
+    source: Input,
+    less: Less,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+    Less: op::PredicateOp2<B, Input::Item>,
+{
+    sort(exec, source, less)
+}
+
+/// Stable key-value sort. The current lower implementation is stable.
+pub fn stable_sort_by_key<B, Keys, Values, Less, KeyOutput, ValueOutput>(
+    exec: &Executor<B>,
+    keys: Keys,
+    values: Values,
+    less: Less,
+) -> Result<(KeyOutput, ValueOutput), Error>
+where
+    B: Backend,
+    Keys: MIter<B>,
+    Values: MIter<B>,
+    Less: op::PredicateOp2<B, Keys::Item>,
+    KeyOutput: MVec<B, Item = Keys::Item>,
+    ValueOutput: MVec<B, Item = Values::Item>,
+{
+    sort_by_key(exec, keys, values, less)
+}
+
+/// Applies a unary transform to a massively iterator.
+pub fn transform<B, Input, Output, Op>(
+    exec: &Executor<B>,
+    source: Input,
+    op: Op,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B>,
+    Op: op::UnaryOp<B, Input::Item, Output = Output::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::transform_dispatch(source, exec.policy(), op)
+}
+
+/// Removes consecutive duplicates under `pred`.
+pub fn unique<B, Input, Output, Pred>(
+    exec: &Executor<B>,
+    source: Input,
+    pred: Pred,
+) -> Result<Output, Error>
+where
+    B: Backend,
+    Input: MIter<B>,
+    Output: MVec<B, Item = Input::Item>,
+    Pred: op::PredicateOp2<B, Input::Item>,
+{
+    validate_input(exec, &source)?;
+    <Input as sealed::MIterDispatch<B>>::unique_dispatch(source, exec.policy(), pred)
+}
+
+/// Removes consecutive duplicate keys and keeps their values.
+pub fn unique_by_key<B, Keys, Values, Eq, KeyOutput, ValueOutput>(
+    exec: &Executor<B>,
+    keys: Keys,
+    values: Values,
+    eq: Eq,
+) -> Result<(KeyOutput, ValueOutput), Error>
+where
+    B: Backend,
+    Keys: MIter<B>,
+    Values: MIter<B>,
+    Eq: op::PredicateOp2<B, Keys::Item>,
+    KeyOutput: MVec<B, Item = Keys::Item>,
+    ValueOutput: MVec<B, Item = Values::Item>,
+{
+    validate_input(exec, &keys)?;
+    validate_input(exec, &values)?;
+    <Keys as sealed::MIterDispatch<B>>::unique_by_key_dispatch(keys, exec.policy(), values, eq)
 }
 
 /// Finds the upper bound of `value` in a sorted input.
@@ -3609,413 +5171,8 @@ pub fn upper_bound<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
+    Less: op::PredicateOp2<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::upper_bound_dispatch(source, exec.policy(), value, less)
-}
-
-/// Finds the equal range of `value` in a sorted input.
-pub fn equal_range<B, Input, Less>(
-    exec: &Executor<B>,
-    source: Input,
-    value: Input::Item,
-    less: Less,
-) -> Result<(usize, usize), Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::equal_range_dispatch(source, exec.policy(), value, less)
-}
-
-/// Returns the first position where sorted order is broken.
-pub fn is_sorted_until<B, Input, Less>(
-    exec: &Executor<B>,
-    source: Input,
-    less: Less,
-) -> Result<usize, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::is_sorted_until_dispatch(source, exec.policy(), less)
-}
-
-/// Returns whether input is sorted.
-pub fn is_sorted<B, Input, Less>(
-    exec: &Executor<B>,
-    source: Input,
-    less: Less,
-) -> Result<bool, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::is_sorted_dispatch(source, exec.policy(), less)
-}
-
-/// Lexicographically compares two inputs.
-pub fn lexicographical_compare<B, Input, Less>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    less: Less,
-) -> Result<bool, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::lexicographical_compare_same_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-    )
-}
-
-/// Merges two sorted inputs.
-pub fn merge<B, Input, Output, Less>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    less: Less,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::merge_same_dispatch(left, exec.policy(), right, less)
-}
-
-/// Computes the sorted set union of two sorted inputs.
-pub fn set_union<B, Input, Output, Less>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    less: Less,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::set_union_same_dispatch(left, exec.policy(), right, less)
-}
-
-/// Computes the sorted set intersection of two sorted inputs.
-pub fn set_intersection<B, Input, Output, Less>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    less: Less,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::set_intersection_same_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-    )
-}
-
-/// Computes the sorted set difference of two sorted inputs.
-pub fn set_difference<B, Input, Output, Less>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    less: Less,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Less: op::BinaryPredicateOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::set_difference_same_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-    )
-}
-
-/// Applies a binary transform over two inputs and reduces the result.
-pub fn inner_product<B, Input, TransformOp, ReduceOp>(
-    exec: &Executor<B>,
-    left: Input,
-    right: Input,
-    transform_op: TransformOp,
-    init: Input::Item,
-    reduce_op: ReduceOp,
-) -> Result<Input::Item, Error>
-where
-    B: Backend,
-    Input: MIter<B>,
-    TransformOp: op::BinaryOp<Input::Item>,
-    ReduceOp: op::BinaryOp<Input::Item>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Input as sealed::MIterDispatch<B>>::inner_product_same_dispatch(
-        left,
-        exec.policy(),
-        right,
-        transform_op,
-        init,
-        reduce_op,
-    )
-}
-
-/// Inclusive scan by key.
-pub fn inclusive_scan_by_key<B, Keys, Values, K, KeyEq, Op, Output>(
-    exec: &Executor<B>,
-    keys: Keys,
-    values: Values,
-    key_eq: KeyEq,
-    op: Op,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Keys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    KeyEq: op::BinaryPredicateOp<(K,)>,
-    Op: op::BinaryOp<Values::Item>,
-    Output: MVec<B, Item = Values::Item>,
-{
-    validate_input(exec, &keys)?;
-    validate_input(exec, &values)?;
-    let keys = single_column_inner::<B, Keys, K>(
-        exec.policy(),
-        &keys,
-        "inclusive_scan_by_key keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    <Values as sealed::MIterDispatch<B>>::inclusive_scan_by_single_key_dispatch(
-        values,
-        exec.policy(),
-        &keys,
-        key_eq,
-        op,
-    )
-}
-
-/// Exclusive scan by key.
-pub fn exclusive_scan_by_key<B, Keys, Values, K, KeyEq, Op, Output>(
-    exec: &Executor<B>,
-    keys: Keys,
-    values: Values,
-    key_eq: KeyEq,
-    init: Values::Item,
-    op: Op,
-) -> Result<Output, Error>
-where
-    B: Backend,
-    Keys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    KeyEq: op::BinaryPredicateOp<(K,)>,
-    Op: op::BinaryOp<Values::Item>,
-    Output: MVec<B, Item = Values::Item>,
-{
-    validate_input(exec, &keys)?;
-    validate_input(exec, &values)?;
-    let keys = single_column_inner::<B, Keys, K>(
-        exec.policy(),
-        &keys,
-        "exclusive_scan_by_key keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    <Values as sealed::MIterDispatch<B>>::exclusive_scan_by_single_key_dispatch(
-        values,
-        exec.policy(),
-        &keys,
-        key_eq,
-        init,
-        op,
-    )
-}
-
-/// Reduces consecutive values with equal keys.
-pub fn reduce_by_key<B, Keys, Values, K, KeyEq, Op, KeyOutput, ValueOutput>(
-    exec: &Executor<B>,
-    keys: Keys,
-    values: Values,
-    key_eq: KeyEq,
-    init: Values::Item,
-    op: Op,
-) -> Result<(KeyOutput, ValueOutput), Error>
-where
-    B: Backend,
-    Keys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    KeyEq: op::BinaryPredicateOp<(K,)>,
-    Op: op::BinaryOp<Values::Item>,
-    KeyOutput: MVec<B, Item = (K,)>,
-    ValueOutput: MVec<B, Item = Values::Item>,
-{
-    validate_input(exec, &keys)?;
-    validate_input(exec, &values)?;
-    let keys = single_column_inner::<B, Keys, K>(
-        exec.policy(),
-        &keys,
-        "reduce_by_key keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    <Values as sealed::MIterDispatch<B>>::reduce_by_single_key_dispatch(
-        values,
-        exec.policy(),
-        &keys,
-        key_eq,
-        init,
-        op,
-    )
-}
-
-/// Removes consecutive duplicate keys and keeps their values.
-pub fn unique_by_key<B, Keys, Values, K, Eq, KeyOutput, ValueOutput>(
-    exec: &Executor<B>,
-    keys: Keys,
-    values: Values,
-    eq: Eq,
-) -> Result<(KeyOutput, ValueOutput), Error>
-where
-    B: Backend,
-    Keys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    Eq: op::BinaryPredicateOp<(K,)>,
-    KeyOutput: MVec<B, Item = (K,)>,
-    ValueOutput: MVec<B, Item = Values::Item>,
-{
-    validate_input(exec, &keys)?;
-    validate_input(exec, &values)?;
-    let keys = single_column_inner::<B, Keys, K>(
-        exec.policy(),
-        &keys,
-        "unique_by_key keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    <Values as sealed::MIterDispatch<B>>::unique_by_single_key_dispatch(
-        values,
-        exec.policy(),
-        &keys,
-        eq,
-    )
-}
-
-/// Sorts key-value pairs by key.
-pub fn sort_by_key<B, Keys, Values, K, Less, KeyOutput, ValueOutput>(
-    exec: &Executor<B>,
-    keys: Keys,
-    values: Values,
-    less: Less,
-) -> Result<(KeyOutput, ValueOutput), Error>
-where
-    B: Backend,
-    Keys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    Less: op::BinaryPredicateOp<(K,)>,
-    KeyOutput: MVec<B, Item = (K,)>,
-    ValueOutput: MVec<B, Item = Values::Item>,
-{
-    validate_input(exec, &keys)?;
-    validate_input(exec, &values)?;
-    let keys = single_column_inner::<B, Keys, K>(
-        exec.policy(),
-        &keys,
-        "sort_by_key keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    <Values as sealed::MIterDispatch<B>>::sort_by_single_key_dispatch(
-        values,
-        exec.policy(),
-        &keys,
-        less,
-    )
-}
-
-/// Stable key-value sort. The current lower implementation is stable.
-pub fn stable_sort_by_key<B, Keys, Values, K, Less, KeyOutput, ValueOutput>(
-    exec: &Executor<B>,
-    keys: Keys,
-    values: Values,
-    less: Less,
-) -> Result<(KeyOutput, ValueOutput), Error>
-where
-    B: Backend,
-    Keys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    Less: op::BinaryPredicateOp<(K,)>,
-    KeyOutput: MVec<B, Item = (K,)>,
-    ValueOutput: MVec<B, Item = Values::Item>,
-{
-    sort_by_key(exec, keys, values, less)
-}
-
-/// Merges two sorted key-value ranges by key.
-pub fn merge_by_key<B, LeftKeys, Values, RightKeys, K, Less, KeyOutput, ValueOutput>(
-    exec: &Executor<B>,
-    left_keys: LeftKeys,
-    left_values: Values,
-    right_keys: RightKeys,
-    right_values: Values,
-    less: Less,
-) -> Result<(KeyOutput, ValueOutput), Error>
-where
-    B: Backend,
-    LeftKeys: MIter<B, Item = (K,)>,
-    RightKeys: MIter<B, Item = (K,)>,
-    Values: MIter<B>,
-    K: Scalar<B> + 'static,
-    Less: op::BinaryPredicateOp<(K,)>,
-    KeyOutput: MVec<B, Item = (K,)>,
-    ValueOutput: MVec<B, Item = Values::Item>,
-{
-    validate_input(exec, &left_keys)?;
-    validate_input(exec, &left_values)?;
-    validate_input(exec, &right_keys)?;
-    validate_input(exec, &right_values)?;
-    let left_keys = single_column_inner::<B, LeftKeys, K>(
-        exec.policy(),
-        &left_keys,
-        "merge_by_key left keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    let right_keys = single_column_inner::<B, RightKeys, K>(
-        exec.policy(),
-        &right_keys,
-        "merge_by_key right keys must be backed by one DeviceVec or DeviceSlice",
-    )?;
-    <Values as sealed::MIterDispatch<B>>::merge_by_single_key_same_dispatch(
-        left_values,
-        exec.policy(),
-        &left_keys,
-        &right_keys,
-        right_values,
-        less,
-    )
 }

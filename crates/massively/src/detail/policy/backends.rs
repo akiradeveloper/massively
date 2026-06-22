@@ -1,3 +1,4 @@
+#[cfg(any(feature = "cuda", feature = "hip", feature = "wgpu"))]
 use super::CubePolicy;
 
 /// CubeCL CUDA execution policy.

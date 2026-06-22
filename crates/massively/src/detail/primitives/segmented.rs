@@ -1,8 +1,8 @@
 use crate::{
+    detail::op::kernel::PredicateOp2,
     device::DeviceVec,
     error::Error,
     kernels::*,
-    op::BinaryPredicateOp,
     policy::CubePolicy,
     primitives::select::{self, SelectionControl},
 };
@@ -105,7 +105,7 @@ pub(crate) fn key_run_control_with_policy<R, K, Eq>(
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
-    Eq: BinaryPredicateOp<K>,
+    Eq: PredicateOp2<K>,
 {
     if keys.len() == 0 {
         return SegmentControl::empty(policy);
@@ -137,7 +137,7 @@ pub(crate) fn key_run_end_control_with_policy<R, K, Eq>(
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
-    Eq: BinaryPredicateOp<K>,
+    Eq: PredicateOp2<K>,
 {
     if keys.len() == 0 {
         return SegmentControl::empty(policy);

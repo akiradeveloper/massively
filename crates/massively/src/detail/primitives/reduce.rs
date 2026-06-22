@@ -1,9 +1,9 @@
 use crate::{
+    detail::op::kernel::{BinaryOp2, PredicateOp2},
     device::{DeviceVec, KernelColumnBindings},
     error::Error,
-    expr::{DeviceGpuExpr, GpuExpr, Input},
+    expr::DeviceGpuExpr,
     kernels::*,
-    op::{BinaryOp, BinaryPredicateOp},
     policy::CubePolicy,
     primitives::{scan, segmented, workspace::Workspace},
 };
@@ -23,7 +23,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 {
     super::ensure_same_len(right.len(), left.len())?;
     let len = left.len();
@@ -68,7 +68,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 {
     super::ensure_same_len(second.len(), first.len())?;
     super::ensure_same_len(third.len(), first.len())?;
@@ -112,96 +112,6 @@ where
     ))
 }
 
-pub(crate) fn reduce_input_handle<R, T, Op>(
-    policy: &CubePolicy<R>,
-    input_handle: cubecl::server::Handle,
-    _storage_len: usize,
-    len: usize,
-    init: T,
-) -> Result<T, Error>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-    Op: BinaryOp<T>,
-    Input<T>: GpuExpr<T>,
-{
-    if len == 0 {
-        return Ok(init);
-    }
-
-    let client = policy.client();
-    let partial_handle = inclusive_scan_handle::<R, T, Op>(policy, input_handle, len)?;
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let init_handle = client.create_from_slice(T::as_bytes(&[init]));
-    let output_handle = client.empty(std::mem::size_of::<T>());
-    unsafe {
-        scalar_reduce_last_finalize_kernel::launch_unchecked::<T, Op, R>(
-            client,
-            CubeCount::new_single(),
-            CubeDim::new_1d(1),
-            unsafe { BufferArg::from_raw_parts(partial_handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(init_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), 1) },
-        );
-    }
-    read_one(policy, output_handle)
-}
-
-fn inclusive_scan_handle<R, T, Op>(
-    policy: &CubePolicy<R>,
-    input_handle: cubecl::server::Handle,
-    len: usize,
-) -> Result<cubecl::server::Handle, Error>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-    Op: BinaryOp<T>,
-{
-    if len == 0 {
-        return Ok(policy.empty_handle());
-    }
-
-    let client = policy.client();
-    let workspace = Workspace::new(policy);
-    let output_handle = workspace.alloc::<T>(len);
-    let num_blocks = len.div_ceil(scan::BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let block_sums = workspace.alloc::<T>(num_blocks);
-
-    unsafe {
-        scalar_inclusive_scan_block_kernel::launch_unchecked::<T, Op, R>(
-            client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
-            CubeDim::new_1d(scan::BLOCK_SCAN_SIZE),
-            unsafe { BufferArg::from_raw_parts(input_handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(block_sums.clone(), num_blocks) },
-        );
-    }
-
-    if num_blocks > 1 {
-        let block_prefixes = inclusive_scan_handle::<R, T, Op>(policy, block_sums, num_blocks)?;
-        unsafe {
-            scalar_scan_add_block_prefix_kernel::launch_unchecked::<T, Op, R>(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(scan::BLOCK_SCAN_SIZE),
-                unsafe { BufferArg::from_raw_parts(block_prefixes.clone(), num_blocks) },
-                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
-            );
-        }
-    }
-
-    Ok(output_handle)
-}
-
 fn read_one<R, T>(policy: &CubePolicy<R>, handle: cubecl::server::Handle) -> Result<T, Error>
 where
     R: Runtime,
@@ -226,7 +136,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
-    Op: BinaryOp<(A,)>,
+    Op: BinaryOp2<(A,)>,
 {
     if len == 0 {
         return Ok(init);
@@ -267,7 +177,7 @@ where
     B: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 {
     if len == 0 {
         return Ok(init);
@@ -380,7 +290,7 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 {
     if len == 0 {
         return Ok(init);
@@ -522,8 +432,8 @@ where
     R: Runtime,
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 {
     let (keys, values, _) =
         reduce_by_key_handle_with_control::<R, K, T, KeyEq, Op>(policy, keys, value_handle, init)?;
@@ -540,8 +450,8 @@ where
     R: Runtime,
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 {
     let len = keys.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
@@ -640,8 +550,8 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<(A, B)>,
-    Op: BinaryOp<T>,
+    KeyEq: PredicateOp2<(A, B)>,
+    Op: BinaryOp2<T>,
 {
     super::ensure_same_len(key_b.len(), key_a.len())?;
     super::ensure_same_len(values.len(), key_a.len())?;
@@ -720,8 +630,8 @@ where
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<(A, B, C)>,
-    Op: BinaryOp<T>,
+    KeyEq: PredicateOp2<(A, B, C)>,
+    Op: BinaryOp2<T>,
 {
     super::ensure_same_len(key_b.len(), key_a.len())?;
     super::ensure_same_len(key_c.len(), key_a.len())?;
@@ -794,8 +704,8 @@ where
     R: Runtime,
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 {
     let len = keys.len();
     if len == 0 {
@@ -821,8 +731,8 @@ where
     R: Runtime,
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 {
     let len = keys.len();
     if len == 0 {

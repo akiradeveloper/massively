@@ -1,5 +1,6 @@
 use super::memory::{MaterializeOutput, materialize};
 use crate::{
+    detail::op::kernel::PredicateOp2,
     device::{
         DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, ReadOnlySoA, S0, SoA, SoA1,
         SoA2, SoA3, SoAView1, SoAView2, SoAView3,
@@ -7,7 +8,7 @@ use crate::{
     error::Error,
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
-    op::{BinaryPredicateOp, GpuOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::{ordering, range as primitive_range, select},
 };
@@ -84,7 +85,7 @@ where
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: BinaryPredicateOp<Left::Item>,
+    Less: PredicateOp2<Left::Item>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
@@ -159,7 +160,7 @@ where
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: BinaryPredicateOp<Left::Item>,
+    Less: PredicateOp2<Left::Item>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
@@ -228,7 +229,7 @@ where
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: BinaryPredicateOp<(Left::Item,)>,
+    Less: PredicateOp2<(Left::Item,)>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
@@ -407,7 +408,7 @@ macro_rules! impl_tuple_pair_ordering {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
                 <$right_rest_ty as KernelColumn>::Expr: DeviceGpuExpr<<$right_rest_ty as KernelColumn>::Item>,
             )+
-            Less: BinaryPredicateOp<(
+            Less: PredicateOp2<(
                 impl_tuple_pair_ordering!(@item_ty $first),
                 $( impl_tuple_pair_ordering!(@item_ty $rest) ),+
             )>,
@@ -875,7 +876,7 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: BinaryPredicateOp<KeySource::Item>,
+    Less: PredicateOp2<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
     type Output = (
@@ -909,7 +910,7 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: BinaryPredicateOp<KeySource::Item>,
+    Less: PredicateOp2<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
     type Output = (
@@ -978,7 +979,7 @@ macro_rules! impl_sort_by_key_input {
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
                 <$rest as KernelColumn>::Expr: GpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Less: BinaryPredicateOp<KeySource::Item>,
+            Less: PredicateOp2<KeySource::Item>,
         {
             type Runtime = KeySource::Runtime;
             type Output = (
@@ -1059,7 +1060,7 @@ macro_rules! impl_sort_by_key_view_values {
             KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
             $( <$value as KernelColumn>::Expr: GpuExpr<<$value as KernelColumn>::Item>, )+
-            Less: BinaryPredicateOp<KeySource::Item>,
+            Less: PredicateOp2<KeySource::Item>,
         {
             type Runtime = KeySource::Runtime;
             type Output = (
@@ -1128,7 +1129,7 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item)>,
 {
     type Runtime = KeyA::Runtime;
     type Output = (
@@ -1174,7 +1175,7 @@ where
     ValueA::Expr: GpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueB::Expr: GpuExpr<ValueB::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item)>,
 {
     type Runtime = KeyA::Runtime;
     type Output = (
@@ -1234,7 +1235,7 @@ where
     ValueB::Expr: GpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
     ValueC::Expr: GpuExpr<ValueC::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item)>,
 {
     type Runtime = KeyA::Runtime;
     type Output = (
@@ -1295,7 +1296,7 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
     type Runtime = KeyA::Runtime;
     type Output = (
@@ -1358,7 +1359,7 @@ where
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
     type Runtime = KeyA::Runtime;
     type Output = (
@@ -1436,7 +1437,7 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
 {
     type Runtime = KeyA::Runtime;
     type Output = (
@@ -1525,7 +1526,7 @@ macro_rules! impl_sort_by_tuple_key_scalar_value {
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            Less: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Less: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
@@ -1583,7 +1584,7 @@ macro_rules! impl_sort_by_tuple_key_soa2_values {
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
             ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-            Less: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Less: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
@@ -1657,7 +1658,7 @@ macro_rules! impl_sort_by_tuple_key_soa_view_values {
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             <$first_value as KernelColumn>::Expr: DeviceGpuExpr<<$first_value as KernelColumn>::Item>,
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
-            Less: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Less: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = (
@@ -1775,7 +1776,7 @@ where
     LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
     RightKey::Expr: DeviceGpuExpr<RightKey::Item>,
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
-    Less: BinaryPredicateOp<LeftKey::Item>,
+    Less: PredicateOp2<LeftKey::Item>,
 {
     type Runtime = LeftKey::Runtime;
     type Output = (
@@ -1844,7 +1845,7 @@ macro_rules! impl_merge_by_key_input {
                 <$left as KernelColumn>::Expr: DeviceGpuExpr<<$left as KernelColumn>::Item>,
                 <$right as KernelColumn>::Expr: DeviceGpuExpr<<$right as KernelColumn>::Item>,
             )+
-            Less: BinaryPredicateOp<LeftKey::Item>,
+            Less: PredicateOp2<LeftKey::Item>,
         {
             type Runtime = LeftKey::Runtime;
             type Output = (
@@ -2003,7 +2004,7 @@ macro_rules! impl_merge_by_tuple_key_scalar_value {
             $( <$right as KernelColumn>::Expr: DeviceGpuExpr<<$right as KernelColumn>::Item>, )+
             LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
             RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
-            Less: BinaryPredicateOp<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
+            Less: PredicateOp2<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first_left as KernelColumn>::Runtime;
             type Output = (
@@ -2086,7 +2087,7 @@ macro_rules! impl_merge_by_tuple_key_soa_view_values {
             $( <$right as KernelColumn>::Expr: DeviceGpuExpr<<$right as KernelColumn>::Item>, )+
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
             $( <$right_value as KernelColumn>::Expr: DeviceGpuExpr<<$right_value as KernelColumn>::Item>, )+
-            Less: BinaryPredicateOp<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
+            Less: PredicateOp2<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first_left as KernelColumn>::Runtime;
             type Output = (
@@ -2172,7 +2173,7 @@ macro_rules! impl_merge_by_tuple_key_soa_values {
             $( <$right as KernelColumn>::Expr: DeviceGpuExpr<<$right as KernelColumn>::Item>, )+
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
             $( <$right_value as KernelColumn>::Expr: DeviceGpuExpr<<$right_value as KernelColumn>::Item>, )+
-            Less: BinaryPredicateOp<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
+            Less: PredicateOp2<(<$first_left as KernelColumn>::Item, $( <$left as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first_left as KernelColumn>::Runtime;
             type Output = (
@@ -2255,7 +2256,7 @@ where
     RightB::Expr: DeviceGpuExpr<RightB::Item>,
     LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
-    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item)>,
+    Less: PredicateOp2<(LeftA::Item, LeftB::Item)>,
 {
     type Runtime = LeftA::Runtime;
     type Output = (
@@ -2328,7 +2329,7 @@ where
     LeftValueB::Expr: DeviceGpuExpr<LeftValueB::Item>,
     RightValueA::Expr: DeviceGpuExpr<RightValueA::Item>,
     RightValueB::Expr: DeviceGpuExpr<RightValueB::Item>,
-    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item)>,
+    Less: PredicateOp2<(LeftA::Item, LeftB::Item)>,
 {
     type Runtime = LeftA::Runtime;
     type Output = (
@@ -2409,7 +2410,7 @@ where
     RightC::Expr: DeviceGpuExpr<RightC::Item>,
     LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
-    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
+    Less: PredicateOp2<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
     type Runtime = LeftA::Runtime;
     type Output = (
@@ -2519,7 +2520,7 @@ where
     LeftValueB::Expr: DeviceGpuExpr<LeftValueB::Item>,
     RightValueA::Expr: DeviceGpuExpr<RightValueA::Item>,
     RightValueB::Expr: DeviceGpuExpr<RightValueB::Item>,
-    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
+    Less: PredicateOp2<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
     type Runtime = LeftA::Runtime;
     type Output = (
@@ -2662,7 +2663,7 @@ where
     RightValueA::Expr: DeviceGpuExpr<RightValueA::Item>,
     RightValueB::Expr: DeviceGpuExpr<RightValueB::Item>,
     RightValueC::Expr: DeviceGpuExpr<RightValueC::Item>,
-    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
+    Less: PredicateOp2<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
     type Runtime = LeftA::Runtime;
     type Output = (
@@ -2768,7 +2769,7 @@ where
     LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
     RightKey::Expr: DeviceGpuExpr<RightKey::Item>,
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
-    Less: BinaryPredicateOp<LeftKey::Item>,
+    Less: PredicateOp2<LeftKey::Item>,
 {
     type Runtime = LeftKey::Runtime;
     type Output = (
@@ -2852,7 +2853,7 @@ where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: BinaryPredicateOp<Source::Item>,
+    Less: PredicateOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -2874,7 +2875,7 @@ where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: BinaryPredicateOp<Source::Item>,
+    Less: PredicateOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -2893,7 +2894,7 @@ where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: BinaryPredicateOp<(Source::Item,)>,
+    Less: PredicateOp2<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -2974,7 +2975,7 @@ where
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
+    Less: PredicateOp2<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
@@ -3010,7 +3011,7 @@ where
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+    Less: PredicateOp2<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Output = SoA3<
@@ -3051,7 +3052,7 @@ where
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
+    Less: PredicateOp2<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
@@ -3084,7 +3085,7 @@ where
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+    Less: PredicateOp2<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Output = SoA3<

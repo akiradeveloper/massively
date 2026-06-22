@@ -8,7 +8,7 @@ fn count_if_accepts_heterogeneous_tuple_predicates() {
 
     let count = count_if(
         &exec,
-        (values.slice(..), tags.slice(..)),
+        massively::SoA2(values.slice(..), tags.slice(..)),
         PairMixedTagIsTwenty,
     )
     .unwrap();

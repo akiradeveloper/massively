@@ -9,8 +9,8 @@ fn main() -> common::Result {
 
     let result = equal(
         &exec,
-        (left.slice(..),),
-        (right.slice(..),),
+        massively::SoA1(left.slice(..)),
+        massively::SoA1(right.slice(..)),
         common::EqualF32,
     )?;
 

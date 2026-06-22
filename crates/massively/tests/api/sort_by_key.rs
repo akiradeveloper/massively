@@ -10,8 +10,8 @@ fn sort_by_key_accepts_borrowed_tuple_keys() {
 
     let (keys, values) = sort_by_key(
         &exec,
-        (key_a.slice(..), key_b.slice(..)),
-        (values.slice(..),),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
+        massively::SoA1(values.slice(..)),
         MixedTupleLess,
     )
     .unwrap();
@@ -32,8 +32,8 @@ fn sort_by_key_accepts_tuple_values() {
 
     let (keys, values) = sort_by_key(
         &exec,
-        (keys.slice(..),),
-        (a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         LessU32,
     )
     .unwrap();
@@ -55,8 +55,8 @@ fn sort_by_key_reports_value_length_mismatch() {
 
     let err = sort_by_key(
         &exec,
-        (key_a.slice(..), key_b.slice(..)),
-        (values.slice(..),),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
+        massively::SoA1(values.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();

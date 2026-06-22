@@ -1,6 +1,6 @@
 use crate::{
+    detail::op::kernel::{BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp},
     expr::{DeviceGpuExpr, GpuExpr},
-    op::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp},
 };
 use cubecl::prelude::*;
 
@@ -197,7 +197,7 @@ macro_rules! define_tuple_predicate_flags_kernel {
         ($( $ty:ident : $input:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp1<($( $ty, )+)>>(
             $( $input: &[$ty], )+
             len: &[u32],
             invert: &[u32],
@@ -232,7 +232,7 @@ macro_rules! define_tuple_adjacent_flags_kernel {
         ($( $ty:ident : $input:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp2<($( $ty, )+)>>(
             $( $input: &[$ty], )+
             flags: &mut [u32],
         ) {
@@ -259,7 +259,7 @@ macro_rules! define_tuple_unique_flags_kernel {
         ($( $ty:ident : $input:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp2<($( $ty, )+)>>(
             $( $input: &[$ty], )+
             flags: &mut [u32],
         ) {
@@ -288,7 +288,7 @@ macro_rules! define_tuple_mismatch_flags_kernel {
         ($( $ty:ident : $left:ident / $right:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Eq: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Eq: PredicateOp2<($( $ty, )+)>>(
             $( $left: &[$ty], )+
             $( $right: &[$ty], )+
             flags: &mut [u32],
@@ -316,7 +316,7 @@ macro_rules! define_tuple_sorted_break_flags_kernel {
         ($( $ty:ident : $input:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
             $( $input: &[$ty], )+
             flags: &mut [u32],
         ) {
@@ -346,7 +346,7 @@ macro_rules! define_tuple_bound_flags_kernel {
         ($first_ty:ident : $first_input:ident / $first_value:ident $(, $ty:ident : $input:ident / $value:ident )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $lower_fn<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>>(
+        pub(crate) fn $lower_fn<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: PredicateOp2<($first_ty, $( $ty, )*)>>(
             $first_input: &[$first_ty],
             $( $input: &[$ty], )*
             $first_value: &[$first_ty],
@@ -369,7 +369,7 @@ macro_rules! define_tuple_bound_flags_kernel {
         }
 
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $upper_fn<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>>(
+        pub(crate) fn $upper_fn<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: PredicateOp2<($first_ty, $( $ty, )*)>>(
             $first_input: &[$first_ty],
             $( $input: &[$ty], )*
             $first_value: &[$first_ty],
@@ -402,7 +402,7 @@ macro_rules! define_tuple_membership_flags_kernel {
         ($first_ty:ident : $first_candidate:ident / $first_sorted:ident $(, $ty:ident : $candidate:ident / $sorted:ident )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>>(
+        pub(crate) fn $fn_name<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: PredicateOp2<($first_ty, $( $ty, )*)>>(
             $first_candidate: &[$first_ty],
             $( $candidate: &[$ty], )*
             $first_sorted: &[$first_ty],
@@ -486,7 +486,7 @@ macro_rules! define_tuple_minmax_kernels {
         ($( $ty:ident : $input:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $element_fn<$( $ty: CubePrimitive, )+ Less: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $element_fn<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
             $( $input: &[$ty], )+
             len: &[u32],
             partials: &mut [u32],
@@ -559,7 +559,7 @@ macro_rules! define_tuple_minmax_kernels {
         }
 
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $index_fn<$( $ty: CubePrimitive, )+ Less: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $index_fn<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
             $( $input: &[$ty], )+
             candidates: &[u32],
             candidate_len: &[u32],
@@ -645,7 +645,7 @@ macro_rules! define_tuple_find_first_of_flags_kernel {
         ($first_ty:ident : $first_input:ident / $first_needle:ident $(, $ty:ident : $input:ident / $needle:ident )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Eq: BinaryPredicateOp<($first_ty, $( $ty, )*)>>(
+        pub(crate) fn $fn_name<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Eq: PredicateOp2<($first_ty, $( $ty, )*)>>(
             $first_input: &[$first_ty],
             $( $input: &[$ty], )*
             $first_needle: &[$first_ty],
@@ -684,7 +684,7 @@ macro_rules! define_tuple_lexicographical_diff_flags_kernel {
         ($( $ty:ident : $left:ident / $right:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
             $( $left: &[$ty], )+
             $( $right: &[$ty], )+
             flags: &mut [u32],
@@ -711,7 +711,7 @@ macro_rules! define_tuple_lexicographical_compare_at_kernel {
         ($( $ty:ident : $left:ident / $right:ident ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: BinaryPredicateOp<($( $ty, )+)>>(
+        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
             $( $left: &[$ty], )+
             $( $right: &[$ty], )+
             index: &[u32],
@@ -739,7 +739,7 @@ define_tuple_lexicographical_compare_at_kernel!(tuple3_lexicographical_compare_a
 pub(crate) fn copy_if_expr_flags_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -767,7 +767,7 @@ pub(crate) fn copy_if_expr_flags_kernel<
 pub(crate) fn copy_if_expr_flag_only_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -794,7 +794,7 @@ pub(crate) fn copy_if_stencil_expr_flags_kernel<
     S: CubePrimitive,
     ValueExpr: GpuExpr<T>,
     StencilExpr: GpuExpr<S>,
-    Pred: PredicateOp<S>,
+    Pred: PredicateOp1<S>,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -842,7 +842,7 @@ pub(crate) fn transform_if_stencil_expr_kernel<
     ValueExpr: GpuExpr<T>,
     StencilExpr: GpuExpr<S>,
     Op: UnaryOp<T, Output = T>,
-    Pred: PredicateOp<S>,
+    Pred: PredicateOp1<S>,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -982,7 +982,7 @@ pub(crate) fn scatter_if_expr_kernel<
     T: CubePrimitive,
     ValueExpr: GpuExpr<T>,
     IndexExpr: GpuExpr<u32>,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -1081,7 +1081,7 @@ pub(crate) fn u32_add_block_prefix_kernel(block_prefixes: &[u32], len: &[u32], o
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scalar_inclusive_scan_block_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
+pub(crate) fn scalar_inclusive_scan_block_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
     input: &[T],
     len: &[u32],
     output: &mut [T],
@@ -1133,7 +1133,7 @@ pub(crate) fn scalar_inclusive_scan_block_kernel<T: CubePrimitive, Op: BinaryOp<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scalar_scan_add_block_prefix_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
+pub(crate) fn scalar_scan_add_block_prefix_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
     block_prefixes: &[T],
     len: &[u32],
     output: &mut [T],
@@ -1148,7 +1148,7 @@ pub(crate) fn scalar_scan_add_block_prefix_kernel<T: CubePrimitive, Op: BinaryOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scalar_reduce_last_finalize_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
+pub(crate) fn scalar_reduce_last_finalize_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
     partial: &[T],
     len: &[u32],
     init: &[T],
@@ -1163,7 +1163,7 @@ pub(crate) fn scalar_reduce_last_finalize_kernel<T: CubePrimitive, Op: BinaryOp<
 pub(crate) fn tuple1_device_inclusive_scan_expr_block_kernel<
     A: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
-    Op: BinaryOp<(A,)>,
+    Op: BinaryOp2<(A,)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1221,7 +1221,7 @@ pub(crate) fn tuple1_device_inclusive_scan_expr_block_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_inclusive_scan_block_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
+pub(crate) fn tuple1_inclusive_scan_block_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
     input_a: &[A],
     len: &[u32],
     output_a: &mut [A],
@@ -1274,7 +1274,7 @@ pub(crate) fn tuple1_inclusive_scan_block_kernel<A: CubePrimitive, Op: BinaryOp<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_scan_add_block_prefix_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
+pub(crate) fn tuple1_scan_add_block_prefix_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
     block_prefixes_a: &[A],
     len: &[u32],
     output_a: &mut [A],
@@ -1291,7 +1291,7 @@ pub(crate) fn tuple1_scan_add_block_prefix_kernel<A: CubePrimitive, Op: BinaryOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_scan_make_exclusive_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
+pub(crate) fn tuple1_scan_make_exclusive_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
     inclusive_a: &[A],
     init_a: &[A],
     output_a: &mut [A],
@@ -1315,7 +1315,7 @@ pub(crate) fn tuple2_device_inclusive_scan_expr_block_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1394,7 +1394,7 @@ pub(crate) fn tuple2_device_inclusive_scan_expr_block_kernel<
 pub(crate) fn tuple2_inclusive_scan_block_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -1465,7 +1465,7 @@ pub(crate) fn tuple2_inclusive_scan_block_kernel<
 pub(crate) fn tuple2_scan_add_block_prefix_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     block_prefixes_a: &[A],
     block_prefixes_b: &[B],
@@ -1495,7 +1495,7 @@ pub(crate) fn tuple2_scan_add_block_prefix_kernel<
 pub(crate) fn tuple2_scan_make_exclusive_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     inclusive_a: &[A],
     inclusive_b: &[B],
@@ -1530,7 +1530,7 @@ pub(crate) fn tuple3_device_inclusive_scan_expr_block_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1625,7 +1625,7 @@ pub(crate) fn tuple3_inclusive_scan_block_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -1708,7 +1708,7 @@ pub(crate) fn tuple3_scan_add_block_prefix_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     block_prefixes_a: &[A],
     block_prefixes_b: &[B],
@@ -1743,7 +1743,7 @@ pub(crate) fn tuple3_scan_make_exclusive_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     inclusive_a: &[A],
     inclusive_b: &[B],
@@ -1820,7 +1820,7 @@ pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceG
 pub(crate) fn unique_by_key_device_expr_flags_kernel<
     K: CubePrimitive,
     Expr: DeviceGpuExpr<K>,
-    Pred: BinaryPredicateOp<K>,
+    Pred: PredicateOp2<K>,
 >(
     slot0: &[K],
     slot1: &[K],
@@ -1889,7 +1889,7 @@ pub(crate) fn compact_scatter_pair_kernel<A: CubePrimitive, B: CubePrimitive>(
 pub(crate) fn adjacent_difference_expr_kernel<
     T: CubePrimitive,
     Expr: DeviceGpuExpr<T>,
-    Op: BinaryOp<T>,
+    Op: BinaryOp2<T>,
 >(
     slot0: &[T],
     slot1: &[T],
@@ -1920,7 +1920,7 @@ pub(crate) fn tuple2_adjacent_difference_expr_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1982,7 +1982,7 @@ pub(crate) fn tuple3_adjacent_difference_expr_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -2057,8 +2057,8 @@ pub(crate) fn inclusive_scan_by_key_expr_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    KeyEq: crate::op::BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 >(
     keys: &[K],
     input: &[T],
@@ -2095,8 +2095,8 @@ pub(crate) fn inclusive_scan_by_key_expr_keys_expr_kernel<
     T: CubePrimitive,
     KeyExpr: GpuExpr<K>,
     ValueExpr: GpuExpr<T>,
-    KeyEq: crate::op::BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 >(
     key_input: &[K],
     key_indices: &[u32],
@@ -2159,8 +2159,8 @@ pub(crate) fn exclusive_scan_by_key_expr_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    KeyEq: crate::op::BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 >(
     keys: &[K],
     input: &[T],
@@ -2198,8 +2198,8 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
     T: CubePrimitive,
     KeyExpr: GpuExpr<K>,
     ValueExpr: GpuExpr<T>,
-    KeyEq: crate::op::BinaryPredicateOp<K>,
-    Op: BinaryOp<T>,
+    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
+    Op: BinaryOp2<T>,
 >(
     key_input: &[K],
     key_indices: &[u32],
@@ -2253,7 +2253,7 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op: BinaryOp<T>>(
+pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op: BinaryOp2<T>>(
     input: &[T],
     indices: &[u32],
     rhs: &[T],
@@ -2311,7 +2311,7 @@ pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_reduce_last_finalize_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
+pub(crate) fn tuple1_reduce_last_finalize_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
     partial_a: &[A],
     len: &[u32],
     init_a: &[A],
@@ -2330,7 +2330,7 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -2432,7 +2432,7 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
 pub(crate) fn tuple2_reduce_partials_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -2509,7 +2509,7 @@ pub(crate) fn tuple2_reduce_partials_kernel<
 pub(crate) fn tuple2_reduce_finalize_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp<(A, B)>,
+    Op: BinaryOp2<(A, B)>,
 >(
     partial_a: &[A],
     partial_b: &[B],
@@ -2533,7 +2533,7 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -2659,7 +2659,7 @@ pub(crate) fn tuple3_reduce_partials_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -2748,7 +2748,7 @@ pub(crate) fn tuple3_reduce_finalize_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp<(A, B, C)>,
+    Op: BinaryOp2<(A, B, C)>,
 >(
     partial_a: &[A],
     partial_b: &[B],
@@ -2775,7 +2775,7 @@ pub(crate) fn tuple3_reduce_finalize_kernel<
 pub(crate) fn count_if_expr_partials_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -2853,7 +2853,7 @@ pub(crate) fn sum_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
 pub(crate) fn find_if_expr_partials_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -2937,7 +2937,7 @@ pub(crate) fn min_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
 pub(crate) fn adjacent_find_expr_partials_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: BinaryPredicateOp<T>,
+    Pred: PredicateOp2<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -2988,7 +2988,7 @@ pub(crate) fn adjacent_find_expr_partials_kernel<
 pub(crate) fn minmax_element_expr_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 >(
     input: &[T],
     indices: &[u32],

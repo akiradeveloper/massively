@@ -12,4 +12,7 @@ license = "MIT"
 repository = "https://github.com/akiradeveloper/massively"
 
 [workspace.dependencies]
-cubecl = { git = "https://github.com/tracel-ai/cubecl.git", branch = "main", default-features = true }
+cubecl = { git = "https://github.com/tracel-ai/cubecl.git", branch = "main", default-features = false, features = [
+    "std",
+    "stdlib",
+] }

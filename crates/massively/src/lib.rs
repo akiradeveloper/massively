@@ -15,9 +15,9 @@
 //! # Data Model
 //!
 //! A [`DeviceVec`] is one owned GPU column. Algorithms read borrowed
-//! [`DeviceSlice`] inputs: borrow one column as `(xs.slice(..),)`, or combine
-//! several borrowed columns as a tuple such as
-//! `(xs.slice(..), ys.slice(..), zs.slice(..))`.
+//! [`DeviceSlice`] inputs: borrow one column as `SoA1(xs.slice(..))`, or combine
+//! several borrowed columns as `SoA2(xs.slice(..), ys.slice(..))` or
+//! `SoA3(xs.slice(..), ys.slice(..), zs.slice(..))`.
 //!
 //! Algorithm outputs are owned device storage: a [`DeviceVec`] for one output
 //! column, or a tuple of [`DeviceVec`] columns for multi-column output.
@@ -42,7 +42,7 @@
 //! struct TupleLess;
 //!
 //! #[cubecl::cube]
-//! impl massively::op::BinaryPredicateOp<(u32, u32)> for TupleLess {
+//! impl massively::op::PredicateOp2<Wgpu, (u32, u32)> for TupleLess {
 //!     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
 //!         lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
 //!     }
@@ -56,8 +56,8 @@
 //!
 //!     let _ = sort_by_key::<Wgpu, _, _, _, _, _, _>(
 //!         &exec,
-//!         (key_a.slice(..), key_b.slice(..)),
-//!         (values.slice(..),),
+//!         massively::SoA2(key_a.slice(..), key_b.slice(..)),
+//!         massively::SoA1(values.slice(..)),
 //!         TupleLess,
 //!     )?;
 //!
@@ -70,5 +70,15 @@ mod detail;
 
 pub use api::*;
 pub use detail::op;
+
+/// Common facade traits and types.
+///
+/// Algorithm functions are intentionally not included; call them through the
+/// `massively::` namespace.
+pub mod prelude {
+    pub use crate::api::{
+        Backend, DeviceSlice, DeviceVec, Executor, MIter, MVec, SoA1, SoA2, SoA3,
+    };
+}
 
 pub(crate) use detail::{device, error, expr, kernels, policy, primitives};

@@ -1,8 +1,8 @@
-use crate::{expr::DeviceGpuExpr, op::BinaryPredicateOp};
+use crate::{detail::op::kernel::PredicateOp2, expr::DeviceGpuExpr};
 use cubecl::prelude::*;
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn merge_path_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn merge_path_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     output: &mut [T],
     lhs: &[T],
     rhs: &[T],
@@ -51,7 +51,7 @@ pub(crate) fn merge_path_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn merge_by_key_control_path_kernel<K: CubePrimitive, Less: BinaryPredicateOp<K>>(
+pub(crate) fn merge_by_key_control_path_kernel<K: CubePrimitive, Less: PredicateOp2<K>>(
     lhs_keys: &[K],
     rhs_keys: &[K],
     out_keys: &mut [K],
@@ -129,7 +129,7 @@ pub(crate) fn merge_by_key_values_from_control_kernel<T: CubePrimitive>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn merge_sort_pass_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn merge_sort_pass_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     width: &[u32],
     output: &mut [T],
@@ -207,7 +207,7 @@ pub(crate) fn merge_sort_pass_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T
 pub(crate) fn merge_sort_expr_first_pass_kernel<
     T: CubePrimitive,
     Expr: DeviceGpuExpr<T>,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 >(
     slot0: &[T],
     slot1: &[T],
@@ -249,7 +249,7 @@ pub(crate) fn merge_sort_by_key_expr_first_pass_kernel<
     T: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
     ValueExpr: DeviceGpuExpr<T>,
-    Less: BinaryPredicateOp<K>,
+    Less: PredicateOp2<K>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -346,7 +346,7 @@ pub(crate) fn merge_sort_tuple2_expr_first_pass_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Less: BinaryPredicateOp<(A, B)>,
+    Less: PredicateOp2<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -417,7 +417,7 @@ pub(crate) fn merge_sort_tuple2_by_key_expr_first_pass_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ValueExpr: DeviceGpuExpr<T>,
-    Less: BinaryPredicateOp<(A, B)>,
+    Less: PredicateOp2<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -522,7 +522,7 @@ pub(crate) fn merge_sort_tuple3_expr_first_pass_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Less: BinaryPredicateOp<(A, B, C)>,
+    Less: PredicateOp2<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -610,7 +610,7 @@ pub(crate) fn merge_sort_tuple3_expr_first_pass_kernel<
 pub(crate) fn merge_sort_tuple2_pass_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Less: BinaryPredicateOp<(A, B)>,
+    Less: PredicateOp2<(A, B)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -709,7 +709,7 @@ pub(crate) fn merge_sort_tuple2_by_key_pass_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     T: CubePrimitive,
-    Less: BinaryPredicateOp<(A, B)>,
+    Less: PredicateOp2<(A, B)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -814,7 +814,7 @@ pub(crate) fn merge_sort_tuple3_by_key_pass_kernel<
     B: CubePrimitive,
     C: CubePrimitive,
     T: CubePrimitive,
-    Less: BinaryPredicateOp<(A, B, C)>,
+    Less: PredicateOp2<(A, B, C)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -930,7 +930,7 @@ pub(crate) fn merge_sort_tuple3_pass_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Less: BinaryPredicateOp<(A, B, C)>,
+    Less: PredicateOp2<(A, B, C)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -1040,7 +1040,7 @@ pub(crate) fn merge_sort_tuple3_pass_kernel<
 pub(crate) fn merge_sort_by_key_pass_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    Less: BinaryPredicateOp<K>,
+    Less: PredicateOp2<K>,
 >(
     input_keys: &[K],
     input_values: &[T],

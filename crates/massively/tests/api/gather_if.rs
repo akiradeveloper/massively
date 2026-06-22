@@ -9,10 +9,10 @@ fn gather_if_accepts_soa12_values() {
     let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
     let output = gather_if(
         &exec,
-        (a.slice(..), b.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(a.slice(..), b.slice(..)),
+        indices.slice(..),
         (0.0_f32, 0_u32),
-        (stencil.slice(..),),
+        stencil.slice(..),
     )
     .unwrap();
     let (a, b) = output;
@@ -30,10 +30,10 @@ fn gather_if_accepts_u32_stencil() {
 
     let output = gather_if(
         &exec,
-        (a.slice(..), b.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(a.slice(..), b.slice(..)),
+        indices.slice(..),
         (0_u32, 0.0_f32),
-        (stencil.slice(..),),
+        stencil.slice(..),
     )
     .unwrap();
     let (a, b) = output;

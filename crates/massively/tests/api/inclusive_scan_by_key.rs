@@ -10,8 +10,8 @@ fn inclusive_scan_by_key_accepts_tuple_keys() {
 
     let output = inclusive_scan_by_key(
         &exec,
-        (key_a.slice(..), key_b.slice(..)),
-        (values.slice(..),),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
+        massively::SoA1(values.slice(..)),
         MixedTupleEqual,
         Sum,
     )
@@ -33,9 +33,14 @@ fn inclusive_scan_by_key_handles_block_boundary_runs() {
 
     let keys = exec.to_device(&keys).unwrap();
     let values = exec.to_device(&values).unwrap();
-    let output =
-        inclusive_scan_by_key(&exec, (keys.slice(..),), (values.slice(..),), EqualU32, Sum)
-            .unwrap();
+    let output = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        Sum,
+    )
+    .unwrap();
     let (output,) = output;
 
     assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -53,8 +58,8 @@ fn inclusive_scan_by_key_accepts_tuple_values() {
 
     let output = inclusive_scan_by_key(
         &exec,
-        (keys.slice(..),),
-        (a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
         TupleSum,
     )

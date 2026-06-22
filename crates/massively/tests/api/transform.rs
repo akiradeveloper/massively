@@ -6,7 +6,12 @@ fn transform_zip_output_returns_storage() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let output = transform(&exec, (values.slice(..), tags.slice(..)), PairMixedSplit).unwrap();
+    let output = transform(
+        &exec,
+        massively::SoA2(values.slice(..), tags.slice(..)),
+        PairMixedSplit,
+    )
+    .unwrap();
     let (values, tags) = output;
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);
@@ -18,7 +23,12 @@ fn transform_returns_device_storage() {
     let exec = exec();
     let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let split = transform(&exec, (left.slice(..), right.slice(..)), PairMixedSplit).unwrap();
+    let split = transform(
+        &exec,
+        massively::SoA2(left.slice(..), right.slice(..)),
+        PairMixedSplit,
+    )
+    .unwrap();
     let (values, tags) = split;
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);
@@ -26,7 +36,7 @@ fn transform_returns_device_storage() {
 }
 
 #[test]
-fn transform_tuple_output_maps_to_storage_output() {
+fn transform_tuple_output_maps_to_mitem_storage() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
@@ -34,7 +44,7 @@ fn transform_tuple_output_maps_to_storage_output() {
 
     let split = transform(
         &exec,
-        (values.slice(..), tags.slice(..), bias.slice(..)),
+        massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
     )
     .unwrap();
@@ -49,7 +59,7 @@ fn tuple1_transform_returns_soa1_storage() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let (output,) = transform(&exec, (input.slice(..),), Double).unwrap();
+    let (output,) = transform(&exec, massively::SoA1(input.slice(..)), Double).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
 }
@@ -60,7 +70,7 @@ fn unary_transform_accepts_wide_tuple_outputs() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let output = transform(&exec, (input.slice(..),), ScalarToTuple5Mixed).unwrap();
+    let output = transform(&exec, massively::SoA1(input.slice(..)), ScalarToTuple5Mixed).unwrap();
     let (a, b, c, d, e) = output;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![2.0, 3.0, 4.0]);
@@ -76,7 +86,12 @@ fn unary_transform_accepts_tuple12_output_and_checks_every_column() {
     let exec = exec();
     let input = exec.to_device(&[10_u32, 20]).unwrap();
 
-    let output = transform(&exec, (input.slice(..),), ScalarToTuple12Mixed).unwrap();
+    let output = transform(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        ScalarToTuple12Mixed,
+    )
+    .unwrap();
     let (a, b, c, d, e, f, g, h, i, j, k, l) = output;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![11.0, 21.0]);
@@ -102,7 +117,7 @@ fn tuple_transform_uses_flat_soa_input() {
 
     let output = transform(
         &exec,
-        (lhs.slice(..), rhs.slice(..), bias.slice(..)),
+        massively::SoA3(lhs.slice(..), rhs.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
     )
     .unwrap();
@@ -122,14 +137,19 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
-    let pair_output = transform(&exec, (values.slice(..), tags.slice(..)), PairMixedSplit).unwrap();
+    let pair_output = transform(
+        &exec,
+        massively::SoA2(values.slice(..), tags.slice(..)),
+        PairMixedSplit,
+    )
+    .unwrap();
     let (pair_values, pair_tags) = pair_output;
     assert_eq!(exec.to_host(&pair_values).unwrap(), vec![11.0, 12.0, 13.0]);
     assert_eq!(exec.to_host(&pair_tags).unwrap(), vec![11, 21, 31]);
 
     let tuple3_output = transform(
         &exec,
-        (values.slice(..), tags.slice(..), bias.slice(..)),
+        massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
     )
     .unwrap();
@@ -197,7 +217,7 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
 
     let out_3_to_5 = transform(
         &exec,
-        zip3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         Tuple3To5MixedSplit,
     )
     .unwrap();
@@ -216,7 +236,12 @@ fn transform_accepts_extreme_mismatched_tuple_widths() {
     let a = exec.to_device(&[1.0_f32, 2.0]).unwrap();
     let b = exec.to_device(&[10_u32, 20]).unwrap();
 
-    let expanded = transform(&exec, zip(a.slice(..), b.slice(..)), Tuple2To12MixedExpand).unwrap();
+    let expanded = transform(
+        &exec,
+        massively::SoA2(a.slice(..), b.slice(..)),
+        Tuple2To12MixedExpand,
+    )
+    .unwrap();
     let (a1, b1, a2, b2, a3, b3, a4, b4, a5, b5, a6, b6) = expanded;
     assert_eq!(exec.to_host(&a1).unwrap(), vec![2.0, 3.0]);
     assert_eq!(exec.to_host(&b1).unwrap(), vec![12, 22]);
@@ -549,7 +574,12 @@ fn transform_zip_flattens_soa1_columns() {
     let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let split = transform(&exec, (left.slice(..), right.slice(..)), PairMixedSplit).unwrap();
+    let split = transform(
+        &exec,
+        massively::SoA2(left.slice(..), right.slice(..)),
+        PairMixedSplit,
+    )
+    .unwrap();
     let (values, tags) = split;
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);

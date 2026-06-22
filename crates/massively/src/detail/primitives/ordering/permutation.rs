@@ -1,7 +1,8 @@
 use crate::{
+    detail::op::kernel::PredicateOp2,
     device::DeviceVec,
     error::Error,
-    op::{BinaryPredicateOp, GpuOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::range,
 };
@@ -27,7 +28,7 @@ pub(crate) fn sort_by_key_permutation<R, K, Less>(
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<K>,
+    Less: PredicateOp2<K>,
 {
     let indices = range::indices_u32(policy, keys.len())?;
     let (keys, indices) =

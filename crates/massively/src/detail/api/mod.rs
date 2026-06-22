@@ -12,13 +12,12 @@ use std::marker::PhantomData;
 
 pub use gather::{gather, gather_if};
 pub use memory::{
-    MaterializeOutput, StorageOutput, TransformSoA2Output, TransformSoA3Output,
-    TransformUnaryOutput,
+    MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformUnaryOutput,
 };
 pub use ordering::{
     merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,
 };
-pub use reduce::{inner_product, reduce, reduce_by_key};
+pub use reduce::{reduce, reduce_by_key};
 pub use scan::{
     adjacent_difference, exclusive_scan, exclusive_scan_by_key, inclusive_scan,
     inclusive_scan_by_key,
@@ -35,11 +34,12 @@ pub use selection::{
 pub use sequence::{replace_if, unique, unique_by_key};
 
 use crate::{
+    detail::op::kernel::{BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp},
     device::{DeviceVec, KernelColumn, KernelColumnAt, S0, SoAView2, SoAView3},
     error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
-    op::{BinaryOp, BinaryPredicateOp, GpuOp, PredicateOp},
+    op::GpuOp,
     primitives::{
         reduce as primitive_reduce, scan as primitive_scan, scan::read_u32_scalar,
         search as primitive_search, select,
@@ -61,10 +61,10 @@ impl<Less> Default for Tuple1Less<Less> {
 }
 
 #[cubecl::cube]
-impl<T, Less> BinaryPredicateOp<T> for Tuple1Less<Less>
+impl<T, Less> PredicateOp2<T> for Tuple1Less<Less>
 where
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<(T,)>,
+    Less: PredicateOp2<(T,)>,
 {
     fn apply(lhs: T, rhs: T) -> bool {
         Less::apply((lhs,), (rhs,))
@@ -83,13 +83,38 @@ impl<Op> Default for Tuple1BinaryOp<Op> {
 }
 
 #[cubecl::cube]
-impl<T, Op> BinaryOp<T> for Tuple1BinaryOp<Op>
+impl<T, Op> BinaryOp2<T> for Tuple1BinaryOp<Op>
 where
     T: CubePrimitive + CubeElement,
-    Op: BinaryOp<(T,)>,
+    Op: BinaryOp2<(T,)>,
 {
     fn apply(lhs: T, rhs: T) -> T {
         Op::apply((lhs,), (rhs,)).0
+    }
+}
+
+#[doc(hidden)]
+pub struct Tuple1InnerProductZipper<Op> {
+    _op: PhantomData<fn() -> Op>,
+}
+
+impl<Op> Default for Tuple1InnerProductZipper<Op> {
+    fn default() -> Self {
+        Self { _op: PhantomData }
+    }
+}
+
+#[cubecl::cube]
+impl<Left, Right, Op> UnaryOp<(Left, Right)> for Tuple1InnerProductZipper<Op>
+where
+    Left: CubePrimitive + CubeElement,
+    Right: CubePrimitive + CubeElement,
+    Op: UnaryOp<((Left,), (Right,))>,
+{
+    type Output = Op::Output;
+
+    fn apply(input: (Left, Right)) -> Self::Output {
+        Op::apply(((input.0,), (input.1,)))
     }
 }
 
@@ -105,10 +130,10 @@ impl<Op> Default for Tuple1PredicateOp<Op> {
 }
 
 #[cubecl::cube]
-impl<T, Op> PredicateOp<T> for Tuple1PredicateOp<Op>
+impl<T, Op> PredicateOp1<T> for Tuple1PredicateOp<Op>
 where
     T: CubePrimitive + CubeElement,
-    Op: PredicateOp<(T,)>,
+    Op: PredicateOp1<(T,)>,
 {
     fn apply(input: T) -> bool {
         Op::apply((input,))
@@ -378,7 +403,7 @@ where
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
-    Pred: PredicateOp<ExprSource::Item>,
+    Pred: PredicateOp1<ExprSource::Item>,
 {
     let handles =
         device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
@@ -453,7 +478,7 @@ where
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
-    Pred: PredicateOp<ExprSource::Item>,
+    Pred: PredicateOp1<ExprSource::Item>,
 {
     let handles =
         device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
@@ -474,7 +499,7 @@ where
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
-    Pred: PredicateOp<ExprSource::Item>,
+    Pred: PredicateOp1<ExprSource::Item>,
 {
     let handles =
         device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
@@ -491,7 +516,7 @@ where
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
-    Pred: PredicateOp<ExprSource::Item>,
+    Pred: PredicateOp1<ExprSource::Item>,
 {
     expr.validate()?;
     let len = expr.len();
@@ -628,7 +653,7 @@ where
     Stencil::Runtime: Runtime,
     Stencil::Item: CubePrimitive + CubeElement,
     Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<Stencil::Item>,
+    Pred: PredicateOp1<Stencil::Item>,
 {
     type Runtime = Stencil::Runtime;
 
@@ -651,7 +676,7 @@ where
     Stencil::Runtime: Runtime,
     Stencil::Item: CubePrimitive + CubeElement,
     Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,)>,
+    Pred: PredicateOp1<(Stencil::Item,)>,
 {
     type Runtime = Stencil::Runtime;
 
@@ -691,7 +716,7 @@ macro_rules! impl_tuple_selection_stencil {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Pred: PredicateOp<(
+            Pred: PredicateOp1<(
                 <$first as KernelColumn>::Item,
                 $( <$rest as KernelColumn>::Item ),+
             )>,
@@ -825,33 +850,6 @@ where
     }
 }
 
-pub(super) fn device_expr_reduce_with_policy<ExprSource, Op>(
-    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
-    expr: &ExprSource,
-    init: ExprSource::Item,
-) -> Result<ExprSource::Item, Error>
-where
-    ExprSource: KernelColumn + KernelColumnAt<S0>,
-    ExprSource::Runtime: Runtime,
-    ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
-    Op: BinaryOp<ExprSource::Item>,
-{
-    expr.validate()?;
-    if expr.len() == 0 {
-        return Ok(init);
-    }
-
-    let values = device_expr_collect_with_policy(policy, expr)?;
-    primitive_reduce::reduce_input_handle::<ExprSource::Runtime, ExprSource::Item, Op>(
-        policy,
-        values.handle,
-        values.len,
-        values.len,
-        init,
-    )
-}
-
 pub(super) fn device_expr_adjacent_difference_with_policy<ExprSource, Op>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
@@ -861,7 +859,7 @@ where
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
-    Op: BinaryOp<ExprSource::Item>,
+    Op: BinaryOp2<ExprSource::Item>,
 {
     expr.validate()?;
     let len = expr.len();
@@ -912,7 +910,7 @@ where
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
-    Less: BinaryPredicateOp<ExprSource::Item>,
+    Less: PredicateOp2<ExprSource::Item>,
 {
     expr.validate()?;
     let values = device_expr_collect_with_policy(policy, expr)?;
@@ -930,8 +928,8 @@ where
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<ExprSource::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<ExprSource::Item>,
 {
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
@@ -958,8 +956,8 @@ where
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<ExprSource::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<ExprSource::Item>,
 {
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
@@ -993,8 +991,8 @@ where
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<ExprSource::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<ExprSource::Item>,
 {
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
@@ -1027,8 +1025,8 @@ where
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<ExprSource::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<ExprSource::Item>,
 {
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;
@@ -1061,8 +1059,8 @@ where
     ExprSource::Item: CubePrimitive + CubeElement,
     ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<ExprSource::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<ExprSource::Item>,
 {
     expr.validate()?;
     ensure_same_len(expr.len(), keys.len)?;

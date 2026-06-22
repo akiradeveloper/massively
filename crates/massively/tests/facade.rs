@@ -1,11 +1,15 @@
 use cubecl::prelude::*;
-use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
-use massively::{Backend, Executor, MIter, MVec, Wgpu};
+use massively::Wgpu;
+use massively::op::{BinaryOp1, PredicateOp1, PredicateOp2, UnaryOp};
+use massively::prelude::*;
 
 struct AddOne;
 
 #[cubecl::cube]
-impl UnaryOp<(u32,)> for AddOne {
+impl<B> UnaryOp<B, (u32,)> for AddOne
+where
+    B: Backend,
+{
     type Output = (u32,);
 
     fn apply(input: (u32,)) -> (u32,) {
@@ -16,7 +20,10 @@ impl UnaryOp<(u32,)> for AddOne {
 struct Split;
 
 #[cubecl::cube]
-impl UnaryOp<(u32,)> for Split {
+impl<B> UnaryOp<B, (u32,)> for Split
+where
+    B: Backend,
+{
     type Output = (u32, u32);
 
     fn apply(input: (u32,)) -> (u32, u32) {
@@ -27,7 +34,10 @@ impl UnaryOp<(u32,)> for Split {
 struct PairShift;
 
 #[cubecl::cube]
-impl UnaryOp<(u32, u32)> for PairShift {
+impl<B> UnaryOp<B, (u32, u32)> for PairShift
+where
+    B: Backend,
+{
     type Output = (u32, u32);
 
     fn apply(input: (u32, u32)) -> (u32, u32) {
@@ -38,7 +48,10 @@ impl UnaryOp<(u32, u32)> for PairShift {
 struct TripleShift;
 
 #[cubecl::cube]
-impl UnaryOp<(u32, u32, u32)> for TripleShift {
+impl<B> UnaryOp<B, (u32, u32, u32)> for TripleShift
+where
+    B: Backend,
+{
     type Output = (u32, u32, u32);
 
     fn apply(input: (u32, u32, u32)) -> (u32, u32, u32) {
@@ -49,7 +62,10 @@ impl UnaryOp<(u32, u32, u32)> for TripleShift {
 struct TupleU32Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<(u32,)> for TupleU32Less {
+impl<B> PredicateOp2<B, (u32,)> for TupleU32Less
+where
+    B: Backend,
+{
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -58,7 +74,10 @@ impl BinaryPredicateOp<(u32,)> for TupleU32Less {
 struct PairU32Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<(u32, u32)> for PairU32Less {
+impl<B> PredicateOp2<B, (u32, u32)> for PairU32Less
+where
+    B: Backend,
+{
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 < rhs.0
     }
@@ -67,7 +86,10 @@ impl BinaryPredicateOp<(u32, u32)> for PairU32Less {
 struct PairEqual;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<(u32, u32)> for PairEqual {
+impl<B> PredicateOp2<B, (u32, u32)> for PairEqual
+where
+    B: Backend,
+{
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1
     }
@@ -76,7 +98,10 @@ impl BinaryPredicateOp<(u32, u32)> for PairEqual {
 struct PairDifference;
 
 #[cubecl::cube]
-impl BinaryOp<(u32, u32)> for PairDifference {
+impl<B> BinaryOp1<B, (u32, u32)> for PairDifference
+where
+    B: Backend,
+{
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> (u32, u32) {
         (lhs.0 - rhs.0, lhs.1 - rhs.1)
     }
@@ -85,7 +110,10 @@ impl BinaryOp<(u32, u32)> for PairDifference {
 struct TripleU32Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<(u32, u32, u32)> for TripleU32Less {
+impl<B> PredicateOp2<B, (u32, u32, u32)> for TripleU32Less
+where
+    B: Backend,
+{
     fn apply(lhs: (u32, u32, u32), rhs: (u32, u32, u32)) -> bool {
         lhs.0 < rhs.0
     }
@@ -94,7 +122,10 @@ impl BinaryPredicateOp<(u32, u32, u32)> for TripleU32Less {
 struct PairFirstOdd;
 
 #[cubecl::cube]
-impl PredicateOp<(u32, u32)> for PairFirstOdd {
+impl<B> PredicateOp1<B, (u32, u32)> for PairFirstOdd
+where
+    B: Backend,
+{
     fn apply(input: (u32, u32)) -> bool {
         input.0 % 2 == 1
     }
@@ -105,7 +136,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B>,
-    Op: UnaryOp<S1::Item, Output = S2::Item>,
+    Op: UnaryOp<B, S1::Item, Output = S2::Item>,
 {
     massively::transform(exec, source, op)
 }
@@ -115,7 +146,7 @@ where
     B: Backend,
     S1: MIter<B, Item = (u32,)>,
     S2: MVec<B, Item = (u32,)>,
-    Op: UnaryOp<(u32,), Output = (u32,)>,
+    Op: UnaryOp<B, (u32,), Output = (u32,)>,
 {
     massively::transform(exec, source, op)
 }
@@ -125,7 +156,7 @@ where
     B: Backend,
     S1: MIter<B, Item = (u32, u32)>,
     S2: MVec<B, Item = (u32, u32)>,
-    Op: UnaryOp<(u32, u32), Output = (u32, u32)>,
+    Op: UnaryOp<B, (u32, u32), Output = (u32, u32)>,
 {
     massively::transform(exec, source, op)
 }
@@ -135,7 +166,7 @@ where
     B: Backend,
     S1: MIter<B, Item = (u32, u32, u32)>,
     S2: MVec<B, Item = (u32, u32, u32)>,
-    Op: UnaryOp<(u32, u32, u32), Output = (u32, u32, u32)>,
+    Op: UnaryOp<B, (u32, u32, u32), Output = (u32, u32, u32)>,
 {
     massively::transform(exec, source, op)
 }
@@ -167,7 +198,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Less: BinaryPredicateOp<S1::Item>,
+    Less: PredicateOp2<B, S1::Item>,
 {
     massively::sort(exec, source, less)
 }
@@ -180,7 +211,7 @@ fn minmax_element2<B, S1, Less>(
 where
     B: Backend,
     S1: MIter<B>,
-    Less: BinaryPredicateOp<S1::Item>,
+    Less: PredicateOp2<B, S1::Item>,
 {
     massively::minmax_element(exec, source, less)
 }
@@ -193,7 +224,7 @@ fn adjacent_find2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: BinaryPredicateOp<S1::Item>,
+    Pred: PredicateOp2<B, S1::Item>,
 {
     massively::adjacent_find(exec, source, pred)
 }
@@ -207,7 +238,7 @@ fn lower_bound2<B, S1, Less>(
 where
     B: Backend,
     S1: MIter<B>,
-    Less: BinaryPredicateOp<S1::Item>,
+    Less: PredicateOp2<B, S1::Item>,
 {
     massively::lower_bound(exec, source, value, less)
 }
@@ -220,49 +251,46 @@ fn is_sorted2<B, S1, Less>(
 where
     B: Backend,
     S1: MIter<B>,
-    Less: BinaryPredicateOp<S1::Item>,
+    Less: PredicateOp2<B, S1::Item>,
 {
     massively::is_sorted(exec, source, less)
 }
 
-fn gather2<B, S1, Indices, S2>(
+fn gather2<B, S1, S2>(
     exec: &Executor<B>,
     source: S1,
-    indices: Indices,
+    indices: DeviceSlice<'_, B, u32>,
 ) -> Result<S2, massively::Error>
 where
     B: Backend,
     S1: MIter<B>,
-    Indices: MIter<B, Item = (u32,)>,
     S2: MVec<B, Item = S1::Item>,
 {
     massively::gather(exec, source, indices)
 }
 
-fn copy_if2<B, S1, Stencil, S2>(
+fn copy_if2<B, S1, S2>(
     exec: &Executor<B>,
     source: S1,
-    stencil: Stencil,
+    stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<S2, massively::Error>
 where
     B: Backend,
     S1: MIter<B>,
-    Stencil: MIter<B, Item = (u32,)>,
     S2: MVec<B, Item = S1::Item>,
 {
     massively::copy_if(exec, source, stencil)
 }
 
-fn replace_if2<B, S1, Stencil, S2>(
+fn replace_if2<B, S1, S2>(
     exec: &Executor<B>,
     source: S1,
     replacement: S1::Item,
-    stencil: Stencil,
+    stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<S2, massively::Error>
 where
     B: Backend,
     S1: MIter<B>,
-    Stencil: MIter<B, Item = (u32,)>,
     S2: MVec<B, Item = S1::Item>,
 {
     massively::replace_if(exec, source, replacement, stencil)
@@ -276,7 +304,7 @@ fn count_if2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp<S1::Item>,
+    Pred: PredicateOp1<B, S1::Item>,
 {
     massively::count_if(exec, source, pred)
 }
@@ -289,7 +317,7 @@ fn find_if2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp<S1::Item>,
+    Pred: PredicateOp1<B, S1::Item>,
 {
     massively::find_if(exec, source, pred)
 }
@@ -303,7 +331,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp<S1::Item>,
+    Pred: PredicateOp1<B, S1::Item>,
 {
     massively::remove_if(exec, source, pred)
 }
@@ -317,7 +345,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp<S1::Item>,
+    Pred: PredicateOp1<B, S1::Item>,
 {
     massively::partition(exec, source, pred)
 }
@@ -330,7 +358,7 @@ fn is_partitioned2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp<S1::Item>,
+    Pred: PredicateOp1<B, S1::Item>,
 {
     massively::is_partitioned(exec, source, pred)
 }
@@ -344,7 +372,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: BinaryPredicateOp<S1::Item>,
+    Pred: PredicateOp2<B, S1::Item>,
 {
     massively::unique(exec, source, pred)
 }
@@ -358,7 +386,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Op: BinaryOp<S1::Item>,
+    Op: BinaryOp1<B, S1::Item>,
 {
     massively::adjacent_difference(exec, source, op)
 }
@@ -368,7 +396,7 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
     let exec = Executor::<Wgpu>::cpu();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform2(&exec, (input.slice(..),), AddOne).unwrap();
+    let (output,) = transform2(&exec, SoA1(input.slice(..)), AddOne).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -378,7 +406,7 @@ fn reverse2_wraps_reverse_with_slice_array_signature() {
     let exec = Executor::<Wgpu>::cpu();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = reverse2(&exec, (input.slice(..),)).unwrap();
+    let (output,) = reverse2(&exec, SoA1(input.slice(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![3, 2, 1]);
 }
@@ -388,7 +416,7 @@ fn sort2_wraps_sort_with_slice_array_signature() {
     let exec = Executor::<Wgpu>::cpu();
     let input = exec.to_device(&[3_u32, 1, 2]).unwrap();
 
-    let (output,) = sort2(&exec, (input.slice(..),), TupleU32Less).unwrap();
+    let (output,) = sort2(&exec, SoA1(input.slice(..)), TupleU32Less).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 }
@@ -399,7 +427,7 @@ fn gather2_wraps_gather_with_slice_array_signature() {
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let (output,) = gather2(&exec, (input.slice(..),), (indices.slice(..),)).unwrap();
+    let (output,) = gather2(&exec, SoA1(input.slice(..)), indices.slice(..)).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10, 20]);
 }
@@ -409,7 +437,7 @@ fn transform3_can_fix_concrete_input_and_output_types() {
     let exec = Executor::<Wgpu>::cpu();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform3(&exec, (input.slice(..),), AddOne).unwrap();
+    let (output,) = transform3(&exec, SoA1(input.slice(..)), AddOne).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -419,7 +447,7 @@ fn transform_can_hide_op_inside_wrapper() {
     let exec = Executor::<Wgpu>::cpu();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform_without_op(&exec, (input.slice(..),)).unwrap();
+    let (output,) = transform_without_op(&exec, SoA1(input.slice(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -431,7 +459,7 @@ fn transform4_can_fix_concrete_two_column_input_and_output_types() {
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
     let (out_left, out_right) =
-        transform4(&exec, (left.slice(..), right.slice(..)), PairShift).unwrap();
+        transform4(&exec, SoA2(left.slice(..), right.slice(..)), PairShift).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![11, 22, 33]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![110, 120, 130]);
@@ -444,7 +472,7 @@ fn sort2_wraps_two_column_sort_with_slice_array_signature() {
     let right = exec.to_device(&[30_u32, 10, 20]).unwrap();
 
     let (out_left, out_right) =
-        sort2(&exec, (left.slice(..), right.slice(..)), PairU32Less).unwrap();
+        sort2(&exec, SoA2(left.slice(..), right.slice(..)), PairU32Less).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![10, 20, 30]);
@@ -459,7 +487,7 @@ fn transform5_can_fix_concrete_three_column_input_and_output_types() {
 
     let (out_first, out_second, out_third) = transform5(
         &exec,
-        (first.slice(..), second.slice(..), third.slice(..)),
+        SoA3(first.slice(..), second.slice(..), third.slice(..)),
         TripleShift,
     )
     .unwrap();
@@ -478,7 +506,7 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
 
     let (out_first, out_second, out_third) = sort2(
         &exec,
-        (first.slice(..), second.slice(..), third.slice(..)),
+        SoA3(first.slice(..), second.slice(..), third.slice(..)),
         TripleU32Less,
     )
     .unwrap();
@@ -495,7 +523,7 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
     let tags = exec.to_device(&[20_u32, 30, 10, 40]).unwrap();
 
     assert_eq!(
-        minmax_element2(&exec, (values.slice(..), tags.slice(..)), PairU32Less).unwrap(),
+        minmax_element2(&exec, SoA2(values.slice(..), tags.slice(..)), PairU32Less).unwrap(),
         Some((1, 3))
     );
 
@@ -506,7 +534,7 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
     assert_eq!(
         minmax_element2(
             &exec,
-            (first.slice(..), second.slice(..), third.slice(..)),
+            SoA3(first.slice(..), second.slice(..), third.slice(..)),
             TripleU32Less
         )
         .unwrap(),
@@ -521,20 +549,20 @@ fn search_queries_wrap_two_column_tuple_inputs() {
     let right = exec.to_device(&[10_u32, 20, 20, 40]).unwrap();
 
     assert_eq!(
-        adjacent_find2(&exec, (left.slice(..), right.slice(..)), PairEqual).unwrap(),
+        adjacent_find2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap(),
         Some(1)
     );
     assert_eq!(
         lower_bound2(
             &exec,
-            (left.slice(..), right.slice(..)),
+            SoA2(left.slice(..), right.slice(..)),
             (2_u32, 0_u32),
             PairU32Less
         )
         .unwrap(),
         1
     );
-    assert!(is_sorted2(&exec, (left.slice(..), right.slice(..)), PairU32Less).unwrap());
+    assert!(is_sorted2(&exec, SoA2(left.slice(..), right.slice(..)), PairU32Less).unwrap());
 }
 
 #[test]
@@ -547,8 +575,8 @@ fn gather2_wraps_three_column_gather_with_slice_array_signature() {
 
     let (out_first, out_second, out_third) = gather2(
         &exec,
-        (first.slice(..), second.slice(..), third.slice(..)),
-        (indices.slice(..),),
+        SoA3(first.slice(..), second.slice(..), third.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
 
@@ -562,7 +590,7 @@ fn transform2_wraps_tuple_output() {
     let exec = Executor::<Wgpu>::cpu();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (left, right) = transform2(&exec, (input.slice(..),), Split).unwrap();
+    let (left, right) = transform2(&exec, SoA1(input.slice(..)), Split).unwrap();
 
     assert_eq!(exec.to_host(&left).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&right).unwrap(), vec![11, 12, 13]);
@@ -577,8 +605,8 @@ fn copy_if2_wraps_two_column_copy_if_with_tuple_source() {
 
     let (out_left, out_right) = copy_if2(
         &exec,
-        (left.slice(..), right.slice(..)),
-        (stencil.slice(..),),
+        SoA2(left.slice(..), right.slice(..)),
+        stencil.slice(..),
     )
     .unwrap();
 
@@ -595,9 +623,9 @@ fn replace_if2_wraps_two_column_replace_if_with_tuple_replacement() {
 
     let (out_left, out_right) = replace_if2(
         &exec,
-        (left.slice(..), right.slice(..)),
+        SoA2(left.slice(..), right.slice(..)),
         (7_u32, 70_u32),
-        (stencil.slice(..),),
+        stencil.slice(..),
     )
     .unwrap();
 
@@ -611,8 +639,8 @@ fn predicate_queries_wrap_two_column_tuple_predicates() {
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
-    let count = count_if2(&exec, (left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
-    let found = find_if2(&exec, (left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let count = count_if2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let found = find_if2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(count, 2);
     assert_eq!(found, Some(1));
@@ -625,7 +653,7 @@ fn remove_if2_wraps_two_column_remove_if_with_tuple_predicate() {
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
     let (out_left, out_right) =
-        remove_if2(&exec, (left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+        remove_if2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 30]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![100, 300]);
@@ -638,7 +666,7 @@ fn partition2_wraps_two_column_partition_with_tuple_predicate() {
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
     let ((true_left, true_right), (false_left, false_right)) =
-        partition2(&exec, (left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+        partition2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(exec.to_host(&true_left).unwrap(), vec![21, 43]);
     assert_eq!(exec.to_host(&true_right).unwrap(), vec![200, 400]);
@@ -657,7 +685,7 @@ fn is_partitioned2_wraps_two_column_partition_query() {
     assert!(
         is_partitioned2(
             &exec,
-            (partitioned_left.slice(..), partitioned_right.slice(..)),
+            SoA2(partitioned_left.slice(..), partitioned_right.slice(..)),
             PairFirstOdd
         )
         .unwrap()
@@ -665,7 +693,7 @@ fn is_partitioned2_wraps_two_column_partition_query() {
     assert!(
         !is_partitioned2(
             &exec,
-            (mixed_left.slice(..), mixed_right.slice(..)),
+            SoA2(mixed_left.slice(..), mixed_right.slice(..)),
             PairFirstOdd
         )
         .unwrap()
@@ -679,7 +707,7 @@ fn unique2_wraps_two_column_unique_with_tuple_predicate() {
     let right = exec.to_device(&[10_u32, 10, 20, 21, 21, 30]).unwrap();
 
     let (out_left, out_right) =
-        unique2(&exec, (left.slice(..), right.slice(..)), PairEqual).unwrap();
+        unique2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![1, 2, 2, 3]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![10, 20, 21, 30]);
@@ -692,7 +720,7 @@ fn adjacent_difference2_wraps_two_column_tuple_op() {
     let right = exec.to_device(&[100_u32, 107, 120]).unwrap();
 
     let (out_left, out_right) =
-        adjacent_difference2(&exec, (left.slice(..), right.slice(..)), PairDifference).unwrap();
+        adjacent_difference2(&exec, SoA2(left.slice(..), right.slice(..)), PairDifference).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 3, 7]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![100, 7, 13]);

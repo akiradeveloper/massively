@@ -50,10 +50,10 @@ fn merge_by_key_accepts_tuple_values() {
 
     let (keys, values) = merge_by_key(
         &exec,
-        (left_keys.slice(..),),
-        (left_values.slice(..), left_ids.slice(..)),
-        (right_keys.slice(..),),
-        (right_values.slice(..), right_ids.slice(..)),
+        massively::SoA1(left_keys.slice(..)),
+        massively::SoA2(left_values.slice(..), left_ids.slice(..)),
+        massively::SoA1(right_keys.slice(..)),
+        massively::SoA2(right_values.slice(..), right_ids.slice(..)),
         LessU32,
     )
     .unwrap();
@@ -81,10 +81,10 @@ fn merge_by_key_accepts_borrowed_tuple_keys() {
 
     let (keys, values) = merge_by_key(
         &exec,
-        (left_key_a.slice(..), left_key_b.slice(..)),
-        (left_values.slice(..),),
-        (right_key_a.slice(..), right_key_b.slice(..)),
-        (right_values.slice(..),),
+        massively::SoA2(left_key_a.slice(..), left_key_b.slice(..)),
+        massively::SoA1(left_values.slice(..)),
+        massively::SoA2(right_key_a.slice(..), right_key_b.slice(..)),
+        massively::SoA1(right_values.slice(..)),
         MixedTupleLess,
     )
     .unwrap();
@@ -112,10 +112,10 @@ fn merge_by_tuple_key_reports_left_value_length_mismatch() {
 
     let err = merge_by_key(
         &exec,
-        (left_key_a.slice(..), left_key_b.slice(..)),
-        (left_values.slice(..),),
-        (right_key_a.slice(..), right_key_b.slice(..)),
-        (right_values.slice(..),),
+        massively::SoA2(left_key_a.slice(..), left_key_b.slice(..)),
+        massively::SoA1(left_values.slice(..)),
+        massively::SoA2(right_key_a.slice(..), right_key_b.slice(..)),
+        massively::SoA1(right_values.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -136,10 +136,10 @@ fn merge_by_tuple_key_reports_right_value_length_mismatch() {
 
     let err = merge_by_key(
         &exec,
-        (left_key_a.slice(..), left_key_b.slice(..)),
-        (left_values.slice(..),),
-        (right_key_a.slice(..), right_key_b.slice(..)),
-        (right_values.slice(..),),
+        massively::SoA2(left_key_a.slice(..), left_key_b.slice(..)),
+        massively::SoA1(left_values.slice(..)),
+        massively::SoA2(right_key_a.slice(..), right_key_b.slice(..)),
+        massively::SoA1(right_values.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -162,10 +162,10 @@ fn merge_by_tuple_key_reports_left_tuple_value_length_mismatch() {
 
     let err = merge_by_key(
         &exec,
-        (left_key_a.slice(..), left_key_b.slice(..)),
-        (left_value_a.slice(..), left_value_b.slice(..)),
-        (right_key_a.slice(..), right_key_b.slice(..)),
-        (right_value_a.slice(..), right_value_b.slice(..)),
+        massively::SoA2(left_key_a.slice(..), left_key_b.slice(..)),
+        massively::SoA2(left_value_a.slice(..), left_value_b.slice(..)),
+        massively::SoA2(right_key_a.slice(..), right_key_b.slice(..)),
+        massively::SoA2(right_value_a.slice(..), right_value_b.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -188,10 +188,10 @@ fn merge_by_tuple_key_reports_right_tuple_value_length_mismatch() {
 
     let err = merge_by_key(
         &exec,
-        (left_key_a.slice(..), left_key_b.slice(..)),
-        (left_value_a.slice(..), left_value_b.slice(..)),
-        (right_key_a.slice(..), right_key_b.slice(..)),
-        (right_value_a.slice(..), right_value_b.slice(..)),
+        massively::SoA2(left_key_a.slice(..), left_key_b.slice(..)),
+        massively::SoA2(left_value_a.slice(..), left_value_b.slice(..)),
+        massively::SoA2(right_key_a.slice(..), right_key_b.slice(..)),
+        massively::SoA2(right_value_a.slice(..), right_value_b.slice(..)),
         MixedTupleLess,
     )
     .unwrap_err();
@@ -216,14 +216,14 @@ fn merge_by_key_accepts_wide_soa_values() {
 
     let (keys, values) = merge_by_key(
         &exec,
-        (left_keys.slice(..),),
+        massively::SoA1(left_keys.slice(..)),
         zip4(
             left_a.slice(..),
             left_b.slice(..),
             left_c.slice(..),
             left_d.slice(..),
         ),
-        (right_keys.slice(..),),
+        massively::SoA1(right_keys.slice(..)),
         zip4(
             right_a.slice(..),
             right_b.slice(..),
@@ -276,7 +276,7 @@ fn merge_by_key_accepts_soa12_values() {
 
     let (keys, values) = merge_by_key(
         &exec,
-        (left_keys.slice(..),),
+        massively::SoA1(left_keys.slice(..)),
         zip12(
             la.slice(..),
             lb.slice(..),
@@ -291,7 +291,7 @@ fn merge_by_key_accepts_soa12_values() {
             lk.slice(..),
             ll.slice(..),
         ),
-        (right_keys.slice(..),),
+        massively::SoA1(right_keys.slice(..)),
         zip12(
             ra.slice(..),
             rb.slice(..),
@@ -360,7 +360,7 @@ fn merge_by_key_accepts_soa12_values_with_equal_keys_and_uneven_lengths() {
 
     let (keys, values) = merge_by_key(
         &exec,
-        (left_keys.slice(..),),
+        massively::SoA1(left_keys.slice(..)),
         zip12(
             la.slice(..),
             lb.slice(..),
@@ -375,7 +375,7 @@ fn merge_by_key_accepts_soa12_values_with_equal_keys_and_uneven_lengths() {
             lk.slice(..),
             ll.slice(..),
         ),
-        (right_keys.slice(..),),
+        massively::SoA1(right_keys.slice(..)),
         zip12(
             ra.slice(..),
             rb.slice(..),

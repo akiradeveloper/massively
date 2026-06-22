@@ -22,7 +22,7 @@ fn alternating_flags(len: usize) -> Vec<u32> {
 fn check_copy_if(exec: &Executor<Wgpu>) {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
-    let (output,) = copy_if(&exec, (values.slice(..),), (stencil.slice(..),)).unwrap();
+    let (output,) = copy_if(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0]);
 }
 
@@ -40,8 +40,8 @@ fn bench_select(c: &mut Criterion) {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = copy_if(
                         &exec,
-                        (black_box(values.slice(..)),),
-                        (black_box(stencil.slice(..)),),
+                        massively::SoA1(black_box(values.slice(..))),
+                        black_box(stencil.slice(..)),
                     )
                     .unwrap();
                     sync(&exec);

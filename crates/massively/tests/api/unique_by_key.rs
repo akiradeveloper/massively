@@ -10,8 +10,8 @@ fn unique_by_key_accepts_tuple_values() {
 
     let (keys, values) = unique_by_key(
         &exec,
-        (keys.slice(..),),
-        (a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
     )
     .unwrap();
@@ -36,8 +36,8 @@ fn unique_by_key_accepts_tuple_values_with_multiple_runs() {
 
     let (keys, values) = unique_by_key(
         &exec,
-        (keys.slice(..),),
-        (a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
     )
     .unwrap();
@@ -60,7 +60,7 @@ fn unique_by_key_accepts_borrowed_tuple_keys() {
 
     let (keys, values) = unique_by_key(
         &exec,
-        (key_a.slice(..), key_b.slice(..)),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
         values,
         MixedTupleEqual,
     )
@@ -86,7 +86,7 @@ fn unique_by_tuple_key_reports_value_length_mismatch_for_wide_values() {
 
     let err = unique_by_key(
         &exec,
-        zip(key_a.slice(..), key_b.slice(..)),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
         zip4(
             value_a.slice(..),
             value_b.slice(..),
@@ -121,7 +121,7 @@ fn unique_by_tuple_key_with_wide_values_uses_supplied_key_equality() {
 
     let (keys, values) = unique_by_key(
         &exec,
-        zip(key_a.slice(..), key_b.slice(..)),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
         zip4(
             value_a.slice(..),
             value_b.slice(..),

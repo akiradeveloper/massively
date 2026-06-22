@@ -9,8 +9,8 @@ fn copy_if_accepts_u32_flags_for_heterogeneous_tuple_values() {
 
     let selected = copy_if(
         &exec,
-        (values.slice(..), tags.slice(..)),
-        (stencil.slice(..),),
+        massively::SoA2(values.slice(..), tags.slice(..)),
+        stencil.slice(..),
     )
     .unwrap();
     let (values, tags) = selected;
@@ -28,8 +28,8 @@ fn copy_if_accepts_three_tuple_columns() {
 
     let selected = copy_if(
         &exec,
-        (a.slice(..), b.slice(..), c.slice(..)),
-        (stencil.slice(..),),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        stencil.slice(..),
     )
     .unwrap();
     let (a, b, c) = selected;
@@ -47,8 +47,8 @@ fn copy_if_accepts_u32_stencil() {
 
     let selected = copy_if(
         &exec,
-        (values.slice(..), ids.slice(..)),
-        (stencil.slice(..),),
+        massively::SoA2(values.slice(..), ids.slice(..)),
+        stencil.slice(..),
     )
     .unwrap();
     let (values, ids) = selected;

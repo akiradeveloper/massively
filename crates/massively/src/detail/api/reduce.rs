@@ -1,18 +1,18 @@
 use super::memory::{MaterializeOutput, materialize};
 use crate::{
+    detail::op::kernel::{BinaryOp2, PredicateOp2},
     device::{
-        DeviceBinaryMap, DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA, SoA1, SoA2,
-        SoA3, SoAView1, SoAView2, SoAView3,
+        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA, SoA1, SoA2, SoA3, SoAView1,
+        SoAView2, SoAView3,
     },
     error::Error,
     expr::DeviceGpuExpr,
     kernels::*,
-    op::{BinaryOp, BinaryPredicateOp, GpuOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::{reduce as primitive_reduce, scan as primitive_scan, segmented, select},
 };
 use cubecl::prelude::*;
-use std::marker::PhantomData;
 
 /// One-component key input accepted by by-key algorithms.
 #[doc(hidden)]
@@ -90,7 +90,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<(Source::Item,)>,
+    Op: BinaryOp2<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Init = (Source::Item,);
@@ -154,7 +154,7 @@ macro_rules! impl_reduce_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
@@ -268,7 +268,7 @@ macro_rules! impl_reduce_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
@@ -331,383 +331,6 @@ where
     input.reduce_input(policy, init, GpuOp::<Op>::new())
 }
 
-/// Input accepted by [`inner_product`].
-#[doc(hidden)]
-pub trait InnerProductInput<Right, TransformOp, ReduceOp> {
-    /// CubeCL runtime used by this input.
-    type Runtime: Runtime;
-    /// Reduced item type.
-    type Item;
-
-    /// Applies a binary transform and reduces the result.
-    fn inner_product_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        right: Right,
-        init: Self::Item,
-        transform_op: GpuOp<TransformOp>,
-        reduce_op: GpuOp<ReduceOp>,
-    ) -> Result<Self::Item, Error>;
-}
-
-impl<Left, Right, TransformOp, ReduceOp> InnerProductInput<Right, TransformOp, ReduceOp> for Left
-where
-    Left: KernelColumn + KernelColumnAt<S0>,
-    Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item>
-        + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    Left::Item: CubePrimitive + CubeElement,
-    TransformOp: BinaryOp<Left::Item>,
-    ReduceOp: BinaryOp<Left::Item>,
-    DeviceBinaryMap<Left, Right, TransformOp>:
-        KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
-    <DeviceBinaryMap<Left, Right, TransformOp> as KernelColumn>::Expr: DeviceGpuExpr<Left::Item>,
-{
-    type Runtime = Left::Runtime;
-    type Item = Left::Item;
-
-    fn inner_product_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        right: Right,
-        init: Self::Item,
-        _transform_op: GpuOp<TransformOp>,
-        reduce_op: GpuOp<ReduceOp>,
-    ) -> Result<Self::Item, Error> {
-        let mapped = DeviceBinaryMap {
-            left: self,
-            right,
-            _op: PhantomData::<fn() -> TransformOp>,
-        };
-        let _ = reduce_op;
-        super::device_expr_reduce_with_policy::<_, ReduceOp>(policy, &mapped, init)
-    }
-}
-
-macro_rules! impl_inner_product_tuple_input {
-    (
-        $left_name:ident < $first_left:ident, $( $left:ident ),+ >,
-        $right_name:ident < $first_right:ident, $( $right:ident ),+ > {
-            $first_field:ident, $( $field:ident ),+
-        }
-    ) => {
-        impl<$first_left, $first_right, $( $left, $right ),+, TransformOp, ReduceOp>
-            InnerProductInput<$right_name<$first_right, $( $right ),+>, TransformOp, ReduceOp>
-            for $left_name<$first_left, $( $left ),+>
-        where
-            Self: ReadOnlySoA<Scalar = <$first_left as KernelColumn>::Item>,
-            $right_name<$first_right, $( $right ),+>: ReadOnlySoA<Scalar = <$first_right as KernelColumn>::Item>,
-            $first_left: KernelColumn + KernelColumnAt<S0>,
-            $first_right:
-                KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$first_left as KernelColumn>::Item>
-                + KernelColumnAt<<$first_left as KernelColumnAt<S0>>::Next>,
-            $(
-                $left: KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-                $right:
-                    KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$left as KernelColumn>::Item>
-                    + KernelColumnAt<<$left as KernelColumnAt<S0>>::Next>,
-            )+
-            <$first_left as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$left as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            TransformOp: BinaryOp<<$first_left as KernelColumn>::Item>,
-            $( TransformOp: BinaryOp<<$left as KernelColumn>::Item>, )+
-            ReduceOp: BinaryOp<<$first_left as KernelColumn>::Item>,
-            $( ReduceOp: BinaryOp<<$left as KernelColumn>::Item>, )+
-            DeviceBinaryMap<$first_left, $first_right, TransformOp>:
-                KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$first_left as KernelColumn>::Item>
-                + KernelColumnAt<S0>,
-            <DeviceBinaryMap<$first_left, $first_right, TransformOp> as KernelColumn>::Expr:
-                DeviceGpuExpr<<$first_left as KernelColumn>::Item>,
-            $(
-                DeviceBinaryMap<$left, $right, TransformOp>:
-                    KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$left as KernelColumn>::Item>
-                    + KernelColumnAt<S0>,
-                <DeviceBinaryMap<$left, $right, TransformOp> as KernelColumn>::Expr:
-                    DeviceGpuExpr<<$left as KernelColumn>::Item>,
-            )+
-        {
-            type Runtime = <$first_left as KernelColumn>::Runtime;
-            type Item = (
-                <$first_left as KernelColumn>::Item,
-                $( <$left as KernelColumn>::Item ),+
-            );
-
-            fn inner_product_input(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                right: $right_name<$first_right, $( $right ),+>,
-                init: Self::Item,
-                _transform_op: GpuOp<TransformOp>,
-                _reduce_op: GpuOp<ReduceOp>,
-            ) -> Result<Self::Item, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&right)?;
-                let ($first_field, $( $field ),+) = init;
-                let first_mapped = DeviceBinaryMap {
-                    left: self.$first_field,
-                    right: right.$first_field,
-                    _op: PhantomData::<fn() -> TransformOp>,
-                };
-                let $first_field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
-                    policy,
-                    &first_mapped,
-                    $first_field,
-                )?;
-                $(
-                    let mapped = DeviceBinaryMap {
-                        left: self.$field,
-                        right: right.$field,
-                        _op: PhantomData::<fn() -> TransformOp>,
-                    };
-                    let $field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
-                        policy,
-                        &mapped,
-                        $field,
-                    )?;
-                )+
-                Ok(($first_field, $( $field ),+))
-            }
-        }
-    };
-}
-
-impl_inner_product_tuple_input!(SoAView2<A, B>, SoAView2<RA, RB> { left, right });
-impl_inner_product_tuple_input!(SoAView3<A, B, C>, SoAView3<RA, RB, RC> { first, second, third });
-
-macro_rules! impl_inner_product_owned_tuple_input {
-    (
-        $left_name:ident < $first_left:ident, $( $left:ident ),+ >,
-        $right_name:ident < $first_right:ident, $( $right:ident ),+ > {
-            $first_field:ident, $( $field:ident ),+
-        }
-    ) => {
-        impl<$first_left, $first_right, $( $left, $right ),+, TransformOp, ReduceOp>
-            InnerProductInput<$right_name<$first_right, $( $right ),+>, TransformOp, ReduceOp>
-            for $left_name<$first_left, $( $left ),+>
-        where
-            Self: SoA<Scalar = <$first_left as KernelColumn>::Item>,
-            $right_name<$first_right, $( $right ),+>: SoA<Scalar = <$first_right as KernelColumn>::Item>,
-            $first_left: KernelColumn + KernelColumnAt<S0>,
-            $first_right:
-                KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$first_left as KernelColumn>::Item>
-                + KernelColumnAt<<$first_left as KernelColumnAt<S0>>::Next>,
-            $(
-                $left: KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-                $right:
-                    KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$left as KernelColumn>::Item>
-                    + KernelColumnAt<<$left as KernelColumnAt<S0>>::Next>,
-            )+
-            <$first_left as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$left as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            TransformOp: BinaryOp<<$first_left as KernelColumn>::Item>,
-            $( TransformOp: BinaryOp<<$left as KernelColumn>::Item>, )+
-            ReduceOp: BinaryOp<<$first_left as KernelColumn>::Item>,
-            $( ReduceOp: BinaryOp<<$left as KernelColumn>::Item>, )+
-            DeviceBinaryMap<$first_left, $first_right, TransformOp>:
-                KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$first_left as KernelColumn>::Item>
-                + KernelColumnAt<S0>,
-            <DeviceBinaryMap<$first_left, $first_right, TransformOp> as KernelColumn>::Expr:
-                DeviceGpuExpr<<$first_left as KernelColumn>::Item>,
-            $(
-                DeviceBinaryMap<$left, $right, TransformOp>:
-                    KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$left as KernelColumn>::Item>
-                    + KernelColumnAt<S0>,
-                <DeviceBinaryMap<$left, $right, TransformOp> as KernelColumn>::Expr:
-                    DeviceGpuExpr<<$left as KernelColumn>::Item>,
-            )+
-        {
-            type Runtime = <$first_left as KernelColumn>::Runtime;
-            type Item = (
-                <$first_left as KernelColumn>::Item,
-                $( <$left as KernelColumn>::Item ),+
-            );
-
-            fn inner_product_input(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                right: $right_name<$first_right, $( $right ),+>,
-                init: Self::Item,
-                _transform_op: GpuOp<TransformOp>,
-                _reduce_op: GpuOp<ReduceOp>,
-            ) -> Result<Self::Item, Error> {
-                SoA::validate(&self)?;
-                SoA::validate(&right)?;
-                super::ensure_same_len(SoA::len(&right), SoA::len(&self))?;
-                let ($first_field, $( $field ),+) = init;
-                let first_mapped = DeviceBinaryMap {
-                    left: self.$first_field,
-                    right: right.$first_field,
-                    _op: PhantomData::<fn() -> TransformOp>,
-                };
-                let $first_field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
-                    policy,
-                    &first_mapped,
-                    $first_field,
-                )?;
-                $(
-                    let mapped = DeviceBinaryMap {
-                        left: self.$field,
-                        right: right.$field,
-                        _op: PhantomData::<fn() -> TransformOp>,
-                    };
-                    let $field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
-                        policy,
-                        &mapped,
-                        $field,
-                    )?;
-                )+
-                Ok(($first_field, $( $field ),+))
-            }
-        }
-    };
-}
-
-impl_inner_product_owned_tuple_input!(SoA2<A, B>, SoA2<RA, RB> { left, right });
-impl_inner_product_owned_tuple_input!(SoA3<A, B, C>, SoA3<RA, RB, RC> { first, second, third });
-
-macro_rules! impl_inner_product_mixed_tuple_input {
-    (
-        $left_trait:ident,
-        $right_trait:ident,
-        $left_name:ident < $first_left:ident, $( $left:ident ),+ >,
-        $right_name:ident < $first_right:ident, $( $right:ident ),+ > {
-            $first_field:ident, $( $field:ident ),+
-        }
-    ) => {
-        impl<$first_left, $first_right, $( $left, $right ),+, TransformOp, ReduceOp>
-            InnerProductInput<$right_name<$first_right, $( $right ),+>, TransformOp, ReduceOp>
-            for $left_name<$first_left, $( $left ),+>
-        where
-            Self: $left_trait<Scalar = <$first_left as KernelColumn>::Item>,
-            $right_name<$first_right, $( $right ),+>: $right_trait<Scalar = <$first_right as KernelColumn>::Item>,
-            $first_left: KernelColumn + KernelColumnAt<S0>,
-            $first_right:
-                KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$first_left as KernelColumn>::Item>
-                + KernelColumnAt<<$first_left as KernelColumnAt<S0>>::Next>,
-            $(
-                $left: KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-                $right:
-                    KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$left as KernelColumn>::Item>
-                    + KernelColumnAt<<$left as KernelColumnAt<S0>>::Next>,
-            )+
-            <$first_left as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$left as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            TransformOp: BinaryOp<<$first_left as KernelColumn>::Item>,
-            $( TransformOp: BinaryOp<<$left as KernelColumn>::Item>, )+
-            ReduceOp: BinaryOp<<$first_left as KernelColumn>::Item>,
-            $( ReduceOp: BinaryOp<<$left as KernelColumn>::Item>, )+
-            DeviceBinaryMap<$first_left, $first_right, TransformOp>:
-                KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$first_left as KernelColumn>::Item>
-                + KernelColumnAt<S0>,
-            <DeviceBinaryMap<$first_left, $first_right, TransformOp> as KernelColumn>::Expr:
-                DeviceGpuExpr<<$first_left as KernelColumn>::Item>,
-            $(
-                DeviceBinaryMap<$left, $right, TransformOp>:
-                    KernelColumn<Runtime = <$first_left as KernelColumn>::Runtime, Item = <$left as KernelColumn>::Item>
-                    + KernelColumnAt<S0>,
-                <DeviceBinaryMap<$left, $right, TransformOp> as KernelColumn>::Expr:
-                    DeviceGpuExpr<<$left as KernelColumn>::Item>,
-            )+
-        {
-            type Runtime = <$first_left as KernelColumn>::Runtime;
-            type Item = (
-                <$first_left as KernelColumn>::Item,
-                $( <$left as KernelColumn>::Item ),+
-            );
-
-            fn inner_product_input(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                right: $right_name<$first_right, $( $right ),+>,
-                init: Self::Item,
-                _transform_op: GpuOp<TransformOp>,
-                _reduce_op: GpuOp<ReduceOp>,
-            ) -> Result<Self::Item, Error> {
-                $left_trait::validate(&self)?;
-                $right_trait::validate(&right)?;
-                super::ensure_same_len($right_trait::len(&right), $left_trait::len(&self))?;
-                let ($first_field, $( $field ),+) = init;
-                let first_mapped = DeviceBinaryMap {
-                    left: self.$first_field,
-                    right: right.$first_field,
-                    _op: PhantomData::<fn() -> TransformOp>,
-                };
-                let $first_field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
-                    policy,
-                    &first_mapped,
-                    $first_field,
-                )?;
-                $(
-                    let mapped = DeviceBinaryMap {
-                        left: self.$field,
-                        right: right.$field,
-                        _op: PhantomData::<fn() -> TransformOp>,
-                    };
-                    let $field = super::device_expr_reduce_with_policy::<_, ReduceOp>(
-                        policy,
-                        &mapped,
-                        $field,
-                    )?;
-                )+
-                Ok(($first_field, $( $field ),+))
-            }
-        }
-    };
-}
-
-macro_rules! impl_inner_product_mixed_tuple_inputs {
-    (
-        $soa:ident < $first_left:ident, $( $left:ident ),+ >,
-        $soa_view:ident < $first_right:ident, $( $right:ident ),+ > {
-            $first_field:ident, $( $field:ident ),+
-        }
-    ) => {
-        impl_inner_product_mixed_tuple_input!(
-            SoA,
-            ReadOnlySoA,
-            $soa < $first_left, $( $left ),+ >,
-            $soa_view < $first_right, $( $right ),+ > {
-                $first_field, $( $field ),+
-            }
-        );
-        impl_inner_product_mixed_tuple_input!(
-            ReadOnlySoA,
-            SoA,
-            $soa_view < $first_left, $( $left ),+ >,
-            $soa < $first_right, $( $right ),+ > {
-                $first_field, $( $field ),+
-            }
-        );
-    };
-}
-
-impl_inner_product_mixed_tuple_inputs!(SoA2<A, B>, SoAView2<RA, RB> { left, right });
-impl_inner_product_mixed_tuple_inputs!(SoA3<A, B, C>, SoAView3<RA, RB, RC> { first, second, third });
-
-/// Applies a binary transform over two read-only inputs and reduces the result.
-///
-/// This is a fused borrowing algorithm. It reads both inputs and returns a host
-/// scalar.
-pub fn inner_product<R, Left, Right, TransformOp, ReduceOp>(
-    policy: &CubePolicy<R>,
-    left: Left,
-    right: Right,
-    _transform_op: TransformOp,
-    init: <Left as InnerProductInput<Right, TransformOp, ReduceOp>>::Item,
-    _reduce_op: ReduceOp,
-) -> Result<<Left as InnerProductInput<Right, TransformOp, ReduceOp>>::Item, Error>
-where
-    R: Runtime,
-    Left: InnerProductInput<Right, TransformOp, ReduceOp, Runtime = R>,
-{
-    left.inner_product_input(
-        policy,
-        right,
-        init,
-        GpuOp::<TransformOp>::new(),
-        GpuOp::<ReduceOp>::new(),
-    )
-}
-
 /// Input accepted by [`reduce_by_key`].
 #[doc(hidden)]
 pub trait ReduceByKeyInput<K, KeyEq, Op> {
@@ -733,10 +356,10 @@ where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
+    KeyEq: PredicateOp2<K>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<Source::Item>,
+    Op: BinaryOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Init = Source::Item;
@@ -765,7 +388,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     SoAView1<Source>: ReduceByKeyInput<K, KeyEq, Op>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
+    KeyEq: PredicateOp2<K>,
 {
     type Runtime = <SoAView1<Source> as ReduceByKeyInput<K, KeyEq, Op>>::Runtime;
     type Values = <SoAView1<Source> as ReduceByKeyInput<K, KeyEq, Op>>::Values;
@@ -795,12 +418,12 @@ where
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
+    KeyEq: PredicateOp2<K>,
     Left::Item: CubePrimitive + CubeElement,
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Op: BinaryOp<(Left::Item, Right::Item)>,
+    Op: BinaryOp2<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Init = (Left::Item, Right::Item);
@@ -852,14 +475,14 @@ where
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
     K: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<K>,
+    KeyEq: PredicateOp2<K>,
     First::Item: CubePrimitive + CubeElement,
     Second::Item: CubePrimitive + CubeElement,
     Third::Item: CubePrimitive + CubeElement,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
+    Op: BinaryOp2<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Init = (First::Item, Second::Item, Third::Item);
@@ -931,16 +554,16 @@ macro_rules! impl_reduce_by_key_soa_input {
                     + KernelColumnAt<S0>,
             )+
             Key: CubePrimitive + CubeElement,
-            KeyEq: BinaryPredicateOp<Key>,
+            KeyEq: PredicateOp2<Key>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<<$first as KernelColumn>::Item>,
+            Op: BinaryOp2<<$first as KernelColumn>::Item>,
             $(
-                Op: BinaryOp<<$rest as KernelColumn>::Item>,
+                Op: BinaryOp2<<$rest as KernelColumn>::Item>,
             )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -1039,7 +662,7 @@ impl<Values, Keys, KeyEq, Op> ReduceByKeyCall<Values, KeyEq, Op> for Keys
 where
     Keys: KeyInput,
     Keys::Item: CubePrimitive + CubeElement,
-    KeyEq: BinaryPredicateOp<Keys::Item>,
+    KeyEq: PredicateOp2<Keys::Item>,
     Values: ReduceByKeyInput<Keys::Item, KeyEq, Op, Runtime = Keys::Runtime>,
 {
     type Runtime = Keys::Runtime;
@@ -1076,8 +699,8 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueSource::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueSource::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Init = ValueSource::Item;
@@ -1126,9 +749,9 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
@@ -1190,10 +813,10 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
-    Op: BinaryOp<ValueC::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
+    Op: BinaryOp2<ValueC::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
@@ -1260,8 +883,8 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueSource::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueSource::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Init = ValueSource::Item;
@@ -1325,9 +948,9 @@ where
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
@@ -1401,10 +1024,10 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
-    Op: BinaryOp<ValueC::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
+    Op: BinaryOp2<ValueC::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
@@ -1484,8 +1107,8 @@ macro_rules! impl_reduce_by_tuple_key_scalar_value {
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp<ValueSource::Item>,
+            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<ValueSource::Item>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = ValueSource::Item;
@@ -1605,9 +1228,9 @@ macro_rules! impl_reduce_by_tuple_key_soa_view_values {
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             <$first_value as KernelColumn>::Expr: DeviceGpuExpr<<$first_value as KernelColumn>::Item>,
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
-            KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp<<$first_value as KernelColumn>::Item>,
-            $( Op: BinaryOp<<$value as KernelColumn>::Item>, )+
+            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<<$first_value as KernelColumn>::Item>,
+            $( Op: BinaryOp2<<$value as KernelColumn>::Item>, )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (<$first_value as KernelColumn>::Item, $( <$value as KernelColumn>::Item ),+);
@@ -1719,8 +1342,8 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueSource::Item,)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueSource::Item,)>,
 {
     type Runtime = KeySource::Runtime;
     type Init = (ValueSource::Item,);
@@ -1828,8 +1451,8 @@ where
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueA::Item, ValueB::Item)>,
 {
     type Runtime = KeySource::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
@@ -1965,8 +1588,8 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueA::Item, ValueB::Item, ValueC::Item)>,
 {
     type Runtime = KeySource::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);

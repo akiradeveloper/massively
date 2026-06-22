@@ -10,8 +10,8 @@ fn exclusive_scan_by_key_accepts_tuple_keys() {
 
     let output = exclusive_scan_by_key(
         &exec,
-        (key_a.slice(..), key_b.slice(..)),
-        (values.slice(..),),
+        massively::SoA2(key_a.slice(..), key_b.slice(..)),
+        massively::SoA1(values.slice(..)),
         MixedTupleEqual,
         (0_u32,),
         Sum,
@@ -30,8 +30,8 @@ fn exclusive_scan_by_key_uses_supplied_key_equality() {
 
     let output = exclusive_scan_by_key(
         &exec,
-        (keys.slice(..),),
-        (values.slice(..), ids.slice(..)),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA2(values.slice(..), ids.slice(..)),
         NeverEqualU32,
         (100.0_f32, 1000_u32),
         TupleSum,
@@ -54,8 +54,8 @@ fn exclusive_scan_by_key_accepts_tuple_values() {
 
     let output = exclusive_scan_by_key(
         &exec,
-        (keys.slice(..),),
-        (a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
         (0.0_f32, 0_u32, 0.0_f32),
         TupleSum,

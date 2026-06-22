@@ -9,8 +9,8 @@ fn main() -> common::Result {
 
     let (output,) = scatter(
         &exec,
-        (values.slice(..),),
-        (indices.slice(..),),
+        massively::SoA1(values.slice(..)),
+        indices.slice(..),
         3,
         (0.0_f32,),
     )?;

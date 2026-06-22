@@ -9,7 +9,7 @@ use massively::{DeviceVec, Executor, Wgpu, transform};
 struct MulTwo;
 
 #[cubecl::cube]
-impl UnaryOp<(f32,)> for MulTwo {
+impl UnaryOp<Wgpu, (f32,)> for MulTwo {
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -19,7 +19,7 @@ impl UnaryOp<(f32,)> for MulTwo {
 
 fn check_transform(exec: &Executor<Wgpu>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let (output,) = transform(&exec, (values.slice(..),), MulTwo).unwrap();
+    let (output,) = transform(&exec, massively::SoA1(values.slice(..)), MulTwo).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
@@ -35,7 +35,8 @@ fn bench_transform(c: &mut Criterion) {
             transform_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) =
-                        transform(&exec, (black_box(values.slice(..)),), MulTwo).unwrap();
+                        transform(&exec, massively::SoA1(black_box(values.slice(..))), MulTwo)
+                            .unwrap();
                     sync(&exec);
                     black_box(output)
                 })

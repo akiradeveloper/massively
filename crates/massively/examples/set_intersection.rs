@@ -9,8 +9,8 @@ fn main() -> common::Result {
 
     let (output,) = set_intersection(
         &exec,
-        (left.slice(..),),
-        (right.slice(..),),
+        massively::SoA1(left.slice(..)),
+        massively::SoA1(right.slice(..)),
         common::LessF32,
     )?;
 

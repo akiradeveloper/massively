@@ -11,8 +11,8 @@ fn lexicographical_compare_accepts_borrowed_tuple_columns() {
     assert!(
         lexicographical_compare(
             &exec,
-            (left_a.slice(..), left_b.slice(..)),
-            (right_a.slice(..), right_b.slice(..)),
+            massively::SoA2(left_a.slice(..), left_b.slice(..)),
+            massively::SoA2(right_a.slice(..), right_b.slice(..)),
             MixedTupleLess
         )
         .unwrap()
@@ -20,8 +20,8 @@ fn lexicographical_compare_accepts_borrowed_tuple_columns() {
     assert!(
         !lexicographical_compare(
             &exec,
-            (right_a.slice(..), right_b.slice(..)),
-            (left_a.slice(..), left_b.slice(..)),
+            massively::SoA2(right_a.slice(..), right_b.slice(..)),
+            massively::SoA2(left_a.slice(..), left_b.slice(..)),
             MixedTupleLess
         )
         .unwrap()

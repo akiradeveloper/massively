@@ -1,8 +1,9 @@
 use crate::{
+    detail::op::kernel::{PredicateOp1, PredicateOp2},
     device::DeviceVec,
     error::Error,
     kernels::*,
-    op::{BinaryPredicateOp, GpuOp, PredicateOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::scan::{inclusive_scan_u32, read_u32_scalar},
 };
@@ -59,7 +60,7 @@ pub(crate) fn partition_copy<R, T, Pred>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 {
     let selected_handles = predicate_handles::<R, T, Pred>(policy, input, false)?;
     if selected_handles.len == 0 {
@@ -85,7 +86,7 @@ pub(crate) fn unique<R, T, Pred>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Pred: BinaryPredicateOp<T>,
+    Pred: PredicateOp2<T>,
 {
     let len_u32 =
         u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
@@ -303,7 +304,7 @@ fn predicate_handles<R, T, Pred>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 {
     let len_u32 =
         u32::try_from(input.len()).map_err(|_| Error::LengthTooLarge { len: input.len() })?;
