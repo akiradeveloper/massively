@@ -11,10 +11,10 @@ fn main() -> common::Result {
 
     let ((keys,), (values,)) = merge_by_key(
         &exec,
-        (left_keys.slice(..),),
-        (left_values.slice(..),),
-        (right_keys.slice(..),),
-        (right_values.slice(..),),
+        massively::SoA1(left_keys.slice(..)),
+        massively::SoA1(left_values.slice(..)),
+        massively::SoA1(right_keys.slice(..)),
+        massively::SoA1(right_values.slice(..)),
         common::LessU32,
     )?;
 

@@ -9,8 +9,8 @@ fn main() -> common::Result {
 
     let index = find_first_of(
         &exec,
-        (input.slice(..),),
-        (needles.slice(..),),
+        massively::SoA1(input.slice(..)),
+        massively::SoA1(needles.slice(..)),
         common::EqualF32,
     )?;
 

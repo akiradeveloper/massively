@@ -1,12 +1,13 @@
 use super::memory::{MaterializeOutput, materialize};
 use crate::{
+    detail::op::kernel::{BinaryOp2, PredicateOp2},
     device::{
         DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA, SoA1, SoA2, SoA3, SoAView1,
         SoAView2, SoAView3,
     },
     error::Error,
     expr::DeviceGpuExpr,
-    op::{BinaryOp, BinaryPredicateOp, GpuOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::scan as primitive_scan,
 };
@@ -85,7 +86,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<(Source::Item,)>,
+    Op: BinaryOp2<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -143,7 +144,7 @@ macro_rules! impl_inclusive_scan_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -245,7 +246,7 @@ macro_rules! impl_inclusive_scan_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -326,7 +327,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<(Source::Item,)>,
+    Op: BinaryOp2<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Init = (Source::Item,);
@@ -390,7 +391,7 @@ macro_rules! impl_exclusive_scan_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
@@ -504,7 +505,7 @@ macro_rules! impl_exclusive_scan_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
@@ -588,7 +589,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<Source::Item>,
+    Op: BinaryOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -610,7 +611,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<Source::Item>,
+    Op: BinaryOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -645,7 +646,7 @@ macro_rules! impl_adjacent_difference_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -689,7 +690,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<(Source::Item,)>,
+    Op: BinaryOp2<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -770,7 +771,7 @@ macro_rules! impl_adjacent_difference_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -851,8 +852,8 @@ where
     K: CubePrimitive + CubeElement,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<Source::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -913,8 +914,8 @@ where
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<(Left::Item, Right::Item)>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
@@ -958,8 +959,8 @@ where
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Output = SoA3<
@@ -1009,10 +1010,10 @@ macro_rules! impl_inclusive_scan_by_key_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            KeyEq: BinaryPredicateOp<Key>,
-            Op: BinaryOp<<$first as KernelColumn>::Item>,
+            KeyEq: PredicateOp2<Key>,
+            Op: BinaryOp2<<$first as KernelColumn>::Item>,
             $(
-                Op: BinaryOp<<$rest as KernelColumn>::Item>,
+                Op: BinaryOp2<<$rest as KernelColumn>::Item>,
             )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -1131,8 +1132,8 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueSource::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueSource::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Output = SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>;
@@ -1181,9 +1182,9 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Output =
@@ -1243,10 +1244,10 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
-    Op: BinaryOp<ValueC::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
+    Op: BinaryOp2<ValueC::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Output = SoA3<
@@ -1317,8 +1318,8 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueSource::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueSource::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Output = SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>;
@@ -1372,9 +1373,9 @@ where
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Output =
@@ -1441,10 +1442,10 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
-    Op: BinaryOp<ValueC::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
+    Op: BinaryOp2<ValueC::Item>,
 {
     type Runtime = KeyA::Runtime;
     type Output = SoA3<
@@ -1522,8 +1523,8 @@ macro_rules! impl_inclusive_scan_by_tuple_key_scalar_value {
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp<ValueSource::Item>,
+            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<ValueSource::Item>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = SoA1<DeviceVec<<$first as KernelColumn>::Runtime, ValueSource::Item>>;
@@ -1611,9 +1612,9 @@ macro_rules! impl_inclusive_scan_by_tuple_key_soa_view_values {
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             <$first_value as KernelColumn>::Expr: DeviceGpuExpr<<$first_value as KernelColumn>::Item>,
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
-            KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp<<$first_value as KernelColumn>::Item>,
-            $( Op: BinaryOp<<$value as KernelColumn>::Item>, )+
+            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<<$first_value as KernelColumn>::Item>,
+            $( Op: BinaryOp2<<$value as KernelColumn>::Item>, )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -1706,8 +1707,8 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueSource::Item,)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueSource::Item,)>,
 {
     type Runtime = KeySource::Runtime;
     type Output = SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>;
@@ -1750,8 +1751,8 @@ where
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueA::Item, ValueB::Item)>,
 {
     type Runtime = KeySource::Runtime;
     type Output = SoA2<
@@ -1809,8 +1810,8 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueA::Item, ValueB::Item, ValueC::Item)>,
 {
     type Runtime = KeySource::Runtime;
     type Output = SoA3<
@@ -1915,8 +1916,8 @@ where
     K: CubePrimitive + CubeElement,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<Source::Item>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Init = Source::Item;
@@ -1983,8 +1984,8 @@ where
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<(Left::Item, Right::Item)>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Init = (Left::Item, Right::Item);
@@ -2031,8 +2032,8 @@ where
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    KeyEq: BinaryPredicateOp<K>,
-    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
+    KeyEq: PredicateOp2<K>,
+    Op: BinaryOp2<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Init = (First::Item, Second::Item, Third::Item);
@@ -2085,10 +2086,10 @@ macro_rules! impl_exclusive_scan_by_key_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            KeyEq: BinaryPredicateOp<Key>,
-            Op: BinaryOp<<$first as KernelColumn>::Item>,
+            KeyEq: PredicateOp2<Key>,
+            Op: BinaryOp2<<$first as KernelColumn>::Item>,
             $(
-                Op: BinaryOp<<$rest as KernelColumn>::Item>,
+                Op: BinaryOp2<<$rest as KernelColumn>::Item>,
             )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -2228,8 +2229,8 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueSource::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueSource::Item>,
 {
     type Init = ValueSource::Item;
     type Runtime = KeyA::Runtime;
@@ -2281,9 +2282,9 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
 {
     type Init = (ValueA::Item, ValueB::Item);
     type Runtime = KeyA::Runtime;
@@ -2347,10 +2348,10 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
-    Op: BinaryOp<ValueC::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
+    Op: BinaryOp2<ValueC::Item>,
 {
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
     type Runtime = KeyA::Runtime;
@@ -2426,8 +2427,8 @@ where
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueSource::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueSource::Item>,
 {
     type Init = ValueSource::Item;
     type Runtime = KeyA::Runtime;
@@ -2484,9 +2485,9 @@ where
     KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
 {
     type Init = (ValueA::Item, ValueB::Item);
     type Runtime = KeyA::Runtime;
@@ -2557,10 +2558,10 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp<ValueA::Item>,
-    Op: BinaryOp<ValueB::Item>,
-    Op: BinaryOp<ValueC::Item>,
+    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
+    Op: BinaryOp2<ValueA::Item>,
+    Op: BinaryOp2<ValueB::Item>,
+    Op: BinaryOp2<ValueC::Item>,
 {
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
     type Runtime = KeyA::Runtime;
@@ -2643,8 +2644,8 @@ macro_rules! impl_exclusive_scan_by_tuple_key_scalar_value {
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp<ValueSource::Item>,
+            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<ValueSource::Item>,
         {
             type Init = ValueSource::Item;
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -2738,9 +2739,9 @@ macro_rules! impl_exclusive_scan_by_tuple_key_soa_view_values {
             $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
             <$first_value as KernelColumn>::Expr: DeviceGpuExpr<<$first_value as KernelColumn>::Item>,
             $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
-            KeyEq: BinaryPredicateOp<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp<<$first_value as KernelColumn>::Item>,
-            $( Op: BinaryOp<<$value as KernelColumn>::Item>, )+
+            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
+            Op: BinaryOp2<<$first_value as KernelColumn>::Item>,
+            $( Op: BinaryOp2<<$value as KernelColumn>::Item>, )+
         {
             type Init = (<$first_value as KernelColumn>::Item, $( <$value as KernelColumn>::Item ),+);
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -2838,8 +2839,8 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueSource::Item,)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueSource::Item,)>,
 {
     type Init = (ValueSource::Item,);
     type Runtime = KeySource::Runtime;
@@ -2884,8 +2885,8 @@ where
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueA::Item, ValueB::Item)>,
 {
     type Init = (ValueA::Item, ValueB::Item);
     type Runtime = KeySource::Runtime;
@@ -2946,8 +2947,8 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
-    Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+    KeyEq: PredicateOp2<(KeySource::Item,)>,
+    Op: BinaryOp2<(ValueA::Item, ValueB::Item, ValueC::Item)>,
 {
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
     type Runtime = KeySource::Runtime;

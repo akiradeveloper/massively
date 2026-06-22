@@ -10,11 +10,11 @@ fn main() -> common::Result {
 
     let (output,) = scatter_if(
         &exec,
-        (values.slice(..),),
-        (indices.slice(..),),
+        massively::SoA1(values.slice(..)),
+        indices.slice(..),
         3,
         (0.0_f32,),
-        (stencil.slice(..),),
+        stencil.slice(..),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![0.0, 30.0, 10.0]);

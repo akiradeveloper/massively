@@ -11,8 +11,8 @@ fn mismatch_accepts_borrowed_tuple_columns() {
     assert_eq!(
         mismatch(
             &exec,
-            (a.slice(..), b.slice(..)),
-            (c.slice(..), d.slice(..)),
+            massively::SoA2(a.slice(..), b.slice(..)),
+            massively::SoA2(c.slice(..), d.slice(..)),
             MixedTupleEqual
         )
         .unwrap(),

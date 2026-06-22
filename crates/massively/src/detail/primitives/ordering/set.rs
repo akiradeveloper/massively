@@ -1,10 +1,6 @@
 use crate::{
-    device::DeviceVec,
-    error::Error,
-    kernels::*,
-    op::{BinaryPredicateOp, GpuOp},
-    policy::CubePolicy,
-    primitives::select,
+    detail::op::kernel::PredicateOp2, device::DeviceVec, error::Error, kernels::*, op::GpuOp,
+    policy::CubePolicy, primitives::select,
 };
 use cubecl::prelude::*;
 
@@ -19,7 +15,7 @@ pub(crate) fn set_union_with_policy<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     let right_only = set_difference_with_policy(policy, right, left, GpuOp::<Less>::new())?;
     super::merge_with_policy(policy, left, &right_only, GpuOp::<Less>::new())
@@ -34,7 +30,7 @@ pub(crate) fn set_intersection_with_policy<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     membership_compact::<R, T, Less>(policy, left, right, true)
 }
@@ -48,7 +44,7 @@ pub(crate) fn set_difference_with_policy<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     membership_compact::<R, T, Less>(policy, left, right, false)
 }
@@ -62,7 +58,7 @@ fn membership_compact<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     let len_u32 = u32::try_from(candidates.len()).map_err(|_| Error::LengthTooLarge {
         len: candidates.len(),

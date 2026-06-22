@@ -9,8 +9,8 @@ fn main() -> common::Result {
 
     let ((out_keys,), (out_values,)) = reduce_by_key(
         &exec,
-        (keys.slice(..),),
-        (values.slice(..),),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
         common::EqualU32,
         (0.0,),
         common::SumF32,

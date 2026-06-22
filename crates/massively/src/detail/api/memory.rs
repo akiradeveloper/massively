@@ -1,4 +1,5 @@
 use crate::{
+    detail::op::kernel::UnaryOp,
     device::{
         DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, S0, SoA, SoA1, SoA2, SoA3,
         StorageKernelColumn,
@@ -6,7 +7,6 @@ use crate::{
     error::Error,
     expr::DeviceGpuExpr,
     kernels::*,
-    op::UnaryOp,
     policy::CubePolicy,
 };
 use cubecl::prelude::*;
@@ -21,11 +21,11 @@ fn transform_offset_handle<R: Runtime>(
 
 /// Storage shape used for a transformed device value.
 #[doc(hidden)]
-pub trait StorageOutput<R: Runtime>: CubeType {
+pub trait MItemStorage<R: Runtime>: CubeType {
     type Storage;
 }
 
-impl<R, A> StorageOutput<R> for (A,)
+impl<R, A> MItemStorage<R> for (A,)
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -33,7 +33,7 @@ where
     type Storage = SoA1<DeviceVec<R, A>>;
 }
 
-impl<R, A, B> StorageOutput<R> for (A, B)
+impl<R, A, B> MItemStorage<R> for (A, B)
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -42,7 +42,7 @@ where
     type Storage = SoA2<DeviceVec<R, A>, DeviceVec<R, B>>;
 }
 
-impl<R, A, B, C> StorageOutput<R> for (A, B, C)
+impl<R, A, B, C> MItemStorage<R> for (A, B, C)
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -53,7 +53,7 @@ where
 }
 
 #[doc(hidden)]
-pub trait TransformUnaryOutput<R, T, Op>: StorageOutput<R>
+pub trait TransformUnaryOutput<R, T, Op>: MItemStorage<R>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
@@ -62,7 +62,7 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
 impl<R, T, A, Op> TransformUnaryOutput<R, T, Op> for (A,)
@@ -75,7 +75,7 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = input.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -120,7 +120,7 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = input.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -169,7 +169,7 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = input.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<A>());
@@ -229,7 +229,7 @@ macro_rules! impl_transform_tuple_output {
                 policy: &crate::policy::CubePolicy<R>,
                 $first_arg: DeviceColumnView<R, $first_in>,
                 $( $arg: DeviceColumnView<R, $in_ty>, )+
-            ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let len = $first_arg.len();
                 let client = policy.client();
                 $(
@@ -333,7 +333,7 @@ macro_rules! impl_transform_tuple_outputs {
 }
 
 #[doc(hidden)]
-pub trait TransformSoA2Output<R, InA, InB, Op>: CubeType + StorageOutput<R>
+pub trait TransformSoA2Output<R, InA, InB, Op>: CubeType + MItemStorage<R>
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -344,7 +344,7 @@ where
         policy: &crate::policy::CubePolicy<R>,
         left: DeviceColumnView<R, InA>,
         right: DeviceColumnView<R, InB>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
 impl<R, InA, InB, OutA, Op> TransformSoA2Output<R, InA, InB, Op> for (OutA,)
@@ -359,7 +359,7 @@ where
         policy: &crate::policy::CubePolicy<R>,
         left: DeviceColumnView<R, InA>,
         right: DeviceColumnView<R, InB>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -409,7 +409,7 @@ where
         policy: &crate::policy::CubePolicy<R>,
         left: DeviceColumnView<R, InA>,
         right: DeviceColumnView<R, InB>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -450,7 +450,7 @@ where
 }
 
 #[doc(hidden)]
-pub trait TransformSoA3Output<R, InA, InB, InC, Op>: CubeType + StorageOutput<R>
+pub trait TransformSoA3Output<R, InA, InB, InC, Op>: CubeType + MItemStorage<R>
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -463,7 +463,7 @@ where
         first: DeviceColumnView<R, InA>,
         second: DeviceColumnView<R, InB>,
         third: DeviceColumnView<R, InC>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error>;
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
 impl<R, InA, InB, InC, OutA, Op> TransformSoA3Output<R, InA, InB, InC, Op> for (OutA,)
@@ -480,7 +480,7 @@ where
         first: DeviceColumnView<R, InA>,
         second: DeviceColumnView<R, InB>,
         third: DeviceColumnView<R, InC>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -539,7 +539,7 @@ where
         first: DeviceColumnView<R, InA>,
         second: DeviceColumnView<R, InB>,
         third: DeviceColumnView<R, InC>,
-    ) -> Result<<Self as StorageOutput<R>>::Storage, Error> {
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());

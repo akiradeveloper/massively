@@ -1,14 +1,17 @@
 #![allow(dead_code)]
 
 use cubecl::prelude::*;
-use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
+use massively::op::{BinaryOp1, BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp};
 
 pub type Result = std::result::Result<(), massively::Error>;
 
 pub struct AddOne;
 
 #[cubecl::cube]
-impl UnaryOp<(f32,)> for AddOne {
+impl<B> UnaryOp<B, (f32,)> for AddOne
+where
+    B: massively::Backend,
+{
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -19,7 +22,10 @@ impl UnaryOp<(f32,)> for AddOne {
 pub struct Square;
 
 #[cubecl::cube]
-impl UnaryOp<(f32,)> for Square {
+impl<B> UnaryOp<B, (f32,)> for Square
+where
+    B: massively::Backend,
+{
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -30,25 +36,24 @@ impl UnaryOp<(f32,)> for Square {
 pub struct PairProduct;
 
 #[cubecl::cube]
-impl UnaryOp<(f32, f32)> for PairProduct {
+impl<B> BinaryOp2<B, (f32,), (f32,)> for PairProduct
+where
+    B: massively::Backend,
+{
     type Output = (f32,);
 
-    fn apply(input: (f32, f32)) -> (f32,) {
-        (input.0 * input.1,)
+    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
+        (lhs.0 * rhs.0,)
     }
 }
 
 pub struct SumF32;
 
 #[cubecl::cube]
-impl BinaryOp<f32> for SumF32 {
-    fn apply(lhs: f32, rhs: f32) -> f32 {
-        lhs + rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryOp<(f32,)> for SumF32 {
+impl<B> BinaryOp1<B, (f32,)> for SumF32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
@@ -57,7 +62,10 @@ impl BinaryOp<(f32,)> for SumF32 {
 pub struct TupleSumF32;
 
 #[cubecl::cube]
-impl BinaryOp<(f32,)> for TupleSumF32 {
+impl<B> BinaryOp1<B, (f32,)> for TupleSumF32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
@@ -66,14 +74,10 @@ impl BinaryOp<(f32,)> for TupleSumF32 {
 pub struct SumU32;
 
 #[cubecl::cube]
-impl BinaryOp<u32> for SumU32 {
-    fn apply(lhs: u32, rhs: u32) -> u32 {
-        lhs + rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryOp<(u32,)> for SumU32 {
+impl<B> BinaryOp1<B, (u32,)> for SumU32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         (lhs.0 + rhs.0,)
     }
@@ -82,14 +86,10 @@ impl BinaryOp<(u32,)> for SumU32 {
 pub struct MulF32;
 
 #[cubecl::cube]
-impl BinaryOp<f32> for MulF32 {
-    fn apply(lhs: f32, rhs: f32) -> f32 {
-        lhs * rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryOp<(f32,)> for MulF32 {
+impl<B> BinaryOp1<B, (f32,)> for MulF32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 * rhs.0,)
     }
@@ -98,14 +98,10 @@ impl BinaryOp<(f32,)> for MulF32 {
 pub struct LessF32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<f32> for LessF32 {
-    fn apply(lhs: f32, rhs: f32) -> bool {
-        lhs < rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryPredicateOp<(f32,)> for LessF32 {
+impl<B> PredicateOp2<B, (f32,)> for LessF32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -114,14 +110,10 @@ impl BinaryPredicateOp<(f32,)> for LessF32 {
 pub struct LessU32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs < rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryPredicateOp<(u32,)> for LessU32 {
+impl<B> PredicateOp2<B, (u32,)> for LessU32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -130,14 +122,10 @@ impl BinaryPredicateOp<(u32,)> for LessU32 {
 pub struct EqualF32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<f32> for EqualF32 {
-    fn apply(lhs: f32, rhs: f32) -> bool {
-        lhs == rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryPredicateOp<(f32,)> for EqualF32 {
+impl<B> PredicateOp2<B, (f32,)> for EqualF32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
         lhs.0 == rhs.0
     }
@@ -146,14 +134,10 @@ impl BinaryPredicateOp<(f32,)> for EqualF32 {
 pub struct EqualU32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for EqualU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
-        lhs == rhs
-    }
-}
-
-#[cubecl::cube]
-impl BinaryPredicateOp<(u32,)> for EqualU32 {
+impl<B> PredicateOp2<B, (u32,)> for EqualU32
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 == rhs.0
     }
@@ -162,14 +146,10 @@ impl BinaryPredicateOp<(u32,)> for EqualU32 {
 pub struct Positive;
 
 #[cubecl::cube]
-impl PredicateOp<f32> for Positive {
-    fn apply(input: f32) -> bool {
-        input > 0.0
-    }
-}
-
-#[cubecl::cube]
-impl PredicateOp<(f32,)> for Positive {
+impl<B> PredicateOp1<B, (f32,)> for Positive
+where
+    B: massively::Backend,
+{
     fn apply(input: (f32,)) -> bool {
         input.0 > 0.0
     }
@@ -178,14 +158,10 @@ impl PredicateOp<(f32,)> for Positive {
 pub struct GreaterThanTwo;
 
 #[cubecl::cube]
-impl PredicateOp<f32> for GreaterThanTwo {
-    fn apply(input: f32) -> bool {
-        input > 2.0
-    }
-}
-
-#[cubecl::cube]
-impl PredicateOp<(f32,)> for GreaterThanTwo {
+impl<B> PredicateOp1<B, (f32,)> for GreaterThanTwo
+where
+    B: massively::Backend,
+{
     fn apply(input: (f32,)) -> bool {
         input.0 > 2.0
     }
@@ -194,14 +170,10 @@ impl PredicateOp<(f32,)> for GreaterThanTwo {
 pub struct EvenU32;
 
 #[cubecl::cube]
-impl PredicateOp<u32> for EvenU32 {
-    fn apply(input: u32) -> bool {
-        input % 2 == 0
-    }
-}
-
-#[cubecl::cube]
-impl PredicateOp<(u32,)> for EvenU32 {
+impl<B> PredicateOp1<B, (u32,)> for EvenU32
+where
+    B: massively::Backend,
+{
     fn apply(input: (u32,)) -> bool {
         input.0 % 2 == 0
     }

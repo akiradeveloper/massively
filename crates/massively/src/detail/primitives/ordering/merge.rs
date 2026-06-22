@@ -1,10 +1,6 @@
 use crate::{
-    device::DeviceVec,
-    error::Error,
-    kernels::*,
-    op::{BinaryPredicateOp, GpuOp},
-    policy::CubePolicy,
-    primitives::ensure_same_len,
+    detail::op::kernel::PredicateOp2, device::DeviceVec, error::Error, kernels::*, op::GpuOp,
+    policy::CubePolicy, primitives::ensure_same_len,
 };
 use cubecl::prelude::*;
 
@@ -28,7 +24,7 @@ pub(crate) fn merge_with_policy<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     let len = left.len() + right.len();
     if left.is_empty() {
@@ -80,7 +76,7 @@ where
     R: Runtime,
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<K>,
+    Less: PredicateOp2<K>,
 {
     ensure_same_len(left_values.len(), left_keys.len())?;
     ensure_same_len(right_values.len(), right_keys.len())?;
@@ -100,7 +96,7 @@ pub(crate) fn merge_by_key_control_with_policy<R, K, Less>(
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<K>,
+    Less: PredicateOp2<K>,
 {
     let len = left_keys.len() + right_keys.len();
     let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);

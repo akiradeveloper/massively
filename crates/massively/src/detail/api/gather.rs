@@ -660,9 +660,8 @@ impl_gather_if_input_sources!(SoA3<A, B, C>);
 /// Gathers `input[indices[i]]` into new owned device storage.
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only. For
-/// multiple value columns, pass borrowed columns as a tuple, such as
-/// `(values.slice(..), tags.slice(..))`. Indices may also be passed as a
-/// one-column tuple, such as `(indices.slice(..),)`.
+/// multiple value columns, pass borrowed columns as `SoA2` or `SoA3`.
+/// Indices may be passed as `SoA1(indices.slice(..))`.
 pub fn gather<Input, Indices>(
     policy: &CubePolicy<<Input as GatherInput<Indices>>::Runtime>,
     input: Input,

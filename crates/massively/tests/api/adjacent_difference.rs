@@ -7,8 +7,12 @@ fn adjacent_difference_accepts_three_tuple_columns() {
     let b = exec.to_device(&[10_u32, 30, 60, 100]).unwrap();
     let c = exec.to_device(&[2.0_f32, 5.0, 9.0, 14.0]).unwrap();
 
-    let output =
-        adjacent_difference(&exec, (a.slice(..), b.slice(..), c.slice(..)), TupleSum).unwrap();
+    let output = adjacent_difference(
+        &exec,
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        TupleSum,
+    )
+    .unwrap();
     let (a_out, b_out, c_out) = output;
 
     assert_eq!(exec.to_host(&a_out).unwrap(), vec![1.0, 4.0, 9.0, 16.0]);

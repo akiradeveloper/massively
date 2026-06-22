@@ -1,8 +1,8 @@
-use crate::op::{BinaryPredicateOp, PredicateOp};
+use crate::detail::op::kernel::{PredicateOp1, PredicateOp2};
 use cubecl::prelude::*;
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn copy_if_flags_kernel<T: CubePrimitive, S: CubePrimitive, Pred: PredicateOp<S>>(
+pub(crate) fn copy_if_flags_kernel<T: CubePrimitive, S: CubePrimitive, Pred: PredicateOp1<S>>(
     input: &[T],
     stencil: &[S],
     invert: &[u32],
@@ -24,7 +24,7 @@ pub(crate) fn copy_if_flags_kernel<T: CubePrimitive, S: CubePrimitive, Pred: Pre
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn copy_if_flag_only_kernel<S: CubePrimitive, Pred: PredicateOp<S>>(
+pub(crate) fn copy_if_flag_only_kernel<S: CubePrimitive, Pred: PredicateOp1<S>>(
     stencil: &[S],
     invert: &[u32],
     flags: &mut [u32],
@@ -75,7 +75,7 @@ pub(crate) fn scatter_if_flags_kernel<T: CubePrimitive>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn adjacent_find_flags_kernel<T: CubePrimitive, Pred: BinaryPredicateOp<T>>(
+pub(crate) fn adjacent_find_flags_kernel<T: CubePrimitive, Pred: PredicateOp2<T>>(
     input: &[T],
     flags: &mut [u32],
 ) {
@@ -315,7 +315,7 @@ pub(crate) fn invert_flags_kernel(flags: &[u32], output: &mut [u32]) {
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn mismatch_flags_kernel<T: CubePrimitive, Eq: BinaryPredicateOp<T>>(
+pub(crate) fn mismatch_flags_kernel<T: CubePrimitive, Eq: PredicateOp2<T>>(
     left: &[T],
     right: &[T],
     flags: &mut [u32],
@@ -333,7 +333,7 @@ pub(crate) fn mismatch_flags_kernel<T: CubePrimitive, Eq: BinaryPredicateOp<T>>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn sorted_break_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn sorted_break_flags_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     flags: &mut [u32],
 ) {
@@ -350,7 +350,7 @@ pub(crate) fn sorted_break_flags_kernel<T: CubePrimitive, Less: BinaryPredicateO
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn find_first_of_flags_kernel<T: CubePrimitive, Eq: BinaryPredicateOp<T>>(
+pub(crate) fn find_first_of_flags_kernel<T: CubePrimitive, Eq: PredicateOp2<T>>(
     input: &[T],
     needles: &[T],
     flags: &mut [u32],
@@ -374,7 +374,7 @@ pub(crate) fn find_first_of_flags_kernel<T: CubePrimitive, Eq: BinaryPredicateOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn subrange_match_flags_kernel<T: CubePrimitive, Eq: BinaryPredicateOp<T>>(
+pub(crate) fn subrange_match_flags_kernel<T: CubePrimitive, Eq: PredicateOp2<T>>(
     input: &[T],
     pattern: &[T],
     flags: &mut [u32],
@@ -398,7 +398,7 @@ pub(crate) fn subrange_match_flags_kernel<T: CubePrimitive, Eq: BinaryPredicateO
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn lexicographical_diff_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn lexicographical_diff_flags_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     left: &[T],
     right: &[T],
     flags: &mut [u32],
@@ -416,7 +416,7 @@ pub(crate) fn lexicographical_diff_flags_kernel<T: CubePrimitive, Less: BinaryPr
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn lexicographical_compare_at_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn lexicographical_compare_at_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     left: &[T],
     right: &[T],
     index: &[u32],
@@ -433,7 +433,7 @@ pub(crate) fn lexicographical_compare_at_kernel<T: CubePrimitive, Less: BinaryPr
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn partition_point_flags_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+pub(crate) fn partition_point_flags_kernel<T: CubePrimitive, Pred: PredicateOp1<T>>(
     input: &[T],
     flags: &mut [u32],
 ) {
@@ -450,7 +450,7 @@ pub(crate) fn partition_point_flags_kernel<T: CubePrimitive, Pred: PredicateOp<T
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn partition_tail_true_flags_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+pub(crate) fn partition_tail_true_flags_kernel<T: CubePrimitive, Pred: PredicateOp1<T>>(
     input: &[T],
     point: &[u32],
     flags: &mut [u32],
@@ -468,7 +468,7 @@ pub(crate) fn partition_tail_true_flags_kernel<T: CubePrimitive, Pred: Predicate
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn lower_bound_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn lower_bound_flags_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     value: &[T],
     flags: &mut [u32],
@@ -486,7 +486,7 @@ pub(crate) fn lower_bound_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn upper_bound_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn upper_bound_flags_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     value: &[T],
     flags: &mut [u32],
@@ -504,7 +504,7 @@ pub(crate) fn upper_bound_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn binary_search_at_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn binary_search_at_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     value: &[T],
     index: &[u32],
@@ -521,7 +521,7 @@ pub(crate) fn binary_search_at_kernel<T: CubePrimitive, Less: BinaryPredicateOp<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn sorted_membership_flags_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn sorted_membership_flags_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     candidates: &[T],
     sorted: &[T],
     keep_present: &[u32],
@@ -587,7 +587,7 @@ pub(crate) fn sorted_membership_flags_kernel<T: CubePrimitive, Less: BinaryPredi
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn remove_value_flags_kernel<T: CubePrimitive, Pred: BinaryPredicateOp<T>>(
+pub(crate) fn remove_value_flags_kernel<T: CubePrimitive, Pred: PredicateOp2<T>>(
     input: &[T],
     value: &[T],
     flags: &mut [u32],
@@ -603,7 +603,7 @@ pub(crate) fn remove_value_flags_kernel<T: CubePrimitive, Pred: BinaryPredicateO
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn replace_if_value_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+pub(crate) fn replace_if_value_kernel<T: CubePrimitive, Pred: PredicateOp1<T>>(
     input: &[T],
     replacement: &[T],
     output: &mut [T],
@@ -640,7 +640,7 @@ pub(crate) fn replace_with_flags_kernel<T: CubePrimitive>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn unique_flags_kernel<T: CubePrimitive, Pred: BinaryPredicateOp<T>>(
+pub(crate) fn unique_flags_kernel<T: CubePrimitive, Pred: PredicateOp2<T>>(
     input: &[T],
     flags: &mut [u32],
 ) {
@@ -659,7 +659,7 @@ pub(crate) fn unique_flags_kernel<T: CubePrimitive, Pred: BinaryPredicateOp<T>>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn unique_by_key_flags_kernel<K: CubePrimitive, Pred: BinaryPredicateOp<K>>(
+pub(crate) fn unique_by_key_flags_kernel<K: CubePrimitive, Pred: PredicateOp2<K>>(
     keys: &[K],
     flags: &mut [u32],
 ) {
@@ -678,7 +678,7 @@ pub(crate) fn unique_by_key_flags_kernel<K: CubePrimitive, Pred: BinaryPredicate
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn key_run_end_flags_kernel<K: CubePrimitive, Pred: BinaryPredicateOp<K>>(
+pub(crate) fn key_run_end_flags_kernel<K: CubePrimitive, Pred: PredicateOp2<K>>(
     keys: &[K],
     flags: &mut [u32],
 ) {
@@ -695,7 +695,7 @@ pub(crate) fn key_run_end_flags_kernel<K: CubePrimitive, Pred: BinaryPredicateOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn gather_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+pub(crate) fn gather_if_kernel<T: CubePrimitive, Pred: PredicateOp1<T>>(
     input: &[T],
     indices: &[u32],
     output: &mut [T],
@@ -710,7 +710,7 @@ pub(crate) fn gather_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn minmax_element_partials_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn minmax_element_partials_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     len: &[u32],
     partials: &mut [u32],
@@ -783,7 +783,7 @@ pub(crate) fn minmax_element_partials_kernel<T: CubePrimitive, Less: BinaryPredi
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn minmax_index_partials_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
+pub(crate) fn minmax_index_partials_kernel<T: CubePrimitive, Less: PredicateOp2<T>>(
     input: &[T],
     candidates: &[u32],
     candidate_len: &[u32],

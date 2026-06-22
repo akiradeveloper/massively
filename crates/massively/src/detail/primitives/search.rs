@@ -1,8 +1,9 @@
 use crate::{
+    detail::op::kernel::{PredicateOp1, PredicateOp2},
     device::DeviceVec,
     error::Error,
     kernels::*,
-    op::{BinaryPredicateOp, GpuOp, PredicateOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::scan::read_u32_scalar,
 };
@@ -24,7 +25,7 @@ pub(crate) fn equal<R, T, Eq>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Eq: BinaryPredicateOp<T>,
+    Eq: PredicateOp2<T>,
 {
     if left.len() != right.len() {
         return Ok(false);
@@ -40,7 +41,7 @@ pub(crate) fn adjacent_find<R, T, Pred>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Pred: BinaryPredicateOp<T>,
+    Pred: PredicateOp2<T>,
 {
     if input.len() < 2 {
         return Ok(None);
@@ -72,7 +73,7 @@ pub(crate) fn mismatch<R, T, Eq>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Eq: BinaryPredicateOp<T>,
+    Eq: PredicateOp2<T>,
 {
     let min_len = left.len().min(right.len());
     if min_len == 0 {
@@ -118,7 +119,7 @@ pub(crate) fn is_sorted_until<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     if input.len() <= 1 {
         return Ok(input.len());
@@ -151,7 +152,7 @@ pub(crate) fn find_first_of<R, T, Eq>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Eq: BinaryPredicateOp<T>,
+    Eq: PredicateOp2<T>,
 {
     if input.len() == 0 || needles.len() == 0 {
         return Ok(None);
@@ -185,7 +186,7 @@ pub(crate) fn lexicographical_compare<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     let min_len = left.len().min(right.len());
     if min_len == 0 {
@@ -237,7 +238,7 @@ pub(crate) fn partition_point<R, T, Pred>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 {
     if input.len() == 0 {
         return Ok(0);
@@ -269,7 +270,7 @@ pub(crate) fn is_partitioned<R, T, Pred>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Pred: PredicateOp<T>,
+    Pred: PredicateOp1<T>,
 {
     if input.len() <= 1 {
         return Ok(true);
@@ -309,7 +310,7 @@ pub(crate) fn lower_bound<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     sorted_bound_flags::<R, T, Less>(policy, input, value, BoundKind::Lower)
 }
@@ -323,7 +324,7 @@ pub(crate) fn upper_bound<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     sorted_bound_flags::<R, T, Less>(policy, input, value, BoundKind::Upper)
 }
@@ -336,7 +337,7 @@ pub(crate) fn minmax_element<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     if input.len() == 0 {
         return Ok(None);
@@ -409,7 +410,7 @@ fn sorted_bound_flags<R, T, Less>(
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<T>,
+    Less: PredicateOp2<T>,
 {
     if input.len() == 0 {
         return Ok(0);

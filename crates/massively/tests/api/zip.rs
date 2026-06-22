@@ -29,8 +29,8 @@ fn tuple_flattens_single_column_inputs() {
 
     let (left, right) = gather(
         &exec,
-        (left.slice(..), right.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(left.slice(..), right.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
 
@@ -47,8 +47,8 @@ fn tuple_materializes_heterogeneous_columns() {
 
     let (values, ids) = gather(
         &exec,
-        (values.slice(..), ids.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(values.slice(..), ids.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
 
@@ -65,8 +65,8 @@ fn tuple_gather_accepts_borrowed_heterogeneous_columns() {
 
     let gathered = gather(
         &exec,
-        (values.slice(..), ids.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(values.slice(..), ids.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
     let (values, ids) = gathered;
@@ -84,8 +84,8 @@ fn tuple_gather_accepts_heterogeneous_columns() {
 
     let gathered = gather(
         &exec,
-        (values.slice(..), ids.slice(..)),
-        (indices.slice(..),),
+        massively::SoA2(values.slice(..), ids.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
     let (values, ids) = gathered;
@@ -104,8 +104,8 @@ fn tuple_concatenates_borrowed_columns() {
     let indices = exec.to_device(&[0_u32, 1]).unwrap();
     let (a, b, c) = gather(
         &exec,
-        (a.slice(..), b.slice(..), c.slice(..)),
-        (indices.slice(..),),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
 
@@ -124,8 +124,8 @@ fn tuple_concatenates_column_and_columns() {
     let indices = exec.to_device(&[0_u32, 1]).unwrap();
     let (a, b, c) = gather(
         &exec,
-        (a.slice(..), b.slice(..), c.slice(..)),
-        (indices.slice(..),),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        indices.slice(..),
     )
     .unwrap();
 

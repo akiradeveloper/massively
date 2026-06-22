@@ -7,7 +7,7 @@ use massively::{DeviceVec, Executor, Wgpu, gather};
 fn check_gather(exec: &Executor<Wgpu>) {
     let values = exec.to_device(&[10.0_f32, 20.0, 30.0, 40.0]).unwrap();
     let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let (output,) = gather(&exec, (values.slice(..),), (indices.slice(..),)).unwrap();
+    let (output,) = gather(&exec, massively::SoA1(values.slice(..)), indices.slice(..)).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
 }
 
@@ -25,8 +25,8 @@ fn bench_gather(c: &mut Criterion) {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = gather(
                         &exec,
-                        (black_box(values.slice(..)),),
-                        (black_box(indices.slice(..)),),
+                        massively::SoA1(black_box(values.slice(..))),
+                        black_box(indices.slice(..)),
                     )
                     .unwrap();
                     sync(&exec);

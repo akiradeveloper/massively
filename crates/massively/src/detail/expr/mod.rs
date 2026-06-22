@@ -1,18 +1,5 @@
-use crate::op::BinaryOp;
 use cubecl::prelude::*;
 use std::marker::PhantomData;
-
-/// Type-level input node for a device expression.
-pub struct Input<T> {
-    _item: PhantomData<fn() -> T>,
-}
-
-/// Type-level binary map node over two device expressions.
-pub struct BinaryMap<Left, Right, Op> {
-    _left: PhantomData<fn() -> Left>,
-    _right: PhantomData<fn() -> Right>,
-    _op: PhantomData<fn() -> Op>,
-}
 
 /// Device expression leaf bound to slot 0.
 pub struct Slot0<T> {
@@ -53,13 +40,6 @@ pub trait DeviceGpuExpr<T: CubePrimitive>: 'static + Send + Sync {
         slot_offsets: &[u32],
         index: usize,
     ) -> T;
-}
-
-#[cube]
-impl<T: CubePrimitive, C: CubePrimitive> GpuExpr<C> for Input<T> {
-    fn eval(input: &[C], indices: &[u32], _rhs: &[C], _rhs_indices: &[u32], index: usize) -> C {
-        input[indices[0] as usize + index]
-    }
 }
 
 #[cube]
@@ -129,44 +109,5 @@ impl<T: CubePrimitive, C: CubePrimitive> DeviceGpuExpr<C> for Slot3<T> {
         index: usize,
     ) -> C {
         slot3[slot_offsets[3] as usize + index]
-    }
-}
-
-#[cube]
-impl<T, Left, Right, Op> GpuExpr<T> for BinaryMap<Left, Right, Op>
-where
-    T: CubePrimitive,
-    Left: GpuExpr<T>,
-    Right: GpuExpr<T>,
-    Op: BinaryOp<T>,
-{
-    fn eval(input: &[T], indices: &[u32], rhs: &[T], rhs_indices: &[u32], index: usize) -> T {
-        Op::apply(
-            Left::eval(input, indices, rhs, rhs_indices, index),
-            Right::eval(rhs, rhs_indices, input, indices, index),
-        )
-    }
-}
-
-#[cube]
-impl<T, Left, Right, Op> DeviceGpuExpr<T> for BinaryMap<Left, Right, Op>
-where
-    T: CubePrimitive,
-    Left: DeviceGpuExpr<T>,
-    Right: DeviceGpuExpr<T>,
-    Op: BinaryOp<T>,
-{
-    fn eval(
-        slot0: &[T],
-        slot1: &[T],
-        slot2: &[T],
-        slot3: &[T],
-        slot_offsets: &[u32],
-        index: usize,
-    ) -> T {
-        Op::apply(
-            Left::eval(slot0, slot1, slot2, slot3, slot_offsets, index),
-            Right::eval(slot0, slot1, slot2, slot3, slot_offsets, index),
-        )
     }
 }

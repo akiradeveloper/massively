@@ -43,7 +43,7 @@ fn sort_returns_device_storage() {
     let exec = exec();
     let x = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
 
-    let sorted = sort(&exec, (x.slice(..),), Less).unwrap();
+    let sorted = sort(&exec, massively::SoA1(x.slice(..)), Less).unwrap();
     let (sorted,) = sorted;
 
     assert_eq!(exec.to_host(&sorted).unwrap(), vec![1.0, 2.0, 3.0]);
@@ -56,7 +56,12 @@ fn tuple_sort_preserves_soa_components() {
     let x = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
     let y = exec.to_device(&[30_u32, 10, 20]).unwrap();
 
-    let sorted = sort(&exec, (x.slice(..), y.slice(..)), MixedTupleLess).unwrap();
+    let sorted = sort(
+        &exec,
+        massively::SoA2(x.slice(..), y.slice(..)),
+        MixedTupleLess,
+    )
+    .unwrap();
     let (x, y) = sorted;
 
     assert_eq!(exec.to_host(&x).unwrap(), vec![1.0, 2.0, 3.0]);
@@ -69,7 +74,12 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
     let values = exec.to_device(&[2.0_f32, 1.0, 2.0, 3.0]).unwrap();
     let tags = exec.to_device(&[20_u32, 30, 10, 40]).unwrap();
 
-    let sorted = sort(&exec, (values.slice(..), tags.slice(..)), MixedTupleLess).unwrap();
+    let sorted = sort(
+        &exec,
+        massively::SoA2(values.slice(..), tags.slice(..)),
+        MixedTupleLess,
+    )
+    .unwrap();
     let (values, tags) = sorted;
     assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 2.0, 2.0, 3.0]);
     assert_eq!(exec.to_host(&tags).unwrap(), vec![30, 10, 20, 40]);
@@ -80,7 +90,7 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
 
     let sorted = sort(
         &exec,
-        (values.slice(..), tags.slice(..), payload.slice(..)),
+        massively::SoA3(values.slice(..), tags.slice(..), payload.slice(..)),
         MixedTuple3Less,
     )
     .unwrap();

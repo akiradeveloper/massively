@@ -48,8 +48,8 @@ fn set_union_accepts_borrowed_tuple_columns() {
 
     let output = set_union(
         &exec,
-        (left_a.slice(..), left_b.slice(..)),
-        (right_a.slice(..), right_b.slice(..)),
+        massively::SoA2(left_a.slice(..), left_b.slice(..)),
+        massively::SoA2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
     )
     .unwrap();

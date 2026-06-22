@@ -3,13 +3,13 @@ mod common;
 use common::{Backend, SORT_SIZES, descending_f32, shuffled_u32, sync};
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::op::BinaryPredicateOp;
+use massively::op::PredicateOp2;
 use massively::{DeviceVec, Executor, Wgpu, sort_by_key};
 
 struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<(u32,)> for Less {
+impl PredicateOp2<Wgpu, (u32,)> for Less {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -18,8 +18,13 @@ impl BinaryPredicateOp<(u32,)> for Less {
 fn check_sort_by_key(exec: &Executor<Wgpu>) {
     let keys = exec.to_device(&[2_u32, 0, 1]).unwrap();
     let values = exec.to_device(&[20.0_f32, 0.0, 10.0]).unwrap();
-    let ((keys,), (values,)) =
-        sort_by_key(&exec, (keys.slice(..),), (values.slice(..),), Less).unwrap();
+    let ((keys,), (values,)) = sort_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        Less,
+    )
+    .unwrap();
     assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1, 2]);
     assert_eq!(exec.to_host(&values).unwrap(), vec![0.0, 10.0, 20.0]);
 }
@@ -45,8 +50,13 @@ fn bench_sort(c: &mut Criterion) {
                     },
                     |(keys, values)| {
                         let output: ((DeviceVec<Wgpu, u32>,), (DeviceVec<Wgpu, f32>,)) =
-                            sort_by_key(&exec, (keys.slice(..),), (values.slice(..),), Less)
-                                .unwrap();
+                            sort_by_key(
+                                &exec,
+                                massively::SoA1(keys.slice(..)),
+                                massively::SoA1(values.slice(..)),
+                                Less,
+                            )
+                            .unwrap();
                         sync(&exec);
                         black_box(output)
                     },

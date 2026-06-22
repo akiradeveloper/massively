@@ -40,7 +40,7 @@ fn algorithms_reject_other_executor_data() {
 
     let result = transform::<_, _, (massively::DeviceVec<Wgpu, f32>,), _>(
         &other_exec,
-        (input.slice(..),),
+        massively::SoA1(input.slice(..)),
         Double,
     );
 
@@ -52,7 +52,7 @@ fn transform_accepts_device_slice() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
 
-    let (output,) = transform(&exec, (input.slice(1..3),), Double).unwrap();
+    let (output,) = transform(&exec, massively::SoA1(input.slice(1..3)), Double).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![4.0, 6.0]);
 }
@@ -62,7 +62,13 @@ fn reduce_accepts_device_slice() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
 
-    let sum = reduce(&exec, (input.slice(1..),), (0.0_f32,), TupleSum).unwrap();
+    let sum = reduce(
+        &exec,
+        massively::SoA1(input.slice(1..)),
+        (0.0_f32,),
+        TupleSum,
+    )
+    .unwrap();
 
     assert_eq!(sum, (9.0,));
 }
@@ -72,7 +78,7 @@ fn inclusive_scan_accepts_device_slice() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
 
-    let (output,) = inclusive_scan(&exec, (input.slice(1..4),), TupleSum).unwrap();
+    let (output,) = inclusive_scan(&exec, massively::SoA1(input.slice(1..4)), TupleSum).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 5.0, 9.0]);
 }
@@ -85,7 +91,7 @@ fn transform_accepts_multi_column_device_slices() {
 
     let (values, tags) = transform(
         &exec,
-        (values.slice(1..4), tags.slice(1..4)),
+        massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         PairMixedSplit,
     )
     .unwrap();
@@ -102,7 +108,7 @@ fn reduce_accepts_multi_column_device_slices() {
 
     let sum = reduce(
         &exec,
-        (values.slice(1..4), tags.slice(1..4)),
+        massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         (0.0_f32, 0_u32),
         TupleSum,
     )
@@ -117,7 +123,8 @@ fn reverse_accepts_multi_column_device_slices() {
     let values = exec.to_device(&[0.0_f32, 1.0, 2.0, 3.0, 99.0]).unwrap();
     let tags = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
 
-    let (values, tags) = reverse(&exec, (values.slice(1..4), tags.slice(1..4))).unwrap();
+    let (values, tags) =
+        reverse(&exec, massively::SoA2(values.slice(1..4), tags.slice(1..4))).unwrap();
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![3.0, 2.0, 1.0]);
     assert_eq!(exec.to_host(&tags).unwrap(), vec![30, 20, 10]);
@@ -131,7 +138,7 @@ fn sort_accepts_multi_column_device_slices() {
 
     let (values, tags) = sort(
         &exec,
-        (values.slice(1..4), tags.slice(1..4)),
+        massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         MixedTupleLess,
     )
     .unwrap();
@@ -147,7 +154,7 @@ fn sort_accepts_offset_device_slice() {
         .to_device(&[999.0_f32, 4.0, 1.0, 3.0, 2.0, 888.0])
         .unwrap();
 
-    let (values,) = sort(&exec, (values.slice(1..5),), Less).unwrap();
+    let (values,) = sort(&exec, massively::SoA1(values.slice(1..5)), Less).unwrap();
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
 }
@@ -158,7 +165,12 @@ fn gather_accepts_device_slice_indices() {
     let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let indices = exec.to_device(&[99_u32, 3, 1, 0, 88]).unwrap();
 
-    let (output,) = gather(&exec, (values.slice(..),), (indices.slice(1..4),)).unwrap();
+    let (output,) = gather(
+        &exec,
+        massively::SoA1(values.slice(..)),
+        indices.slice(1..4),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![40, 20, 10]);
 }
@@ -169,7 +181,15 @@ fn equal_accepts_device_slices() {
     let left = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    assert!(equal(&exec, (left.slice(1..4),), (right.slice(..),), EqualU32).unwrap());
+    assert!(
+        equal(
+            &exec,
+            massively::SoA1(left.slice(1..4)),
+            massively::SoA1(right.slice(..)),
+            EqualU32
+        )
+        .unwrap()
+    );
 }
 
 #[test]
@@ -178,7 +198,13 @@ fn merge_accepts_device_slices() {
     let left = exec.to_device(&[0_u32, 1, 3, 99]).unwrap();
     let right = exec.to_device(&[2_u32, 4, 88]).unwrap();
 
-    let (output,) = merge(&exec, (left.slice(1..3),), (right.slice(..2),), LessU32).unwrap();
+    let (output,) = merge(
+        &exec,
+        massively::SoA1(left.slice(1..3)),
+        massively::SoA1(right.slice(..2)),
+        LessU32,
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3, 4]);
 }
@@ -191,8 +217,8 @@ fn inclusive_scan_by_key_accepts_device_slice_keys_and_values() {
 
     let (output,) = inclusive_scan_by_key(
         &exec,
-        (keys.slice(1..5),),
-        (values.slice(1..5),),
+        massively::SoA1(keys.slice(1..5)),
+        massively::SoA1(values.slice(1..5)),
         EqualU32,
         Sum,
     )
@@ -207,8 +233,13 @@ fn sort_by_key_accepts_device_slice_keys_and_values() {
     let keys = exec.to_device(&[99_u32, 3, 1, 2, 88]).unwrap();
     let values = exec.to_device(&[99_u32, 30, 10, 20, 88]).unwrap();
 
-    let ((keys,), (values,)) =
-        sort_by_key(&exec, (keys.slice(1..4),), (values.slice(1..4),), LessU32).unwrap();
+    let ((keys,), (values,)) = sort_by_key(
+        &exec,
+        massively::SoA1(keys.slice(1..4)),
+        massively::SoA1(values.slice(1..4)),
+        LessU32,
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&values).unwrap(), vec![10, 20, 30]);
@@ -223,8 +254,8 @@ fn sort_by_key_accepts_multi_column_device_slice_values() {
 
     let ((keys,), (values, tags)) = sort_by_key(
         &exec,
-        (keys.slice(1..4),),
-        (values.slice(1..4), tags.slice(1..4)),
+        massively::SoA1(keys.slice(1..4)),
+        massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         LessU32,
     )
     .unwrap();
@@ -245,8 +276,8 @@ fn unique_by_key_accepts_multi_column_device_slice_values() {
 
     let ((keys,), (values, tags)) = unique_by_key(
         &exec,
-        (keys.slice(1..5),),
-        (values.slice(1..5), tags.slice(1..5)),
+        massively::SoA1(keys.slice(1..5)),
+        massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
     )
     .unwrap();
@@ -267,8 +298,8 @@ fn inclusive_scan_by_key_accepts_multi_column_device_slice_values() {
 
     let (values, tags) = inclusive_scan_by_key(
         &exec,
-        (keys.slice(1..5),),
-        (values.slice(1..5), tags.slice(1..5)),
+        massively::SoA1(keys.slice(1..5)),
+        massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
         TupleSum,
     )
@@ -289,8 +320,8 @@ fn exclusive_scan_by_key_accepts_multi_column_device_slice_values() {
 
     let (values, tags) = exclusive_scan_by_key(
         &exec,
-        (keys.slice(1..5),),
-        (values.slice(1..5), tags.slice(1..5)),
+        massively::SoA1(keys.slice(1..5)),
+        massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
         (0.0_f32, 0_u32),
         TupleSum,
@@ -312,8 +343,8 @@ fn reduce_by_key_accepts_multi_column_device_slice_values() {
 
     let ((keys,), (values, tags)) = reduce_by_key(
         &exec,
-        (keys.slice(1..5),),
-        (values.slice(1..5), tags.slice(1..5)),
+        massively::SoA1(keys.slice(1..5)),
+        massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
         (0.0_f32, 0_u32),
         TupleSum,
@@ -331,7 +362,12 @@ fn copy_if_accepts_device_slice_stencil() {
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
 
-    let (output,) = copy_if(&exec, (values.slice(1..4),), (stencil.slice(1..4),)).unwrap();
+    let (output,) = copy_if(
+        &exec,
+        massively::SoA1(values.slice(1..4)),
+        stencil.slice(1..4),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![20, 40]);
 }
@@ -341,7 +377,7 @@ fn remove_if_accepts_device_slice_input() {
     let exec = exec();
     let values = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
 
-    let (output,) = remove_if(&exec, (values.slice(1..4),), U32IsTwenty).unwrap();
+    let (output,) = remove_if(&exec, massively::SoA1(values.slice(1..4)), U32IsTwenty).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![10, 30]);
 }
@@ -354,9 +390,9 @@ fn replace_if_accepts_device_slice_stencil() {
 
     let (output,) = replace_if(
         &exec,
-        (values.slice(1..4),),
+        massively::SoA1(values.slice(1..4)),
         (99_u32,),
-        (stencil.slice(1..4),),
+        stencil.slice(1..4),
     )
     .unwrap();
 
@@ -372,11 +408,11 @@ fn scatter_if_accepts_device_slice_indices_and_stencil() {
 
     let (output,) = scatter_if(
         &exec,
-        (values.slice(1..4),),
-        (indices.slice(1..4),),
+        massively::SoA1(values.slice(1..4)),
+        indices.slice(1..4),
         3,
         (0_u32,),
-        (stencil.slice(1..4),),
+        stencil.slice(1..4),
     )
     .unwrap();
 
@@ -394,7 +430,7 @@ fn transform_accepts_three_column_device_slices() {
 
     let (a, b, c) = transform(
         &exec,
-        (a.slice(1..4), b.slice(1..4), c.slice(1..4)),
+        massively::SoA3(a.slice(1..4), b.slice(1..4), c.slice(1..4)),
         Tuple3MixedSplit,
     )
     .unwrap();
@@ -410,8 +446,8 @@ fn empty_device_slice_is_valid_input() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
     let slice = values.slice(1..1);
-    let (output,) = transform(&exec, (slice,), Double).unwrap();
-    let sum = reduce(&exec, (slice,), (0.0_f32,), TupleSum).unwrap();
+    let (output,) = transform(&exec, massively::SoA1(slice), Double).unwrap();
+    let sum = reduce(&exec, massively::SoA1(slice), (0.0_f32,), TupleSum).unwrap();
 
     assert!(slice.is_empty());
     assert_eq!(exec.to_host(&slice).unwrap(), Vec::<f32>::new());

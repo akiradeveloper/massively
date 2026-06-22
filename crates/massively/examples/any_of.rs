@@ -6,7 +6,7 @@ fn main() -> common::Result {
     let exec = Executor::<Wgpu>::cpu();
     let values = exec.to_device(&[-1.0_f32, -2.0, 3.0])?;
 
-    let result = any_of(&exec, (values.slice(..),), common::Positive)?;
+    let result = any_of(&exec, massively::SoA1(values.slice(..)), common::Positive)?;
 
     assert!(result);
     Ok(())

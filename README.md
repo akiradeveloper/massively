@@ -104,7 +104,10 @@ use massively::{Executor, Wgpu, sort_by_key};
 
 struct Less;
 #[cubecl::cube]
-impl massively::op::BinaryPredicateOp<(u32,)> for Less {
+impl<B> massively::op::PredicateOp2<B, (u32,)> for Less
+where
+    B: massively::Backend,
+{
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -134,7 +137,7 @@ use massively::{Executor, Wgpu, reduce, transform};
 
 struct Sum;
 #[cubecl::cube]
-impl massively::op::BinaryOp<(f32,)> for Sum {
+impl massively::op::BinaryOp1<Wgpu, (f32,)> for Sum {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
@@ -142,7 +145,7 @@ impl massively::op::BinaryOp<(f32,)> for Sum {
 
 struct KineticEnergy;
 #[cubecl::cube]
-impl massively::op::UnaryOp<(f32, f32, f32)> for KineticEnergy {
+impl massively::op::UnaryOp<Wgpu, (f32, f32, f32)> for KineticEnergy {
     type Output = (f32,);
 
     fn apply(input: (f32, f32, f32)) -> (f32,) {

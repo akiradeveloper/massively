@@ -6,7 +6,7 @@ fn reverse_accepts_borrowed_tuple_columns() {
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let reversed = reverse(&exec, (a.slice(..), b.slice(..))).unwrap();
+    let reversed = reverse(&exec, massively::SoA2(a.slice(..), b.slice(..))).unwrap();
     let (a, b) = reversed;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![3.0, 2.0, 1.0]);
@@ -20,7 +20,11 @@ fn reverse_accepts_borrowed_three_tuple_columns() {
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let reversed = reverse(&exec, (a.slice(..), b.slice(..), c.slice(..))).unwrap();
+    let reversed = reverse(
+        &exec,
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+    )
+    .unwrap();
     let (a, b, c) = reversed;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![3.0, 2.0, 1.0]);

@@ -8,15 +8,34 @@ fn inner_product_accepts_scalar_column() {
 
     let result = inner_product(
         &exec,
-        (left.slice(..),),
-        (right.slice(..),),
-        Sum,
+        massively::SoA1(left.slice(..)),
+        massively::SoA1(right.slice(..)),
+        TupleProduct,
         (0.0_f32,),
         Sum,
     )
     .unwrap();
 
-    assert_eq!(result, (21.0,));
+    assert_eq!(result, (32.0,));
+}
+
+#[test]
+fn inner_product_accepts_different_right_item_and_output() {
+    let exec = exec();
+    let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let right = exec.to_device(&[2_u32, 3, 4]).unwrap();
+
+    let result = inner_product(
+        &exec,
+        massively::SoA1(left.slice(..)),
+        massively::SoA1(right.slice(..)),
+        TupleWeightedProduct,
+        (0.0_f32,),
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(result, (20.0,));
 }
 
 #[cfg(any())]
@@ -30,8 +49,8 @@ fn inner_product_accepts_tuple_columns() {
 
     let result = inner_product(
         &exec,
-        (left_values.slice(..), left_ids.slice(..)),
-        (right_values.slice(..), right_ids.slice(..)),
+        massively::SoA2(left_values.slice(..), left_ids.slice(..)),
+        massively::SoA2(right_values.slice(..), right_ids.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -52,8 +71,8 @@ fn inner_product_accepts_heterogeneous_soas() {
 
     let pair = inner_product(
         &exec,
-        zip(left_a.slice(..), left_b.slice(..)),
-        zip(right_a.slice(..), right_b.slice(..)),
+        massively::SoA2(left_a.slice(..), left_b.slice(..)),
+        massively::SoA2(right_a.slice(..), right_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -135,8 +154,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let rhs_b = exec.to_device(&[40_u32, 50, 60]).unwrap();
     let zipped = inner_product(
         &exec,
-        zip(lhs_a.slice(..), lhs_b.slice(..)),
-        zip(rhs_a.slice(..), rhs_b.slice(..)),
+        massively::SoA2(lhs_a.slice(..), lhs_b.slice(..)),
+        massively::SoA2(rhs_a.slice(..), rhs_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -150,8 +169,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let mixed_right_b = exec.to_device(&[40_u32, 50, 60]).unwrap();
     let mixed = inner_product(
         &exec,
-        zip(mixed_left_a.slice(..), mixed_left_b.slice(..)),
-        zip(mixed_right_a.slice(..), mixed_right_b.slice(..)),
+        massively::SoA2(mixed_left_a.slice(..), mixed_left_b.slice(..)),
+        massively::SoA2(mixed_right_a.slice(..), mixed_right_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,
@@ -165,8 +184,8 @@ fn inner_product_accepts_heterogeneous_soas() {
     let mixed_right_b = exec.to_device(&[40_u32, 50, 60]).unwrap();
     let mixed = inner_product(
         &exec,
-        zip(mixed_left_a.slice(..), mixed_left_b.slice(..)),
-        zip(mixed_right_a.slice(..), mixed_right_b.slice(..)),
+        massively::SoA2(mixed_left_a.slice(..), mixed_left_b.slice(..)),
+        massively::SoA2(mixed_right_a.slice(..), mixed_right_b.slice(..)),
         Sum,
         (0.0_f32, 0_u32),
         Sum,

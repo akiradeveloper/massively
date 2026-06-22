@@ -1,9 +1,10 @@
 use crate::{
+    detail::op::kernel::PredicateOp2,
     device::{DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0},
     error::Error,
     expr::DeviceGpuExpr,
     kernels::*,
-    op::{BinaryPredicateOp, GpuOp},
+    op::GpuOp,
     policy::CubePolicy,
     primitives::{ensure_same_len, workspace::Workspace},
 };
@@ -20,7 +21,7 @@ where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: BinaryPredicateOp<Source::Item>,
+    Less: PredicateOp2<Source::Item>,
 {
     input.validate()?;
     let len = input.len();
@@ -112,7 +113,7 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: BinaryPredicateOp<KeySource::Item>,
+    Less: PredicateOp2<KeySource::Item>,
 {
     keys.validate()?;
     values.validate()?;
@@ -238,7 +239,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<(A, B)>,
+    Less: PredicateOp2<(A, B)>,
 {
     ensure_same_len(second.len(), first.len())?;
 
@@ -320,7 +321,7 @@ where
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
+    Less: PredicateOp2<(Left::Item, Right::Item)>,
 {
     first.validate()?;
     second.validate()?;
@@ -456,7 +457,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<(A, B, C)>,
+    Less: PredicateOp2<(A, B, C)>,
 {
     ensure_same_len(second.len(), first.len())?;
     ensure_same_len(third.len(), first.len())?;
@@ -552,7 +553,7 @@ where
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+    Less: PredicateOp2<(First::Item, Second::Item, Third::Item)>,
 {
     first.validate()?;
     second.validate()?;
@@ -726,7 +727,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<(A, B)>,
+    Less: PredicateOp2<(A, B)>,
 {
     ensure_same_len(key_b.len(), key_a.len())?;
     ensure_same_len(values.len(), key_a.len())?;
@@ -822,7 +823,7 @@ where
     KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
     KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: BinaryPredicateOp<(KeyA::Item, KeyB::Item)>,
+    Less: PredicateOp2<(KeyA::Item, KeyB::Item)>,
 {
     key_a.validate()?;
     key_b.validate()?;
@@ -986,7 +987,7 @@ where
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    Less: BinaryPredicateOp<(A, B, C)>,
+    Less: PredicateOp2<(A, B, C)>,
 {
     ensure_same_len(key_b.len(), key_a.len())?;
     ensure_same_len(key_c.len(), key_a.len())?;

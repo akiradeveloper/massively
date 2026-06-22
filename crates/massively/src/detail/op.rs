@@ -11,7 +11,10 @@ use cubecl::prelude::*;
 /// struct AddOne;
 ///
 /// #[cubecl::cube]
-/// impl massively::op::UnaryOp<(f32,)> for AddOne {
+/// impl<B> massively::op::UnaryOp<B, (f32,)> for AddOne
+/// where
+///     B: massively::Backend,
+/// {
 ///     type Output = (f32,);
 ///
 ///     fn apply(input: (f32,)) -> (f32,) {
@@ -20,15 +23,34 @@ use cubecl::prelude::*;
 /// }
 /// ```
 #[cube]
-pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
+pub trait UnaryOp<B, Input>: 'static + Send + Sync
+where
+    B: crate::Backend,
+    Input: crate::MItem<B>,
+{
     /// Output value produced for one logical input element.
-    type Output: CubeType;
+    type Output: crate::MItem<B>;
 
     /// Maps one logical input element.
     fn apply(input: Input) -> Self::Output;
 }
 
-/// Compile-time binary operator used by reductions and scans.
+/// Compile-time binary transform used by algorithms such as
+/// [`inner_product`](crate::inner_product).
+#[cube]
+pub trait BinaryOp2<B, X, Y>: 'static + Send + Sync
+where
+    B: crate::Backend,
+    X: crate::MItem<B>,
+    Y: crate::MItem<B>,
+{
+    type Output: crate::MItem<B>;
+
+    /// Combines two values.
+    fn apply(lhs: X, rhs: Y) -> Self::Output;
+}
+
+/// Compile-time same-type binary operator used by reductions and scans.
 ///
 /// ```no_run
 /// use cubecl::prelude::*;
@@ -36,16 +58,23 @@ pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
 /// struct Sum;
 ///
 /// #[cubecl::cube]
-/// impl massively::op::BinaryOp<f32> for Sum {
-///     fn apply(lhs: f32, rhs: f32) -> f32 {
-///         lhs + rhs
+/// impl<B> massively::op::BinaryOp1<B, (f32,)> for Sum
+/// where
+///     B: massively::Backend,
+/// {
+///     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
+///         (lhs.0 + rhs.0,)
 ///     }
 /// }
 /// ```
 #[cube]
-pub trait BinaryOp<T: CubeType>: 'static + Send + Sync {
+pub trait BinaryOp1<B, X>: 'static + Send + Sync
+where
+    B: crate::Backend,
+    X: crate::MItem<B>,
+{
     /// Combines two values.
-    fn apply(lhs: T, rhs: T) -> T;
+    fn apply(lhs: X, rhs: X) -> X;
 }
 
 /// Compile-time predicate used by conditional algorithms such as
@@ -61,14 +90,21 @@ pub trait BinaryOp<T: CubeType>: 'static + Send + Sync {
 /// struct Positive;
 ///
 /// #[cubecl::cube]
-/// impl massively::op::PredicateOp<f32> for Positive {
-///     fn apply(input: f32) -> bool {
-///         input > 0.0
+/// impl<B> massively::op::PredicateOp1<B, (f32,)> for Positive
+/// where
+///     B: massively::Backend,
+/// {
+///     fn apply(input: (f32,)) -> bool {
+///         input.0 > 0.0
 ///     }
 /// }
 /// ```
 #[cube]
-pub trait PredicateOp<T: CubeType>: 'static + Send + Sync {
+pub trait PredicateOp1<B, T>: 'static + Send + Sync
+where
+    B: crate::Backend,
+    T: crate::MItem<B>,
+{
     /// Returns whether the element should be processed.
     fn apply(input: T) -> bool;
 }
@@ -81,14 +117,21 @@ pub trait PredicateOp<T: CubeType>: 'static + Send + Sync {
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl massively::op::BinaryPredicateOp<f32> for Less {
-///     fn apply(lhs: f32, rhs: f32) -> bool {
-///         lhs < rhs
+/// impl<B> massively::op::PredicateOp2<B, (f32,)> for Less
+/// where
+///     B: massively::Backend,
+/// {
+///     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
+///         lhs.0 < rhs.0
 ///     }
 /// }
 /// ```
 #[cube]
-pub trait BinaryPredicateOp<T: CubeType>: 'static + Send + Sync {
+pub trait PredicateOp2<B, T>: 'static + Send + Sync
+where
+    B: crate::Backend,
+    T: crate::MItem<B>,
+{
     /// Returns whether the pair matches.
     fn apply(lhs: T, rhs: T) -> bool;
 }
@@ -98,12 +141,68 @@ pub trait BinaryPredicateOp<T: CubeType>: 'static + Send + Sync {
 pub struct Equal;
 
 #[cube]
-impl<T> BinaryPredicateOp<T> for Equal
+impl<B, T> PredicateOp2<B, (T,)> for Equal
 where
-    T: CubePrimitive + PartialEq,
+    B: crate::Backend,
+    T: CubePrimitive + CubeElement + PartialEq,
 {
-    fn apply(lhs: T, rhs: T) -> bool {
-        lhs == rhs
+    fn apply(lhs: (T,), rhs: (T,)) -> bool {
+        lhs.0 == rhs.0
+    }
+}
+
+#[cube]
+impl<B, A, C> PredicateOp2<B, (A, C)> for Equal
+where
+    B: crate::Backend,
+    A: CubePrimitive + CubeElement + PartialEq,
+    C: CubePrimitive + CubeElement + PartialEq,
+{
+    fn apply(lhs: (A, C), rhs: (A, C)) -> bool {
+        lhs.0 == rhs.0 && lhs.1 == rhs.1
+    }
+}
+
+#[cube]
+impl<B, A, C, D> PredicateOp2<B, (A, C, D)> for Equal
+where
+    B: crate::Backend,
+    A: CubePrimitive + CubeElement + PartialEq,
+    C: CubePrimitive + CubeElement + PartialEq,
+    D: CubePrimitive + CubeElement + PartialEq,
+{
+    fn apply(lhs: (A, C, D), rhs: (A, C, D)) -> bool {
+        lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
+    }
+}
+
+/// Backend-local operation traits used by generated CubeCL kernels.
+///
+/// These are intentionally crate-private. They allow the detail layer to keep
+/// scalar kernels scalar while the public API exposes only `MItem` operators.
+pub(crate) mod kernel {
+    use cubecl::prelude::*;
+
+    #[cube]
+    pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
+        type Output: CubeType;
+
+        fn apply(input: Input) -> Self::Output;
+    }
+
+    #[cube]
+    pub trait BinaryOp2<T: CubeType>: 'static + Send + Sync {
+        fn apply(lhs: T, rhs: T) -> T;
+    }
+
+    #[cube]
+    pub trait PredicateOp1<T: CubeType>: 'static + Send + Sync {
+        fn apply(input: T) -> bool;
+    }
+
+    #[cube]
+    pub trait PredicateOp2<T: CubeType>: 'static + Send + Sync {
+        fn apply(lhs: T, rhs: T) -> bool;
     }
 }
 

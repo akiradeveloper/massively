@@ -9,7 +9,7 @@ use massively::{DeviceVec, Executor, Wgpu, scatter, transform};
 struct MulTwo;
 
 #[cubecl::cube]
-impl UnaryOp<(f32,)> for MulTwo {
+impl UnaryOp<Wgpu, (f32,)> for MulTwo {
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -22,8 +22,8 @@ fn check_scatter(exec: &Executor<Wgpu>) {
     let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
     let (output,) = scatter(
         &exec,
-        (values.slice(..),),
-        (indices.slice(..),),
+        massively::SoA1(values.slice(..)),
+        indices.slice(..),
         4,
         (0.0_f32,),
     )
@@ -40,14 +40,14 @@ fn bench_scatter(c: &mut Criterion) {
         for &len in SIZES {
             let input = exec.to_device(&dense_f32(len)).unwrap();
             let indices = exec.to_device(&reverse_indices(len)).unwrap();
-            let (values,) = transform(&exec, (input.slice(..),), MulTwo).unwrap();
+            let (values,) = transform(&exec, massively::SoA1(input.slice(..)), MulTwo).unwrap();
             sync(&exec);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
                     let output: (DeviceVec<Wgpu, f32>,) = scatter(
                         &exec,
-                        (black_box(values.slice(..)),),
-                        (black_box(indices.slice(..)),),
+                        massively::SoA1(black_box(values.slice(..))),
+                        black_box(indices.slice(..)),
                         len,
                         (0.0_f32,),
                     )

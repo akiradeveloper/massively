@@ -10,9 +10,9 @@ fn replace_if_accepts_three_tuple_columns() {
 
     let output = replace_if(
         &exec,
-        (a.slice(..), b.slice(..), c.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         (99.0_f32, 77_u32, -99.0_f32),
-        (stencil.slice(..),),
+        stencil.slice(..),
     )
     .unwrap();
     let (a, b, c) = output;
@@ -31,9 +31,9 @@ fn replace_if_accepts_u32_stencil() {
 
     let output = replace_if(
         &exec,
-        (a.slice(..), b.slice(..)),
+        massively::SoA2(a.slice(..), b.slice(..)),
         (-1.0_f32, 99_u32),
-        (stencil.slice(..),),
+        stencil.slice(..),
     )
     .unwrap();
     let (a, b) = output;

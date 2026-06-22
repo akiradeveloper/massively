@@ -9,9 +9,9 @@ fn main() -> common::Result {
 
     let dot = inner_product(
         &exec,
-        (x.slice(..),),
-        (y.slice(..),),
-        common::MulF32,
+        massively::SoA1(x.slice(..)),
+        massively::SoA1(y.slice(..)),
+        common::PairProduct,
         (0.0,),
         common::SumF32,
     )?;

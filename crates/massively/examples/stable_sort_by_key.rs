@@ -9,8 +9,8 @@ fn main() -> common::Result {
 
     let ((keys,), (values,)) = stable_sort_by_key(
         &exec,
-        (keys.slice(..),),
-        (values.slice(..),),
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
         common::LessU32,
     )?;
 

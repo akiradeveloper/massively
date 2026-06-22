@@ -1,18 +1,10 @@
 use super::DeviceVec;
 use crate::{
     error::{Error, ensure_same_len},
-    expr::{BinaryMap, Slot0, Slot1, Slot2, Slot3},
+    expr::{Slot0, Slot1, Slot2, Slot3},
     policy::CubePolicy,
 };
 use cubecl::prelude::*;
-use std::marker::PhantomData;
-
-/// Binary transform expression used by fused kernels.
-pub struct DeviceBinaryMap<Left, Right, Op> {
-    pub(crate) left: Left,
-    pub(crate) right: Right,
-    pub(crate) _op: PhantomData<fn() -> Op>,
-}
 
 /// Two-component flat device expression.
 pub struct SoA2<Left, Right> {
@@ -801,63 +793,5 @@ where
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
         bindings.push(self.handle.clone(), self.len);
         Ok(())
-    }
-}
-
-impl<Left, Right, Op> KernelColumn for DeviceBinaryMap<Left, Right, Op>
-where
-    Left: KernelColumn + KernelColumnAt<S0>,
-    Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item>
-        + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    Left::Item: CubePrimitive + CubeElement,
-{
-    type Runtime = Left::Runtime;
-    type Item = Left::Item;
-    type Expr = BinaryMap<
-        <Left as KernelColumnAt<S0>>::ExprAt,
-        <Right as KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>>::ExprAt,
-        Op,
-    >;
-
-    fn len(&self) -> usize {
-        self.left.len()
-    }
-
-    fn validate(&self) -> Result<(), Error> {
-        self.left.validate()?;
-        self.right.validate()?;
-        ensure_same_len(self.right.len(), self.left.len())?;
-        Ok(())
-    }
-
-    fn stage(&self, policy: &CubePolicy<Self::Runtime>) -> Result<KernelColumnBindings, Error> {
-        let mut bindings = KernelColumnBindings::empty(policy.client());
-        <Self as KernelColumnAt<S0>>::stage_at(self, &mut bindings)?;
-        bindings.finish();
-        Ok(bindings)
-    }
-}
-
-impl<Left, Right, Op, Start> KernelColumnAt<Start> for DeviceBinaryMap<Left, Right, Op>
-where
-    Left: KernelColumn + KernelColumnAt<S0> + KernelColumnAt<Start>,
-    Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item>
-        + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>
-        + KernelColumnAt<<Left as KernelColumnAt<Start>>::Next>,
-    Left::Item: CubePrimitive + CubeElement,
-{
-    type ExprAt = BinaryMap<
-        <Left as KernelColumnAt<Start>>::ExprAt,
-        <Right as KernelColumnAt<<Left as KernelColumnAt<Start>>::Next>>::ExprAt,
-        Op,
-    >;
-    type Next = <Right as KernelColumnAt<<Left as KernelColumnAt<Start>>::Next>>::Next;
-
-    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        <Left as KernelColumnAt<Start>>::stage_at(&self.left, bindings)?;
-        <Right as KernelColumnAt<<Left as KernelColumnAt<Start>>::Next>>::stage_at(
-            &self.right,
-            bindings,
-        )
     }
 }
