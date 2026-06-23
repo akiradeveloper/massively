@@ -21,6 +21,10 @@ GPU上のデータ領域を表す。
 
 - 不変スライス: DeviceVec::slice<R: RangeBounds>(range: R) -> DeviceSlice
 - 可変スライス: DeviceVec::slice_mut<R: RangeBounds>(range: R) -> DeviceSliceMut
+- スライスはスライスを作れる
+  - DeviceSlice::slice -> DeviceSlice
+  - DeviceSliceMut::slice -> DeviceSlice
+  - DeviceSliceMut::slice_mut -> DeviceSliceMut
 
 ### SoA (Structure of Array)
 
@@ -50,7 +54,7 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - a,b,c <= 3
 
 - adjacent_difference(xs: &[]a, sum: a->a->a) -> []a
-- adjacent_find: (xs: &[]a, eq: a->a->bool) -> int?
+- adjacent_find(xs: &[]a, eq: a->a->bool) -> int?
 - all_of(xs: &[]a, p: a->bool) -> bool
 - any_of(xs: &[]a, p: a->bool) -> bool
 - copy_if(xs: &[]a, stencil: &[u32]) -> []a

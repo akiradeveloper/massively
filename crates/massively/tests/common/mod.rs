@@ -1,7 +1,10 @@
 #![allow(dead_code, unused_imports)]
 
 pub(crate) use cubecl::prelude::*;
-pub(crate) use massively::op::{BinaryOp1, BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp};
+pub(crate) use massively::algorithm::op::{
+    BinaryOp1, BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp,
+};
+pub(crate) use massively::runtime::op::TabulateOp;
 pub(crate) use massively::{
     Executor, Wgpu, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_if,
@@ -29,6 +32,24 @@ impl BinaryOp1<massively::Wgpu, (f32,)> for Sum {
 impl BinaryOp1<massively::Wgpu, (u32,)> for Sum {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         (lhs.0 + rhs.0,)
+    }
+}
+
+pub(crate) struct SquareIndex;
+
+#[cubecl::cube]
+impl TabulateOp<massively::Wgpu, u32> for SquareIndex {
+    fn apply(input: u32) -> u32 {
+        input * input
+    }
+}
+
+pub(crate) struct HalfIndex;
+
+#[cubecl::cube]
+impl TabulateOp<massively::Wgpu, f32> for HalfIndex {
+    fn apply(input: u32) -> f32 {
+        input as f32 * 0.5
     }
 }
 

@@ -78,6 +78,8 @@ mod set_union;
 mod sort;
 #[path = "api/sort_by_key.rs"]
 mod sort_by_key;
+#[path = "api/tabulate.rs"]
+mod tabulate;
 #[path = "api/transform.rs"]
 mod transform;
 #[path = "api/unique.rs"]
@@ -93,6 +95,18 @@ mod zip;
 fn public_api_is_available_from_massively() {
     let exec = massively::Executor::<massively::Wgpu>::cpu();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+    let _: massively::runtime::DeviceSlice<'_, massively::Wgpu, u32> = input.slice(..);
 
     assert_eq!(exec.to_host(&input).unwrap(), vec![1, 2, 3]);
+
+    let generated = exec.tabulate(3, common::SquareIndex).unwrap();
+    let sum = massively::algorithm::reduce(
+        &exec,
+        massively::algorithm::SoA1(generated.slice(..)),
+        (0_u32,),
+        common::Sum,
+    )
+    .unwrap();
+
+    assert_eq!(sum, (5,));
 }

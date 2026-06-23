@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use massively::Wgpu;
-use massively::op::{BinaryOp1, PredicateOp1, PredicateOp2, UnaryOp};
+use massively::algorithm::op::{BinaryOp1, PredicateOp1, PredicateOp2, UnaryOp};
 use massively::prelude::*;
 
 struct AddOne;
