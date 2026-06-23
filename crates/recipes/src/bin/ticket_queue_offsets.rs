@@ -16,16 +16,19 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, exclusive_scan, reduce};
 
-struct Output {
-    offset: DeviceVec<Wgpu, u32>,
+struct Output<B: massively::Backend> {
+    offset: DeviceVec<B, u32>,
     total_slots: u32,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    _team_id: DeviceVec<Wgpu, u32>,
-    slot_count: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    _team_id: DeviceVec<B, u32>,
+    slot_count: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (offset,) = exclusive_scan(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
     let (total_slots,) = reduce(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
     Ok(Output {

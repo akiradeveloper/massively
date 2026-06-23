@@ -16,12 +16,15 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, reduce_by_key, sort};
 
-struct Output {
-    category_id: DeviceVec<Wgpu, u32>,
-    count: DeviceVec<Wgpu, u32>,
+struct Output<B: massively::Backend> {
+    category_id: DeviceVec<B, u32>,
+    count: DeviceVec<B, u32>,
 }
 
-fn solve(exec: &Executor<Wgpu>, category_id: DeviceVec<Wgpu, u32>) -> common::Result<Output> {
+fn solve<B>(exec: &Executor<B>, category_id: DeviceVec<B, u32>) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (sorted,) = sort(exec, SoA1(category_id.slice(..)), common::LessU32)?;
     let ones = exec.filled(sorted.len(), 1_u32)?;
     let ((category_id,), (count,)) = reduce_by_key(

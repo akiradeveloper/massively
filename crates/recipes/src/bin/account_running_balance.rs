@@ -15,11 +15,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, inclusive_scan_by_key};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    account_id: DeviceVec<Wgpu, u32>,
-    amount_delta: DeviceVec<Wgpu, f32>,
-) -> common::Result<DeviceVec<Wgpu, f32>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    account_id: DeviceVec<B, u32>,
+    amount_delta: DeviceVec<B, f32>,
+) -> common::Result<DeviceVec<B, f32>>
+where
+    B: massively::Backend,
+{
     let (balance,) = inclusive_scan_by_key(
         exec,
         SoA1(account_id.slice(..)),

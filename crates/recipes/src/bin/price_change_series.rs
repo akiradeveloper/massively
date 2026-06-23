@@ -13,13 +13,13 @@
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::BinaryOp1;
+use massively::op::ReductionOp;
 use massively::{DeviceVec, Executor, SoA1, Wgpu, adjacent_difference};
 
 struct PriceDelta;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (f32,)> for PriceDelta
+impl<B> ReductionOp<B, (f32,)> for PriceDelta
 where
     B: massively::Backend,
 {
@@ -28,10 +28,10 @@ where
     }
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    price: DeviceVec<Wgpu, f32>,
-) -> common::Result<DeviceVec<Wgpu, f32>> {
+fn solve<B>(exec: &Executor<B>, price: DeviceVec<B, f32>) -> common::Result<DeviceVec<B, f32>>
+where
+    B: massively::Backend,
+{
     let (delta,) = adjacent_difference(exec, SoA1(price.slice(..)), PriceDelta)?;
     Ok(delta)
 }

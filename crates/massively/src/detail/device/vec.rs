@@ -13,6 +13,7 @@ use std::marker::PhantomData;
 ///
 /// Algorithms take `DeviceSlice<T>` as a one-column SoA input and return
 /// `DeviceVec<T>` as one-column owned output storage.
+#[derive(Clone)]
 pub struct DeviceVec<R: Runtime, T> {
     pub(crate) policy_id: CubePolicyId,
     pub(crate) handle: cubecl::server::Handle,

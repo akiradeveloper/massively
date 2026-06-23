@@ -1,5 +1,5 @@
 use cubecl::prelude::*;
-use massively::op::{BinaryOp1, BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp};
+use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::{
     DeviceVec, Executor as ApiExecutor, Wgpu as ApiWgpu,
     adjacent_difference as api_adjacent_difference, adjacent_find, all_of as api_all_of,
@@ -35,7 +35,7 @@ impl UnaryOp<ApiWgpu, (u32,)> for TransformMap {
 struct TupleMaxOp;
 
 #[cubecl::cube]
-impl BinaryOp1<ApiWgpu, (u32,)> for TupleMaxOp {
+impl ReductionOp<ApiWgpu, (u32,)> for TupleMaxOp {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         if lhs.0 > rhs.0 { lhs } else { rhs }
     }
@@ -44,7 +44,7 @@ impl BinaryOp1<ApiWgpu, (u32,)> for TupleMaxOp {
 struct TuplePairMax;
 
 #[cubecl::cube]
-impl BinaryOp2<ApiWgpu, (u32,), (u32,)> for TuplePairMax {
+impl BinaryOp<ApiWgpu, (u32,), (u32,)> for TuplePairMax {
     type Output = (u32,);
 
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
@@ -55,7 +55,7 @@ impl BinaryOp2<ApiWgpu, (u32,), (u32,)> for TuplePairMax {
 struct TupleKeep;
 
 #[cubecl::cube]
-impl PredicateOp1<ApiWgpu, (u32,)> for TupleKeep {
+impl PredicateOp<ApiWgpu, (u32,)> for TupleKeep {
     fn apply(input: (u32,)) -> bool {
         input.0 % 2 == 0
     }
@@ -64,7 +64,7 @@ impl PredicateOp1<ApiWgpu, (u32,)> for TupleKeep {
 struct TupleSameLowNibble;
 
 #[cubecl::cube]
-impl PredicateOp2<ApiWgpu, (u32,)> for TupleSameLowNibble {
+impl BinaryPredicateOp<ApiWgpu, (u32,)> for TupleSameLowNibble {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         (lhs.0 % 16) == (rhs.0 % 16)
     }
@@ -73,7 +73,7 @@ impl PredicateOp2<ApiWgpu, (u32,)> for TupleSameLowNibble {
 struct TupleBucketThenValueLess;
 
 #[cubecl::cube]
-impl PredicateOp2<ApiWgpu, (u32,)> for TupleBucketThenValueLess {
+impl BinaryPredicateOp<ApiWgpu, (u32,)> for TupleBucketThenValueLess {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         let lhs_key = lhs.0 % 16;
         let rhs_key = rhs.0 % 16;

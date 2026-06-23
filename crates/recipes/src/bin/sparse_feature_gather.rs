@@ -16,17 +16,20 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA2, Wgpu, gather};
 
-struct Output {
-    age: DeviceVec<Wgpu, u32>,
-    score: DeviceVec<Wgpu, f32>,
+struct Output<B: massively::Backend> {
+    age: DeviceVec<B, u32>,
+    score: DeviceVec<B, f32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    age: DeviceVec<Wgpu, u32>,
-    score: DeviceVec<Wgpu, f32>,
-    row_index: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    age: DeviceVec<B, u32>,
+    score: DeviceVec<B, f32>,
+    row_index: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (age, score) = gather(
         exec,
         SoA2(age.slice(..), score.slice(..)),

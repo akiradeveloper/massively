@@ -15,10 +15,10 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, minmax_element};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    price: DeviceVec<Wgpu, f32>,
-) -> common::Result<Option<(usize, usize)>> {
+fn solve<B>(exec: &Executor<B>, price: DeviceVec<B, f32>) -> common::Result<Option<(usize, usize)>>
+where
+    B: massively::Backend,
+{
     minmax_element(exec, SoA1(price.slice(..)), common::LessF32)
 }
 

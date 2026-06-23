@@ -1,6 +1,6 @@
 use super::memory::{MaterializeOutput, materialize};
 use crate::{
-    detail::op::kernel::{BinaryOp2, PredicateOp2},
+    detail::op::kernel::{BinaryOp, BinaryPredicateOp},
     device::{
         DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA, SoA1, SoA2, SoA3, SoAView1,
         SoAView2, SoAView3,
@@ -20,12 +20,11 @@ pub trait KeyInput {
     type Runtime: Runtime;
     /// Key scalar type.
     type Item;
+    /// Key column source.
+    type Source: KernelColumn<Runtime = Self::Runtime, Item = Self::Item> + KernelColumnAt<S0>;
 
-    /// Materializes keys for primitive kernels.
-    fn key_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error>;
+    /// Lowers keys to the column source consumed by primitive kernels.
+    fn key_source(self) -> Result<Self::Source, Error>;
 }
 
 impl<Source> KeyInput for SoAView1<Source>
@@ -37,13 +36,11 @@ where
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
+    type Source = Source;
 
-    fn key_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error> {
+    fn key_source(self) -> Result<Self::Source, Error> {
         ReadOnlySoA::validate(&self)?;
-        super::device_expr_collect_with_policy(policy, &self.source)
+        Ok(self.source)
     }
 }
 
@@ -55,12 +52,10 @@ where
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
+    type Source = Source;
 
-    fn key_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<DeviceVec<Self::Runtime, Self::Item>, Error> {
-        <SoAView1<Source> as KeyInput>::key_input(SoAView1 { source: self }, policy)
+    fn key_source(self) -> Result<Self::Source, Error> {
+        <SoAView1<Source> as KeyInput>::key_source(SoAView1 { source: self })
     }
 }
 
@@ -86,7 +81,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp2<(Source::Item,)>,
+    Op: BinaryOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -144,7 +139,7 @@ macro_rules! impl_inclusive_scan_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -246,7 +241,7 @@ macro_rules! impl_inclusive_scan_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -327,7 +322,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp2<(Source::Item,)>,
+    Op: BinaryOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Init = (Source::Item,);
@@ -391,7 +386,7 @@ macro_rules! impl_exclusive_scan_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
@@ -505,7 +500,7 @@ macro_rules! impl_exclusive_scan_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Init = (
@@ -589,7 +584,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp2<Source::Item>,
+    Op: BinaryOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -611,7 +606,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp2<Source::Item>,
+    Op: BinaryOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -646,7 +641,7 @@ macro_rules! impl_adjacent_difference_input {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -690,7 +685,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp2<(Source::Item,)>,
+    Op: BinaryOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -771,7 +766,7 @@ macro_rules! impl_adjacent_difference_soa_input {
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Op: BinaryOp2<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
+            Op: BinaryOp<(<$first as KernelColumn>::Item, $( <$rest as KernelColumn>::Item ),+)>,
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Output = $output<
@@ -829,7 +824,10 @@ where
 
 /// Input accepted by [`inclusive_scan_by_key`].
 #[doc(hidden)]
-pub trait InclusiveScanByKeyInput<K, KeyEq, Op> {
+pub trait InclusiveScanByKeyInput<KeySource, KeyEq, Op>
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+{
     /// CubeCL runtime used by this input.
     type Runtime: Runtime;
     /// Scan output type.
@@ -839,21 +837,24 @@ pub trait InclusiveScanByKeyInput<K, KeyEq, Op> {
     fn inclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         key_eq: GpuOp<KeyEq>,
         op: GpuOp<Op>,
     ) -> Result<Self::Output, Error>;
 }
 
-impl<Source, K, KeyEq, Op> InclusiveScanByKeyInput<K, KeyEq, Op> for SoAView1<Source>
+impl<Source, KeySource, KeyEq, Op> InclusiveScanByKeyInput<KeySource, KeyEq, Op>
+    for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<Source::Item>,
+    KeyEq: BinaryPredicateOp<KeySource::Item>,
+    Op: BinaryOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
@@ -861,38 +862,39 @@ where
     fn inclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(SoA1 {
-            source: super::device_expr_inclusive_scan_by_key_with_policy::<Source, K, KeyEq, Op>(
-                policy,
-                &self.source,
-                keys,
-            )?,
+            source: super::device_expr_inclusive_scan_by_key_expr_keys_with_policy::<
+                KeySource,
+                Source,
+                KeyEq,
+                Op,
+            >(policy, keys, &self.source)?,
         })
     }
 }
 
-impl<Source, K, KeyEq, Op> InclusiveScanByKeyInput<K, KeyEq, Op> for Source
+impl<Source, KeySource, KeyEq, Op> InclusiveScanByKeyInput<KeySource, KeyEq, Op> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    SoAView1<Source>: InclusiveScanByKeyInput<K, KeyEq, Op>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    SoAView1<Source>: InclusiveScanByKeyInput<KeySource, KeyEq, Op>,
 {
-    type Runtime = <SoAView1<Source> as InclusiveScanByKeyInput<K, KeyEq, Op>>::Runtime;
-    type Output = <SoAView1<Source> as InclusiveScanByKeyInput<K, KeyEq, Op>>::Output;
+    type Runtime = <SoAView1<Source> as InclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Runtime;
+    type Output = <SoAView1<Source> as InclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Output;
 
     fn inclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         key_eq: GpuOp<KeyEq>,
         op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Source> as InclusiveScanByKeyInput<K, KeyEq, Op>>::inclusive_scan_by_key_input(
+        <SoAView1<Source> as InclusiveScanByKeyInput<KeySource, KeyEq, Op>>::inclusive_scan_by_key_input(
             SoAView1 { source: self },
             policy,
             keys,
@@ -902,20 +904,23 @@ where
     }
 }
 
-impl<Left, Right, K, KeyEq, Op> InclusiveScanByKeyInput<K, KeyEq, Op> for SoAView2<Left, Right>
+impl<Left, Right, KeySource, KeyEq, Op> InclusiveScanByKeyInput<KeySource, KeyEq, Op>
+    for SoAView2<Left, Right>
 where
     Self: ReadOnlySoA<Item = (Left::Item, Right::Item), Scalar = Left::Item>,
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Left::Item: CubePrimitive + CubeElement,
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(Left::Item, Right::Item)>,
+    KeyEq: BinaryPredicateOp<KeySource::Item>,
+    Op: BinaryOp<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Output = SoA2<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
@@ -923,25 +928,31 @@ where
     fn inclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let left = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let right = super::device_expr_collect_with_policy(policy, &self.right)?;
-        primitive_scan::inclusive_scan_tuple2_by_key_values_device_vec(
-            policy,
-            keys,
-            &left,
-            &right,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )
+        keys.validate()?;
+        super::ensure_same_len(keys.len(), self.left.len())?;
+        let key_bindings = keys.stage(policy)?;
+        let left = self.left.stage(policy)?;
+        let right = self.right.stage(policy)?;
+        primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr::<
+            Left::Runtime,
+            KeySource::Item,
+            Left::Item,
+            Right::Item,
+            KeySource::Expr,
+            Left::Expr,
+            Right::Expr,
+            KeyEq,
+            Op,
+        >(policy, &key_bindings, &left, &right, self.left.len())
     }
 }
 
-impl<First, Second, Third, K, KeyEq, Op> InclusiveScanByKeyInput<K, KeyEq, Op>
+impl<First, Second, Third, KeySource, KeyEq, Op> InclusiveScanByKeyInput<KeySource, KeyEq, Op>
     for SoAView3<First, Second, Third>
 where
     Self: ReadOnlySoA<Item = (First::Item, Second::Item, Third::Item), Scalar = First::Item>,
@@ -952,15 +963,17 @@ where
     Third: KernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     First::Item: CubePrimitive + CubeElement,
     Second::Item: CubePrimitive + CubeElement,
     Third::Item: CubePrimitive + CubeElement,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(First::Item, Second::Item, Third::Item)>,
+    KeyEq: BinaryPredicateOp<KeySource::Item>,
+    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Output = SoA3<
@@ -972,29 +985,43 @@ where
     fn inclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let second = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let third = super::device_expr_collect_with_policy(policy, &self.third)?;
-        primitive_scan::inclusive_scan_tuple3_by_key_values_device_vec(
+        keys.validate()?;
+        super::ensure_same_len(keys.len(), self.first.len())?;
+        let key_bindings = keys.stage(policy)?;
+        let first = self.first.stage(policy)?;
+        let second = self.second.stage(policy)?;
+        let third = self.third.stage(policy)?;
+        primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr::<
+            First::Runtime,
+            KeySource::Item,
+            First::Item,
+            Second::Item,
+            Third::Item,
+            KeySource::Expr,
+            First::Expr,
+            Second::Expr,
+            Third::Expr,
+            KeyEq,
+            Op,
+        >(
             policy,
-            keys,
+            &key_bindings,
             &first,
             &second,
             &third,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
+            self.first.len(),
         )
     }
 }
 
 macro_rules! impl_inclusive_scan_by_key_soa_input {
     ($input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+, Key, KeyEq, Op> InclusiveScanByKeyInput<Key, KeyEq, Op>
+        impl<$first, $( $rest ),+, KeySource, KeyEq, Op> InclusiveScanByKeyInput<KeySource, KeyEq, Op>
             for $input<$first, $( $rest ),+>
         where
             Self: SoA<Scalar = <$first as KernelColumn>::Item>,
@@ -1003,17 +1030,19 @@ macro_rules! impl_inclusive_scan_by_key_soa_input {
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
-            Key: CubePrimitive + CubeElement,
+            KeySource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            KeySource::Item: CubePrimitive + CubeElement,
+            KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            KeyEq: PredicateOp2<Key>,
-            Op: BinaryOp2<<$first as KernelColumn>::Item>,
+            KeyEq: BinaryPredicateOp<KeySource::Item>,
+            Op: BinaryOp<<$first as KernelColumn>::Item>,
             $(
-                Op: BinaryOp2<<$rest as KernelColumn>::Item>,
+                Op: BinaryOp<<$rest as KernelColumn>::Item>,
             )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -1025,23 +1054,23 @@ macro_rules! impl_inclusive_scan_by_key_soa_input {
             fn inclusive_scan_by_key_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                keys: &DeviceVec<Self::Runtime, Key>,
+                keys: &KeySource,
                 _key_eq: GpuOp<KeyEq>,
                 _op: GpuOp<Op>,
             ) -> Result<Self::Output, Error> {
                 SoA::validate(&self)?;
                 let $first_field =
-                    super::device_expr_inclusive_scan_by_key_with_policy::<$first, Key, KeyEq, Op>(
+                    super::device_expr_inclusive_scan_by_key_expr_keys_with_policy::<KeySource, $first, KeyEq, Op>(
                         policy,
-                        &self.$first_field,
                         keys,
+                        &self.$first_field,
                     )?;
                 $(
                     let $field =
-                        super::device_expr_inclusive_scan_by_key_with_policy::<$rest, Key, KeyEq, Op>(
+                        super::device_expr_inclusive_scan_by_key_expr_keys_with_policy::<KeySource, $rest, KeyEq, Op>(
                             policy,
-                            &self.$field,
                             keys,
+                            &self.$field,
                         )?;
                 )+
                 Ok($output { $first_field, $( $field ),+ })
@@ -1055,21 +1084,22 @@ impl_inclusive_scan_by_key_soa_input!(SoA3 -> SoA3<A, B, C> { first, second, thi
 
 macro_rules! impl_inclusive_scan_by_key_tuple_values {
     ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
-        impl<$( $ty ),+, Key, KeyEq, Op> InclusiveScanByKeyInput<Key, KeyEq, Op> for ($( $ty ),+)
+        impl<$( $ty ),+, KeySource, KeyEq, Op> InclusiveScanByKeyInput<KeySource, KeyEq, Op> for ($( $ty ),+)
         where
-            $view<$( $ty ),+>: InclusiveScanByKeyInput<Key, KeyEq, Op>,
+            KeySource: KernelColumn + KernelColumnAt<S0>,
+            $view<$( $ty ),+>: InclusiveScanByKeyInput<KeySource, KeyEq, Op>,
         {
-            type Runtime = <$view<$( $ty ),+> as InclusiveScanByKeyInput<Key, KeyEq, Op>>::Runtime;
-            type Output = <$view<$( $ty ),+> as InclusiveScanByKeyInput<Key, KeyEq, Op>>::Output;
+            type Runtime = <$view<$( $ty ),+> as InclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Runtime;
+            type Output = <$view<$( $ty ),+> as InclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Output;
 
             fn inclusive_scan_by_key_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                keys: &DeviceVec<Self::Runtime, Key>,
+                keys: &KeySource,
                 key_eq: GpuOp<KeyEq>,
                 op: GpuOp<Op>,
             ) -> Result<Self::Output, Error> {
-                <$view<$( $ty ),+> as InclusiveScanByKeyInput<Key, KeyEq, Op>>::inclusive_scan_by_key_input(
+                <$view<$( $ty ),+> as InclusiveScanByKeyInput<KeySource, KeyEq, Op>>::inclusive_scan_by_key_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     keys,
@@ -1102,10 +1132,10 @@ impl<Values, Keys, KeyEq, Op> InclusiveScanByKeyCall<Values, KeyEq, Op> for Keys
 where
     Keys: KeyInput,
     Keys::Item: CubePrimitive + CubeElement,
-    Values: InclusiveScanByKeyInput<Keys::Item, KeyEq, Op, Runtime = Keys::Runtime>,
+    Values: InclusiveScanByKeyInput<Keys::Source, KeyEq, Op, Runtime = Keys::Runtime>,
 {
     type Runtime = Keys::Runtime;
-    type Output = <Values as InclusiveScanByKeyInput<Keys::Item, KeyEq, Op>>::Output;
+    type Output = <Values as InclusiveScanByKeyInput<Keys::Source, KeyEq, Op>>::Output;
 
     fn inclusive_scan_by_key_call(
         self,
@@ -1114,754 +1144,11 @@ where
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        let keys = self.key_input(policy)?;
+        let keys = self.key_source()?;
         values.inclusive_scan_by_key_input(policy, &keys, GpuOp::<KeyEq>::new(), GpuOp::<Op>::new())
     }
 }
 
-impl<ValueSource, KeyA, KeyB, KeyEq, Op> InclusiveScanByKeyCall<ValueSource, KeyEq, Op>
-    for SoAView2<KeyA, KeyB>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp2<ValueSource::Item>,
-{
-    type Runtime = KeyA::Runtime;
-    type Output = SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: ValueSource,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        let values = SoAView1 { source: values };
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
-        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
-        Ok(SoA1 {
-            source: primitive_scan::inclusive_scan_tuple2_by_key_device_vec(
-                policy,
-                &key_a,
-                &key_b,
-                &values,
-                GpuOp::<KeyEq>::new(),
-                GpuOp::<Op>::new(),
-            )?,
-        })
-    }
-}
-
-impl<ValueA, ValueB, KeyA, KeyB, KeyEq, Op>
-    InclusiveScanByKeyCall<SoAView2<ValueA, ValueB>, KeyEq, Op> for SoAView2<KeyA, KeyB>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
-    SoAView2<ValueA, ValueB>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-{
-    type Runtime = KeyA::Runtime;
-    type Output =
-        SoA2<DeviceVec<KeyA::Runtime, ValueA::Item>, DeviceVec<KeyA::Runtime, ValueB::Item>>;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView2<ValueA, ValueB>,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
-        let left = primitive_scan::inclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_a,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let right = primitive_scan::inclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_b,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA2 { left, right })
-    }
-}
-
-impl<ValueA, ValueB, ValueC, KeyA, KeyB, KeyEq, Op>
-    InclusiveScanByKeyCall<SoAView3<ValueA, ValueB, ValueC>, KeyEq, Op> for SoAView2<KeyA, KeyB>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
-    SoAView3<ValueA, ValueB, ValueC>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item, ValueC::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    ValueC::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-    Op: BinaryOp2<ValueC::Item>,
-{
-    type Runtime = KeyA::Runtime;
-    type Output = SoA3<
-        DeviceVec<KeyA::Runtime, ValueA::Item>,
-        DeviceVec<KeyA::Runtime, ValueB::Item>,
-        DeviceVec<KeyA::Runtime, ValueC::Item>,
-    >;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView3<ValueA, ValueB, ValueC>,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
-        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
-        let first = primitive_scan::inclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_a,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let second = primitive_scan::inclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_b,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let third = primitive_scan::inclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_c,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA3 {
-            first,
-            second,
-            third,
-        })
-    }
-}
-
-impl<ValueSource, KeyA, KeyB, KeyC, KeyEq, Op> InclusiveScanByKeyCall<ValueSource, KeyEq, Op>
-    for SoAView3<KeyA, KeyB, KeyC>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item, KeyC::Item), Scalar = KeyA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    KeyC::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp2<ValueSource::Item>,
-{
-    type Runtime = KeyA::Runtime;
-    type Output = SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: ValueSource,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        let values = SoAView1 { source: values };
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
-        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
-        Ok(SoA1 {
-            source: primitive_scan::inclusive_scan_tuple3_by_key_device_vec(
-                policy,
-                &key_a,
-                &key_b,
-                &key_c,
-                &values,
-                GpuOp::<KeyEq>::new(),
-                GpuOp::<Op>::new(),
-            )?,
-        })
-    }
-}
-
-impl<ValueA, ValueB, KeyA, KeyB, KeyC, KeyEq, Op>
-    InclusiveScanByKeyCall<SoAView2<ValueA, ValueB>, KeyEq, Op> for SoAView3<KeyA, KeyB, KeyC>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item, KeyC::Item), Scalar = KeyA::Item>,
-    SoAView2<ValueA, ValueB>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    KeyC::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-{
-    type Runtime = KeyA::Runtime;
-    type Output =
-        SoA2<DeviceVec<KeyA::Runtime, ValueA::Item>, DeviceVec<KeyA::Runtime, ValueB::Item>>;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView2<ValueA, ValueB>,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
-        let left = primitive_scan::inclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_a,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let right = primitive_scan::inclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_b,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA2 { left, right })
-    }
-}
-
-impl<ValueA, ValueB, ValueC, KeyA, KeyB, KeyC, KeyEq, Op>
-    InclusiveScanByKeyCall<SoAView3<ValueA, ValueB, ValueC>, KeyEq, Op>
-    for SoAView3<KeyA, KeyB, KeyC>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item, KeyC::Item), Scalar = KeyA::Item>,
-    SoAView3<ValueA, ValueB, ValueC>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item, ValueC::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    KeyC::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    ValueC::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-    Op: BinaryOp2<ValueC::Item>,
-{
-    type Runtime = KeyA::Runtime;
-    type Output = SoA3<
-        DeviceVec<KeyA::Runtime, ValueA::Item>,
-        DeviceVec<KeyA::Runtime, ValueB::Item>,
-        DeviceVec<KeyA::Runtime, ValueC::Item>,
-    >;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView3<ValueA, ValueB, ValueC>,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
-        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
-        let first = primitive_scan::inclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_a,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let second = primitive_scan::inclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_b,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let third = primitive_scan::inclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_c,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA3 {
-            first,
-            second,
-            third,
-        })
-    }
-}
-
-macro_rules! impl_inclusive_scan_by_tuple_key_scalar_value {
-    (
-        $keys:ident,
-        $scan_fn:ident,
-        ( $first:ident: $first_field:ident, $( $key:ident: $field:ident ),+ )
-    ) => {
-        impl<ValueSource, $first, $( $key ),+, KeyEq, Op>
-            InclusiveScanByKeyCall<ValueSource, KeyEq, Op> for $keys<$first, $( $key ),+>
-        where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
-            $first: KernelColumn + KernelColumnAt<S0>,
-            $( $key: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            ValueSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            ValueSource::Item: CubePrimitive + CubeElement,
-            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
-            $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
-            ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp2<ValueSource::Item>,
-        {
-            type Runtime = <$first as KernelColumn>::Runtime;
-            type Output = SoA1<DeviceVec<<$first as KernelColumn>::Runtime, ValueSource::Item>>;
-
-            fn inclusive_scan_by_key_call(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                values: ValueSource,
-                _key_eq: GpuOp<KeyEq>,
-                _op: GpuOp<Op>,
-            ) -> Result<Self::Output, Error> {
-                ReadOnlySoA::validate(&self)?;
-                values.validate()?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
-                let values = super::device_expr_collect_with_policy(policy, &values)?;
-                Ok(SoA1 {
-                    source: primitive_scan::$scan_fn(
-                        policy,
-                        &$first_field,
-                        $( &$field, )+
-                        &values,
-                        GpuOp::<KeyEq>::new(),
-                        GpuOp::<Op>::new(),
-                    )?,
-                })
-            }
-        }
-    };
-}
-
-impl_inclusive_scan_by_tuple_key_scalar_value!(SoA2, inclusive_scan_tuple2_by_key_device_vec, (A: left, B: right));
-impl_inclusive_scan_by_tuple_key_scalar_value!(SoA3, inclusive_scan_tuple3_by_key_device_vec, (A: first, B: second, C: third));
-
-macro_rules! impl_inclusive_scan_by_tuple_key_soa_view_values {
-    (@scan $scan_fn:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), $value_field:ident) => {
-        primitive_scan::$scan_fn(
-            $policy,
-            &$first_field,
-            $( &$field, )+
-            &$value_field,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )
-    };
-    (@scan_values $scan_fn:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), ) => {};
-    (@scan_values $scan_fn:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), $value_field:ident $(, $tail:ident )*) => {
-        let $value_field = impl_inclusive_scan_by_tuple_key_soa_view_values!(
-            @scan $scan_fn,
-            $policy,
-            ($first_field, $( $field ),+),
-            $value_field
-        )?;
-        impl_inclusive_scan_by_tuple_key_soa_view_values!(
-            @scan_values $scan_fn,
-            $policy,
-            ($first_field, $( $field ),+),
-            $( $tail ),*
-        );
-    };
-
-    (
-        $key_storage:ident,
-        $storage:ident,
-        $values:ident -> $output:ident < $first_value:ident, $( $value:ident ),+ > { $first_value_field:ident, $( $value_field:ident ),+ },
-        $keys:ident,
-        $scan_fn:ident,
-        ( $first:ident: $first_field:ident, $( $key:ident: $field:ident ),+ )
-    ) => {
-        impl<$first_value, $( $value ),+, $first, $( $key ),+, KeyEq, Op>
-            InclusiveScanByKeyCall<$values<$first_value, $( $value ),+>, KeyEq, Op>
-            for $keys<$first, $( $key ),+>
-        where
-            Self: $key_storage<Scalar = <$first as KernelColumn>::Item>,
-            $values<$first_value, $( $value ),+>: $storage<Scalar = <$first_value as KernelColumn>::Item>,
-            $first: KernelColumn + KernelColumnAt<S0>,
-            $( $key: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            $first_value: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            $( $value: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            <$first_value as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$value as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
-            $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
-            <$first_value as KernelColumn>::Expr: DeviceGpuExpr<<$first_value as KernelColumn>::Item>,
-            $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
-            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp2<<$first_value as KernelColumn>::Item>,
-            $( Op: BinaryOp2<<$value as KernelColumn>::Item>, )+
-        {
-            type Runtime = <$first as KernelColumn>::Runtime;
-            type Output = $output<
-                DeviceVec<<$first as KernelColumn>::Runtime, <$first_value as KernelColumn>::Item>,
-                $( DeviceVec<<$first as KernelColumn>::Runtime, <$value as KernelColumn>::Item> ),+
-            >;
-
-            fn inclusive_scan_by_key_call(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                values: $values<$first_value, $( $value ),+>,
-                _key_eq: GpuOp<KeyEq>,
-                _op: GpuOp<Op>,
-            ) -> Result<Self::Output, Error> {
-                $key_storage::validate(&self)?;
-                $storage::validate(&values)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
-                let $first_value_field = super::device_expr_collect_with_policy(policy, &values.$first_value_field)?;
-                $(
-                    let $value_field = super::device_expr_collect_with_policy(policy, &values.$value_field)?;
-                )+
-                let $first_value_field = impl_inclusive_scan_by_tuple_key_soa_view_values!(
-                    @scan $scan_fn,
-                    policy,
-                    ($first_field, $( $field ),+),
-                    $first_value_field
-                )?;
-                impl_inclusive_scan_by_tuple_key_soa_view_values!(
-                    @scan_values $scan_fn,
-                    policy,
-                    ($first_field, $( $field ),+),
-                    $( $value_field ),+
-                );
-                Ok($output { $first_value_field, $( $value_field ),+ })
-            }
-        }
-    };
-}
-
-macro_rules! impl_inclusive_scan_by_tuple_key_soa_view_values_for_key {
-    ($key_storage:ident, $keys:ident, $scan_fn:ident, ( $first:ident: $first_field:ident, $( $key:ident: $field:ident ),+ )) => {
-        impl_inclusive_scan_by_tuple_key_soa_view_values!($key_storage, SoA, SoA2 -> SoA2<A, B> { left, right }, $keys, $scan_fn, ( $first: $first_field, $( $key: $field ),+ ));
-        impl_inclusive_scan_by_tuple_key_soa_view_values!($key_storage, SoA, SoA3 -> SoA3<A, B, C> { first, second, third }, $keys, $scan_fn, ( $first: $first_field, $( $key: $field ),+ ));
-    };
-}
-
-impl_inclusive_scan_by_tuple_key_soa_view_values_for_key!(ReadOnlySoA, SoAView2, inclusive_scan_tuple2_by_key_device_vec, (KA: left, KB: right));
-impl_inclusive_scan_by_tuple_key_soa_view_values_for_key!(ReadOnlySoA, SoAView3, inclusive_scan_tuple3_by_key_device_vec, (KA: first, KB: second, KC: third));
-impl_inclusive_scan_by_tuple_key_soa_view_values_for_key!(SoA, SoA2, inclusive_scan_tuple2_by_key_device_vec, (KA: left, KB: right));
-impl_inclusive_scan_by_tuple_key_soa_view_values_for_key!(SoA, SoA3, inclusive_scan_tuple3_by_key_device_vec, (KA: first, KB: second, KC: third));
-
-macro_rules! impl_inclusive_scan_by_key_tuple_keys {
-    ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
-        impl<$( $ty ),+, Values, KeyEq, Op> InclusiveScanByKeyCall<Values, KeyEq, Op> for ($( $ty ),+)
-        where
-            $view<$( $ty ),+>: InclusiveScanByKeyCall<Values, KeyEq, Op>,
-        {
-            type Runtime = <$view<$( $ty ),+> as InclusiveScanByKeyCall<Values, KeyEq, Op>>::Runtime;
-            type Output = <$view<$( $ty ),+> as InclusiveScanByKeyCall<Values, KeyEq, Op>>::Output;
-
-            fn inclusive_scan_by_key_call(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                values: Values,
-                key_eq: GpuOp<KeyEq>,
-                op: GpuOp<Op>,
-            ) -> Result<Self::Output, Error> {
-                <$view<$( $ty ),+> as InclusiveScanByKeyCall<Values, KeyEq, Op>>::inclusive_scan_by_key_call(
-                    $view { $( $field: self.$index ),+ },
-                    policy,
-                    values,
-                    key_eq,
-                    op,
-                )
-            }
-        }
-    };
-}
-
-impl_inclusive_scan_by_key_tuple_keys!(SoAView2<A, B> { left: 0, right: 1 });
-impl_inclusive_scan_by_key_tuple_keys!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
-
-impl<KeySource, ValueSource, KeyEq, Op> InclusiveScanByKeyCall<(ValueSource,), KeyEq, Op>
-    for (KeySource,)
-where
-    KeySource: KernelColumn + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    KeySource::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: PredicateOp2<(KeySource::Item,)>,
-    Op: BinaryOp2<(ValueSource::Item,)>,
-{
-    type Runtime = KeySource::Runtime;
-    type Output = SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: (ValueSource,),
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        self.0.validate()?;
-        values.0.validate()?;
-        super::ensure_same_len(values.0.len(), self.0.len())?;
-        let key_bindings = self.0.stage(policy)?;
-        let value_bindings = values.0.stage(policy)?;
-        Ok(SoA1 {
-            source: primitive_scan::inclusive_scan_by_key_device_expr::<
-                KeySource::Runtime,
-                KeySource::Item,
-                ValueSource::Item,
-                KeySource::Expr,
-                ValueSource::Expr,
-                super::Tuple1Less<KeyEq>,
-                super::Tuple1BinaryOp<Op>,
-            >(policy, &key_bindings, &value_bindings, self.0.len())?,
-        })
-    }
-}
-
-impl<KeySource, ValueA, ValueB, KeyEq, Op> InclusiveScanByKeyCall<(ValueA, ValueB), KeyEq, Op>
-    for (KeySource,)
-where
-    KeySource: KernelColumn + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    KeySource::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: PredicateOp2<(KeySource::Item,)>,
-    Op: BinaryOp2<(ValueA::Item, ValueB::Item)>,
-{
-    type Runtime = KeySource::Runtime;
-    type Output = SoA2<
-        DeviceVec<KeySource::Runtime, ValueA::Item>,
-        DeviceVec<KeySource::Runtime, ValueB::Item>,
-    >;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: (ValueA, ValueB),
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        self.0.validate()?;
-        values.0.validate()?;
-        values.1.validate()?;
-        super::ensure_same_len(values.0.len(), self.0.len())?;
-        super::ensure_same_len(values.1.len(), self.0.len())?;
-        let key_bindings = self.0.stage(policy)?;
-        let a_bindings = values.0.stage(policy)?;
-        let b_bindings = values.1.stage(policy)?;
-        primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr::<
-            KeySource::Runtime,
-            KeySource::Item,
-            ValueA::Item,
-            ValueB::Item,
-            KeySource::Expr,
-            ValueA::Expr,
-            ValueB::Expr,
-            super::Tuple1Less<KeyEq>,
-            Op,
-        >(
-            policy,
-            &key_bindings,
-            &a_bindings,
-            &b_bindings,
-            self.0.len(),
-        )
-    }
-}
-
-impl<KeySource, ValueA, ValueB, ValueC, KeyEq, Op>
-    InclusiveScanByKeyCall<(ValueA, ValueB, ValueC), KeyEq, Op> for (KeySource,)
-where
-    KeySource: KernelColumn + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    ValueC: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    KeySource::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    ValueC::Item: CubePrimitive + CubeElement,
-    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: PredicateOp2<(KeySource::Item,)>,
-    Op: BinaryOp2<(ValueA::Item, ValueB::Item, ValueC::Item)>,
-{
-    type Runtime = KeySource::Runtime;
-    type Output = SoA3<
-        DeviceVec<KeySource::Runtime, ValueA::Item>,
-        DeviceVec<KeySource::Runtime, ValueB::Item>,
-        DeviceVec<KeySource::Runtime, ValueC::Item>,
-    >;
-
-    fn inclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: (ValueA, ValueB, ValueC),
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        self.0.validate()?;
-        values.0.validate()?;
-        values.1.validate()?;
-        values.2.validate()?;
-        super::ensure_same_len(values.0.len(), self.0.len())?;
-        super::ensure_same_len(values.1.len(), self.0.len())?;
-        super::ensure_same_len(values.2.len(), self.0.len())?;
-        let key_bindings = self.0.stage(policy)?;
-        let a_bindings = values.0.stage(policy)?;
-        let b_bindings = values.1.stage(policy)?;
-        let c_bindings = values.2.stage(policy)?;
-        primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr::<
-            KeySource::Runtime,
-            KeySource::Item,
-            ValueA::Item,
-            ValueB::Item,
-            ValueC::Item,
-            KeySource::Expr,
-            ValueA::Expr,
-            ValueB::Expr,
-            ValueC::Expr,
-            super::Tuple1Less<KeyEq>,
-            Op,
-        >(
-            policy,
-            &key_bindings,
-            &a_bindings,
-            &b_bindings,
-            &c_bindings,
-            self.0.len(),
-        )
-    }
-}
-
-/// Computes an inclusive scan by key.
 pub fn inclusive_scan_by_key<R, Keys, Values, KeyEq, Op>(
     _policy: &CubePolicy<R>,
     keys: Keys,
@@ -1890,7 +1177,10 @@ where
 
 /// Input accepted by [`exclusive_scan_by_key`].
 #[doc(hidden)]
-pub trait ExclusiveScanByKeyInput<K, KeyEq, Op> {
+pub trait ExclusiveScanByKeyInput<KeySource, KeyEq, Op>
+where
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+{
     /// CubeCL runtime used by this input.
     type Runtime: Runtime;
     /// Initial value type.
@@ -1902,22 +1192,25 @@ pub trait ExclusiveScanByKeyInput<K, KeyEq, Op> {
     fn exclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         init: Self::Init,
         key_eq: GpuOp<KeyEq>,
         op: GpuOp<Op>,
     ) -> Result<Self::Output, Error>;
 }
 
-impl<Source, K, KeyEq, Op> ExclusiveScanByKeyInput<K, KeyEq, Op> for SoAView1<Source>
+impl<Source, KeySource, KeyEq, Op> ExclusiveScanByKeyInput<KeySource, KeyEq, Op>
+    for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn<Runtime = Source::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<Source::Item>,
+    KeyEq: BinaryPredicateOp<KeySource::Item>,
+    Op: BinaryOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Init = Source::Item;
@@ -1926,42 +1219,42 @@ where
     fn exclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         init: Self::Init,
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(SoA1 {
-            source: super::device_expr_exclusive_scan_by_key_with_policy::<Source, K, KeyEq, Op>(
-                policy,
-                &self.source,
-                keys,
-                init,
-            )?,
+            source: super::device_expr_exclusive_scan_by_key_expr_keys_with_policy::<
+                KeySource,
+                Source,
+                KeyEq,
+                Op,
+            >(policy, keys, &self.source, init)?,
         })
     }
 }
 
-impl<Source, K, KeyEq, Op> ExclusiveScanByKeyInput<K, KeyEq, Op> for Source
+impl<Source, KeySource, KeyEq, Op> ExclusiveScanByKeyInput<KeySource, KeyEq, Op> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    SoAView1<Source>: ExclusiveScanByKeyInput<K, KeyEq, Op>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn + KernelColumnAt<S0>,
+    SoAView1<Source>: ExclusiveScanByKeyInput<KeySource, KeyEq, Op>,
 {
-    type Runtime = <SoAView1<Source> as ExclusiveScanByKeyInput<K, KeyEq, Op>>::Runtime;
-    type Init = <SoAView1<Source> as ExclusiveScanByKeyInput<K, KeyEq, Op>>::Init;
-    type Output = <SoAView1<Source> as ExclusiveScanByKeyInput<K, KeyEq, Op>>::Output;
+    type Runtime = <SoAView1<Source> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Runtime;
+    type Init = <SoAView1<Source> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Init;
+    type Output = <SoAView1<Source> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Output;
 
     fn exclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         init: Self::Init,
         key_eq: GpuOp<KeyEq>,
         op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Source> as ExclusiveScanByKeyInput<K, KeyEq, Op>>::exclusive_scan_by_key_input(
+        <SoAView1<Source> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::exclusive_scan_by_key_input(
             SoAView1 { source: self },
             policy,
             keys,
@@ -1972,20 +1265,23 @@ where
     }
 }
 
-impl<Left, Right, K, KeyEq, Op> ExclusiveScanByKeyInput<K, KeyEq, Op> for SoAView2<Left, Right>
+impl<Left, Right, KeySource, KeyEq, Op> ExclusiveScanByKeyInput<KeySource, KeyEq, Op>
+    for SoAView2<Left, Right>
 where
     Self: ReadOnlySoA<Item = (Left::Item, Right::Item), Scalar = Left::Item>,
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Left::Item: CubePrimitive + CubeElement,
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(Left::Item, Right::Item)>,
+    KeyEq: BinaryPredicateOp<KeySource::Item>,
+    Op: BinaryOp<(Left::Item, Right::Item)>,
 {
     type Runtime = Left::Runtime;
     type Init = (Left::Item, Right::Item);
@@ -1994,27 +1290,32 @@ where
     fn exclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         init: Self::Init,
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let left = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let right = super::device_expr_collect_with_policy(policy, &self.right)?;
-        primitive_scan::exclusive_scan_tuple2_by_key_values_device_vec(
-            policy,
-            keys,
-            &left,
-            &right,
-            init,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )
+        keys.validate()?;
+        super::ensure_same_len(keys.len(), self.left.len())?;
+        let key_bindings = keys.stage(policy)?;
+        let left = self.left.stage(policy)?;
+        let right = self.right.stage(policy)?;
+        primitive_scan::exclusive_scan_tuple2_by_key_values_device_expr::<
+            Left::Runtime,
+            KeySource::Item,
+            Left::Item,
+            Right::Item,
+            KeySource::Expr,
+            Left::Expr,
+            Right::Expr,
+            KeyEq,
+            Op,
+        >(policy, &key_bindings, &left, &right, self.left.len(), init)
     }
 }
 
-impl<First, Second, Third, K, KeyEq, Op> ExclusiveScanByKeyInput<K, KeyEq, Op>
+impl<First, Second, Third, KeySource, KeyEq, Op> ExclusiveScanByKeyInput<KeySource, KeyEq, Op>
     for SoAView3<First, Second, Third>
 where
     Self: ReadOnlySoA<Item = (First::Item, Second::Item, Third::Item), Scalar = First::Item>,
@@ -2025,15 +1326,17 @@ where
     Third: KernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>,
-    K: CubePrimitive + CubeElement,
+    KeySource: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    KeySource::Item: CubePrimitive + CubeElement,
+    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     First::Item: CubePrimitive + CubeElement,
     Second::Item: CubePrimitive + CubeElement,
     Third::Item: CubePrimitive + CubeElement,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(First::Item, Second::Item, Third::Item)>,
+    KeyEq: BinaryPredicateOp<KeySource::Item>,
+    Op: BinaryOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
     type Init = (First::Item, Second::Item, Third::Item);
@@ -2046,31 +1349,45 @@ where
     fn exclusive_scan_by_key_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        keys: &DeviceVec<Self::Runtime, K>,
+        keys: &KeySource,
         init: Self::Init,
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
         ReadOnlySoA::validate(&self)?;
-        let first = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let second = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let third = super::device_expr_collect_with_policy(policy, &self.third)?;
-        primitive_scan::exclusive_scan_tuple3_by_key_values_device_vec(
+        keys.validate()?;
+        super::ensure_same_len(keys.len(), self.first.len())?;
+        let key_bindings = keys.stage(policy)?;
+        let first = self.first.stage(policy)?;
+        let second = self.second.stage(policy)?;
+        let third = self.third.stage(policy)?;
+        primitive_scan::exclusive_scan_tuple3_by_key_values_device_expr::<
+            First::Runtime,
+            KeySource::Item,
+            First::Item,
+            Second::Item,
+            Third::Item,
+            KeySource::Expr,
+            First::Expr,
+            Second::Expr,
+            Third::Expr,
+            KeyEq,
+            Op,
+        >(
             policy,
-            keys,
+            &key_bindings,
             &first,
             &second,
             &third,
+            self.first.len(),
             init,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
         )
     }
 }
 
 macro_rules! impl_exclusive_scan_by_key_soa_input {
     ($input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+, Key, KeyEq, Op> ExclusiveScanByKeyInput<Key, KeyEq, Op>
+        impl<$first, $( $rest ),+, KeySource, KeyEq, Op> ExclusiveScanByKeyInput<KeySource, KeyEq, Op>
             for $input<$first, $( $rest ),+>
         where
             Self: SoA<Scalar = <$first as KernelColumn>::Item>,
@@ -2079,17 +1396,19 @@ macro_rules! impl_exclusive_scan_by_key_soa_input {
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime>
                     + KernelColumnAt<S0>,
             )+
-            Key: CubePrimitive + CubeElement,
+            KeySource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            KeySource::Item: CubePrimitive + CubeElement,
+            KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
             <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
             $(
                 <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            KeyEq: PredicateOp2<Key>,
-            Op: BinaryOp2<<$first as KernelColumn>::Item>,
+            KeyEq: BinaryPredicateOp<KeySource::Item>,
+            Op: BinaryOp<<$first as KernelColumn>::Item>,
             $(
-                Op: BinaryOp2<<$rest as KernelColumn>::Item>,
+                Op: BinaryOp<<$rest as KernelColumn>::Item>,
             )+
         {
             type Runtime = <$first as KernelColumn>::Runtime;
@@ -2105,7 +1424,7 @@ macro_rules! impl_exclusive_scan_by_key_soa_input {
             fn exclusive_scan_by_key_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                keys: &DeviceVec<Self::Runtime, Key>,
+                keys: &KeySource,
                 init: Self::Init,
                 _key_eq: GpuOp<KeyEq>,
                 _op: GpuOp<Op>,
@@ -2113,18 +1432,18 @@ macro_rules! impl_exclusive_scan_by_key_soa_input {
                 SoA::validate(&self)?;
                 let ($first_field, $( $field ),+) = init;
                 let $first_field =
-                    super::device_expr_exclusive_scan_by_key_with_policy::<$first, Key, KeyEq, Op>(
+                    super::device_expr_exclusive_scan_by_key_expr_keys_with_policy::<KeySource, $first, KeyEq, Op>(
                         policy,
-                        &self.$first_field,
                         keys,
+                        &self.$first_field,
                         $first_field,
                     )?;
                 $(
                     let $field =
-                        super::device_expr_exclusive_scan_by_key_with_policy::<$rest, Key, KeyEq, Op>(
+                        super::device_expr_exclusive_scan_by_key_expr_keys_with_policy::<KeySource, $rest, KeyEq, Op>(
                             policy,
-                            &self.$field,
                             keys,
+                            &self.$field,
                             $field,
                         )?;
                 )+
@@ -2139,23 +1458,24 @@ impl_exclusive_scan_by_key_soa_input!(SoA3 -> SoA3<A, B, C> { first, second, thi
 
 macro_rules! impl_exclusive_scan_by_key_tuple_values {
     ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
-        impl<$( $ty ),+, Key, KeyEq, Op> ExclusiveScanByKeyInput<Key, KeyEq, Op> for ($( $ty ),+)
+        impl<$( $ty ),+, KeySource, KeyEq, Op> ExclusiveScanByKeyInput<KeySource, KeyEq, Op> for ($( $ty ),+)
         where
-            $view<$( $ty ),+>: ExclusiveScanByKeyInput<Key, KeyEq, Op>,
+            KeySource: KernelColumn + KernelColumnAt<S0>,
+            $view<$( $ty ),+>: ExclusiveScanByKeyInput<KeySource, KeyEq, Op>,
         {
-            type Runtime = <$view<$( $ty ),+> as ExclusiveScanByKeyInput<Key, KeyEq, Op>>::Runtime;
-            type Init = <$view<$( $ty ),+> as ExclusiveScanByKeyInput<Key, KeyEq, Op>>::Init;
-            type Output = <$view<$( $ty ),+> as ExclusiveScanByKeyInput<Key, KeyEq, Op>>::Output;
+            type Runtime = <$view<$( $ty ),+> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Runtime;
+            type Init = <$view<$( $ty ),+> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Init;
+            type Output = <$view<$( $ty ),+> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::Output;
 
             fn exclusive_scan_by_key_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                keys: &DeviceVec<Self::Runtime, Key>,
+                keys: &KeySource,
                 init: Self::Init,
                 key_eq: GpuOp<KeyEq>,
                 op: GpuOp<Op>,
             ) -> Result<Self::Output, Error> {
-                <$view<$( $ty ),+> as ExclusiveScanByKeyInput<Key, KeyEq, Op>>::exclusive_scan_by_key_input(
+                <$view<$( $ty ),+> as ExclusiveScanByKeyInput<KeySource, KeyEq, Op>>::exclusive_scan_by_key_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     keys,
@@ -2191,11 +1511,11 @@ impl<Values, Keys, KeyEq, Op> ExclusiveScanByKeyCall<Values, KeyEq, Op> for Keys
 where
     Keys: KeyInput,
     Keys::Item: CubePrimitive + CubeElement,
-    Values: ExclusiveScanByKeyInput<Keys::Item, KeyEq, Op, Runtime = Keys::Runtime>,
+    Values: ExclusiveScanByKeyInput<Keys::Source, KeyEq, Op, Runtime = Keys::Runtime>,
 {
     type Runtime = Keys::Runtime;
-    type Init = <Values as ExclusiveScanByKeyInput<Keys::Item, KeyEq, Op>>::Init;
-    type Output = <Values as ExclusiveScanByKeyInput<Keys::Item, KeyEq, Op>>::Output;
+    type Init = <Values as ExclusiveScanByKeyInput<Keys::Source, KeyEq, Op>>::Init;
+    type Output = <Values as ExclusiveScanByKeyInput<Keys::Source, KeyEq, Op>>::Output;
 
     fn exclusive_scan_by_key_call(
         self,
@@ -2205,7 +1525,7 @@ where
         _key_eq: GpuOp<KeyEq>,
         _op: GpuOp<Op>,
     ) -> Result<Self::Output, Error> {
-        let keys = self.key_input(policy)?;
+        let keys = self.key_source()?;
         values.exclusive_scan_by_key_input(
             policy,
             &keys,
@@ -2216,792 +1536,6 @@ where
     }
 }
 
-impl<ValueSource, KeyA, KeyB, KeyEq, Op> ExclusiveScanByKeyCall<ValueSource, KeyEq, Op>
-    for SoAView2<KeyA, KeyB>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp2<ValueSource::Item>,
-{
-    type Init = ValueSource::Item;
-    type Runtime = KeyA::Runtime;
-    type Output = SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: ValueSource,
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        let values = SoAView1 { source: values };
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
-        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
-        Ok(SoA1 {
-            source: primitive_scan::exclusive_scan_tuple2_by_key_device_vec(
-                policy,
-                &key_a,
-                &key_b,
-                &values,
-                init,
-                GpuOp::<KeyEq>::new(),
-                GpuOp::<Op>::new(),
-            )?,
-        })
-    }
-}
-
-impl<ValueA, ValueB, KeyA, KeyB, KeyEq, Op>
-    ExclusiveScanByKeyCall<SoAView2<ValueA, ValueB>, KeyEq, Op> for SoAView2<KeyA, KeyB>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
-    SoAView2<ValueA, ValueB>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-{
-    type Init = (ValueA::Item, ValueB::Item);
-    type Runtime = KeyA::Runtime;
-    type Output =
-        SoA2<DeviceVec<KeyA::Runtime, ValueA::Item>, DeviceVec<KeyA::Runtime, ValueB::Item>>;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView2<ValueA, ValueB>,
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
-        let left = primitive_scan::exclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_a,
-            init.0,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let right = primitive_scan::exclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_b,
-            init.1,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA2 { left, right })
-    }
-}
-
-impl<ValueA, ValueB, ValueC, KeyA, KeyB, KeyEq, Op>
-    ExclusiveScanByKeyCall<SoAView3<ValueA, ValueB, ValueC>, KeyEq, Op> for SoAView2<KeyA, KeyB>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item), Scalar = KeyA::Item>,
-    SoAView3<ValueA, ValueB, ValueC>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item, ValueC::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    ValueC::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-    Op: BinaryOp2<ValueC::Item>,
-{
-    type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
-    type Runtime = KeyA::Runtime;
-    type Output = SoA3<
-        DeviceVec<KeyA::Runtime, ValueA::Item>,
-        DeviceVec<KeyA::Runtime, ValueB::Item>,
-        DeviceVec<KeyA::Runtime, ValueC::Item>,
-    >;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView3<ValueA, ValueB, ValueC>,
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.left)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.right)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
-        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
-        let first = primitive_scan::exclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_a,
-            init.0,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let second = primitive_scan::exclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_b,
-            init.1,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let third = primitive_scan::exclusive_scan_tuple2_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &value_c,
-            init.2,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA3 {
-            first,
-            second,
-            third,
-        })
-    }
-}
-
-impl<ValueSource, KeyA, KeyB, KeyC, KeyEq, Op> ExclusiveScanByKeyCall<ValueSource, KeyEq, Op>
-    for SoAView3<KeyA, KeyB, KeyC>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item, KeyC::Item), Scalar = KeyA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    KeyC::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp2<ValueSource::Item>,
-{
-    type Init = ValueSource::Item;
-    type Runtime = KeyA::Runtime;
-    type Output = SoA1<DeviceVec<KeyA::Runtime, ValueSource::Item>>;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: ValueSource,
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        let values = SoAView1 { source: values };
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
-        let values = super::device_expr_collect_with_policy(policy, &values.source)?;
-        Ok(SoA1 {
-            source: primitive_scan::exclusive_scan_tuple3_by_key_device_vec(
-                policy,
-                &key_a,
-                &key_b,
-                &key_c,
-                &values,
-                init,
-                GpuOp::<KeyEq>::new(),
-                GpuOp::<Op>::new(),
-            )?,
-        })
-    }
-}
-
-impl<ValueA, ValueB, KeyA, KeyB, KeyC, KeyEq, Op>
-    ExclusiveScanByKeyCall<SoAView2<ValueA, ValueB>, KeyEq, Op> for SoAView3<KeyA, KeyB, KeyC>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item, KeyC::Item), Scalar = KeyA::Item>,
-    SoAView2<ValueA, ValueB>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    KeyC::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-{
-    type Init = (ValueA::Item, ValueB::Item);
-    type Runtime = KeyA::Runtime;
-    type Output =
-        SoA2<DeviceVec<KeyA::Runtime, ValueA::Item>, DeviceVec<KeyA::Runtime, ValueB::Item>>;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView2<ValueA, ValueB>,
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.left)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.right)?;
-        let left = primitive_scan::exclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_a,
-            init.0,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let right = primitive_scan::exclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_b,
-            init.1,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA2 { left, right })
-    }
-}
-
-impl<ValueA, ValueB, ValueC, KeyA, KeyB, KeyC, KeyEq, Op>
-    ExclusiveScanByKeyCall<SoAView3<ValueA, ValueB, ValueC>, KeyEq, Op>
-    for SoAView3<KeyA, KeyB, KeyC>
-where
-    Self: ReadOnlySoA<Item = (KeyA::Item, KeyB::Item, KeyC::Item), Scalar = KeyA::Item>,
-    SoAView3<ValueA, ValueB, ValueC>:
-        ReadOnlySoA<Item = (ValueA::Item, ValueB::Item, ValueC::Item), Scalar = ValueA::Item>,
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueC: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    KeyC::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    ValueC::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    KeyC::Expr: DeviceGpuExpr<KeyC::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: PredicateOp2<(KeyA::Item, KeyB::Item, KeyC::Item)>,
-    Op: BinaryOp2<ValueA::Item>,
-    Op: BinaryOp2<ValueB::Item>,
-    Op: BinaryOp2<ValueC::Item>,
-{
-    type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
-    type Runtime = KeyA::Runtime;
-    type Output = SoA3<
-        DeviceVec<KeyA::Runtime, ValueA::Item>,
-        DeviceVec<KeyA::Runtime, ValueB::Item>,
-        DeviceVec<KeyA::Runtime, ValueC::Item>,
-    >;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: SoAView3<ValueA, ValueB, ValueC>,
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
-        let key_a = super::device_expr_collect_with_policy(policy, &self.first)?;
-        let key_b = super::device_expr_collect_with_policy(policy, &self.second)?;
-        let key_c = super::device_expr_collect_with_policy(policy, &self.third)?;
-        let value_a = super::device_expr_collect_with_policy(policy, &values.first)?;
-        let value_b = super::device_expr_collect_with_policy(policy, &values.second)?;
-        let value_c = super::device_expr_collect_with_policy(policy, &values.third)?;
-        let first = primitive_scan::exclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_a,
-            init.0,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let second = primitive_scan::exclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_b,
-            init.1,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        let third = primitive_scan::exclusive_scan_tuple3_by_key_device_vec(
-            policy,
-            &key_a,
-            &key_b,
-            &key_c,
-            &value_c,
-            init.2,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )?;
-        Ok(SoA3 {
-            first,
-            second,
-            third,
-        })
-    }
-}
-
-macro_rules! impl_exclusive_scan_by_tuple_key_scalar_value {
-    (
-        $keys:ident,
-        $scan_fn:ident,
-        ( $first:ident: $first_field:ident, $( $key:ident: $field:ident ),+ )
-    ) => {
-        impl<ValueSource, $first, $( $key ),+, KeyEq, Op>
-            ExclusiveScanByKeyCall<ValueSource, KeyEq, Op> for $keys<$first, $( $key ),+>
-        where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
-            $first: KernelColumn + KernelColumnAt<S0>,
-            $( $key: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            ValueSource: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            ValueSource::Item: CubePrimitive + CubeElement,
-            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
-            $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
-            ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp2<ValueSource::Item>,
-        {
-            type Init = ValueSource::Item;
-            type Runtime = <$first as KernelColumn>::Runtime;
-            type Output = SoA1<DeviceVec<<$first as KernelColumn>::Runtime, ValueSource::Item>>;
-
-            fn exclusive_scan_by_key_call(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                values: ValueSource,
-                init: Self::Init,
-                _key_eq: GpuOp<KeyEq>,
-                _op: GpuOp<Op>,
-            ) -> Result<Self::Output, Error> {
-                ReadOnlySoA::validate(&self)?;
-                values.validate()?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
-                let values = super::device_expr_collect_with_policy(policy, &values)?;
-                Ok(SoA1 {
-                    source: primitive_scan::$scan_fn(
-                        policy,
-                        &$first_field,
-                        $( &$field, )+
-                        &values,
-                        init,
-                        GpuOp::<KeyEq>::new(),
-                        GpuOp::<Op>::new(),
-                    )?,
-                })
-            }
-        }
-    };
-}
-
-impl_exclusive_scan_by_tuple_key_scalar_value!(SoA2, exclusive_scan_tuple2_by_key_device_vec, (A: left, B: right));
-impl_exclusive_scan_by_tuple_key_scalar_value!(SoA3, exclusive_scan_tuple3_by_key_device_vec, (A: first, B: second, C: third));
-
-macro_rules! impl_exclusive_scan_by_tuple_key_soa_view_values {
-    (@scan $scan_fn:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), $value_field:ident, $init:expr) => {
-        primitive_scan::$scan_fn(
-            $policy,
-            &$first_field,
-            $( &$field, )+
-            &$value_field,
-            $init,
-            GpuOp::<KeyEq>::new(),
-            GpuOp::<Op>::new(),
-        )
-    };
-    (@scan_values $scan_fn:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), $init:ident, ) => {};
-    (@scan_values $scan_fn:ident, $policy:ident, ($first_field:ident, $( $field:ident ),+), $init:ident, $value_field:ident: $idx:tt $(, $tail_field:ident: $tail_idx:tt )*) => {
-        let $value_field = impl_exclusive_scan_by_tuple_key_soa_view_values!(
-            @scan $scan_fn,
-            $policy,
-            ($first_field, $( $field ),+),
-            $value_field,
-            $init.$idx
-        )?;
-        impl_exclusive_scan_by_tuple_key_soa_view_values!(
-            @scan_values $scan_fn,
-            $policy,
-            ($first_field, $( $field ),+),
-            $init,
-            $( $tail_field: $tail_idx ),*
-        );
-    };
-
-    (
-        $key_storage:ident,
-        $storage:ident,
-        $values:ident -> $output:ident < $first_value:ident: $first_idx:tt, $( $value:ident: $idx:tt ),+ > { $first_value_field:ident, $( $value_field:ident ),+ },
-        $keys:ident,
-        $scan_fn:ident,
-        ( $first:ident: $first_field:ident, $( $key:ident: $field:ident ),+ )
-    ) => {
-        impl<$first_value, $( $value ),+, $first, $( $key ),+, KeyEq, Op>
-            ExclusiveScanByKeyCall<$values<$first_value, $( $value ),+>, KeyEq, Op>
-            for $keys<$first, $( $key ),+>
-        where
-            Self: $key_storage<Scalar = <$first as KernelColumn>::Item>,
-            $values<$first_value, $( $value ),+>: $storage<Scalar = <$first_value as KernelColumn>::Item>,
-            $first: KernelColumn + KernelColumnAt<S0>,
-            $( $key: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            $first_value: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
-            $( $value: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>, )+
-            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$key as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            <$first_value as KernelColumn>::Item: CubePrimitive + CubeElement,
-            $( <$value as KernelColumn>::Item: CubePrimitive + CubeElement, )+
-            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
-            $( <$key as KernelColumn>::Expr: DeviceGpuExpr<<$key as KernelColumn>::Item>, )+
-            <$first_value as KernelColumn>::Expr: DeviceGpuExpr<<$first_value as KernelColumn>::Item>,
-            $( <$value as KernelColumn>::Expr: DeviceGpuExpr<<$value as KernelColumn>::Item>, )+
-            KeyEq: PredicateOp2<(<$first as KernelColumn>::Item, $( <$key as KernelColumn>::Item ),+)>,
-            Op: BinaryOp2<<$first_value as KernelColumn>::Item>,
-            $( Op: BinaryOp2<<$value as KernelColumn>::Item>, )+
-        {
-            type Init = (<$first_value as KernelColumn>::Item, $( <$value as KernelColumn>::Item ),+);
-            type Runtime = <$first as KernelColumn>::Runtime;
-            type Output = $output<
-                DeviceVec<<$first as KernelColumn>::Runtime, <$first_value as KernelColumn>::Item>,
-                $( DeviceVec<<$first as KernelColumn>::Runtime, <$value as KernelColumn>::Item> ),+
-            >;
-
-            fn exclusive_scan_by_key_call(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                values: $values<$first_value, $( $value ),+>,
-                init: Self::Init,
-                _key_eq: GpuOp<KeyEq>,
-                _op: GpuOp<Op>,
-            ) -> Result<Self::Output, Error> {
-                $key_storage::validate(&self)?;
-                $storage::validate(&values)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                $( let $field = super::device_expr_collect_with_policy(policy, &self.$field)?; )+
-                let $first_value_field = super::device_expr_collect_with_policy(policy, &values.$first_value_field)?;
-                $( let $value_field = super::device_expr_collect_with_policy(policy, &values.$value_field)?; )+
-                let $first_value_field = impl_exclusive_scan_by_tuple_key_soa_view_values!(
-                    @scan $scan_fn,
-                    policy,
-                    ($first_field, $( $field ),+),
-                    $first_value_field,
-                    init.$first_idx
-                )?;
-                impl_exclusive_scan_by_tuple_key_soa_view_values!(
-                    @scan_values $scan_fn,
-                    policy,
-                    ($first_field, $( $field ),+),
-                    init,
-                    $( $value_field: $idx ),+
-                );
-                Ok($output { $first_value_field, $( $value_field ),+ })
-            }
-        }
-    };
-}
-
-macro_rules! impl_exclusive_scan_by_tuple_key_soa_view_values_for_key {
-    ($key_storage:ident, $keys:ident, $scan_fn:ident, ( $first:ident: $first_field:ident, $( $key:ident: $field:ident ),+ )) => {
-        impl_exclusive_scan_by_tuple_key_soa_view_values!($key_storage, SoA, SoA2 -> SoA2<A: 0, B: 1> { left, right }, $keys, $scan_fn, ( $first: $first_field, $( $key: $field ),+ ));
-        impl_exclusive_scan_by_tuple_key_soa_view_values!($key_storage, SoA, SoA3 -> SoA3<A: 0, B: 1, C: 2> { first, second, third }, $keys, $scan_fn, ( $first: $first_field, $( $key: $field ),+ ));
-    };
-}
-
-impl_exclusive_scan_by_tuple_key_soa_view_values_for_key!(ReadOnlySoA, SoAView2, exclusive_scan_tuple2_by_key_device_vec, (KA: left, KB: right));
-impl_exclusive_scan_by_tuple_key_soa_view_values_for_key!(ReadOnlySoA, SoAView3, exclusive_scan_tuple3_by_key_device_vec, (KA: first, KB: second, KC: third));
-impl_exclusive_scan_by_tuple_key_soa_view_values_for_key!(SoA, SoA2, exclusive_scan_tuple2_by_key_device_vec, (KA: left, KB: right));
-impl_exclusive_scan_by_tuple_key_soa_view_values_for_key!(SoA, SoA3, exclusive_scan_tuple3_by_key_device_vec, (KA: first, KB: second, KC: third));
-
-macro_rules! impl_exclusive_scan_by_key_tuple_keys {
-    ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
-        impl<$( $ty ),+, Values, KeyEq, Op> ExclusiveScanByKeyCall<Values, KeyEq, Op> for ($( $ty ),+)
-        where
-            $view<$( $ty ),+>: ExclusiveScanByKeyCall<Values, KeyEq, Op>,
-        {
-            type Runtime = <$view<$( $ty ),+> as ExclusiveScanByKeyCall<Values, KeyEq, Op>>::Runtime;
-            type Init = <$view<$( $ty ),+> as ExclusiveScanByKeyCall<Values, KeyEq, Op>>::Init;
-            type Output = <$view<$( $ty ),+> as ExclusiveScanByKeyCall<Values, KeyEq, Op>>::Output;
-
-            fn exclusive_scan_by_key_call(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                values: Values,
-                init: Self::Init,
-                key_eq: GpuOp<KeyEq>,
-                op: GpuOp<Op>,
-            ) -> Result<Self::Output, Error> {
-                <$view<$( $ty ),+> as ExclusiveScanByKeyCall<Values, KeyEq, Op>>::exclusive_scan_by_key_call(
-                    $view { $( $field: self.$index ),+ },
-                    policy,
-                    values,
-                    init,
-                    key_eq,
-                    op,
-                )
-            }
-        }
-    };
-}
-
-impl_exclusive_scan_by_key_tuple_keys!(SoAView2<A, B> { left: 0, right: 1 });
-impl_exclusive_scan_by_key_tuple_keys!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
-
-impl<KeySource, ValueSource, KeyEq, Op> ExclusiveScanByKeyCall<(ValueSource,), KeyEq, Op>
-    for (KeySource,)
-where
-    KeySource: KernelColumn + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    KeySource::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    KeyEq: PredicateOp2<(KeySource::Item,)>,
-    Op: BinaryOp2<(ValueSource::Item,)>,
-{
-    type Init = (ValueSource::Item,);
-    type Runtime = KeySource::Runtime;
-    type Output = SoA1<DeviceVec<KeySource::Runtime, ValueSource::Item>>;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: (ValueSource,),
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        self.0.validate()?;
-        values.0.validate()?;
-        super::ensure_same_len(values.0.len(), self.0.len())?;
-        let key_bindings = self.0.stage(policy)?;
-        let value_bindings = values.0.stage(policy)?;
-        Ok(SoA1 {
-            source: primitive_scan::exclusive_scan_by_key_device_expr::<
-                KeySource::Runtime,
-                KeySource::Item,
-                ValueSource::Item,
-                KeySource::Expr,
-                ValueSource::Expr,
-                super::Tuple1Less<KeyEq>,
-                super::Tuple1BinaryOp<Op>,
-            >(policy, &key_bindings, &value_bindings, self.0.len(), init.0)?,
-        })
-    }
-}
-
-impl<KeySource, ValueA, ValueB, KeyEq, Op> ExclusiveScanByKeyCall<(ValueA, ValueB), KeyEq, Op>
-    for (KeySource,)
-where
-    KeySource: KernelColumn + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    KeySource::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    KeyEq: PredicateOp2<(KeySource::Item,)>,
-    Op: BinaryOp2<(ValueA::Item, ValueB::Item)>,
-{
-    type Init = (ValueA::Item, ValueB::Item);
-    type Runtime = KeySource::Runtime;
-    type Output = SoA2<
-        DeviceVec<KeySource::Runtime, ValueA::Item>,
-        DeviceVec<KeySource::Runtime, ValueB::Item>,
-    >;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: (ValueA, ValueB),
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        self.0.validate()?;
-        values.0.validate()?;
-        values.1.validate()?;
-        super::ensure_same_len(values.0.len(), self.0.len())?;
-        super::ensure_same_len(values.1.len(), self.0.len())?;
-        let key_bindings = self.0.stage(policy)?;
-        let a_bindings = values.0.stage(policy)?;
-        let b_bindings = values.1.stage(policy)?;
-        primitive_scan::exclusive_scan_tuple2_by_key_values_device_expr::<
-            KeySource::Runtime,
-            KeySource::Item,
-            ValueA::Item,
-            ValueB::Item,
-            KeySource::Expr,
-            ValueA::Expr,
-            ValueB::Expr,
-            super::Tuple1Less<KeyEq>,
-            Op,
-        >(
-            policy,
-            &key_bindings,
-            &a_bindings,
-            &b_bindings,
-            self.0.len(),
-            init,
-        )
-    }
-}
-
-impl<KeySource, ValueA, ValueB, ValueC, KeyEq, Op>
-    ExclusiveScanByKeyCall<(ValueA, ValueB, ValueC), KeyEq, Op> for (KeySource,)
-where
-    KeySource: KernelColumn + KernelColumnAt<S0>,
-    ValueA: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    ValueB: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    ValueC: KernelColumn<Runtime = KeySource::Runtime> + KernelColumnAt<S0>,
-    KeySource::Item: CubePrimitive + CubeElement,
-    ValueA::Item: CubePrimitive + CubeElement,
-    ValueB::Item: CubePrimitive + CubeElement,
-    ValueC::Item: CubePrimitive + CubeElement,
-    KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-    ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
-    ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    KeyEq: PredicateOp2<(KeySource::Item,)>,
-    Op: BinaryOp2<(ValueA::Item, ValueB::Item, ValueC::Item)>,
-{
-    type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
-    type Runtime = KeySource::Runtime;
-    type Output = SoA3<
-        DeviceVec<KeySource::Runtime, ValueA::Item>,
-        DeviceVec<KeySource::Runtime, ValueB::Item>,
-        DeviceVec<KeySource::Runtime, ValueC::Item>,
-    >;
-
-    fn exclusive_scan_by_key_call(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        values: (ValueA, ValueB, ValueC),
-        init: Self::Init,
-        _key_eq: GpuOp<KeyEq>,
-        _op: GpuOp<Op>,
-    ) -> Result<Self::Output, Error> {
-        self.0.validate()?;
-        values.0.validate()?;
-        values.1.validate()?;
-        values.2.validate()?;
-        super::ensure_same_len(values.0.len(), self.0.len())?;
-        super::ensure_same_len(values.1.len(), self.0.len())?;
-        super::ensure_same_len(values.2.len(), self.0.len())?;
-        let key_bindings = self.0.stage(policy)?;
-        let a_bindings = values.0.stage(policy)?;
-        let b_bindings = values.1.stage(policy)?;
-        let c_bindings = values.2.stage(policy)?;
-        primitive_scan::exclusive_scan_tuple3_by_key_values_device_expr::<
-            KeySource::Runtime,
-            KeySource::Item,
-            ValueA::Item,
-            ValueB::Item,
-            ValueC::Item,
-            KeySource::Expr,
-            ValueA::Expr,
-            ValueB::Expr,
-            ValueC::Expr,
-            super::Tuple1Less<KeyEq>,
-            Op,
-        >(
-            policy,
-            &key_bindings,
-            &a_bindings,
-            &b_bindings,
-            &c_bindings,
-            self.0.len(),
-            init,
-        )
-    }
-}
-
-/// Computes an exclusive scan by key.
 pub fn exclusive_scan_by_key<R, Keys, Values, KeyEq, Op>(
     _policy: &CubePolicy<R>,
     keys: Keys,

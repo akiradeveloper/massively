@@ -38,7 +38,7 @@ where
 /// Compile-time binary transform used by algorithms such as
 /// [`inner_product`](crate::inner_product).
 #[cube]
-pub trait BinaryOp2<B, X, Y>: 'static + Send + Sync
+pub trait BinaryOp<B, X, Y>: 'static + Send + Sync
 where
     B: crate::Backend,
     X: crate::MItem<B>,
@@ -58,7 +58,7 @@ where
 /// struct Sum;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::BinaryOp1<B, (f32,)> for Sum
+/// impl<B> massively::op::ReductionOp<B, (f32,)> for Sum
 /// where
 ///     B: massively::Backend,
 /// {
@@ -68,7 +68,7 @@ where
 /// }
 /// ```
 #[cube]
-pub trait BinaryOp1<B, X>: 'static + Send + Sync
+pub trait ReductionOp<B, X>: 'static + Send + Sync
 where
     B: crate::Backend,
     X: crate::MItem<B>,
@@ -90,7 +90,7 @@ where
 /// struct Positive;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::PredicateOp1<B, (f32,)> for Positive
+/// impl<B> massively::op::PredicateOp<B, (f32,)> for Positive
 /// where
 ///     B: massively::Backend,
 /// {
@@ -100,7 +100,7 @@ where
 /// }
 /// ```
 #[cube]
-pub trait PredicateOp1<B, T>: 'static + Send + Sync
+pub trait PredicateOp<B, T>: 'static + Send + Sync
 where
     B: crate::Backend,
     T: crate::MItem<B>,
@@ -117,7 +117,7 @@ where
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::PredicateOp2<B, (f32,)> for Less
+/// impl<B> massively::op::BinaryPredicateOp<B, (f32,)> for Less
 /// where
 ///     B: massively::Backend,
 /// {
@@ -127,7 +127,7 @@ where
 /// }
 /// ```
 #[cube]
-pub trait PredicateOp2<B, T>: 'static + Send + Sync
+pub trait BinaryPredicateOp<B, T>: 'static + Send + Sync
 where
     B: crate::Backend,
     T: crate::MItem<B>,
@@ -141,7 +141,7 @@ where
 pub struct Equal;
 
 #[cube]
-impl<B, T> PredicateOp2<B, (T,)> for Equal
+impl<B, T> BinaryPredicateOp<B, (T,)> for Equal
 where
     B: crate::Backend,
     T: CubePrimitive + CubeElement + PartialEq,
@@ -152,7 +152,7 @@ where
 }
 
 #[cube]
-impl<B, A, C> PredicateOp2<B, (A, C)> for Equal
+impl<B, A, C> BinaryPredicateOp<B, (A, C)> for Equal
 where
     B: crate::Backend,
     A: CubePrimitive + CubeElement + PartialEq,
@@ -164,7 +164,7 @@ where
 }
 
 #[cube]
-impl<B, A, C, D> PredicateOp2<B, (A, C, D)> for Equal
+impl<B, A, C, D> BinaryPredicateOp<B, (A, C, D)> for Equal
 where
     B: crate::Backend,
     A: CubePrimitive + CubeElement + PartialEq,
@@ -191,17 +191,17 @@ pub(crate) mod kernel {
     }
 
     #[cube]
-    pub trait BinaryOp2<T: CubeType>: 'static + Send + Sync {
+    pub trait BinaryOp<T: CubeType>: 'static + Send + Sync {
         fn apply(lhs: T, rhs: T) -> T;
     }
 
     #[cube]
-    pub trait PredicateOp1<T: CubeType>: 'static + Send + Sync {
+    pub trait PredicateOp<T: CubeType>: 'static + Send + Sync {
         fn apply(input: T) -> bool;
     }
 
     #[cube]
-    pub trait PredicateOp2<T: CubeType>: 'static + Send + Sync {
+    pub trait BinaryPredicateOp<T: CubeType>: 'static + Send + Sync {
         fn apply(lhs: T, rhs: T) -> bool;
     }
 }

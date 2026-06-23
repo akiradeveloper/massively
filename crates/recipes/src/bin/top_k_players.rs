@@ -16,17 +16,20 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, reverse, sort_by_key};
 
-struct Output {
-    player_id: DeviceVec<Wgpu, u32>,
-    score: DeviceVec<Wgpu, f32>,
+struct Output<B: massively::Backend> {
+    player_id: DeviceVec<B, u32>,
+    score: DeviceVec<B, f32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    player_id: DeviceVec<Wgpu, u32>,
-    score: DeviceVec<Wgpu, f32>,
+fn solve<B>(
+    exec: &Executor<B>,
+    player_id: DeviceVec<B, u32>,
+    score: DeviceVec<B, f32>,
     k: usize,
-) -> common::Result<Output> {
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let ((score,), (player_id,)) = sort_by_key(
         exec,
         SoA1(score.slice(..)),

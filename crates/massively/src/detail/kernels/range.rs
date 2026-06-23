@@ -1,4 +1,4 @@
-use crate::detail::op::kernel::{PredicateOp1, UnaryOp};
+use crate::detail::op::kernel::{PredicateOp, UnaryOp};
 use cubecl::prelude::*;
 
 #[cube(launch_unchecked, explicit_define)]
@@ -114,7 +114,7 @@ pub(crate) fn scatter_kernel<T: CubePrimitive>(input: &[T], indices: &[u32], out
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scatter_if_kernel<T: CubePrimitive, Pred: PredicateOp1<T>>(
+pub(crate) fn scatter_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
     input: &[T],
     indices: &[u32],
     output: &mut [T],

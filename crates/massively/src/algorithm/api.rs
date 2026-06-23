@@ -23,19 +23,19 @@ where
 }
 
 fn gather_index_inner<B, Indices>(
-    policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+    _policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
     indices: &Indices,
-) -> Result<crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, u32>, Error>
+) -> Result<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, u32>, Error>
 where
     B: Backend,
     Indices: MIter<B, Item = (u32,)>,
 {
-    <Indices as sealed::MIterDispatch<B>>::column_vec_inner::<u32>(indices, policy)?.ok_or_else(
-        || Error::Launch {
+    <Indices as sealed::MIterDispatch<B>>::column_view_inner::<u32>(indices)?.ok_or_else(|| {
+        Error::Launch {
             message: "gather indices must be backed by one u32 DeviceVec or DeviceSlice"
                 .to_string(),
-        },
-    )
+        }
+    })
 }
 
 fn column_view_at<B, Iter, T>(
@@ -82,7 +82,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Op: op::BinaryOp1<B, Input::Item>,
+    Op: op::ReductionOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::adjacent_difference_dispatch(source, exec.policy(), op)
@@ -97,7 +97,7 @@ pub fn adjacent_find<B, Input, Pred>(
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp2<B, Input::Item>,
+    Pred: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::adjacent_find_dispatch(source, exec.policy(), pred)
@@ -108,7 +108,7 @@ pub fn all_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> 
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::all_of_dispatch(source, exec.policy(), pred)
@@ -119,7 +119,7 @@ pub fn any_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> 
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::any_of_dispatch(source, exec.policy(), pred)
@@ -150,7 +150,7 @@ pub fn count_if<B, Input, Pred>(
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::count_if_dispatch(source, exec.policy(), pred)
@@ -167,7 +167,7 @@ where
     B: Backend,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
-    Eq: op::PredicateOp2<B, Left::Item>,
+    Eq: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -184,7 +184,7 @@ pub fn equal_range<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::equal_range_dispatch(source, exec.policy(), value, less)
@@ -201,7 +201,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Op: op::BinaryOp1<B, Input::Item>,
+    Op: op::ReductionOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::exclusive_scan_dispatch(source, exec.policy(), init, op)
@@ -220,8 +220,8 @@ where
     B: Backend,
     Keys: MIter<B>,
     Values: MIter<B>,
-    KeyEq: op::PredicateOp2<B, Keys::Item>,
-    Op: op::BinaryOp1<B, Values::Item>,
+    KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
+    Op: op::ReductionOp<B, Values::Item>,
     Output: MVec<B, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
@@ -247,7 +247,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Needles: MIter<B, Item = Input::Item>,
-    Eq: op::PredicateOp2<B, Input::Item>,
+    Eq: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_input(exec, &needles)?;
@@ -263,7 +263,7 @@ pub fn find_if<B, Input, Pred>(
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::find_if_dispatch(source, exec.policy(), pred)
@@ -320,7 +320,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Op: op::BinaryOp1<B, Input::Item>,
+    Op: op::ReductionOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::inclusive_scan_dispatch(source, exec.policy(), op)
@@ -338,8 +338,8 @@ where
     B: Backend,
     Keys: MIter<B>,
     Values: MIter<B>,
-    KeyEq: op::PredicateOp2<B, Keys::Item>,
-    Op: op::BinaryOp1<B, Values::Item>,
+    KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
+    Op: op::ReductionOp<B, Values::Item>,
     Output: MVec<B, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
@@ -366,8 +366,8 @@ where
     B: Backend,
     Left: MIter<B>,
     Right: MIter<B>,
-    ZipperOp: op::BinaryOp2<B, Left::Item, Right::Item>,
-    ReduceOp: op::BinaryOp1<B, ZipperOp::Output>,
+    ZipperOp: op::BinaryOp<B, Left::Item, Right::Item>,
+    ReduceOp: op::ReductionOp<B, ZipperOp::Output>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -389,7 +389,7 @@ pub fn is_partitioned<B, Input, Pred>(
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::is_partitioned_dispatch(source, exec.policy(), pred)
@@ -404,7 +404,7 @@ pub fn is_sorted<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::is_sorted_dispatch(source, exec.policy(), less)
@@ -419,7 +419,7 @@ pub fn is_sorted_until<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::is_sorted_until_dispatch(source, exec.policy(), less)
@@ -436,7 +436,7 @@ where
     B: Backend,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
-    Less: op::PredicateOp2<B, Left::Item>,
+    Less: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -458,7 +458,7 @@ pub fn lower_bound<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::lower_bound_dispatch(source, exec.policy(), value, less)
@@ -473,7 +473,7 @@ pub fn max_element<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::max_element_dispatch(source, exec.policy(), less)
@@ -491,7 +491,7 @@ where
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
-    Less: op::PredicateOp2<B, Left::Item>,
+    Less: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -513,7 +513,7 @@ where
     RightKeys: MIter<B, Item = LeftKeys::Item>,
     LeftValues: MIter<B>,
     RightValues: MIter<B, Item = LeftValues::Item>,
-    Less: op::PredicateOp2<B, LeftKeys::Item>,
+    Less: op::BinaryPredicateOp<B, LeftKeys::Item>,
     KeyOutput: MVec<B, Item = LeftKeys::Item>,
     ValueOutput: MVec<B, Item = LeftValues::Item>,
 {
@@ -539,7 +539,7 @@ pub fn min_element<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::min_element_dispatch(source, exec.policy(), less)
@@ -554,7 +554,7 @@ pub fn minmax_element<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::minmax_element_dispatch(source, exec.policy(), less)
@@ -571,7 +571,7 @@ where
     B: Backend,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
-    Eq: op::PredicateOp2<B, Left::Item>,
+    Eq: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -583,7 +583,7 @@ pub fn none_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) ->
 where
     B: Backend,
     Input: MIter<B>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::none_of_dispatch(source, exec.policy(), pred)
@@ -599,7 +599,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::partition_dispatch(source, exec.policy(), pred)
@@ -615,7 +615,7 @@ pub fn reduce<B, Input, Op>(
 where
     B: Backend,
     Input: MIter<B>,
-    Op: op::BinaryOp1<B, Input::Item>,
+    Op: op::ReductionOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::reduce_dispatch(source, exec.policy(), init, op)
@@ -634,8 +634,8 @@ where
     B: Backend,
     Keys: MIter<B>,
     Values: MIter<B>,
-    KeyEq: op::PredicateOp2<B, Keys::Item>,
-    Op: op::BinaryOp1<B, Values::Item>,
+    KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
+    Op: op::ReductionOp<B, Values::Item>,
     KeyOutput: MVec<B, Item = Keys::Item>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
@@ -661,7 +661,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp1<B, Input::Item>,
+    Pred: op::PredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::remove_if_dispatch(source, exec.policy(), pred)
@@ -763,7 +763,7 @@ where
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
-    Less: op::PredicateOp2<B, Left::Item>,
+    Less: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -782,7 +782,7 @@ where
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
-    Less: op::PredicateOp2<B, Left::Item>,
+    Less: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -801,7 +801,7 @@ where
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
-    Less: op::PredicateOp2<B, Left::Item>,
+    Less: op::BinaryPredicateOp<B, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -818,7 +818,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::sort_dispatch(source, exec.policy(), less)
@@ -835,7 +835,7 @@ where
     B: Backend,
     Keys: MIter<B>,
     Values: MIter<B>,
-    Less: op::PredicateOp2<B, Keys::Item>,
+    Less: op::BinaryPredicateOp<B, Keys::Item>,
     KeyOutput: MVec<B, Item = Keys::Item>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
@@ -854,7 +854,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     sort(exec, source, less)
 }
@@ -870,7 +870,7 @@ where
     B: Backend,
     Keys: MIter<B>,
     Values: MIter<B>,
-    Less: op::PredicateOp2<B, Keys::Item>,
+    Less: op::BinaryPredicateOp<B, Keys::Item>,
     KeyOutput: MVec<B, Item = Keys::Item>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
@@ -903,7 +903,7 @@ where
     B: Backend,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp2<B, Input::Item>,
+    Pred: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::unique_dispatch(source, exec.policy(), pred)
@@ -920,7 +920,7 @@ where
     B: Backend,
     Keys: MIter<B>,
     Values: MIter<B>,
-    Eq: op::PredicateOp2<B, Keys::Item>,
+    Eq: op::BinaryPredicateOp<B, Keys::Item>,
     KeyOutput: MVec<B, Item = Keys::Item>,
     ValueOutput: MVec<B, Item = Values::Item>,
 {
@@ -939,7 +939,7 @@ pub fn upper_bound<B, Input, Less>(
 where
     B: Backend,
     Input: MIter<B>,
-    Less: op::PredicateOp2<B, Input::Item>,
+    Less: op::BinaryPredicateOp<B, Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<B>>::upper_bound_dispatch(source, exec.policy(), value, less)

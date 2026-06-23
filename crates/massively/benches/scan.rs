@@ -3,7 +3,7 @@ mod common;
 use common::{Backend, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::op::{BinaryOp1, PredicateOp2};
+use massively::op::{BinaryPredicateOp, ReductionOp};
 use massively::{
     DeviceVec, Executor, Wgpu, exclusive_scan_by_key, inclusive_scan, inclusive_scan_by_key,
 };
@@ -11,7 +11,7 @@ use massively::{
 struct Sum;
 
 #[cubecl::cube]
-impl BinaryOp1<Wgpu, (f32,)> for Sum {
+impl ReductionOp<Wgpu, (f32,)> for Sum {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
@@ -20,7 +20,7 @@ impl BinaryOp1<Wgpu, (f32,)> for Sum {
 struct KeyEq;
 
 #[cubecl::cube]
-impl PredicateOp2<Wgpu, (u32,)> for KeyEq {
+impl BinaryPredicateOp<Wgpu, (u32,)> for KeyEq {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 == rhs.0
     }

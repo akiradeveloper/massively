@@ -13,13 +13,13 @@
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::PredicateOp1;
+use massively::op::PredicateOp;
 use massively::{DeviceVec, Executor, SoA1, Wgpu, count_if};
 
 struct PassingScore;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (u32,)> for PassingScore
+impl<B> PredicateOp<B, (u32,)> for PassingScore
 where
     B: massively::Backend,
 {
@@ -28,7 +28,10 @@ where
     }
 }
 
-fn solve(exec: &Executor<Wgpu>, score: DeviceVec<Wgpu, u32>) -> common::Result<usize> {
+fn solve<B>(exec: &Executor<B>, score: DeviceVec<B, u32>) -> common::Result<usize>
+where
+    B: massively::Backend,
+{
     count_if(exec, SoA1(score.slice(..)), PassingScore)
 }
 

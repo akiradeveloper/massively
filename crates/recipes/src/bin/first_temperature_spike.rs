@@ -14,13 +14,13 @@
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::PredicateOp2;
+use massively::op::BinaryPredicateOp;
 use massively::{DeviceVec, Executor, SoA1, Wgpu, adjacent_find};
 
 struct TemperatureSpike;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (f32,)> for TemperatureSpike
+impl<B> BinaryPredicateOp<B, (f32,)> for TemperatureSpike
 where
     B: massively::Backend,
 {
@@ -29,10 +29,10 @@ where
     }
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    temperature: DeviceVec<Wgpu, f32>,
-) -> common::Result<Option<usize>> {
+fn solve<B>(exec: &Executor<B>, temperature: DeviceVec<B, f32>) -> common::Result<Option<usize>>
+where
+    B: massively::Backend,
+{
     adjacent_find(exec, SoA1(temperature.slice(..)), TemperatureSpike)
 }
 

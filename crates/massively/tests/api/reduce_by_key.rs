@@ -70,27 +70,3 @@ fn reduce_by_key_accepts_three_tuple_values() {
     assert_eq!(exec.to_host(&b).unwrap(), vec![30, 120]);
     assert_eq!(exec.to_host(&c).unwrap(), vec![300.0, 1200.0]);
 }
-
-#[cfg(any())]
-#[test]
-fn reduce_by_key_accepts_tuple_keys() {
-    let exec = exec();
-    let key_a = exec.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 2.0]).unwrap();
-    let key_b = exec.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
-    let values = exec.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
-
-    let (keys, values) = reduce_by_key(
-        &exec,
-        massively::SoA2(key_a.slice(..), key_b.slice(..)),
-        massively::SoA1(values.slice(..)),
-        MixedTupleEqual,
-        0_u32,
-        Sum,
-    )
-    .unwrap();
-    let (key_a, key_b) = keys;
-    let (values,) = values;
-    assert_eq!(exec.to_host(&key_a).unwrap(), vec![1.0, 2.0, 2.0]);
-    assert_eq!(exec.to_host(&key_b).unwrap(), vec![10, 20, 30]);
-    assert_eq!(exec.to_host(&values).unwrap(), vec![3, 7, 5]);
-}

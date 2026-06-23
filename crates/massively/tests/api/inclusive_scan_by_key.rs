@@ -1,25 +1,5 @@
 use crate::common::*;
 
-#[cfg(any())]
-#[test]
-fn inclusive_scan_by_key_accepts_tuple_keys() {
-    let exec = exec();
-    let key_a = exec.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 2.0]).unwrap();
-    let key_b = exec.to_device(&[10_u32, 10, 20, 20, 30]).unwrap();
-    let values = exec.to_device(&[1_u32, 2, 3, 4, 5]).unwrap();
-
-    let output = inclusive_scan_by_key(
-        &exec,
-        massively::SoA2(key_a.slice(..), key_b.slice(..)),
-        massively::SoA1(values.slice(..)),
-        MixedTupleEqual,
-        Sum,
-    )
-    .unwrap();
-    let (output,) = output;
-    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 3, 7, 5]);
-}
-
 #[test]
 fn inclusive_scan_by_key_handles_block_boundary_runs() {
     let exec = exec();

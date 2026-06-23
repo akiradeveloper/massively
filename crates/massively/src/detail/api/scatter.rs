@@ -57,21 +57,45 @@ where
     indices.validate()?;
     super::ensure_same_len(values.len(), indices.len())?;
     super::ensure_same_len(values.len(), stencil.len())?;
-    let values = super::device_expr_collect_with_policy(policy, values)?;
-    let indices = super::device_expr_collect_with_policy(policy, indices)?;
     let flags = stencil.selection_handles_with_policy(policy, false)?;
     let initial = range::filled(policy, len, default)?;
-    let block_count = values.len.div_ceil(256);
+    let input_len = values.len();
+    let block_count = input_len.div_ceil(256);
     let block_count_u32 =
         u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
-    if values.len != 0 {
+    let value_bindings = values.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
+    let value_slot0 = value_bindings.slot_or_first(0);
+    let value_slot1 = value_bindings.slot_or_first(1);
+    let value_slot2 = value_bindings.slot_or_first(2);
+    let value_slot3 = value_bindings.slot_or_first(3);
+    let index_slot0 = index_bindings.slot_or_first(0);
+    let index_slot1 = index_bindings.slot_or_first(1);
+    let index_slot2 = index_bindings.slot_or_first(2);
+    let index_slot3 = index_bindings.slot_or_first(3);
+    let value_slot_offsets = value_bindings.slot_offsets_handle(policy.client())?;
+    let index_slot_offsets = index_bindings.slot_offsets_handle(policy.client())?;
+    if input_len != 0 {
         unsafe {
-            scatter_if_flags_kernel::launch_unchecked::<ValueSource::Item, ValueSource::Runtime>(
+            scatter_if_flags_kernel::launch_unchecked::<
+                ValueSource::Item,
+                ValueSource::Expr,
+                IndexSource::Expr,
+                ValueSource::Runtime,
+            >(
                 policy.client(),
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(256),
-                unsafe { BufferArg::from_raw_parts(values.handle.clone(), values.len) },
-                unsafe { BufferArg::from_raw_parts(indices.handle.clone(), indices.len) },
+                unsafe { BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(value_slot2.0.clone(), value_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(value_slot3.0.clone(), value_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(value_slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 4) },
                 unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
                 unsafe { BufferArg::from_raw_parts(initial.handle.clone(), initial.len) },
             );

@@ -3,13 +3,13 @@ mod common;
 use common::{Backend, SORT_SIZES, descending_f32, shuffled_u32, sync};
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::op::PredicateOp2;
+use massively::op::BinaryPredicateOp;
 use massively::{DeviceVec, Executor, Wgpu, sort_by_key};
 
 struct Less;
 
 #[cubecl::cube]
-impl PredicateOp2<Wgpu, (u32,)> for Less {
+impl BinaryPredicateOp<Wgpu, (u32,)> for Less {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
     }

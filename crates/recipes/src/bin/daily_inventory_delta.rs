@@ -15,18 +15,21 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, merge_by_key, reduce_by_key};
 
-struct Output {
-    sku: DeviceVec<Wgpu, u32>,
-    delta: DeviceVec<Wgpu, f32>,
+struct Output<B: massively::Backend> {
+    sku: DeviceVec<B, u32>,
+    delta: DeviceVec<B, f32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    left_sku: DeviceVec<Wgpu, u32>,
-    left_delta: DeviceVec<Wgpu, f32>,
-    right_sku: DeviceVec<Wgpu, u32>,
-    right_delta: DeviceVec<Wgpu, f32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    left_sku: DeviceVec<B, u32>,
+    left_delta: DeviceVec<B, f32>,
+    right_sku: DeviceVec<B, u32>,
+    right_delta: DeviceVec<B, f32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let ((sku,), (delta,)) = merge_by_key(
         exec,
         SoA1(left_sku.slice(..)),

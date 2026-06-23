@@ -40,17 +40,20 @@ where
     }
 }
 
-struct Output {
-    sku: DeviceVec<Wgpu, u32>,
-    urgency: DeviceVec<Wgpu, u32>,
+struct Output<B: massively::Backend> {
+    sku: DeviceVec<B, u32>,
+    urgency: DeviceVec<B, u32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    sku: DeviceVec<Wgpu, u32>,
-    stock: DeviceVec<Wgpu, u32>,
-    daily_sales: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    sku: DeviceVec<B, u32>,
+    stock: DeviceVec<B, u32>,
+    daily_sales: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (urgency,) = transform(
         exec,
         SoA2(stock.slice(..), daily_sales.slice(..)),

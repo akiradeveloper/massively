@@ -25,19 +25,6 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         None
     }
 
-    fn column_vec_inner<T: 'static>(
-        &self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-    ) -> Result<Option<crate::detail::DeviceVec<<B as Backend>::Runtime, T>>, Error>
-    where
-        T: super::Scalar,
-    {
-        Ok(self
-            .column_view_inner::<T>()?
-            .map(|view| view.materialize(policy))
-            .transpose()?)
-    }
-
     fn column_view_inner<T: 'static>(
         &self,
     ) -> Result<Option<crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, T>>, Error>
@@ -89,19 +76,19 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn sort_by_single_key_dispatch<K, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
+        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<B>,
         K: super::Scalar + 'static,
-        Less: op::PredicateOp2<B, (K,)>,
+        Less: op::BinaryPredicateOp<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
 
@@ -115,7 +102,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Values: MIter<B>,
         <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
     {
@@ -127,13 +114,13 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
+        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<B>,
         K: super::Scalar + 'static,
-        Eq: op::PredicateOp2<B, (K,)>,
+        Eq: op::BinaryPredicateOp<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
 
@@ -147,7 +134,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Values: MIter<B>,
         <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
     {
@@ -159,15 +146,15 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
+        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
         key_eq: KeyEq,
         op: Op,
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
         K: super::Scalar + 'static,
-        KeyEq: op::PredicateOp2<B, (K,)>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        KeyEq: op::BinaryPredicateOp<B, (K,)>,
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -181,8 +168,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Values: MIter<B>,
         <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
-        KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
-        Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+        KeyEq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
+        Op: op::ReductionOp<B, <Values as MIter<B>>::Item>,
         Output: MVec<B, Item = <Values as MIter<B>>::Item>,
     {
         Err(Error::Launch {
@@ -194,7 +181,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
+        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
         key_eq: KeyEq,
         _init: <Self as MIter<B>>::Item,
         op: Op,
@@ -202,8 +189,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         K: super::Scalar + 'static,
-        KeyEq: op::PredicateOp2<B, (K,)>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        KeyEq: op::BinaryPredicateOp<B, (K,)>,
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -218,8 +205,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Values: MIter<B>,
         <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
-        KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
-        Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+        KeyEq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
+        Op: op::ReductionOp<B, <Values as MIter<B>>::Item>,
         Output: MVec<B, Item = <Values as MIter<B>>::Item>,
     {
         Err(Error::Launch {
@@ -231,7 +218,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
+        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
         key_eq: KeyEq,
         _init: <Self as MIter<B>>::Item,
         op: Op,
@@ -239,8 +226,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         K: super::Scalar + 'static,
-        KeyEq: op::PredicateOp2<B, (K,)>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        KeyEq: op::BinaryPredicateOp<B, (K,)>,
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
 
@@ -256,8 +243,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Values: MIter<B>,
         <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
-        KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
-        Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
+        KeyEq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
+        Op: op::ReductionOp<B, <Values as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
     {
@@ -269,8 +256,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
         self,
         _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        left_keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
-        right_keys: &crate::detail::DeviceVec<<B as Backend>::Runtime, K>,
+        left_keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        right_keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
         _right_values: RightValues,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -278,7 +265,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
         K: super::Scalar + 'static,
-        Less: op::PredicateOp2<B, (K,)>,
+        Less: op::BinaryPredicateOp<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
     {
@@ -360,7 +347,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<<Self as MIter<B>>::Item, Error>
     where
         Self: MIter<B>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>;
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>;
 
     fn inclusive_scan_dispatch<Op, Output>(
         self,
@@ -369,7 +356,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn exclusive_scan_dispatch<Op, Output>(
@@ -380,7 +367,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn adjacent_difference_dispatch<Op, Output>(
@@ -390,7 +377,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
+        Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn copy_if_dispatch<Stencil, Output>(
@@ -410,7 +397,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn count_if_dispatch<Pred>(
@@ -420,7 +407,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<usize, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn all_of_dispatch<Pred>(
         self,
@@ -429,7 +416,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn any_of_dispatch<Pred>(
         self,
@@ -438,7 +425,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn none_of_dispatch<Pred>(
         self,
@@ -447,7 +434,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn find_if_dispatch<Pred>(
         self,
@@ -456,7 +443,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn partition_dispatch<Pred, Output>(
         self,
@@ -465,7 +452,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<(Output, Output), Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn is_partitioned_dispatch<Pred>(
@@ -475,7 +462,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>;
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn replace_if_dispatch<Stencil, Output>(
         self,
@@ -496,7 +483,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<crate::detail::api::PrecomputedSelection<<B as Backend>::Runtime>, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp1<B, <Self as MIter<B>>::Item>,
+        Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "stencil is not supported for this iterator shape".to_string(),
@@ -510,7 +497,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Pred: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn min_element_dispatch<Less>(
@@ -520,7 +507,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn max_element_dispatch<Less>(
         self,
@@ -529,7 +516,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn minmax_element_dispatch<Less>(
         self,
@@ -538,7 +525,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<(usize, usize)>, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn adjacent_find_dispatch<Pred>(
         self,
@@ -547,7 +534,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<B>,
-        Pred: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Pred: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn equal_dispatch<Right, Eq>(
         self,
@@ -558,7 +545,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "equal is not supported for this iterator shape".to_string(),
@@ -574,7 +561,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "mismatch is not supported for this iterator shape".to_string(),
@@ -590,7 +577,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Needles: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "find_first_of is not supported for this iterator shape".to_string(),
@@ -605,7 +592,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<usize, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn upper_bound_dispatch<Less>(
         self,
@@ -615,7 +602,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<usize, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn equal_range_dispatch<Less>(
         self,
@@ -625,7 +612,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<(usize, usize), Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn is_sorted_until_dispatch<Less>(
         self,
@@ -634,7 +621,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<usize, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn is_sorted_dispatch<Less>(
         self,
@@ -643,7 +630,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>;
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>;
 
     fn lexicographical_compare_dispatch<Right, Less>(
         self,
@@ -654,7 +641,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "lexicographical_compare is not supported for this iterator shape".to_string(),
@@ -671,7 +658,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "merge is not supported for this iterator shape".to_string(),
@@ -688,7 +675,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "set_union is not supported for this iterator shape".to_string(),
@@ -705,7 +692,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "set_intersection is not supported for this iterator shape".to_string(),
@@ -722,7 +709,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Right: MIter<B, Item = <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "set_difference is not supported for this iterator shape".to_string(),
@@ -741,9 +728,9 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         Self: MIter<B>,
         Right: MIter<B>,
         TransformOp:
-            op::BinaryOp2<B, <Self as MIter<B>>::Item, <Right as MIter<B>>::Item, Output = Output>,
+            op::BinaryOp<B, <Self as MIter<B>>::Item, <Right as MIter<B>>::Item, Output = Output>,
         Output: super::MItem<B>,
-        ReduceOp: op::BinaryOp1<B, Output>,
+        ReduceOp: op::ReductionOp<B, Output>,
     {
         Err(Error::Launch {
             message: "inner_product is not supported for this iterator shape".to_string(),
@@ -758,7 +745,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "equal is not supported for this iterator shape".to_string(),
@@ -773,7 +760,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<B>,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "mismatch is not supported for this iterator shape".to_string(),
@@ -788,7 +775,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<B>,
-        Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Eq: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "find_first_of is not supported for this iterator shape".to_string(),
@@ -803,7 +790,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<B>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "lexicographical_compare is not supported for this iterator shape".to_string(),
@@ -819,7 +806,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "merge is not supported for this iterator shape".to_string(),
@@ -835,7 +822,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "set_union is not supported for this iterator shape".to_string(),
@@ -851,7 +838,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "set_intersection is not supported for this iterator shape".to_string(),
@@ -867,7 +854,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "set_difference is not supported for this iterator shape".to_string(),
@@ -885,9 +872,9 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     where
         Self: MIter<B>,
         TransformOp:
-            op::BinaryOp2<B, <Self as MIter<B>>::Item, <Self as MIter<B>>::Item, Output = Output>,
+            op::BinaryOp<B, <Self as MIter<B>>::Item, <Self as MIter<B>>::Item, Output = Output>,
         Output: super::MItem<B>,
-        ReduceOp: op::BinaryOp1<B, Output>,
+        ReduceOp: op::ReductionOp<B, Output>,
     {
         Err(Error::Launch {
             message: "inner_product is not supported for this iterator shape".to_string(),
@@ -908,7 +895,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
         LeftValues: MIter<B>,
         RightValues: MIter<B, Item = <LeftValues as MIter<B>>::Item>,
         <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
-        Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
+        Less: op::BinaryPredicateOp<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <LeftValues as MIter<B>>::Item>,
     {
@@ -981,7 +968,7 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
     ) -> Result<Self, Error>
     where
         Self: super::MItem<B>,
-        Op: op::BinaryOp1<B, Self>,
+        Op: op::ReductionOp<B, Self>,
     {
         let _ = (policy, input, init, op);
         Err(Error::Launch {
@@ -1001,9 +988,9 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
         Self: super::MItem<B>,
         LeftIter: MIter<B, Item = Self>,
         RightIter: MIter<B>,
-        TransformOp: op::BinaryOp2<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
+        TransformOp: op::BinaryOp<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
         Output: super::MItem<B>,
-        ReduceOp: op::BinaryOp1<B, Output>,
+        ReduceOp: op::ReductionOp<B, Output>,
     {
         let _ = (policy, left, right, transform_op, init, reduce_op);
         Err(Error::Launch {
@@ -1031,9 +1018,9 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
         LeftScalar: super::Scalar + 'static,
         LeftIter: MIter<B, Item = (LeftScalar,)>,
         RightIter: MIter<B, Item = Self>,
-        TransformOp: op::BinaryOp2<B, (LeftScalar,), Self, Output = Output>,
+        TransformOp: op::BinaryOp<B, (LeftScalar,), Self, Output = Output>,
         Output: super::MItem<B>,
-        ReduceOp: op::BinaryOp1<B, Output>,
+        ReduceOp: op::ReductionOp<B, Output>,
     {
         let _ = (policy, left, right, transform_op, init, reduce_op);
         Err(Error::Launch {

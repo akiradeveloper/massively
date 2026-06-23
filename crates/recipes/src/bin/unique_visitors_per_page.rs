@@ -15,13 +15,13 @@
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::PredicateOp2;
+use massively::op::BinaryPredicateOp;
 use massively::{DeviceVec, Executor, SoA1, SoA2, Wgpu, reduce_by_key, sort, unique};
 
 struct LessVisitPair;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32, u32)> for LessVisitPair
+impl<B> BinaryPredicateOp<B, (u32, u32)> for LessVisitPair
 where
     B: massively::Backend,
 {
@@ -33,7 +33,7 @@ where
 struct EqualVisitPair;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32, u32)> for EqualVisitPair
+impl<B> BinaryPredicateOp<B, (u32, u32)> for EqualVisitPair
 where
     B: massively::Backend,
 {
@@ -42,16 +42,19 @@ where
     }
 }
 
-struct Output {
-    page_id: DeviceVec<Wgpu, u32>,
-    unique_count: DeviceVec<Wgpu, u32>,
+struct Output<B: massively::Backend> {
+    page_id: DeviceVec<B, u32>,
+    unique_count: DeviceVec<B, u32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    page_id: DeviceVec<Wgpu, u32>,
-    user_id: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    page_id: DeviceVec<B, u32>,
+    user_id: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (page_id, user_id) = sort(
         exec,
         SoA2(page_id.slice(..), user_id.slice(..)),

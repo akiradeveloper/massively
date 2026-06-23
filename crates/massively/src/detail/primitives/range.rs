@@ -91,6 +91,7 @@ where
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
+#[allow(dead_code)]
 pub(crate) fn concat_device_with_policy<R, T>(
     policy: &CubePolicy<R>,
     left: &DeviceVec<R, T>,
@@ -296,6 +297,7 @@ where
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
+#[allow(dead_code)]
 pub(crate) fn gather_device_with_policy<R, T>(
     policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,

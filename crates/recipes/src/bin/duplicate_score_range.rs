@@ -15,11 +15,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, equal_range};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    score: DeviceVec<Wgpu, u32>,
+fn solve<B>(
+    exec: &Executor<B>,
+    score: DeviceVec<B, u32>,
     target: u32,
-) -> common::Result<(usize, usize)> {
+) -> common::Result<(usize, usize)>
+where
+    B: massively::Backend,
+{
     equal_range(exec, SoA1(score.slice(..)), (target,), common::LessU32)
 }
 
