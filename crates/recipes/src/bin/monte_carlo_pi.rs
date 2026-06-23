@@ -24,7 +24,10 @@ use massively::{Executor, SoA1, Wgpu, reduce, transform};
 struct Index;
 
 #[cubecl::cube]
-impl TabulateOp<Wgpu, u32> for Index {
+impl<B> TabulateOp<B, u32> for Index
+where
+    B: massively::Backend,
+{
     fn apply(index: u32) -> u32 {
         index
     }
@@ -52,7 +55,10 @@ where
     }
 }
 
-fn solve(exec: &Executor<Wgpu>, samples: usize) -> common::Result<f32> {
+fn solve<B>(exec: &Executor<B>, samples: usize) -> common::Result<f32>
+where
+    B: massively::Backend,
+{
     let indices = exec.tabulate(samples, Index)?;
     let (inside,) = transform(exec, SoA1(indices.slice(..)), InsideQuarterCircle)?;
     let (hits,) = reduce(exec, SoA1(inside.slice(..)), (0_u32,), common::SumU32)?;

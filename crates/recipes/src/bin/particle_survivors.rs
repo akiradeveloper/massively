@@ -14,7 +14,7 @@
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::{PredicateOp1, UnaryOp};
+use massively::op::{PredicateOp, UnaryOp};
 use massively::{DeviceVec, Executor, SoA3, Wgpu, remove_if, transform};
 
 struct AdvanceParticle;
@@ -36,7 +36,7 @@ where
 struct OutsideParticleBox;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (f32, f32, f32)> for OutsideParticleBox
+impl<B> PredicateOp<B, (f32, f32, f32)> for OutsideParticleBox
 where
     B: massively::Backend,
 {
@@ -45,18 +45,21 @@ where
     }
 }
 
-struct Output {
-    x: DeviceVec<Wgpu, f32>,
-    y: DeviceVec<Wgpu, f32>,
-    vx: DeviceVec<Wgpu, f32>,
+struct Output<B: massively::Backend> {
+    x: DeviceVec<B, f32>,
+    y: DeviceVec<B, f32>,
+    vx: DeviceVec<B, f32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    x: DeviceVec<Wgpu, f32>,
-    y: DeviceVec<Wgpu, f32>,
-    vx: DeviceVec<Wgpu, f32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    x: DeviceVec<B, f32>,
+    y: DeviceVec<B, f32>,
+    vx: DeviceVec<B, f32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (x, y, vx) = transform(
         exec,
         SoA3(x.slice(..), y.slice(..), vx.slice(..)),

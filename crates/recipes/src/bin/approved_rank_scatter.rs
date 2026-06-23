@@ -15,13 +15,16 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, scatter_if};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    item_id: DeviceVec<Wgpu, u32>,
-    slot: DeviceVec<Wgpu, u32>,
-    approved: DeviceVec<Wgpu, u32>,
+fn solve<B>(
+    exec: &Executor<B>,
+    item_id: DeviceVec<B, u32>,
+    slot: DeviceVec<B, u32>,
+    approved: DeviceVec<B, u32>,
     len: usize,
-) -> common::Result<DeviceVec<Wgpu, u32>> {
+) -> common::Result<DeviceVec<B, u32>>
+where
+    B: massively::Backend,
+{
     let (out,) = scatter_if(
         exec,
         SoA1(item_id.slice(..)),

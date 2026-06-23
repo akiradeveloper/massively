@@ -14,11 +14,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, set_union};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    left: DeviceVec<Wgpu, u32>,
-    right: DeviceVec<Wgpu, u32>,
-) -> common::Result<DeviceVec<Wgpu, u32>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    left: DeviceVec<B, u32>,
+    right: DeviceVec<B, u32>,
+) -> common::Result<DeviceVec<B, u32>>
+where
+    B: massively::Backend,
+{
     let (out,) = set_union(
         exec,
         SoA1(left.slice(..)),

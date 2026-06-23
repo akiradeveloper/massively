@@ -1,5 +1,5 @@
 use crate::{
-    detail::op::kernel::{BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp},
+    detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp},
     expr::{DeviceGpuExpr, GpuExpr},
 };
 use cubecl::prelude::*;
@@ -191,76 +191,154 @@ define_transform_tuple_to_tuple_kernel!(
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 
-macro_rules! define_tuple_predicate_flags_kernel {
-    (
-        $fn_name:ident,
-        ($( $ty:ident : $input:ident ),+)
-    ) => {
-        #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp1<($( $ty, )+)>>(
-            $( $input: &[$ty], )+
-            len: &[u32],
-            invert: &[u32],
-            flags: &mut [u32],
-        ) {
-            let unit = UNIT_POS as usize;
-            let cube_dim = 256usize;
-            let global = (CUBE_POS as usize) * cube_dim + unit;
-            if global < (len[0] as usize) {
-                let selected = Pred::apply((
-                    $( $input[global], )+
-                ));
-                if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
-                    flags[global] = 1u32;
-                } else {
-                    flags[global] = 0u32;
-                }
-            }
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple2_predicate_device_expr_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    ExprA: DeviceGpuExpr<TyA>,
+    ExprB: DeviceGpuExpr<TyB>,
+    Pred: PredicateOp<(TyA, TyB)>,
+>(
+    input_a_slot0: &[TyA],
+    input_a_slot1: &[TyA],
+    input_a_slot2: &[TyA],
+    input_a_slot3: &[TyA],
+    input_a_slot_offsets: &[u32],
+    input_b_slot0: &[TyB],
+    input_b_slot1: &[TyB],
+    input_b_slot2: &[TyB],
+    input_b_slot3: &[TyB],
+    input_b_slot_offsets: &[u32],
+    len: &[u32],
+    invert: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply((
+            ExprA::eval(
+                input_a_slot0,
+                input_a_slot1,
+                input_a_slot2,
+                input_a_slot3,
+                input_a_slot_offsets,
+                global,
+            ),
+            ExprB::eval(
+                input_b_slot0,
+                input_b_slot1,
+                input_b_slot2,
+                input_b_slot3,
+                input_b_slot_offsets,
+                global,
+            ),
+        ));
+        if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
+            flags[global] = 1u32;
+        } else {
+            flags[global] = 0u32;
         }
-    };
+    }
 }
 
-define_tuple_predicate_flags_kernel!(tuple2_predicate_flags_kernel, (TyA: input_a, TyB: input_b));
-define_tuple_predicate_flags_kernel!(
-    tuple3_predicate_flags_kernel,
-    (TyA: input_a, TyB: input_b, TyC: input_c)
-);
-
-macro_rules! define_tuple_adjacent_flags_kernel {
-    (
-        $fn_name:ident,
-        ($( $ty:ident : $input:ident ),+)
-    ) => {
-        #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp2<($( $ty, )+)>>(
-            $( $input: &[$ty], )+
-            flags: &mut [u32],
-        ) {
-            let unit = UNIT_POS as usize;
-            let cube_dim = 256usize;
-            let global = (CUBE_POS as usize) * cube_dim + unit;
-            if global + 1usize < flags.len() {
-                if Pred::apply(($( $input[global], )+), ($( $input[global + 1usize], )+)) {
-                    flags[global] = 1u32;
-                } else {
-                    flags[global] = 0u32;
-                }
-            }
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple3_predicate_device_expr_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    ExprA: DeviceGpuExpr<TyA>,
+    ExprB: DeviceGpuExpr<TyB>,
+    ExprC: DeviceGpuExpr<TyC>,
+    Pred: PredicateOp<(TyA, TyB, TyC)>,
+>(
+    input_a_slot0: &[TyA],
+    input_a_slot1: &[TyA],
+    input_a_slot2: &[TyA],
+    input_a_slot3: &[TyA],
+    input_a_slot_offsets: &[u32],
+    input_b_slot0: &[TyB],
+    input_b_slot1: &[TyB],
+    input_b_slot2: &[TyB],
+    input_b_slot3: &[TyB],
+    input_b_slot_offsets: &[u32],
+    input_c_slot0: &[TyC],
+    input_c_slot1: &[TyC],
+    input_c_slot2: &[TyC],
+    input_c_slot3: &[TyC],
+    input_c_slot_offsets: &[u32],
+    len: &[u32],
+    invert: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply((
+            ExprA::eval(
+                input_a_slot0,
+                input_a_slot1,
+                input_a_slot2,
+                input_a_slot3,
+                input_a_slot_offsets,
+                global,
+            ),
+            ExprB::eval(
+                input_b_slot0,
+                input_b_slot1,
+                input_b_slot2,
+                input_b_slot3,
+                input_b_slot_offsets,
+                global,
+            ),
+            ExprC::eval(
+                input_c_slot0,
+                input_c_slot1,
+                input_c_slot2,
+                input_c_slot3,
+                input_c_slot_offsets,
+                global,
+            ),
+        ));
+        if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
+            flags[global] = 1u32;
+        } else {
+            flags[global] = 0u32;
         }
-    };
+    }
 }
 
-define_tuple_adjacent_flags_kernel!(tuple2_adjacent_flags_kernel, (TyA: input_a, TyB: input_b));
-define_tuple_adjacent_flags_kernel!(tuple3_adjacent_flags_kernel, (TyA: input_a, TyB: input_b, TyC: input_c));
-
-macro_rules! define_tuple_unique_flags_kernel {
+macro_rules! define_tuple_unique_device_expr_flags_kernel {
     (
         $fn_name:ident,
-        ($( $ty:ident : $input:ident ),+)
+        ($first_ty:ident : $first_expr:ident :
+            $first_slot0:ident, $first_slot1:ident, $first_slot2:ident, $first_slot3:ident, $first_offsets:ident
+        $(, $ty:ident : $expr:ident :
+            $slot0:ident, $slot1:ident, $slot2:ident, $slot3:ident, $offsets:ident
+        )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Pred: PredicateOp2<($( $ty, )+)>>(
-            $( $input: &[$ty], )+
+        pub(crate) fn $fn_name<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Pred: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
             flags: &mut [u32],
         ) {
             let unit = UNIT_POS as usize;
@@ -269,7 +347,41 @@ macro_rules! define_tuple_unique_flags_kernel {
             if global < flags.len() {
                 if global == 0usize {
                     flags[global] = 1u32;
-                } else if Pred::apply(($( $input[global - 1usize], )+), ($( $input[global], )+)) {
+                } else if Pred::apply(
+                    (
+                        $first_expr::eval(
+                            $first_slot0,
+                            $first_slot1,
+                            $first_slot2,
+                            $first_slot3,
+                            $first_offsets,
+                            global - 1usize,
+                        ),
+                        $(
+                            $expr::eval(
+                                $slot0,
+                                $slot1,
+                                $slot2,
+                                $slot3,
+                                $offsets,
+                                global - 1usize,
+                            ),
+                        )*
+                    ),
+                    (
+                        $first_expr::eval(
+                            $first_slot0,
+                            $first_slot1,
+                            $first_slot2,
+                            $first_slot3,
+                            $first_offsets,
+                            global,
+                        ),
+                        $(
+                            $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, global),
+                        )*
+                    ),
+                ) {
                     flags[global] = 0u32;
                 } else {
                     flags[global] = 1u32;
@@ -279,25 +391,115 @@ macro_rules! define_tuple_unique_flags_kernel {
     };
 }
 
-define_tuple_unique_flags_kernel!(tuple2_unique_flags_kernel, (TyA: input_a, TyB: input_b));
-define_tuple_unique_flags_kernel!(tuple3_unique_flags_kernel, (TyA: input_a, TyB: input_b, TyC: input_c));
+define_tuple_unique_device_expr_flags_kernel!(
+    tuple2_unique_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets)
+);
+define_tuple_unique_device_expr_flags_kernel!(
+    tuple3_unique_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets)
+);
 
-macro_rules! define_tuple_mismatch_flags_kernel {
+macro_rules! define_tuple_mismatch_device_expr_flags_kernel {
     (
         $fn_name:ident,
-        ($( $ty:ident : $left:ident / $right:ident ),+)
+        ($first_ty:ident : $first_left_expr:ident / $first_right_expr:ident :
+            $first_left_slot0:ident, $first_left_slot1:ident, $first_left_slot2:ident, $first_left_slot3:ident, $first_left_offsets:ident /
+            $first_right_slot0:ident, $first_right_slot1:ident, $first_right_slot2:ident, $first_right_slot3:ident, $first_right_offsets:ident
+        $(, $ty:ident : $left_expr:ident / $right_expr:ident :
+            $left_slot0:ident, $left_slot1:ident, $left_slot2:ident, $left_slot3:ident, $left_offsets:ident /
+            $right_slot0:ident, $right_slot1:ident, $right_slot2:ident, $right_slot3:ident, $right_offsets:ident
+        )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Eq: PredicateOp2<($( $ty, )+)>>(
-            $( $left: &[$ty], )+
-            $( $right: &[$ty], )+
+        pub(crate) fn $fn_name<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_left_expr: DeviceGpuExpr<$first_ty>,
+            $first_right_expr: DeviceGpuExpr<$first_ty>,
+            $( $left_expr: DeviceGpuExpr<$ty>, $right_expr: DeviceGpuExpr<$ty>, )*
+            Eq: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_left_slot0: &[$first_ty],
+            $first_left_slot1: &[$first_ty],
+            $first_left_slot2: &[$first_ty],
+            $first_left_slot3: &[$first_ty],
+            $first_left_offsets: &[u32],
+            $(
+                $left_slot0: &[$ty],
+                $left_slot1: &[$ty],
+                $left_slot2: &[$ty],
+                $left_slot3: &[$ty],
+                $left_offsets: &[u32],
+            )*
+            $first_right_slot0: &[$first_ty],
+            $first_right_slot1: &[$first_ty],
+            $first_right_slot2: &[$first_ty],
+            $first_right_slot3: &[$first_ty],
+            $first_right_offsets: &[u32],
+            $(
+                $right_slot0: &[$ty],
+                $right_slot1: &[$ty],
+                $right_slot2: &[$ty],
+                $right_slot3: &[$ty],
+                $right_offsets: &[u32],
+            )*
             flags: &mut [u32],
         ) {
             let unit = UNIT_POS as usize;
             let cube_dim = 256usize;
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < flags.len() {
-                if Eq::apply(($( $left[global], )+), ($( $right[global], )+)) {
+                if Eq::apply(
+                    (
+                        $first_left_expr::eval(
+                            $first_left_slot0,
+                            $first_left_slot1,
+                            $first_left_slot2,
+                            $first_left_slot3,
+                            $first_left_offsets,
+                            global,
+                        ),
+                        $(
+                            $left_expr::eval(
+                                $left_slot0,
+                                $left_slot1,
+                                $left_slot2,
+                                $left_slot3,
+                                $left_offsets,
+                                global,
+                            ),
+                        )*
+                    ),
+                    (
+                        $first_right_expr::eval(
+                            $first_right_slot0,
+                            $first_right_slot1,
+                            $first_right_slot2,
+                            $first_right_slot3,
+                            $first_right_offsets,
+                            global,
+                        ),
+                        $(
+                            $right_expr::eval(
+                                $right_slot0,
+                                $right_slot1,
+                                $right_slot2,
+                                $right_slot3,
+                                $right_offsets,
+                                global,
+                            ),
+                        )*
+                    ),
+                ) {
                     flags[global] = 0u32;
                 } else {
                     flags[global] = 1u32;
@@ -307,17 +509,258 @@ macro_rules! define_tuple_mismatch_flags_kernel {
     };
 }
 
-define_tuple_mismatch_flags_kernel!(tuple2_mismatch_flags_kernel, (TyA: left_a / right_a, TyB: left_b / right_b));
-define_tuple_mismatch_flags_kernel!(tuple3_mismatch_flags_kernel, (TyA: left_a / right_a, TyB: left_b / right_b, TyC: left_c / right_c));
+define_tuple_mismatch_device_expr_flags_kernel!(
+    tuple2_mismatch_device_expr_flags_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets)
+);
+define_tuple_mismatch_device_expr_flags_kernel!(
+    tuple3_mismatch_device_expr_flags_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets)
+);
 
-macro_rules! define_tuple_sorted_break_flags_kernel {
+macro_rules! define_tuple_find_first_of_device_expr_flags_kernel {
     (
         $fn_name:ident,
-        ($( $ty:ident : $input:ident ),+)
+        ($first_ty:ident : $first_input_expr:ident / $first_needle_expr:ident :
+            $first_input_slot0:ident, $first_input_slot1:ident, $first_input_slot2:ident, $first_input_slot3:ident, $first_input_offsets:ident /
+            $first_needle_slot0:ident, $first_needle_slot1:ident, $first_needle_slot2:ident, $first_needle_slot3:ident, $first_needle_offsets:ident
+        $(, $ty:ident : $input_expr:ident / $needle_expr:ident :
+            $input_slot0:ident, $input_slot1:ident, $input_slot2:ident, $input_slot3:ident, $input_offsets:ident /
+            $needle_slot0:ident, $needle_slot1:ident, $needle_slot2:ident, $needle_slot3:ident, $needle_offsets:ident
+        )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
-            $( $input: &[$ty], )+
+        pub(crate) fn $fn_name<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_input_expr: DeviceGpuExpr<$first_ty>,
+            $first_needle_expr: DeviceGpuExpr<$first_ty>,
+            $( $input_expr: DeviceGpuExpr<$ty>, $needle_expr: DeviceGpuExpr<$ty>, )*
+            Eq: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_input_slot0: &[$first_ty],
+            $first_input_slot1: &[$first_ty],
+            $first_input_slot2: &[$first_ty],
+            $first_input_slot3: &[$first_ty],
+            $first_input_offsets: &[u32],
+            $(
+                $input_slot0: &[$ty],
+                $input_slot1: &[$ty],
+                $input_slot2: &[$ty],
+                $input_slot3: &[$ty],
+                $input_offsets: &[u32],
+            )*
+            $first_needle_slot0: &[$first_ty],
+            $first_needle_slot1: &[$first_ty],
+            $first_needle_slot2: &[$first_ty],
+            $first_needle_slot3: &[$first_ty],
+            $first_needle_offsets: &[u32],
+            $(
+                $needle_slot0: &[$ty],
+                $needle_slot1: &[$ty],
+                $needle_slot2: &[$ty],
+                $needle_slot3: &[$ty],
+                $needle_offsets: &[u32],
+            )*
+            needle_len: &[u32],
+            flags: &mut [u32],
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < flags.len() {
+                let needle = RuntimeCell::<usize>::new(0usize);
+                let found = RuntimeCell::<u32>::new(0u32);
+                while needle.read() < needle_len[0] as usize {
+                    if Eq::apply(
+                        (
+                            $first_input_expr::eval(
+                                $first_input_slot0,
+                                $first_input_slot1,
+                                $first_input_slot2,
+                                $first_input_slot3,
+                                $first_input_offsets,
+                                global,
+                            ),
+                            $(
+                                $input_expr::eval(
+                                    $input_slot0,
+                                    $input_slot1,
+                                    $input_slot2,
+                                    $input_slot3,
+                                    $input_offsets,
+                                    global,
+                                ),
+                            )*
+                        ),
+                        (
+                            $first_needle_expr::eval(
+                                $first_needle_slot0,
+                                $first_needle_slot1,
+                                $first_needle_slot2,
+                                $first_needle_slot3,
+                                $first_needle_offsets,
+                                needle.read(),
+                            ),
+                            $(
+                                $needle_expr::eval(
+                                    $needle_slot0,
+                                    $needle_slot1,
+                                    $needle_slot2,
+                                    $needle_slot3,
+                                    $needle_offsets,
+                                    needle.read(),
+                                ),
+                            )*
+                        ),
+                    ) {
+                        found.store(1u32);
+                        needle.store(needle_len[0] as usize);
+                    } else {
+                        needle.store(needle.read() + 1usize);
+                    }
+                }
+                flags[global] = found.read();
+            }
+        }
+    };
+}
+
+define_tuple_find_first_of_device_expr_flags_kernel!(
+    tuple2_find_first_of_device_expr_flags_kernel,
+    (TyA: InputAExpr / NeedleAExpr:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets /
+        needle_a_slot0, needle_a_slot1, needle_a_slot2, needle_a_slot3, needle_a_offsets,
+     TyB: InputBExpr / NeedleBExpr:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets /
+        needle_b_slot0, needle_b_slot1, needle_b_slot2, needle_b_slot3, needle_b_offsets)
+);
+define_tuple_find_first_of_device_expr_flags_kernel!(
+    tuple3_find_first_of_device_expr_flags_kernel,
+    (TyA: InputAExpr / NeedleAExpr:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets /
+        needle_a_slot0, needle_a_slot1, needle_a_slot2, needle_a_slot3, needle_a_offsets,
+     TyB: InputBExpr / NeedleBExpr:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets /
+        needle_b_slot0, needle_b_slot1, needle_b_slot2, needle_b_slot3, needle_b_offsets,
+     TyC: InputCExpr / NeedleCExpr:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets /
+        needle_c_slot0, needle_c_slot1, needle_c_slot2, needle_c_slot3, needle_c_offsets)
+);
+
+macro_rules! define_tuple_search_device_expr_kernels {
+    (
+        $adjacent_fn:ident,
+        $sorted_break_fn:ident,
+        $lower_fn:ident,
+        $upper_fn:ident,
+        ($first_ty:ident : $first_expr:ident :
+            $first_slot0:ident, $first_slot1:ident, $first_slot2:ident, $first_slot3:ident, $first_offsets:ident / $first_value:ident
+        $(, $ty:ident : $expr:ident :
+            $slot0:ident, $slot1:ident, $slot2:ident, $slot3:ident, $offsets:ident / $value:ident
+        )*)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $adjacent_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Pred: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
+            flags: &mut [u32],
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global + 1usize < flags.len() {
+                if Pred::apply(
+                    (
+                        $first_expr::eval(
+                            $first_slot0,
+                            $first_slot1,
+                            $first_slot2,
+                            $first_slot3,
+                            $first_offsets,
+                            global,
+                        ),
+                        $(
+                            $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, global),
+                        )*
+                    ),
+                    (
+                        $first_expr::eval(
+                            $first_slot0,
+                            $first_slot1,
+                            $first_slot2,
+                            $first_slot3,
+                            $first_offsets,
+                            global + 1usize,
+                        ),
+                        $(
+                            $expr::eval(
+                                $slot0,
+                                $slot1,
+                                $slot2,
+                                $slot3,
+                                $offsets,
+                                global + 1usize,
+                            ),
+                        )*
+                    ),
+                ) {
+                    flags[global] = 1u32;
+                } else {
+                    flags[global] = 0u32;
+                }
+            }
+        }
+
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $sorted_break_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
             flags: &mut [u32],
         ) {
             let unit = UNIT_POS as usize;
@@ -325,7 +768,41 @@ macro_rules! define_tuple_sorted_break_flags_kernel {
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < flags.len() {
                 if global > 0usize
-                    && Less::apply(($( $input[global], )+), ($( $input[global - 1usize], )+))
+                    && Less::apply(
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                global,
+                            ),
+                            $(
+                                $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, global),
+                            )*
+                        ),
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                global - 1usize,
+                            ),
+                            $(
+                                $expr::eval(
+                                    $slot0,
+                                    $slot1,
+                                    $slot2,
+                                    $slot3,
+                                    $offsets,
+                                    global - 1usize,
+                                ),
+                            )*
+                        ),
+                    )
                 {
                     flags[global] = 1u32;
                 } else {
@@ -333,22 +810,27 @@ macro_rules! define_tuple_sorted_break_flags_kernel {
                 }
             }
         }
-    };
-}
 
-define_tuple_sorted_break_flags_kernel!(tuple2_sorted_break_flags_kernel, (TyA: input_a, TyB: input_b));
-define_tuple_sorted_break_flags_kernel!(tuple3_sorted_break_flags_kernel, (TyA: input_a, TyB: input_b, TyC: input_c));
-
-macro_rules! define_tuple_bound_flags_kernel {
-    (
-        $lower_fn:ident,
-        $upper_fn:ident,
-        ($first_ty:ident : $first_input:ident / $first_value:ident $(, $ty:ident : $input:ident / $value:ident )*)
-    ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $lower_fn<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: PredicateOp2<($first_ty, $( $ty, )*)>>(
-            $first_input: &[$first_ty],
-            $( $input: &[$ty], )*
+        pub(crate) fn $lower_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
             $first_value: &[$first_ty],
             $( $value: &[$ty], )*
             flags: &mut [u32],
@@ -358,7 +840,19 @@ macro_rules! define_tuple_bound_flags_kernel {
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < flags.len() {
                 if Less::apply(
-                    ($first_input[global], $( $input[global], )*),
+                    (
+                        $first_expr::eval(
+                            $first_slot0,
+                            $first_slot1,
+                            $first_slot2,
+                            $first_slot3,
+                            $first_offsets,
+                            global,
+                        ),
+                        $(
+                            $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, global),
+                        )*
+                    ),
                     ($first_value[0], $( $value[0], )*),
                 ) {
                     flags[global] = 0u32;
@@ -369,9 +863,25 @@ macro_rules! define_tuple_bound_flags_kernel {
         }
 
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $upper_fn<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: PredicateOp2<($first_ty, $( $ty, )*)>>(
-            $first_input: &[$first_ty],
-            $( $input: &[$ty], )*
+        pub(crate) fn $upper_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
             $first_value: &[$first_ty],
             $( $value: &[$ty], )*
             flags: &mut [u32],
@@ -382,7 +892,19 @@ macro_rules! define_tuple_bound_flags_kernel {
             if global < flags.len() {
                 if Less::apply(
                     ($first_value[0], $( $value[0], )*),
-                    ($first_input[global], $( $input[global], )*),
+                    (
+                        $first_expr::eval(
+                            $first_slot0,
+                            $first_slot1,
+                            $first_slot2,
+                            $first_slot3,
+                            $first_offsets,
+                            global,
+                        ),
+                        $(
+                            $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, global),
+                        )*
+                    ),
                 ) {
                     flags[global] = 1u32;
                 } else {
@@ -393,20 +915,78 @@ macro_rules! define_tuple_bound_flags_kernel {
     };
 }
 
-define_tuple_bound_flags_kernel!(tuple2_lower_bound_flags_kernel, tuple2_upper_bound_flags_kernel, (TyA: input_a / value_a, TyB: input_b / value_b));
-define_tuple_bound_flags_kernel!(tuple3_lower_bound_flags_kernel, tuple3_upper_bound_flags_kernel, (TyA: input_a / value_a, TyB: input_b / value_b, TyC: input_c / value_c));
+define_tuple_search_device_expr_kernels!(
+    tuple2_adjacent_device_expr_flags_kernel,
+    tuple2_sorted_break_device_expr_flags_kernel,
+    tuple2_lower_bound_device_expr_flags_kernel,
+    tuple2_upper_bound_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets / value_a,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets / value_b)
+);
+define_tuple_search_device_expr_kernels!(
+    tuple3_adjacent_device_expr_flags_kernel,
+    tuple3_sorted_break_device_expr_flags_kernel,
+    tuple3_lower_bound_device_expr_flags_kernel,
+    tuple3_upper_bound_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets / value_a,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets / value_b,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c)
+);
 
-macro_rules! define_tuple_membership_flags_kernel {
+macro_rules! define_tuple_membership_device_expr_flags_kernel {
     (
         $fn_name:ident,
-        ($first_ty:ident : $first_candidate:ident / $first_sorted:ident $(, $ty:ident : $candidate:ident / $sorted:ident )*)
+        ($first_ty:ident : $first_expr:ident :
+            $first_candidate_slot0:ident, $first_candidate_slot1:ident, $first_candidate_slot2:ident, $first_candidate_slot3:ident, $first_candidate_offsets:ident /
+            $first_sorted_expr:ident :
+            $first_sorted_slot0:ident, $first_sorted_slot1:ident, $first_sorted_slot2:ident, $first_sorted_slot3:ident, $first_sorted_offsets:ident
+        $(, $ty:ident : $expr:ident :
+            $candidate_slot0:ident, $candidate_slot1:ident, $candidate_slot2:ident, $candidate_slot3:ident, $candidate_offsets:ident /
+            $sorted_expr:ident :
+            $sorted_slot0:ident, $sorted_slot1:ident, $sorted_slot2:ident, $sorted_slot3:ident, $sorted_offsets:ident
+        )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Less: PredicateOp2<($first_ty, $( $ty, )*)>>(
-            $first_candidate: &[$first_ty],
-            $( $candidate: &[$ty], )*
-            $first_sorted: &[$first_ty],
-            $( $sorted: &[$ty], )*
+        pub(crate) fn $fn_name<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            $first_sorted_expr: DeviceGpuExpr<$first_ty>,
+            $( $sorted_expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_candidate_slot0: &[$first_ty],
+            $first_candidate_slot1: &[$first_ty],
+            $first_candidate_slot2: &[$first_ty],
+            $first_candidate_slot3: &[$first_ty],
+            $first_candidate_offsets: &[u32],
+            $(
+                $candidate_slot0: &[$ty],
+                $candidate_slot1: &[$ty],
+                $candidate_slot2: &[$ty],
+                $candidate_slot3: &[$ty],
+                $candidate_offsets: &[u32],
+            )*
+            candidate_len: &[u32],
+            $first_sorted_slot0: &[$first_ty],
+            $first_sorted_slot1: &[$first_ty],
+            $first_sorted_slot2: &[$first_ty],
+            $first_sorted_slot3: &[$first_ty],
+            $first_sorted_offsets: &[u32],
+            $(
+                $sorted_slot0: &[$ty],
+                $sorted_slot1: &[$ty],
+                $sorted_slot2: &[$ty],
+                $sorted_slot3: &[$ty],
+                $sorted_offsets: &[u32],
+            )*
+            sorted_len: &[u32],
             keep_present: &[u32],
             flags: &mut [u32],
         ) {
@@ -414,15 +994,53 @@ macro_rules! define_tuple_membership_flags_kernel {
             let cube_dim = 256usize;
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < flags.len() {
+                let candidate_value = (
+                    $first_expr::eval(
+                        $first_candidate_slot0,
+                        $first_candidate_slot1,
+                        $first_candidate_slot2,
+                        $first_candidate_slot3,
+                        $first_candidate_offsets,
+                        global,
+                    ),
+                    $(
+                        $expr::eval(
+                            $candidate_slot0,
+                            $candidate_slot1,
+                            $candidate_slot2,
+                            $candidate_slot3,
+                            $candidate_offsets,
+                            global,
+                        ),
+                    )*
+                );
+
                 let candidate_first = RuntimeCell::<usize>::new(0usize);
-                let candidate_count = RuntimeCell::<usize>::new($first_candidate.len());
+                let candidate_count = RuntimeCell::<usize>::new(candidate_len[0] as usize);
                 while candidate_count.read() > 0usize {
                     let step = candidate_count.read() / 2usize;
                     let mid = candidate_first.read() + step;
-                    if Less::apply(
-                        ($first_candidate[mid], $( $candidate[mid], )*),
-                        ($first_candidate[global], $( $candidate[global], )*),
-                    ) {
+                    let mid_value = (
+                        $first_expr::eval(
+                            $first_candidate_slot0,
+                            $first_candidate_slot1,
+                            $first_candidate_slot2,
+                            $first_candidate_slot3,
+                            $first_candidate_offsets,
+                            mid,
+                        ),
+                        $(
+                            $expr::eval(
+                                $candidate_slot0,
+                                $candidate_slot1,
+                                $candidate_slot2,
+                                $candidate_slot3,
+                                $candidate_offsets,
+                                mid,
+                            ),
+                        )*
+                    );
+                    if Less::apply(mid_value, candidate_value) {
                         candidate_first.store(mid + 1usize);
                         candidate_count.store(candidate_count.read() - step - 1usize);
                     } else {
@@ -431,14 +1049,31 @@ macro_rules! define_tuple_membership_flags_kernel {
                 }
 
                 let sorted_first = RuntimeCell::<usize>::new(0usize);
-                let sorted_count = RuntimeCell::<usize>::new($first_sorted.len());
+                let sorted_count = RuntimeCell::<usize>::new(sorted_len[0] as usize);
                 while sorted_count.read() > 0usize {
                     let step = sorted_count.read() / 2usize;
                     let mid = sorted_first.read() + step;
-                    if Less::apply(
-                        ($first_sorted[mid], $( $sorted[mid], )*),
-                        ($first_candidate[global], $( $candidate[global], )*),
-                    ) {
+                    let sorted_value = (
+                        $first_sorted_expr::eval(
+                            $first_sorted_slot0,
+                            $first_sorted_slot1,
+                            $first_sorted_slot2,
+                            $first_sorted_slot3,
+                            $first_sorted_offsets,
+                            mid,
+                        ),
+                        $(
+                            $sorted_expr::eval(
+                                $sorted_slot0,
+                                $sorted_slot1,
+                                $sorted_slot2,
+                                $sorted_slot3,
+                                $sorted_offsets,
+                                mid,
+                            ),
+                        )*
+                    );
+                    if Less::apply(sorted_value, candidate_value) {
                         sorted_first.store(mid + 1usize);
                         sorted_count.store(sorted_count.read() - step - 1usize);
                     } else {
@@ -447,14 +1082,31 @@ macro_rules! define_tuple_membership_flags_kernel {
                 }
 
                 let sorted_after = RuntimeCell::<usize>::new(0usize);
-                let sorted_after_count = RuntimeCell::<usize>::new($first_sorted.len());
+                let sorted_after_count = RuntimeCell::<usize>::new(sorted_len[0] as usize);
                 while sorted_after_count.read() > 0usize {
                     let step = sorted_after_count.read() / 2usize;
                     let mid = sorted_after.read() + step;
-                    if !Less::apply(
-                        ($first_candidate[global], $( $candidate[global], )*),
-                        ($first_sorted[mid], $( $sorted[mid], )*),
-                    ) {
+                    let sorted_value = (
+                        $first_sorted_expr::eval(
+                            $first_sorted_slot0,
+                            $first_sorted_slot1,
+                            $first_sorted_slot2,
+                            $first_sorted_slot3,
+                            $first_sorted_offsets,
+                            mid,
+                        ),
+                        $(
+                            $sorted_expr::eval(
+                                $sorted_slot0,
+                                $sorted_slot1,
+                                $sorted_slot2,
+                                $sorted_slot3,
+                                $sorted_offsets,
+                                mid,
+                            ),
+                        )*
+                    );
+                    if !Less::apply(candidate_value, sorted_value) {
                         sorted_after.store(mid + 1usize);
                         sorted_after_count.store(sorted_after_count.read() - step - 1usize);
                     } else {
@@ -476,18 +1128,63 @@ macro_rules! define_tuple_membership_flags_kernel {
     };
 }
 
-define_tuple_membership_flags_kernel!(tuple2_membership_flags_kernel, (TyA: candidate_a / sorted_a, TyB: candidate_b / sorted_b));
-define_tuple_membership_flags_kernel!(tuple3_membership_flags_kernel, (TyA: candidate_a / sorted_a, TyB: candidate_b / sorted_b, TyC: candidate_c / sorted_c));
+define_tuple_membership_device_expr_flags_kernel!(
+    tuple2_membership_device_expr_flags_kernel,
+    (TyA: ExprA:
+        candidate_a_slot0, candidate_a_slot1, candidate_a_slot2, candidate_a_slot3, candidate_a_offsets /
+        SortedExprA:
+        sorted_a_slot0, sorted_a_slot1, sorted_a_slot2, sorted_a_slot3, sorted_a_offsets,
+     TyB: ExprB:
+        candidate_b_slot0, candidate_b_slot1, candidate_b_slot2, candidate_b_slot3, candidate_b_offsets /
+        SortedExprB:
+        sorted_b_slot0, sorted_b_slot1, sorted_b_slot2, sorted_b_slot3, sorted_b_offsets)
+);
+define_tuple_membership_device_expr_flags_kernel!(
+    tuple3_membership_device_expr_flags_kernel,
+    (TyA: ExprA:
+        candidate_a_slot0, candidate_a_slot1, candidate_a_slot2, candidate_a_slot3, candidate_a_offsets /
+        SortedExprA:
+        sorted_a_slot0, sorted_a_slot1, sorted_a_slot2, sorted_a_slot3, sorted_a_offsets,
+     TyB: ExprB:
+        candidate_b_slot0, candidate_b_slot1, candidate_b_slot2, candidate_b_slot3, candidate_b_offsets /
+        SortedExprB:
+        sorted_b_slot0, sorted_b_slot1, sorted_b_slot2, sorted_b_slot3, sorted_b_offsets,
+     TyC: ExprC:
+        candidate_c_slot0, candidate_c_slot1, candidate_c_slot2, candidate_c_slot3, candidate_c_offsets /
+        SortedExprC:
+        sorted_c_slot0, sorted_c_slot1, sorted_c_slot2, sorted_c_slot3, sorted_c_offsets)
+);
 
-macro_rules! define_tuple_minmax_kernels {
+macro_rules! define_tuple_minmax_device_expr_kernels {
     (
         $element_fn:ident,
         $index_fn:ident,
-        ($( $ty:ident : $input:ident ),+)
+        ($first_ty:ident : $first_expr:ident :
+            $first_slot0:ident, $first_slot1:ident, $first_slot2:ident, $first_slot3:ident, $first_offsets:ident
+        $(, $ty:ident : $expr:ident :
+            $slot0:ident, $slot1:ident, $slot2:ident, $slot3:ident, $offsets:ident
+        )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $element_fn<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
-            $( $input: &[$ty], )+
+        pub(crate) fn $element_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
             len: &[u32],
             partials: &mut [u32],
         ) {
@@ -511,10 +1208,78 @@ macro_rules! define_tuple_minmax_kernels {
                     max_index.store(i.read());
                     has_value.store(1u32);
                 } else {
-                    if Less::apply(($( $input[i.read()], )+), ($( $input[min_index.read()], )+)) {
+                    if Less::apply(
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                i.read(),
+                            ),
+                            $(
+                                $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, i.read()),
+                            )*
+                        ),
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                min_index.read(),
+                            ),
+                            $(
+                                $expr::eval(
+                                    $slot0,
+                                    $slot1,
+                                    $slot2,
+                                    $slot3,
+                                    $offsets,
+                                    min_index.read(),
+                                ),
+                            )*
+                        ),
+                    ) {
                         min_index.store(i.read());
                     }
-                    if Less::apply(($( $input[max_index.read()], )+), ($( $input[i.read()], )+)) {
+                    if Less::apply(
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                max_index.read(),
+                            ),
+                            $(
+                                $expr::eval(
+                                    $slot0,
+                                    $slot1,
+                                    $slot2,
+                                    $slot3,
+                                    $offsets,
+                                    max_index.read(),
+                                ),
+                            )*
+                        ),
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                i.read(),
+                            ),
+                            $(
+                                $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, i.read()),
+                            )*
+                        ),
+                    ) {
                         max_index.store(i.read());
                     }
                 }
@@ -536,13 +1301,67 @@ macro_rules! define_tuple_minmax_kernels {
                     } else {
                         let other_min = min_indices[unit + stride.read()] as usize;
                         let current_min = min_indices[unit] as usize;
-                        if Less::apply(($( $input[other_min], )+), ($( $input[current_min], )+)) {
+                        if Less::apply(
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    other_min,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, other_min),
+                                )*
+                            ),
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    current_min,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, current_min),
+                                )*
+                            ),
+                        ) {
                             min_indices[unit] = other_min as u32;
                         }
 
                         let other_max = max_indices[unit + stride.read()] as usize;
                         let current_max = max_indices[unit] as usize;
-                        if Less::apply(($( $input[current_max], )+), ($( $input[other_max], )+)) {
+                        if Less::apply(
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    current_max,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, current_max),
+                                )*
+                            ),
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    other_max,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, other_max),
+                                )*
+                            ),
+                        ) {
                             max_indices[unit] = other_max as u32;
                         }
                     }
@@ -559,8 +1378,25 @@ macro_rules! define_tuple_minmax_kernels {
         }
 
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $index_fn<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
-            $( $input: &[$ty], )+
+        pub(crate) fn $index_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
             candidates: &[u32],
             candidate_len: &[u32],
             partials: &mut [u32],
@@ -587,10 +1423,78 @@ macro_rules! define_tuple_minmax_kernels {
                     max_index.store(candidate_max);
                     has_value.store(1u32);
                 } else {
-                    if Less::apply(($( $input[candidate_min], )+), ($( $input[min_index.read()], )+)) {
+                    if Less::apply(
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                candidate_min,
+                            ),
+                            $(
+                                $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, candidate_min),
+                            )*
+                        ),
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                min_index.read(),
+                            ),
+                            $(
+                                $expr::eval(
+                                    $slot0,
+                                    $slot1,
+                                    $slot2,
+                                    $slot3,
+                                    $offsets,
+                                    min_index.read(),
+                                ),
+                            )*
+                        ),
+                    ) {
                         min_index.store(candidate_min);
                     }
-                    if Less::apply(($( $input[max_index.read()], )+), ($( $input[candidate_max], )+)) {
+                    if Less::apply(
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                max_index.read(),
+                            ),
+                            $(
+                                $expr::eval(
+                                    $slot0,
+                                    $slot1,
+                                    $slot2,
+                                    $slot3,
+                                    $offsets,
+                                    max_index.read(),
+                                ),
+                            )*
+                        ),
+                        (
+                            $first_expr::eval(
+                                $first_slot0,
+                                $first_slot1,
+                                $first_slot2,
+                                $first_slot3,
+                                $first_offsets,
+                                candidate_max,
+                            ),
+                            $(
+                                $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, candidate_max),
+                            )*
+                        ),
+                    ) {
                         max_index.store(candidate_max);
                     }
                 }
@@ -612,13 +1516,67 @@ macro_rules! define_tuple_minmax_kernels {
                     } else {
                         let other_min = min_indices[unit + stride.read()] as usize;
                         let current_min = min_indices[unit] as usize;
-                        if Less::apply(($( $input[other_min], )+), ($( $input[current_min], )+)) {
+                        if Less::apply(
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    other_min,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, other_min),
+                                )*
+                            ),
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    current_min,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, current_min),
+                                )*
+                            ),
+                        ) {
                             min_indices[unit] = other_min as u32;
                         }
 
                         let other_max = max_indices[unit + stride.read()] as usize;
                         let current_max = max_indices[unit] as usize;
-                        if Less::apply(($( $input[current_max], )+), ($( $input[other_max], )+)) {
+                        if Less::apply(
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    current_max,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, current_max),
+                                )*
+                            ),
+                            (
+                                $first_expr::eval(
+                                    $first_slot0,
+                                    $first_slot1,
+                                    $first_slot2,
+                                    $first_slot3,
+                                    $first_offsets,
+                                    other_max,
+                                ),
+                                $(
+                                    $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, other_max),
+                                )*
+                            ),
+                        ) {
                             max_indices[unit] = other_max as u32;
                         }
                     }
@@ -636,65 +1594,116 @@ macro_rules! define_tuple_minmax_kernels {
     };
 }
 
-define_tuple_minmax_kernels!(tuple2_minmax_element_partials_kernel, tuple2_minmax_index_partials_kernel, (TyA: input_a, TyB: input_b));
-define_tuple_minmax_kernels!(tuple3_minmax_element_partials_kernel, tuple3_minmax_index_partials_kernel, (TyA: input_a, TyB: input_b, TyC: input_c));
+define_tuple_minmax_device_expr_kernels!(
+    tuple2_minmax_element_device_expr_partials_kernel,
+    tuple2_minmax_index_device_expr_partials_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets)
+);
+define_tuple_minmax_device_expr_kernels!(
+    tuple3_minmax_element_device_expr_partials_kernel,
+    tuple3_minmax_index_device_expr_partials_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets)
+);
 
-macro_rules! define_tuple_find_first_of_flags_kernel {
+macro_rules! define_tuple_lexicographical_device_expr_kernels {
     (
-        $fn_name:ident,
-        ($first_ty:ident : $first_input:ident / $first_needle:ident $(, $ty:ident : $input:ident / $needle:ident )*)
+        $diff_fn:ident,
+        $compare_fn:ident,
+        ($first_ty:ident : $first_left_expr:ident / $first_right_expr:ident :
+            $first_left_slot0:ident, $first_left_slot1:ident, $first_left_slot2:ident, $first_left_slot3:ident, $first_left_offsets:ident /
+            $first_right_slot0:ident, $first_right_slot1:ident, $first_right_slot2:ident, $first_right_slot3:ident, $first_right_offsets:ident
+        $(, $ty:ident : $left_expr:ident / $right_expr:ident :
+            $left_slot0:ident, $left_slot1:ident, $left_slot2:ident, $left_slot3:ident, $left_offsets:ident /
+            $right_slot0:ident, $right_slot1:ident, $right_slot2:ident, $right_slot3:ident, $right_offsets:ident
+        )*)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$first_ty: CubePrimitive, $( $ty: CubePrimitive, )* Eq: PredicateOp2<($first_ty, $( $ty, )*)>>(
-            $first_input: &[$first_ty],
-            $( $input: &[$ty], )*
-            $first_needle: &[$first_ty],
-            $( $needle: &[$ty], )*
+        pub(crate) fn $diff_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_left_expr: DeviceGpuExpr<$first_ty>,
+            $first_right_expr: DeviceGpuExpr<$first_ty>,
+            $( $left_expr: DeviceGpuExpr<$ty>, $right_expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_left_slot0: &[$first_ty],
+            $first_left_slot1: &[$first_ty],
+            $first_left_slot2: &[$first_ty],
+            $first_left_slot3: &[$first_ty],
+            $first_left_offsets: &[u32],
+            $(
+                $left_slot0: &[$ty],
+                $left_slot1: &[$ty],
+                $left_slot2: &[$ty],
+                $left_slot3: &[$ty],
+                $left_offsets: &[u32],
+            )*
+            $first_right_slot0: &[$first_ty],
+            $first_right_slot1: &[$first_ty],
+            $first_right_slot2: &[$first_ty],
+            $first_right_slot3: &[$first_ty],
+            $first_right_offsets: &[u32],
+            $(
+                $right_slot0: &[$ty],
+                $right_slot1: &[$ty],
+                $right_slot2: &[$ty],
+                $right_slot3: &[$ty],
+                $right_offsets: &[u32],
+            )*
             flags: &mut [u32],
         ) {
             let unit = UNIT_POS as usize;
             let cube_dim = 256usize;
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < flags.len() {
-                let needle_index = RuntimeCell::<usize>::new(0usize);
-                let found = RuntimeCell::<u32>::new(0u32);
-                while needle_index.read() < $first_needle.len() {
-                    if Eq::apply(
-                        ($first_input[global], $( $input[global], )*),
-                        ($first_needle[needle_index.read()], $( $needle[needle_index.read()], )*),
-                    ) {
-                        found.store(1u32);
-                        needle_index.store($first_needle.len());
-                    } else {
-                        needle_index.store(needle_index.read() + 1usize);
-                    }
-                }
-                flags[global] = found.read();
-            }
-        }
-    };
-}
-
-define_tuple_find_first_of_flags_kernel!(tuple2_find_first_of_flags_kernel, (TyA: input_a / needle_a, TyB: input_b / needle_b));
-define_tuple_find_first_of_flags_kernel!(tuple3_find_first_of_flags_kernel, (TyA: input_a / needle_a, TyB: input_b / needle_b, TyC: input_c / needle_c));
-
-macro_rules! define_tuple_lexicographical_diff_flags_kernel {
-    (
-        $fn_name:ident,
-        ($( $ty:ident : $left:ident / $right:ident ),+)
-    ) => {
-        #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
-            $( $left: &[$ty], )+
-            $( $right: &[$ty], )+
-            flags: &mut [u32],
-        ) {
-            let unit = UNIT_POS as usize;
-            let cube_dim = 256usize;
-            let global = (CUBE_POS as usize) * cube_dim + unit;
-            if global < flags.len() {
-                let lhs = ($( $left[global], )+);
-                let rhs = ($( $right[global], )+);
+                let lhs = (
+                    $first_left_expr::eval(
+                        $first_left_slot0,
+                        $first_left_slot1,
+                        $first_left_slot2,
+                        $first_left_slot3,
+                        $first_left_offsets,
+                        global,
+                    ),
+                    $(
+                        $left_expr::eval(
+                            $left_slot0,
+                            $left_slot1,
+                            $left_slot2,
+                            $left_slot3,
+                            $left_offsets,
+                            global,
+                        ),
+                    )*
+                );
+                let rhs = (
+                    $first_right_expr::eval(
+                        $first_right_slot0,
+                        $first_right_slot1,
+                        $first_right_slot2,
+                        $first_right_slot3,
+                        $first_right_offsets,
+                        global,
+                    ),
+                    $(
+                        $right_expr::eval(
+                            $right_slot0,
+                            $right_slot1,
+                            $right_slot2,
+                            $right_slot3,
+                            $right_offsets,
+                            global,
+                        ),
+                    )*
+                );
                 if Less::apply(lhs, rhs) || Less::apply(rhs, lhs) {
                     flags[global] = 1u32;
                 } else {
@@ -702,24 +1711,87 @@ macro_rules! define_tuple_lexicographical_diff_flags_kernel {
                 }
             }
         }
-    };
-}
 
-macro_rules! define_tuple_lexicographical_compare_at_kernel {
-    (
-        $fn_name:ident,
-        ($( $ty:ident : $left:ident / $right:ident ),+)
-    ) => {
         #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $fn_name<$( $ty: CubePrimitive, )+ Less: PredicateOp2<($( $ty, )+)>>(
-            $( $left: &[$ty], )+
-            $( $right: &[$ty], )+
+        pub(crate) fn $compare_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_left_expr: DeviceGpuExpr<$first_ty>,
+            $first_right_expr: DeviceGpuExpr<$first_ty>,
+            $( $left_expr: DeviceGpuExpr<$ty>, $right_expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_left_slot0: &[$first_ty],
+            $first_left_slot1: &[$first_ty],
+            $first_left_slot2: &[$first_ty],
+            $first_left_slot3: &[$first_ty],
+            $first_left_offsets: &[u32],
+            $(
+                $left_slot0: &[$ty],
+                $left_slot1: &[$ty],
+                $left_slot2: &[$ty],
+                $left_slot3: &[$ty],
+                $left_offsets: &[u32],
+            )*
+            $first_right_slot0: &[$first_ty],
+            $first_right_slot1: &[$first_ty],
+            $first_right_slot2: &[$first_ty],
+            $first_right_slot3: &[$first_ty],
+            $first_right_offsets: &[u32],
+            $(
+                $right_slot0: &[$ty],
+                $right_slot1: &[$ty],
+                $right_slot2: &[$ty],
+                $right_slot3: &[$ty],
+                $right_offsets: &[u32],
+            )*
             index: &[u32],
             output: &mut [u32],
         ) {
             if UNIT_POS == 0 {
                 let i = index[0] as usize;
-                if Less::apply(($( $left[i], )+), ($( $right[i], )+)) {
+                if Less::apply(
+                    (
+                        $first_left_expr::eval(
+                            $first_left_slot0,
+                            $first_left_slot1,
+                            $first_left_slot2,
+                            $first_left_slot3,
+                            $first_left_offsets,
+                            i,
+                        ),
+                        $(
+                            $left_expr::eval(
+                                $left_slot0,
+                                $left_slot1,
+                                $left_slot2,
+                                $left_slot3,
+                                $left_offsets,
+                                i,
+                            ),
+                        )*
+                    ),
+                    (
+                        $first_right_expr::eval(
+                            $first_right_slot0,
+                            $first_right_slot1,
+                            $first_right_slot2,
+                            $first_right_slot3,
+                            $first_right_offsets,
+                            i,
+                        ),
+                        $(
+                            $right_expr::eval(
+                                $right_slot0,
+                                $right_slot1,
+                                $right_slot2,
+                                $right_slot3,
+                                $right_offsets,
+                                i,
+                            ),
+                        )*
+                    ),
+                ) {
                     output[0] = 1u32;
                 } else {
                     output[0] = 0u32;
@@ -729,17 +1801,35 @@ macro_rules! define_tuple_lexicographical_compare_at_kernel {
     };
 }
 
-define_tuple_lexicographical_diff_flags_kernel!(tuple2_lexicographical_diff_flags_kernel, (TyA: left_a / right_a, TyB: left_b / right_b));
-define_tuple_lexicographical_diff_flags_kernel!(tuple3_lexicographical_diff_flags_kernel, (TyA: left_a / right_a, TyB: left_b / right_b, TyC: left_c / right_c));
-
-define_tuple_lexicographical_compare_at_kernel!(tuple2_lexicographical_compare_at_kernel, (TyA: left_a / right_a, TyB: left_b / right_b));
-define_tuple_lexicographical_compare_at_kernel!(tuple3_lexicographical_compare_at_kernel, (TyA: left_a / right_a, TyB: left_b / right_b, TyC: left_c / right_c));
+define_tuple_lexicographical_device_expr_kernels!(
+    tuple2_lexicographical_diff_device_expr_flags_kernel,
+    tuple2_lexicographical_compare_at_device_expr_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets)
+);
+define_tuple_lexicographical_device_expr_kernels!(
+    tuple3_lexicographical_diff_device_expr_flags_kernel,
+    tuple3_lexicographical_compare_at_device_expr_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets)
+);
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn copy_if_expr_flags_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp1<T>,
+    Pred: PredicateOp<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -767,7 +1857,7 @@ pub(crate) fn copy_if_expr_flags_kernel<
 pub(crate) fn copy_if_expr_flag_only_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp1<T>,
+    Pred: PredicateOp<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -794,7 +1884,7 @@ pub(crate) fn copy_if_stencil_expr_flags_kernel<
     S: CubePrimitive,
     ValueExpr: GpuExpr<T>,
     StencilExpr: GpuExpr<S>,
-    Pred: PredicateOp1<S>,
+    Pred: PredicateOp<S>,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -842,7 +1932,7 @@ pub(crate) fn transform_if_stencil_expr_kernel<
     ValueExpr: GpuExpr<T>,
     StencilExpr: GpuExpr<S>,
     Op: UnaryOp<T, Output = T>,
-    Pred: PredicateOp1<S>,
+    Pred: PredicateOp<S>,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -982,7 +2072,7 @@ pub(crate) fn scatter_if_expr_kernel<
     T: CubePrimitive,
     ValueExpr: GpuExpr<T>,
     IndexExpr: GpuExpr<u32>,
-    Pred: PredicateOp1<T>,
+    Pred: PredicateOp<T>,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -1081,7 +2171,7 @@ pub(crate) fn u32_add_block_prefix_kernel(block_prefixes: &[u32], len: &[u32], o
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scalar_inclusive_scan_block_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
+pub(crate) fn scalar_inclusive_scan_block_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
     input: &[T],
     len: &[u32],
     output: &mut [T],
@@ -1133,7 +2223,7 @@ pub(crate) fn scalar_inclusive_scan_block_kernel<T: CubePrimitive, Op: BinaryOp2
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scalar_scan_add_block_prefix_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
+pub(crate) fn scalar_scan_add_block_prefix_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
     block_prefixes: &[T],
     len: &[u32],
     output: &mut [T],
@@ -1148,7 +2238,7 @@ pub(crate) fn scalar_scan_add_block_prefix_kernel<T: CubePrimitive, Op: BinaryOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn scalar_reduce_last_finalize_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
+pub(crate) fn scalar_reduce_last_finalize_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
     partial: &[T],
     len: &[u32],
     init: &[T],
@@ -1163,7 +2253,7 @@ pub(crate) fn scalar_reduce_last_finalize_kernel<T: CubePrimitive, Op: BinaryOp2
 pub(crate) fn tuple1_device_inclusive_scan_expr_block_kernel<
     A: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
-    Op: BinaryOp2<(A,)>,
+    Op: BinaryOp<(A,)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1221,7 +2311,7 @@ pub(crate) fn tuple1_device_inclusive_scan_expr_block_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_inclusive_scan_block_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
+pub(crate) fn tuple1_inclusive_scan_block_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
     input_a: &[A],
     len: &[u32],
     output_a: &mut [A],
@@ -1274,7 +2364,7 @@ pub(crate) fn tuple1_inclusive_scan_block_kernel<A: CubePrimitive, Op: BinaryOp2
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_scan_add_block_prefix_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
+pub(crate) fn tuple1_scan_add_block_prefix_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
     block_prefixes_a: &[A],
     len: &[u32],
     output_a: &mut [A],
@@ -1291,7 +2381,7 @@ pub(crate) fn tuple1_scan_add_block_prefix_kernel<A: CubePrimitive, Op: BinaryOp
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_scan_make_exclusive_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
+pub(crate) fn tuple1_scan_make_exclusive_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
     inclusive_a: &[A],
     init_a: &[A],
     output_a: &mut [A],
@@ -1315,7 +2405,7 @@ pub(crate) fn tuple2_device_inclusive_scan_expr_block_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1394,7 +2484,7 @@ pub(crate) fn tuple2_device_inclusive_scan_expr_block_kernel<
 pub(crate) fn tuple2_inclusive_scan_block_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -1465,7 +2555,7 @@ pub(crate) fn tuple2_inclusive_scan_block_kernel<
 pub(crate) fn tuple2_scan_add_block_prefix_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     block_prefixes_a: &[A],
     block_prefixes_b: &[B],
@@ -1495,7 +2585,7 @@ pub(crate) fn tuple2_scan_add_block_prefix_kernel<
 pub(crate) fn tuple2_scan_make_exclusive_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     inclusive_a: &[A],
     inclusive_b: &[B],
@@ -1530,7 +2620,7 @@ pub(crate) fn tuple3_device_inclusive_scan_expr_block_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1625,7 +2715,7 @@ pub(crate) fn tuple3_inclusive_scan_block_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -1708,7 +2798,7 @@ pub(crate) fn tuple3_scan_add_block_prefix_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     block_prefixes_a: &[A],
     block_prefixes_b: &[B],
@@ -1743,7 +2833,7 @@ pub(crate) fn tuple3_scan_make_exclusive_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     inclusive_a: &[A],
     inclusive_b: &[B],
@@ -1820,7 +2910,7 @@ pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceG
 pub(crate) fn unique_by_key_device_expr_flags_kernel<
     K: CubePrimitive,
     Expr: DeviceGpuExpr<K>,
-    Pred: PredicateOp2<K>,
+    Pred: BinaryPredicateOp<K>,
 >(
     slot0: &[K],
     slot1: &[K],
@@ -1850,10 +2940,17 @@ pub(crate) fn unique_by_key_device_expr_flags_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn compact_rejected_scatter_kernel<T: CubePrimitive>(
+pub(crate) fn compact_rejected_scatter_device_expr_kernel<
+    T: CubePrimitive,
+    Expr: DeviceGpuExpr<T>,
+>(
     flags: &[u32],
     positions: &[u32],
-    values: &[T],
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
@@ -1862,7 +2959,8 @@ pub(crate) fn compact_rejected_scatter_kernel<T: CubePrimitive>(
     if global < flags.len() && flags[global] == 0u32 {
         let selected_before_or_at = positions[global];
         let rejected_before = (global as u32) - selected_before_or_at;
-        output[rejected_before as usize] = values[global];
+        output[rejected_before as usize] =
+            Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
     }
 }
 
@@ -1889,7 +2987,7 @@ pub(crate) fn compact_scatter_pair_kernel<A: CubePrimitive, B: CubePrimitive>(
 pub(crate) fn adjacent_difference_expr_kernel<
     T: CubePrimitive,
     Expr: DeviceGpuExpr<T>,
-    Op: BinaryOp2<T>,
+    Op: BinaryOp<T>,
 >(
     slot0: &[T],
     slot1: &[T],
@@ -1920,7 +3018,7 @@ pub(crate) fn tuple2_adjacent_difference_expr_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -1982,7 +3080,7 @@ pub(crate) fn tuple3_adjacent_difference_expr_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -2057,8 +3155,8 @@ pub(crate) fn inclusive_scan_by_key_expr_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: crate::detail::op::kernel::BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     input: &[T],
@@ -2095,8 +3193,8 @@ pub(crate) fn inclusive_scan_by_key_expr_keys_expr_kernel<
     T: CubePrimitive,
     KeyExpr: GpuExpr<K>,
     ValueExpr: GpuExpr<T>,
-    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: crate::detail::op::kernel::BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     key_input: &[K],
     key_indices: &[u32],
@@ -2159,8 +3257,8 @@ pub(crate) fn exclusive_scan_by_key_expr_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: crate::detail::op::kernel::BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     input: &[T],
@@ -2198,8 +3296,8 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
     T: CubePrimitive,
     KeyExpr: GpuExpr<K>,
     ValueExpr: GpuExpr<T>,
-    KeyEq: crate::detail::op::kernel::PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: crate::detail::op::kernel::BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     key_input: &[K],
     key_indices: &[u32],
@@ -2253,7 +3351,7 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op: BinaryOp2<T>>(
+pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op: BinaryOp<T>>(
     input: &[T],
     indices: &[u32],
     rhs: &[T],
@@ -2311,7 +3409,7 @@ pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple1_reduce_last_finalize_kernel<A: CubePrimitive, Op: BinaryOp2<(A,)>>(
+pub(crate) fn tuple1_reduce_last_finalize_kernel<A: CubePrimitive, Op: BinaryOp<(A,)>>(
     partial_a: &[A],
     len: &[u32],
     init_a: &[A],
@@ -2330,7 +3428,7 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
     B: CubePrimitive,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -2432,7 +3530,7 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
 pub(crate) fn tuple2_reduce_partials_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -2509,7 +3607,7 @@ pub(crate) fn tuple2_reduce_partials_kernel<
 pub(crate) fn tuple2_reduce_finalize_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 >(
     partial_a: &[A],
     partial_b: &[B],
@@ -2533,7 +3631,7 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     a_slot0: &[A],
     a_slot1: &[A],
@@ -2659,7 +3757,7 @@ pub(crate) fn tuple3_reduce_partials_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     input_a: &[A],
     input_b: &[B],
@@ -2748,7 +3846,7 @@ pub(crate) fn tuple3_reduce_finalize_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     partial_a: &[A],
     partial_b: &[B],
@@ -2775,7 +3873,7 @@ pub(crate) fn tuple3_reduce_finalize_kernel<
 pub(crate) fn count_if_expr_partials_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp1<T>,
+    Pred: PredicateOp<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -2853,7 +3951,7 @@ pub(crate) fn sum_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
 pub(crate) fn find_if_expr_partials_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp1<T>,
+    Pred: PredicateOp<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -2937,7 +4035,7 @@ pub(crate) fn min_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
 pub(crate) fn adjacent_find_expr_partials_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Pred: PredicateOp2<T>,
+    Pred: BinaryPredicateOp<T>,
 >(
     input: &[T],
     indices: &[u32],
@@ -2988,7 +4086,7 @@ pub(crate) fn adjacent_find_expr_partials_kernel<
 pub(crate) fn minmax_element_expr_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
-    Less: PredicateOp2<T>,
+    Less: BinaryPredicateOp<T>,
 >(
     input: &[T],
     indices: &[u32],

@@ -1,5 +1,5 @@
 use crate::{
-    detail::op::kernel::PredicateOp2,
+    detail::op::kernel::BinaryPredicateOp,
     device::{DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0},
     error::Error,
     expr::DeviceGpuExpr,
@@ -21,7 +21,7 @@ where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
 {
     input.validate()?;
     let len = input.len();
@@ -113,7 +113,7 @@ where
     ValueSource::Item: CubePrimitive + CubeElement,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: PredicateOp2<KeySource::Item>,
+    Less: BinaryPredicateOp<KeySource::Item>,
 {
     keys.validate()?;
     values.validate()?;
@@ -228,78 +228,6 @@ where
         DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }
-
-pub(crate) fn sort_tuple2<R, A, B, Less>(
-    policy: &CubePolicy<R>,
-    first: &DeviceVec<R, A>,
-    second: &DeviceVec<R, B>,
-    _less: GpuOp<Less>,
-) -> Result<(DeviceVec<R, A>, DeviceVec<R, B>), Error>
-where
-    R: Runtime,
-    A: CubePrimitive + CubeElement,
-    B: CubePrimitive + CubeElement,
-    Less: PredicateOp2<(A, B)>,
-{
-    ensure_same_len(second.len(), first.len())?;
-
-    let len = first.len();
-    let client = policy.client();
-    if len <= 1 {
-        return Ok((
-            DeviceVec::from_handle(policy.id(), first.handle.clone(), len),
-            DeviceVec::from_handle(policy.id(), second.handle.clone(), len),
-        ));
-    }
-
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(policy);
-    let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<A>(len);
-    let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<B>(len);
-    let mut input_first_handle = first.handle.clone();
-    let mut input_second_handle = second.handle.clone();
-    let mut output_first_handle = scratch_first_a.clone();
-    let mut output_second_handle = scratch_second_a.clone();
-    let mut next_uses_a = false;
-    let mut width = 1usize;
-
-    while width < len {
-        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
-        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
-        unsafe {
-            merge_sort_tuple2_pass_kernel::launch_unchecked::<A, B, Less, R>(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-                unsafe { BufferArg::from_raw_parts(input_first_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_second_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(output_first_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_second_handle.clone(), len) },
-            );
-        }
-
-        input_first_handle = output_first_handle.clone();
-        input_second_handle = output_second_handle.clone();
-        if next_uses_a {
-            output_first_handle = scratch_first_a.clone();
-            output_second_handle = scratch_second_a.clone();
-        } else {
-            output_first_handle = scratch_first_b.clone();
-            output_second_handle = scratch_second_b.clone();
-        }
-        next_uses_a = !next_uses_a;
-        width *= 2;
-    }
-
-    Ok((
-        DeviceVec::from_handle(policy.id(), input_first_handle, len),
-        DeviceVec::from_handle(policy.id(), input_second_handle, len),
-    ))
-}
-
 pub(crate) fn sort_tuple2_input<Left, Right, Less>(
     policy: &CubePolicy<Left::Runtime>,
     first: &Left,
@@ -321,7 +249,7 @@ where
     Right::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Less: PredicateOp2<(Left::Item, Right::Item)>,
+    Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
 {
     first.validate()?;
     second.validate()?;
@@ -445,6 +373,7 @@ where
     ))
 }
 
+#[allow(dead_code)]
 pub(crate) fn sort_tuple3<R, A, B, C, Less>(
     policy: &CubePolicy<R>,
     first: &DeviceVec<R, A>,
@@ -457,7 +386,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
-    Less: PredicateOp2<(A, B, C)>,
+    Less: BinaryPredicateOp<(A, B, C)>,
 {
     ensure_same_len(second.len(), first.len())?;
     ensure_same_len(third.len(), first.len())?;
@@ -553,7 +482,7 @@ where
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
-    Less: PredicateOp2<(First::Item, Second::Item, Third::Item)>,
+    Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
 {
     first.validate()?;
     second.validate()?;
@@ -712,360 +641,5 @@ where
         DeviceVec::from_handle(policy.id(), input_first_handle, len),
         DeviceVec::from_handle(policy.id(), input_second_handle, len),
         DeviceVec::from_handle(policy.id(), input_third_handle, len),
-    ))
-}
-
-pub(crate) fn sort_tuple2_by_key<R, A, B, T, Less>(
-    policy: &CubePolicy<R>,
-    key_a: &DeviceVec<R, A>,
-    key_b: &DeviceVec<R, B>,
-    values: &DeviceVec<R, T>,
-    _less: GpuOp<Less>,
-) -> Result<(DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, T>), Error>
-where
-    R: Runtime,
-    A: CubePrimitive + CubeElement,
-    B: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    Less: PredicateOp2<(A, B)>,
-{
-    ensure_same_len(key_b.len(), key_a.len())?;
-    ensure_same_len(values.len(), key_a.len())?;
-
-    let len = key_a.len();
-    let client = policy.client();
-    if len <= 1 {
-        return Ok((
-            DeviceVec::from_handle(policy.id(), key_a.handle.clone(), len),
-            DeviceVec::from_handle(policy.id(), key_b.handle.clone(), len),
-            DeviceVec::from_handle(policy.id(), values.handle.clone(), len),
-        ));
-    }
-
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(policy);
-    let (scratch_a_a, scratch_a_b) = workspace.alloc_pair::<A>(len);
-    let (scratch_b_a, scratch_b_b) = workspace.alloc_pair::<B>(len);
-    let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<T>(len);
-    let mut input_a_handle = key_a.handle.clone();
-    let mut input_b_handle = key_b.handle.clone();
-    let mut input_value_handle = values.handle.clone();
-    let mut output_a_handle = scratch_a_a.clone();
-    let mut output_b_handle = scratch_b_a.clone();
-    let mut output_value_handle = scratch_values_a.clone();
-    let mut next_uses_a = false;
-    let mut width = 1usize;
-
-    while width < len {
-        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
-        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
-        unsafe {
-            merge_sort_tuple2_by_key_pass_kernel::launch_unchecked::<A, B, T, Less, R>(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-                unsafe { BufferArg::from_raw_parts(input_a_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_b_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_value_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(output_a_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_b_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_value_handle.clone(), len) },
-            );
-        }
-
-        input_a_handle = output_a_handle.clone();
-        input_b_handle = output_b_handle.clone();
-        input_value_handle = output_value_handle.clone();
-        if next_uses_a {
-            output_a_handle = scratch_a_a.clone();
-            output_b_handle = scratch_b_a.clone();
-            output_value_handle = scratch_values_a.clone();
-        } else {
-            output_a_handle = scratch_a_b.clone();
-            output_b_handle = scratch_b_b.clone();
-            output_value_handle = scratch_values_b.clone();
-        }
-        next_uses_a = !next_uses_a;
-        width *= 2;
-    }
-
-    Ok((
-        DeviceVec::from_handle(policy.id(), input_a_handle, len),
-        DeviceVec::from_handle(policy.id(), input_b_handle, len),
-        DeviceVec::from_handle(policy.id(), input_value_handle, len),
-    ))
-}
-
-pub(crate) fn sort_tuple2_by_key_input<KeyA, KeyB, ValueSource, Less>(
-    policy: &CubePolicy<KeyA::Runtime>,
-    key_a: &KeyA,
-    key_b: &KeyB,
-    values: &ValueSource,
-    _less: GpuOp<Less>,
-) -> Result<
-    (
-        DeviceVec<KeyA::Runtime, KeyA::Item>,
-        DeviceVec<KeyA::Runtime, KeyB::Item>,
-        DeviceVec<KeyA::Runtime, ValueSource::Item>,
-    ),
-    Error,
->
-where
-    KeyA: KernelColumn + KernelColumnAt<S0>,
-    KeyB: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    ValueSource: KernelColumn<Runtime = KeyA::Runtime> + KernelColumnAt<S0>,
-    KeyA::Item: CubePrimitive + CubeElement,
-    KeyB::Item: CubePrimitive + CubeElement,
-    ValueSource::Item: CubePrimitive + CubeElement,
-    KeyA::Expr: DeviceGpuExpr<KeyA::Item>,
-    KeyB::Expr: DeviceGpuExpr<KeyB::Item>,
-    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    Less: PredicateOp2<(KeyA::Item, KeyB::Item)>,
-{
-    key_a.validate()?;
-    key_b.validate()?;
-    values.validate()?;
-    ensure_same_len(key_b.len(), key_a.len())?;
-    ensure_same_len(values.len(), key_a.len())?;
-
-    let len = key_a.len();
-    if len == 0 {
-        return Ok((
-            policy.empty_device_vec(),
-            policy.empty_device_vec(),
-            policy.empty_device_vec(),
-        ));
-    }
-
-    let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(policy);
-    let (scratch_a_a, scratch_a_b) = workspace.alloc_pair::<KeyA::Item>(len);
-    let (scratch_b_a, scratch_b_b) = workspace.alloc_pair::<KeyB::Item>(len);
-    let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<ValueSource::Item>(len);
-    let a_bindings = key_a.stage(policy)?;
-    let b_bindings = key_b.stage(policy)?;
-    let value_bindings = values.stage(policy)?;
-    let a_offsets = a_bindings.slot_offsets_handle(client)?;
-    let b_offsets = b_bindings.slot_offsets_handle(client)?;
-    let value_offsets = value_bindings.slot_offsets_handle(client)?;
-    let (a_slot2, a_slot2_len) = a_bindings.slots.get(2).unwrap_or(&a_bindings.slots[0]);
-    let (a_slot3, a_slot3_len) = a_bindings.slots.get(3).unwrap_or(&a_bindings.slots[0]);
-    let (b_slot2, b_slot2_len) = b_bindings.slots.get(2).unwrap_or(&b_bindings.slots[0]);
-    let (b_slot3, b_slot3_len) = b_bindings.slots.get(3).unwrap_or(&b_bindings.slots[0]);
-    let (value_slot2, value_slot2_len) = value_bindings
-        .slots
-        .get(2)
-        .unwrap_or(&value_bindings.slots[0]);
-    let (value_slot3, value_slot3_len) = value_bindings
-        .slots
-        .get(3)
-        .unwrap_or(&value_bindings.slots[0]);
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-
-    unsafe {
-        merge_sort_tuple2_by_key_expr_first_pass_kernel::launch_unchecked::<
-            KeyA::Item,
-            KeyB::Item,
-            ValueSource::Item,
-            KeyA::Expr,
-            KeyB::Expr,
-            ValueSource::Expr,
-            Less,
-            KeyA::Runtime,
-        >(
-            client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
-            CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-            unsafe { BufferArg::from_raw_parts(a_bindings.input.clone(), a_bindings.input_len) },
-            unsafe { BufferArg::from_raw_parts(a_bindings.rhs.clone(), a_bindings.rhs_len) },
-            unsafe { BufferArg::from_raw_parts(a_slot2.clone(), *a_slot2_len) },
-            unsafe { BufferArg::from_raw_parts(a_slot3.clone(), *a_slot3_len) },
-            unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(b_bindings.input.clone(), b_bindings.input_len) },
-            unsafe { BufferArg::from_raw_parts(b_bindings.rhs.clone(), b_bindings.rhs_len) },
-            unsafe { BufferArg::from_raw_parts(b_slot2.clone(), *b_slot2_len) },
-            unsafe { BufferArg::from_raw_parts(b_slot3.clone(), *b_slot3_len) },
-            unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
-            unsafe {
-                BufferArg::from_raw_parts(value_bindings.input.clone(), value_bindings.input_len)
-            },
-            unsafe {
-                BufferArg::from_raw_parts(value_bindings.rhs.clone(), value_bindings.rhs_len)
-            },
-            unsafe { BufferArg::from_raw_parts(value_slot2.clone(), *value_slot2_len) },
-            unsafe { BufferArg::from_raw_parts(value_slot3.clone(), *value_slot3_len) },
-            unsafe { BufferArg::from_raw_parts(value_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(scratch_a_a.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(scratch_b_a.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(scratch_values_a.clone(), len) },
-        );
-    }
-
-    let mut input_a_handle = scratch_a_a.clone();
-    let mut input_b_handle = scratch_b_a.clone();
-    let mut input_value_handle = scratch_values_a.clone();
-    let mut output_a_handle = scratch_a_b.clone();
-    let mut output_b_handle = scratch_b_b.clone();
-    let mut output_value_handle = scratch_values_b.clone();
-    let mut next_uses_a = true;
-    let mut width = 2usize;
-
-    while width < len {
-        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
-        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
-        unsafe {
-            merge_sort_tuple2_by_key_pass_kernel::launch_unchecked::<
-                KeyA::Item,
-                KeyB::Item,
-                ValueSource::Item,
-                Less,
-                KeyA::Runtime,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-                unsafe { BufferArg::from_raw_parts(input_a_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_b_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_value_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(output_a_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_b_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_value_handle.clone(), len) },
-            );
-        }
-
-        input_a_handle = output_a_handle.clone();
-        input_b_handle = output_b_handle.clone();
-        input_value_handle = output_value_handle.clone();
-        if next_uses_a {
-            output_a_handle = scratch_a_a.clone();
-            output_b_handle = scratch_b_a.clone();
-            output_value_handle = scratch_values_a.clone();
-        } else {
-            output_a_handle = scratch_a_b.clone();
-            output_b_handle = scratch_b_b.clone();
-            output_value_handle = scratch_values_b.clone();
-        }
-        next_uses_a = !next_uses_a;
-        width *= 2;
-    }
-
-    Ok((
-        DeviceVec::from_handle(policy.id(), input_a_handle, len),
-        DeviceVec::from_handle(policy.id(), input_b_handle, len),
-        DeviceVec::from_handle(policy.id(), input_value_handle, len),
-    ))
-}
-
-pub(crate) fn sort_tuple3_by_key<R, A, B, C, T, Less>(
-    policy: &CubePolicy<R>,
-    key_a: &DeviceVec<R, A>,
-    key_b: &DeviceVec<R, B>,
-    key_c: &DeviceVec<R, C>,
-    values: &DeviceVec<R, T>,
-    _less: GpuOp<Less>,
-) -> Result<
-    (
-        DeviceVec<R, A>,
-        DeviceVec<R, B>,
-        DeviceVec<R, C>,
-        DeviceVec<R, T>,
-    ),
-    Error,
->
-where
-    R: Runtime,
-    A: CubePrimitive + CubeElement,
-    B: CubePrimitive + CubeElement,
-    C: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    Less: PredicateOp2<(A, B, C)>,
-{
-    ensure_same_len(key_b.len(), key_a.len())?;
-    ensure_same_len(key_c.len(), key_a.len())?;
-    ensure_same_len(values.len(), key_a.len())?;
-
-    let len = key_a.len();
-    let client = policy.client();
-    if len <= 1 {
-        return Ok((
-            DeviceVec::from_handle(policy.id(), key_a.handle.clone(), len),
-            DeviceVec::from_handle(policy.id(), key_b.handle.clone(), len),
-            DeviceVec::from_handle(policy.id(), key_c.handle.clone(), len),
-            DeviceVec::from_handle(policy.id(), values.handle.clone(), len),
-        ));
-    }
-
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let workspace = Workspace::new(policy);
-    let (scratch_a_a, scratch_a_b) = workspace.alloc_pair::<A>(len);
-    let (scratch_b_a, scratch_b_b) = workspace.alloc_pair::<B>(len);
-    let (scratch_c_a, scratch_c_b) = workspace.alloc_pair::<C>(len);
-    let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<T>(len);
-    let mut input_a_handle = key_a.handle.clone();
-    let mut input_b_handle = key_b.handle.clone();
-    let mut input_c_handle = key_c.handle.clone();
-    let mut input_value_handle = values.handle.clone();
-    let mut output_a_handle = scratch_a_a.clone();
-    let mut output_b_handle = scratch_b_a.clone();
-    let mut output_c_handle = scratch_c_a.clone();
-    let mut output_value_handle = scratch_values_a.clone();
-    let mut next_uses_a = false;
-    let mut width = 1usize;
-
-    while width < len {
-        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
-        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
-        unsafe {
-            merge_sort_tuple3_by_key_pass_kernel::launch_unchecked::<A, B, C, T, Less, R>(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-                unsafe { BufferArg::from_raw_parts(input_a_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_b_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_c_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(input_value_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(output_a_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_b_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_c_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(output_value_handle.clone(), len) },
-            );
-        }
-
-        input_a_handle = output_a_handle.clone();
-        input_b_handle = output_b_handle.clone();
-        input_c_handle = output_c_handle.clone();
-        input_value_handle = output_value_handle.clone();
-        if next_uses_a {
-            output_a_handle = scratch_a_a.clone();
-            output_b_handle = scratch_b_a.clone();
-            output_c_handle = scratch_c_a.clone();
-            output_value_handle = scratch_values_a.clone();
-        } else {
-            output_a_handle = scratch_a_b.clone();
-            output_b_handle = scratch_b_b.clone();
-            output_c_handle = scratch_c_b.clone();
-            output_value_handle = scratch_values_b.clone();
-        }
-        next_uses_a = !next_uses_a;
-        width *= 2;
-    }
-
-    Ok((
-        DeviceVec::from_handle(policy.id(), input_a_handle, len),
-        DeviceVec::from_handle(policy.id(), input_b_handle, len),
-        DeviceVec::from_handle(policy.id(), input_c_handle, len),
-        DeviceVec::from_handle(policy.id(), input_value_handle, len),
     ))
 }

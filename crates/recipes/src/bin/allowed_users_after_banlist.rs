@@ -15,11 +15,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, set_difference};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    allowlist: DeviceVec<Wgpu, u32>,
-    banlist: DeviceVec<Wgpu, u32>,
-) -> common::Result<DeviceVec<Wgpu, u32>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    allowlist: DeviceVec<B, u32>,
+    banlist: DeviceVec<B, u32>,
+) -> common::Result<DeviceVec<B, u32>>
+where
+    B: massively::Backend,
+{
     let (out,) = set_difference(
         exec,
         SoA1(allowlist.slice(..)),

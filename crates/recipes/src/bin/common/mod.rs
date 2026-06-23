@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use cubecl::prelude::*;
-use massively::op::{BinaryOp1, PredicateOp2};
+use massively::op::{BinaryPredicateOp, ReductionOp};
 
 pub type Result<T = ()> = std::result::Result<T, massively::Error>;
 
@@ -15,7 +15,7 @@ pub fn assert_f32_near(actual: f32, expected: f32, tolerance: f32) {
 pub struct SumU32;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (u32,)> for SumU32
+impl<B> ReductionOp<B, (u32,)> for SumU32
 where
     B: massively::Backend,
 {
@@ -27,7 +27,7 @@ where
 pub struct SumF32;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (f32,)> for SumF32
+impl<B> ReductionOp<B, (f32,)> for SumF32
 where
     B: massively::Backend,
 {
@@ -39,7 +39,7 @@ where
 pub struct LessU32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32,)> for LessU32
+impl<B> BinaryPredicateOp<B, (u32,)> for LessU32
 where
     B: massively::Backend,
 {
@@ -51,7 +51,7 @@ where
 pub struct LessF32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (f32,)> for LessF32
+impl<B> BinaryPredicateOp<B, (f32,)> for LessF32
 where
     B: massively::Backend,
 {
@@ -63,7 +63,7 @@ where
 pub struct EqualU32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32,)> for EqualU32
+impl<B> BinaryPredicateOp<B, (u32,)> for EqualU32
 where
     B: massively::Backend,
 {
@@ -75,7 +75,7 @@ where
 pub struct EqualF32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (f32,)> for EqualF32
+impl<B> BinaryPredicateOp<B, (f32,)> for EqualF32
 where
     B: massively::Backend,
 {

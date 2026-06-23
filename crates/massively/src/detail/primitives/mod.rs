@@ -3,7 +3,6 @@ pub(crate) mod range;
 pub(crate) mod reduce;
 pub(crate) mod scan;
 pub(crate) mod search;
-pub(crate) mod segmented;
 pub(crate) mod select;
 pub(crate) mod workspace;
 

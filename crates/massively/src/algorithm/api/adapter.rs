@@ -49,11 +49,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::BinaryOp2<T> for KernelTuple1Op<B, Op>
+impl<B, T, Op> crate::detail::op::kernel::BinaryOp<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
     T: Scalar,
-    Op: op::BinaryOp1<B, (T,)>,
+    Op: op::ReductionOp<B, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> T {
         Op::apply((lhs,), (rhs,)).0
@@ -61,11 +61,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::PredicateOp1<T> for KernelTuple1Op<B, Op>
+impl<B, T, Op> crate::detail::op::kernel::PredicateOp<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
     T: Scalar,
-    Op: op::PredicateOp1<B, (T,)>,
+    Op: op::PredicateOp<B, (T,)>,
 {
     fn apply(input: T) -> bool {
         Op::apply((input,))
@@ -73,11 +73,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::PredicateOp2<T> for KernelTuple1Op<B, Op>
+impl<B, T, Op> crate::detail::op::kernel::BinaryPredicateOp<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
     T: Scalar,
-    Op: op::PredicateOp2<B, (T,)>,
+    Op: op::BinaryPredicateOp<B, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> bool {
         Op::apply((lhs,), (rhs,))
@@ -93,7 +93,7 @@ where
     Right: Scalar,
     Output: MItem<B>,
     Output: 'static,
-    Op: op::BinaryOp2<B, (Left,), (Right,), Output = Output>,
+    Op: op::BinaryOp<B, (Left,), (Right,), Output = Output>,
 {
     type Output = Output;
 
@@ -117,11 +117,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Item, Op> crate::detail::op::kernel::BinaryOp2<Item> for KernelOp<B, Op>
+impl<B, Item, Op> crate::detail::op::kernel::BinaryOp<Item> for KernelOp<B, Op>
 where
     B: Backend,
     Item: MItem<B>,
-    Op: op::BinaryOp1<B, Item>,
+    Op: op::ReductionOp<B, Item>,
 {
     fn apply(lhs: Item, rhs: Item) -> Item {
         Op::apply(lhs, rhs)
@@ -129,11 +129,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Item, Op> crate::detail::op::kernel::PredicateOp1<Item> for KernelOp<B, Op>
+impl<B, Item, Op> crate::detail::op::kernel::PredicateOp<Item> for KernelOp<B, Op>
 where
     B: Backend,
     Item: MItem<B>,
-    Op: op::PredicateOp1<B, Item>,
+    Op: op::PredicateOp<B, Item>,
 {
     fn apply(input: Item) -> bool {
         Op::apply(input)
@@ -141,11 +141,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Item, Op> crate::detail::op::kernel::PredicateOp2<Item> for KernelOp<B, Op>
+impl<B, Item, Op> crate::detail::op::kernel::BinaryPredicateOp<Item> for KernelOp<B, Op>
 where
     B: Backend,
     Item: MItem<B>,
-    Op: op::PredicateOp2<B, Item>,
+    Op: op::BinaryPredicateOp<B, Item>,
 {
     fn apply(lhs: Item, rhs: Item) -> bool {
         Op::apply(lhs, rhs)
@@ -156,7 +156,7 @@ where
 pub struct StencilFlag;
 
 #[cubecl::cube]
-impl<B> op::PredicateOp1<B, (u32,)> for StencilFlag
+impl<B> op::PredicateOp<B, (u32,)> for StencilFlag
 where
     B: Backend,
 {

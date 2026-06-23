@@ -14,11 +14,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, find_first_of};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    token_id: DeviceVec<Wgpu, u32>,
-    blocked_keyword_id: DeviceVec<Wgpu, u32>,
-) -> common::Result<Option<usize>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    token_id: DeviceVec<B, u32>,
+    blocked_keyword_id: DeviceVec<B, u32>,
+) -> common::Result<Option<usize>>
+where
+    B: massively::Backend,
+{
     find_first_of(
         exec,
         SoA1(token_id.slice(..)),

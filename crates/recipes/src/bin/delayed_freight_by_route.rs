@@ -17,17 +17,20 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, SoA2, Wgpu, copy_if, reduce_by_key, sort_by_key};
 
-struct Output {
-    route_id: DeviceVec<Wgpu, u32>,
-    delayed_weight: DeviceVec<Wgpu, f32>,
+struct Output<B: massively::Backend> {
+    route_id: DeviceVec<B, u32>,
+    delayed_weight: DeviceVec<B, f32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    route_id: DeviceVec<Wgpu, u32>,
-    weight: DeviceVec<Wgpu, f32>,
-    delayed: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    route_id: DeviceVec<B, u32>,
+    weight: DeviceVec<B, f32>,
+    delayed: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (delayed_route, delayed_weight) = copy_if(
         exec,
         SoA2(route_id.slice(..), weight.slice(..)),

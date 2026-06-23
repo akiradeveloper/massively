@@ -15,11 +15,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, lexicographical_compare};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    left: DeviceVec<Wgpu, u32>,
-    right: DeviceVec<Wgpu, u32>,
-) -> common::Result<bool> {
+fn solve<B>(
+    exec: &Executor<B>,
+    left: DeviceVec<B, u32>,
+    right: DeviceVec<B, u32>,
+) -> common::Result<bool>
+where
+    B: massively::Backend,
+{
     lexicographical_compare(
         exec,
         SoA1(left.slice(..)),

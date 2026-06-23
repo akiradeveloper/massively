@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::detail::op::kernel::{BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp};
+use crate::detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
 use cubecl::prelude::*;
 
 #[doc(hidden)]
@@ -15,10 +15,10 @@ impl<Less> Default for Tuple1Less<Less> {
 }
 
 #[cubecl::cube]
-impl<T, Less> PredicateOp2<T> for Tuple1Less<Less>
+impl<T, Less> BinaryPredicateOp<T> for Tuple1Less<Less>
 where
     T: CubePrimitive + CubeElement,
-    Less: PredicateOp2<(T,)>,
+    Less: BinaryPredicateOp<(T,)>,
 {
     fn apply(lhs: T, rhs: T) -> bool {
         Less::apply((lhs,), (rhs,))
@@ -37,10 +37,10 @@ impl<Op> Default for Tuple1BinaryOp<Op> {
 }
 
 #[cubecl::cube]
-impl<T, Op> BinaryOp2<T> for Tuple1BinaryOp<Op>
+impl<T, Op> BinaryOp<T> for Tuple1BinaryOp<Op>
 where
     T: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(T,)>,
+    Op: BinaryOp<(T,)>,
 {
     fn apply(lhs: T, rhs: T) -> T {
         Op::apply((lhs,), (rhs,)).0
@@ -84,10 +84,10 @@ impl<Op> Default for Tuple1PredicateOp<Op> {
 }
 
 #[cubecl::cube]
-impl<T, Op> PredicateOp1<T> for Tuple1PredicateOp<Op>
+impl<T, Op> PredicateOp<T> for Tuple1PredicateOp<Op>
 where
     T: CubePrimitive + CubeElement,
-    Op: PredicateOp1<(T,)>,
+    Op: PredicateOp<(T,)>,
 {
     fn apply(input: T) -> bool {
         Op::apply((input,))

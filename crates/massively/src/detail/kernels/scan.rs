@@ -1,5 +1,5 @@
 use crate::{
-    detail::op::kernel::{BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp},
+    detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp},
     expr::DeviceGpuExpr,
 };
 use cubecl::prelude::*;
@@ -8,8 +8,8 @@ use cubecl::prelude::*;
 pub(crate) fn scan_by_key_pass_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     input: &[T],
@@ -33,8 +33,8 @@ pub(crate) fn scan_by_key_pass_kernel<
 pub(crate) fn scan_by_key_block_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     input: &[T],
@@ -105,8 +105,8 @@ pub(crate) fn scan_by_key_device_expr_block_kernel<
     T: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
     ValueExpr: DeviceGpuExpr<T>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -224,8 +224,8 @@ pub(crate) fn scan_by_key_device_expr_block_kernel<
 pub(crate) fn scan_by_key_add_block_prefix_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     block_tail_keys: &[K],
@@ -279,8 +279,8 @@ pub(crate) fn scan_by_key_device_expr_add_block_prefix_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -369,8 +369,8 @@ macro_rules! define_tuple_by_key_block_scan_kernels {
         pub(crate) fn $block_name<
             $( $ty: CubePrimitive, )+
             T: CubePrimitive,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         >(
             $( $key: &[$ty], )+
             input: &[T],
@@ -444,8 +444,8 @@ macro_rules! define_tuple_by_key_block_scan_kernels {
         pub(crate) fn $add_prefix_name<
             $( $ty: CubePrimitive, )+
             T: CubePrimitive,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         >(
             $( $key: &[$ty], )+
             $( $tail: &[$ty], )+
@@ -506,8 +506,8 @@ macro_rules! define_tuple_by_key_block_scan_kernels {
 pub(crate) fn scan_by_key_make_exclusive_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     inclusive: &[T],
@@ -531,8 +531,8 @@ pub(crate) fn scan_by_key_device_expr_make_exclusive_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -583,8 +583,8 @@ pub(crate) fn scan_by_key_tuple2_device_expr_block_kernel<
     KeyExpr: DeviceGpuExpr<K>,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -711,8 +711,8 @@ pub(crate) fn scan_by_key_tuple2_device_expr_add_block_prefix_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -804,8 +804,8 @@ pub(crate) fn scan_by_key_tuple2_device_expr_make_exclusive_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -868,8 +868,8 @@ pub(crate) fn scan_by_key_tuple3_device_expr_block_kernel<
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -1013,8 +1013,8 @@ pub(crate) fn scan_by_key_tuple3_device_expr_add_block_prefix_kernel<
     B: CubePrimitive,
     C: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -1114,8 +1114,8 @@ pub(crate) fn scan_by_key_tuple3_device_expr_make_exclusive_kernel<
     B: CubePrimitive,
     C: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -1182,15 +1182,14 @@ macro_rules! define_tuple_value_by_key_scan_kernels {
     (
         $block_name:ident,
         $add_prefix_name:ident,
-        $exclusive_name:ident,
-        ( $( $ty:ident: $input:ident: $output:ident: $shared:ident: $tail:ident: $prefix:ident: $init:tt: $init_arg:ident: $addend:ident ),+ )
+        ( $( $ty:ident: $input:ident: $output:ident: $shared:ident: $tail:ident: $prefix:ident: $init:tt: $addend:ident ),+ )
     ) => {
         #[cube(launch_unchecked, explicit_define)]
         pub(crate) fn $block_name<
             K: CubePrimitive,
             $( $ty: CubePrimitive, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
         >(
             keys: &[K],
             $( $input: &[$ty], )+
@@ -1279,8 +1278,8 @@ macro_rules! define_tuple_value_by_key_scan_kernels {
         pub(crate) fn $add_prefix_name<
             K: CubePrimitive,
             $( $ty: CubePrimitive, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
         >(
             keys: &[K],
             block_tail_keys: &[K],
@@ -1335,59 +1334,26 @@ macro_rules! define_tuple_value_by_key_scan_kernels {
             }
         }
 
-        #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $exclusive_name<
-            K: CubePrimitive,
-            $( $ty: CubePrimitive, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
-        >(
-            keys: &[K],
-            $( $input: &[$ty], )+
-            $( $init_arg: &[$ty], )+
-            $( $output: &mut [$ty], )+
-        ) {
-            let unit = UNIT_POS as usize;
-            let cube_dim = 256usize;
-            let global = (CUBE_POS as usize) * cube_dim + unit;
-            if global < keys.len() {
-                if global == 0usize || !KeyEq::apply(keys[global - 1usize], keys[global]) {
-                    $(
-                        $output[global] = $init_arg[0];
-                    )+
-                } else {
-                    let reduced = Op::apply(
-                        ($( $init_arg[0] ),+),
-                        ($( $input[global - 1usize] ),+),
-                    );
-                    $(
-                        $output[global] = reduced.$init;
-                    )+
-                }
-            }
-        }
     };
 }
 
 define_tuple_value_by_key_scan_kernels!(
     scan_by_key_tuple2_block_kernel,
     scan_by_key_tuple2_add_block_prefix_kernel,
-    scan_by_key_tuple2_make_exclusive_kernel,
-    (A: input_a: output_a: shared_a: block_tail_a: prefix_a: 0: init_a: addend_a, B: input_b: output_b: shared_b: block_tail_b: prefix_b: 1: init_b: addend_b)
+    (A: input_a: output_a: shared_a: block_tail_a: prefix_a: 0: addend_a, B: input_b: output_b: shared_b: block_tail_b: prefix_b: 1: addend_b)
 );
 define_tuple_value_by_key_scan_kernels!(
     scan_by_key_tuple3_block_kernel,
     scan_by_key_tuple3_add_block_prefix_kernel,
-    scan_by_key_tuple3_make_exclusive_kernel,
-    (A: input_a: output_a: shared_a: block_tail_a: prefix_a: 0: init_a: addend_a, B: input_b: output_b: shared_b: block_tail_b: prefix_b: 1: init_b: addend_b, C: input_c: output_c: shared_c: block_tail_c: prefix_c: 2: init_c: addend_c)
+    (A: input_a: output_a: shared_a: block_tail_a: prefix_a: 0: addend_a, B: input_b: output_b: shared_b: block_tail_b: prefix_b: 1: addend_b, C: input_c: output_c: shared_c: block_tail_c: prefix_c: 2: addend_c)
 );
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn reduce_by_key_end_flags_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     inclusive: &[T],
@@ -1414,8 +1380,8 @@ pub(crate) fn reduce_by_key_device_expr_end_flags_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -1474,8 +1440,8 @@ pub(crate) fn reduce_by_key_tuple2_device_expr_end_flags_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -1544,8 +1510,8 @@ pub(crate) fn reduce_by_key_tuple3_device_expr_end_flags_kernel<
     B: CubePrimitive,
     C: CubePrimitive,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     key_slot0: &[K],
     key_slot1: &[K],
@@ -1620,8 +1586,8 @@ pub(crate) fn reduce_by_key_tuple3_device_expr_end_flags_kernel<
 pub(crate) fn reduce_by_key_end_flags_with_block_prefix_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     local_inclusive: &[T],
@@ -1691,8 +1657,8 @@ pub(crate) fn reduce_by_key_end_flags_with_block_prefix_kernel<
 pub(crate) fn reduce_by_key_values_at_ends_with_block_prefix_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     local_inclusive: &[T],
@@ -1760,7 +1726,6 @@ macro_rules! define_tuple_by_key_scan_kernels {
         $block_name:ident,
         $add_prefix_name:ident,
         $exclusive_name:ident,
-        $reduce_name:ident,
         ( $( $ty:ident: $key:ident: $tail:ident ),+ )
     ) => {
         define_tuple_by_key_block_scan_kernels!(
@@ -1769,12 +1734,13 @@ macro_rules! define_tuple_by_key_scan_kernels {
             ($( $ty: $key: $tail ),+)
         );
 
+        #[allow(dead_code)]
         #[cube(launch_unchecked, explicit_define)]
         pub(crate) fn $exclusive_name<
             $( $ty: CubePrimitive, )+
             T: CubePrimitive,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         >(
             $( $key: &[$ty], )+
             inclusive: &[T],
@@ -1797,38 +1763,6 @@ macro_rules! define_tuple_by_key_scan_kernels {
                 }
             }
         }
-
-        #[cube(launch_unchecked, explicit_define)]
-        pub(crate) fn $reduce_name<
-            $( $ty: CubePrimitive, )+
-            T: CubePrimitive,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
-        >(
-            $( $key: &[$ty], )+
-            inclusive: &[T],
-            init: &[T],
-            flags: &mut [u32],
-            values: &mut [T],
-        ) {
-            let unit = UNIT_POS as usize;
-            let cube_dim = 256usize;
-            let global = (CUBE_POS as usize) * cube_dim + unit;
-            if global < inclusive.len() {
-                if global + 1usize == inclusive.len()
-                    || !KeyEq::apply(
-                        ($( $key[global] ),+),
-                        ($( $key[global + 1usize] ),+),
-                    )
-                {
-                    flags[global] = 1u32;
-                    values[global] = Op::apply(init[0], inclusive[global]);
-                } else {
-                    flags[global] = 0u32;
-                    values[global] = inclusive[global];
-                }
-            }
-        }
     };
 }
 
@@ -1836,14 +1770,12 @@ define_tuple_by_key_scan_kernels!(
     scan_tuple2_by_key_block_kernel,
     scan_tuple2_by_key_add_block_prefix_kernel,
     scan_tuple2_by_key_make_exclusive_kernel,
-    reduce_tuple2_by_key_end_flags_kernel,
     (A: key_a: block_tail_a, B: key_b: block_tail_b)
 );
 define_tuple_by_key_scan_kernels!(
     scan_tuple3_by_key_block_kernel,
     scan_tuple3_by_key_add_block_prefix_kernel,
     scan_tuple3_by_key_make_exclusive_kernel,
-    reduce_tuple3_by_key_end_flags_kernel,
     (A: key_a: block_tail_a, B: key_b: block_tail_b, C: key_c: block_tail_c)
 );
 
@@ -1851,8 +1783,8 @@ define_tuple_by_key_scan_kernels!(
 pub(crate) fn reduce_by_key_values_at_ends_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 >(
     keys: &[K],
     inclusive: &[T],
@@ -1872,11 +1804,7 @@ pub(crate) fn reduce_by_key_values_at_ends_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn tuple2_apply_init_kernel<
-    A: CubePrimitive,
-    B: CubePrimitive,
-    Op: BinaryOp2<(A, B)>,
->(
+pub(crate) fn tuple2_apply_init_kernel<A: CubePrimitive, B: CubePrimitive, Op: BinaryOp<(A, B)>>(
     a: &[A],
     b: &[B],
     init_a: &[A],
@@ -1899,7 +1827,7 @@ pub(crate) fn tuple3_apply_init_kernel<
     A: CubePrimitive,
     B: CubePrimitive,
     C: CubePrimitive,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 >(
     a: &[A],
     b: &[B],
@@ -1926,7 +1854,7 @@ pub(crate) fn tuple3_apply_init_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn adjacent_difference_kernel<T: CubePrimitive, Op: BinaryOp2<T>>(
+pub(crate) fn adjacent_difference_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
     input: &[T],
     output: &mut [T],
 ) {
@@ -1945,7 +1873,7 @@ pub(crate) fn transform_if_kernel<
     T: CubePrimitive,
     S: CubePrimitive,
     Op: UnaryOp<T, Output = T>,
-    Pred: PredicateOp1<S>,
+    Pred: PredicateOp<S>,
 >(
     input: &[T],
     stencil: &[S],
@@ -1961,8 +1889,8 @@ pub(crate) fn transform_if_kernel<
 pub(crate) fn transform_binary_if_kernel<
     T: CubePrimitive,
     S: CubePrimitive,
-    Op: BinaryOp2<T>,
-    Pred: PredicateOp1<S>,
+    Op: BinaryOp<T>,
+    Pred: PredicateOp<S>,
 >(
     lhs: &[T],
     rhs: &[T],

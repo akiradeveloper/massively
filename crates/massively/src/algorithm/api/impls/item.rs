@@ -210,7 +210,7 @@ macro_rules! impl_mitem_tuple {
                 op: Op,
             ) -> Result<Self, Error>
             where
-                Op: op::BinaryOp1<B, Self>,
+                Op: op::ReductionOp<B, Self>,
             {
                 let _ = op;
                 crate::detail::reduce(policy, input, init, KernelOp::<B, Op>::new())
@@ -234,9 +234,9 @@ macro_rules! impl_mitem_tuple {
                 LeftIter: MIter<B, Item = Self>,
                 RightIter: MIter<B>,
                 TransformOp:
-                    op::BinaryOp2<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
+                    op::BinaryOp<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
                 Output: MItem<B>,
-                ReduceOp: op::BinaryOp1<B, Output>,
+                ReduceOp: op::ReductionOp<B, Output>,
             {
                 inner_product_left_item_body!(
                     B;
@@ -269,9 +269,9 @@ macro_rules! impl_mitem_tuple {
                 LeftScalar: Scalar + 'static,
                 LeftIter: MIter<B, Item = (LeftScalar,)>,
                 RightIter: MIter<B, Item = Self>,
-                TransformOp: op::BinaryOp2<B, (LeftScalar,), Self, Output = Output>,
+                TransformOp: op::BinaryOp<B, (LeftScalar,), Self, Output = Output>,
                 Output: MItem<B>,
-                ReduceOp: op::BinaryOp1<B, Output>,
+                ReduceOp: op::ReductionOp<B, Output>,
             {
                 inner_product_right_item_body!(
                     B;

@@ -15,18 +15,21 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, merge_by_key};
 
-struct Output {
-    timestamp: DeviceVec<Wgpu, u32>,
-    event_id: DeviceVec<Wgpu, u32>,
+struct Output<B: massively::Backend> {
+    timestamp: DeviceVec<B, u32>,
+    event_id: DeviceVec<B, u32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    left_timestamp: DeviceVec<Wgpu, u32>,
-    left_event_id: DeviceVec<Wgpu, u32>,
-    right_timestamp: DeviceVec<Wgpu, u32>,
-    right_event_id: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    left_timestamp: DeviceVec<B, u32>,
+    left_event_id: DeviceVec<B, u32>,
+    right_timestamp: DeviceVec<B, u32>,
+    right_event_id: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let ((timestamp,), (event_id,)) = merge_by_key(
         exec,
         SoA1(left_timestamp.slice(..)),

@@ -14,11 +14,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, set_intersection};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    a: DeviceVec<Wgpu, u32>,
-    b: DeviceVec<Wgpu, u32>,
-) -> common::Result<DeviceVec<Wgpu, u32>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    a: DeviceVec<B, u32>,
+    b: DeviceVec<B, u32>,
+) -> common::Result<DeviceVec<B, u32>>
+where
+    B: massively::Backend,
+{
     let (out,) = set_intersection(exec, SoA1(a.slice(..)), SoA1(b.slice(..)), common::LessU32)?;
     Ok(out)
 }

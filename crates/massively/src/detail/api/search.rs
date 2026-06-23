@@ -1,8 +1,7 @@
 use crate::{
-    detail::op::kernel::PredicateOp2,
+    detail::op::kernel::BinaryPredicateOp,
     device::{
-        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA2, SoA3, SoAView1, SoAView2,
-        SoAView3,
+        KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA2, SoA3, SoAView1, SoAView2, SoAView3,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -20,43 +19,472 @@ fn search_block_count(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
-fn materialize_one<Source>(
-    policy: &CubePolicy<Source::Runtime>,
-    input: SoAView1<Source>,
-) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
-where
-    SoAView1<Source>: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
-    Source: KernelColumn + KernelColumnAt<S0>,
-    Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: DeviceGpuExpr<Source::Item>,
-{
-    ReadOnlySoA::validate(&input)?;
-    super::device_expr_collect_with_policy(policy, &input.source)
+struct StagedSearchColumn {
+    slot0: (cubecl::server::Handle, usize),
+    slot1: (cubecl::server::Handle, usize),
+    slot2: (cubecl::server::Handle, usize),
+    slot3: (cubecl::server::Handle, usize),
+    slot_offsets: cubecl::server::Handle,
 }
 
-fn materialize_pair<Left, Right>(
-    policy: &CubePolicy<Left::Runtime>,
-    left: SoAView1<Left>,
-    right: SoAView1<Right>,
-) -> Result<
-    (
-        DeviceVec<Left::Runtime, Left::Item>,
-        DeviceVec<Left::Runtime, Left::Item>,
-    ),
-    Error,
->
+fn stage_search_column<Source>(
+    policy: &CubePolicy<Source::Runtime>,
+    source: &Source,
+) -> Result<StagedSearchColumn, Error>
 where
-    SoAView1<Left>: ReadOnlySoA<Item = (Left::Item,), Scalar = Left::Item>,
-    SoAView1<Right>: ReadOnlySoA<Item = (Right::Item,), Scalar = Right::Item>,
+    Source: KernelColumn + KernelColumnAt<S0>,
+{
+    let bindings = source.stage(policy)?;
+    let slot_offsets = bindings.slot_offsets_handle(policy.client())?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    Ok(StagedSearchColumn {
+        slot0: (slot0.0.clone(), slot0.1),
+        slot1: (slot1.0.clone(), slot1.1),
+        slot2: (slot2.0.clone(), slot2.1),
+        slot3: (slot3.0.clone(), slot3.1),
+        slot_offsets,
+    })
+}
+
+fn device_expr_mismatch<Left, Right, Op>(
+    policy: &CubePolicy<Left::Runtime>,
+    left: &Left,
+    right: &Right,
+) -> Result<Option<usize>, Error>
+where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
+    Op: BinaryPredicateOp<Left::Item>,
 {
-    let left = materialize_one(policy, left)?;
-    let right = materialize_one(policy, right)?;
-    Ok((left, right))
+    left.validate()?;
+    right.validate()?;
+    let min_len = left.len().min(right.len());
+    if min_len == 0 {
+        return if left.len() == right.len() {
+            Ok(None)
+        } else {
+            Ok(Some(0))
+        };
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(min_len)?;
+    let left_bindings = left.stage(policy)?;
+    let right_bindings = right.stage(policy)?;
+    let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
+    let right_slot_offsets = right_bindings.slot_offsets_handle(client)?;
+    let left_slot0 = left_bindings.slots.first().unwrap();
+    let left_slot1 = left_bindings.slots.get(1).unwrap_or(left_slot0);
+    let left_slot2 = left_bindings.slots.get(2).unwrap_or(left_slot0);
+    let left_slot3 = left_bindings.slots.get(3).unwrap_or(left_slot0);
+    let right_slot0 = right_bindings.slots.first().unwrap();
+    let right_slot1 = right_bindings.slots.get(1).unwrap_or(right_slot0);
+    let right_slot2 = right_bindings.slots.get(2).unwrap_or(right_slot0);
+    let right_slot3 = right_bindings.slots.get(3).unwrap_or(right_slot0);
+    let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
+
+    unsafe {
+        mismatch_device_expr_flags_kernel::launch_unchecked::<
+            Left::Item,
+            Left::Expr,
+            Right::Expr,
+            Op,
+            Left::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), min_len) },
+        );
+    }
+
+    if let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? {
+        return Ok(Some(index));
+    }
+
+    if left.len() == right.len() {
+        Ok(None)
+    } else {
+        Ok(Some(min_len))
+    }
+}
+
+fn device_expr_adjacent_find<Source, Pred>(
+    policy: &CubePolicy<Source::Runtime>,
+    input: &Source,
+) -> Result<Option<usize>, Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Pred: BinaryPredicateOp<Source::Item>,
+{
+    input.validate()?;
+    let len = input.len();
+    if len < 2 {
+        return Ok(None);
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(len)?;
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let bindings = input.stage(policy)?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+
+    unsafe {
+        adjacent_find_device_expr_flags_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Pred,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    search::first_flag(policy, flag_handle, len, len - 1)
+}
+
+fn device_expr_is_sorted_until<Source, Less>(
+    policy: &CubePolicy<Source::Runtime>,
+    input: &Source,
+) -> Result<usize, Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    input.validate()?;
+    let len = input.len();
+    if len <= 1 {
+        return Ok(len);
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(len)?;
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let bindings = input.stage(policy)?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+
+    unsafe {
+        sorted_break_device_expr_flags_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Less,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+}
+
+fn device_expr_lower_bound<Source, Less>(
+    policy: &CubePolicy<Source::Runtime>,
+    input: &Source,
+    value: Source::Item,
+) -> Result<usize, Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    input.validate()?;
+    let len = input.len();
+    if len == 0 {
+        return Ok(0);
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(len)?;
+    let value_handle = client.create_from_slice(Source::Item::as_bytes(&[value]));
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let bindings = input.stage(policy)?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+
+    unsafe {
+        lower_bound_device_expr_flags_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Less,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(value_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+}
+
+fn device_expr_upper_bound<Source, Less>(
+    policy: &CubePolicy<Source::Runtime>,
+    input: &Source,
+    value: Source::Item,
+) -> Result<usize, Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    input.validate()?;
+    let len = input.len();
+    if len == 0 {
+        return Ok(0);
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(len)?;
+    let value_handle = client.create_from_slice(Source::Item::as_bytes(&[value]));
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let bindings = input.stage(policy)?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+
+    unsafe {
+        upper_bound_device_expr_flags_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Less,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(value_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+}
+
+fn device_expr_find_first_of<Left, Right, Op>(
+    policy: &CubePolicy<Left::Runtime>,
+    input: &Left,
+    needles: &Right,
+) -> Result<Option<usize>, Error>
+where
+    Left: KernelColumn + KernelColumnAt<S0>,
+    Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
+    Left::Item: CubePrimitive + CubeElement,
+    Left::Expr: DeviceGpuExpr<Left::Item>,
+    Right::Expr: DeviceGpuExpr<Right::Item>,
+    Op: BinaryPredicateOp<Left::Item>,
+{
+    input.validate()?;
+    needles.validate()?;
+    if input.len() == 0 || needles.len() == 0 {
+        return Ok(None);
+    }
+
+    let client = policy.client();
+    let len = input.len();
+    let needle_len_u32 =
+        u32::try_from(needles.len()).map_err(|_| Error::LengthTooLarge { len: needles.len() })?;
+    let needle_len_handle = client.create_from_slice(u32::as_bytes(&[needle_len_u32]));
+    let block_count_u32 = search_block_count(len)?;
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let input_bindings = input.stage(policy)?;
+    let needle_bindings = needles.stage(policy)?;
+    let input_slot_offsets = input_bindings.slot_offsets_handle(client)?;
+    let needle_slot_offsets = needle_bindings.slot_offsets_handle(client)?;
+    let input_slot0 = input_bindings.slots.first().unwrap();
+    let input_slot1 = input_bindings.slots.get(1).unwrap_or(input_slot0);
+    let input_slot2 = input_bindings.slots.get(2).unwrap_or(input_slot0);
+    let input_slot3 = input_bindings.slots.get(3).unwrap_or(input_slot0);
+    let needle_slot0 = needle_bindings.slots.first().unwrap();
+    let needle_slot1 = needle_bindings.slots.get(1).unwrap_or(needle_slot0);
+    let needle_slot2 = needle_bindings.slots.get(2).unwrap_or(needle_slot0);
+    let needle_slot3 = needle_bindings.slots.get(3).unwrap_or(needle_slot0);
+
+    unsafe {
+        find_first_of_device_expr_flags_kernel::launch_unchecked::<
+            Left::Item,
+            Left::Expr,
+            Right::Expr,
+            Op,
+            Left::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot2.0.clone(), input_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot3.0.clone(), input_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(needle_slot0.0.clone(), needle_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(needle_slot1.0.clone(), needle_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(needle_slot2.0.clone(), needle_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(needle_slot3.0.clone(), needle_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(needle_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(needle_len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    search::first_flag(policy, flag_handle, len, len)
+}
+
+fn device_expr_lexicographical_compare<Left, Right, Less>(
+    policy: &CubePolicy<Left::Runtime>,
+    left: &Left,
+    right: &Right,
+) -> Result<bool, Error>
+where
+    Left: KernelColumn + KernelColumnAt<S0>,
+    Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
+    Left::Item: CubePrimitive + CubeElement,
+    Left::Expr: DeviceGpuExpr<Left::Item>,
+    Right::Expr: DeviceGpuExpr<Right::Item>,
+    Less: BinaryPredicateOp<Left::Item>,
+{
+    left.validate()?;
+    right.validate()?;
+    let min_len = left.len().min(right.len());
+    if min_len == 0 {
+        return Ok(left.len() < right.len());
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(min_len)?;
+    let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
+    let left_bindings = left.stage(policy)?;
+    let right_bindings = right.stage(policy)?;
+    let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
+    let right_slot_offsets = right_bindings.slot_offsets_handle(client)?;
+    let left_slot0 = left_bindings.slots.first().unwrap();
+    let left_slot1 = left_bindings.slots.get(1).unwrap_or(left_slot0);
+    let left_slot2 = left_bindings.slots.get(2).unwrap_or(left_slot0);
+    let left_slot3 = left_bindings.slots.get(3).unwrap_or(left_slot0);
+    let right_slot0 = right_bindings.slots.first().unwrap();
+    let right_slot1 = right_bindings.slots.get(1).unwrap_or(right_slot0);
+    let right_slot2 = right_bindings.slots.get(2).unwrap_or(right_slot0);
+    let right_slot3 = right_bindings.slots.get(3).unwrap_or(right_slot0);
+
+    unsafe {
+        lexicographical_diff_device_expr_flags_kernel::launch_unchecked::<
+            Left::Item,
+            Left::Expr,
+            Right::Expr,
+            Less,
+            Left::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), min_len) },
+        );
+    }
+
+    let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? else {
+        return Ok(left.len() < right.len());
+    };
+
+    let index_handle = client.create_from_slice(u32::as_bytes(&[index as u32]));
+    let output_handle = client.empty(std::mem::size_of::<u32>());
+    unsafe {
+        lexicographical_compare_at_device_expr_kernel::launch_unchecked::<
+            Left::Item,
+            Left::Expr,
+            Right::Expr,
+            Less,
+            Left::Runtime,
+        >(
+            client,
+            CubeCount::new_single(),
+            CubeDim::new_1d(1),
+            unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(index_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), 1) },
+        );
+    }
+
+    Ok(scan::read_u32_scalar::<Left::Runtime>(client, output_handle)? != 0)
 }
 
 /// Input accepted by min/max element queries.
@@ -91,7 +519,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
 
@@ -134,7 +562,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
 
@@ -180,7 +608,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<(Source::Item,)>,
+    Less: BinaryPredicateOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
 
@@ -241,7 +669,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Pred: PredicateOp2<Source::Item>,
+    Pred: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
 
@@ -250,8 +678,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _pred: GpuOp<Pred>,
     ) -> Result<Option<usize>, Error> {
-        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
-        search::adjacent_find(policy, &input, GpuOp::<Pred>::new())
+        ReadOnlySoA::validate(&self)?;
+        device_expr_adjacent_find::<Source, Pred>(policy, &self.source)
     }
 }
 
@@ -260,7 +688,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Pred: PredicateOp2<Source::Item>,
+    Pred: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
 
@@ -282,7 +710,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Pred: PredicateOp2<(Source::Item,)>,
+    Pred: BinaryPredicateOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
 
@@ -348,7 +776,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
@@ -359,10 +787,10 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error> {
-        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
+        ReadOnlySoA::validate(&self)?;
         Ok((
-            search::lower_bound(policy, &input, value.clone(), GpuOp::<Less>::new())?,
-            search::upper_bound(policy, &input, value, GpuOp::<Less>::new())?,
+            device_expr_lower_bound::<Source, Less>(policy, &self.source, value.clone())?,
+            device_expr_upper_bound::<Source, Less>(policy, &self.source, value)?,
         ))
     }
 
@@ -372,8 +800,8 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
-        search::lower_bound(policy, &input, value, GpuOp::<Less>::new())
+        ReadOnlySoA::validate(&self)?;
+        device_expr_lower_bound::<Source, Less>(policy, &self.source, value)
     }
 
     fn upper_bound_input(
@@ -382,8 +810,8 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
-        search::upper_bound(policy, &input, value, GpuOp::<Less>::new())
+        ReadOnlySoA::validate(&self)?;
+        device_expr_upper_bound::<Source, Less>(policy, &self.source, value)
     }
 
     fn is_sorted_until_input(
@@ -391,8 +819,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        let input = super::device_expr_collect_with_policy(policy, &self.source)?;
-        search::is_sorted_until(policy, &input, GpuOp::<Less>::new())
+        ReadOnlySoA::validate(&self)?;
+        device_expr_is_sorted_until::<Source, Less>(policy, &self.source)
     }
 
     fn is_sorted_input(
@@ -410,7 +838,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
@@ -487,7 +915,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Less: PredicateOp2<(Source::Item,)>,
+    Less: BinaryPredicateOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
     type Item = (Source::Item,);
@@ -685,7 +1113,7 @@ where
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Op: PredicateOp2<Left::Item>,
+    Op: BinaryPredicateOp<Left::Item>,
 {
     type Runtime = Left::Runtime;
 
@@ -695,8 +1123,10 @@ where
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        let (left, right) = materialize_pair(policy, self, other)?;
-        search::equal(policy, &left, &right, GpuOp::<Op>::new())
+        if self.source.len() != other.source.len() {
+            return Ok(false);
+        }
+        Ok(device_expr_mismatch::<Left, Right, Op>(policy, &self.source, &other.source)?.is_none())
     }
 
     fn mismatch_input(
@@ -705,8 +1135,7 @@ where
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        let (left, right) = materialize_pair(policy, self, other)?;
-        search::mismatch(policy, &left, &right, GpuOp::<Op>::new())
+        device_expr_mismatch::<Left, Right, Op>(policy, &self.source, &other.source)
     }
 
     fn find_first_of_input(
@@ -715,8 +1144,9 @@ where
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        let (input, needles) = materialize_pair(policy, self, other)?;
-        search::find_first_of(policy, &input, &needles, GpuOp::<Op>::new())
+        ReadOnlySoA::validate(&self)?;
+        ReadOnlySoA::validate(&other)?;
+        device_expr_find_first_of::<Left, Right, Op>(policy, &self.source, &other.source)
     }
 
     fn lexicographical_compare_input(
@@ -725,8 +1155,9 @@ where
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        let (left, right) = materialize_pair(policy, self, other)?;
-        search::lexicographical_compare(policy, &left, &right, GpuOp::<Op>::new())
+        ReadOnlySoA::validate(&self)?;
+        ReadOnlySoA::validate(&other)?;
+        device_expr_lexicographical_compare::<Left, Right, Op>(policy, &self.source, &other.source)
     }
 }
 
@@ -737,7 +1168,7 @@ where
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Op: PredicateOp2<Left::Item>,
+    Op: BinaryPredicateOp<Left::Item>,
 {
     type Runtime = Left::Runtime;
 
@@ -805,7 +1236,7 @@ where
     Left::Item: CubePrimitive + CubeElement,
     Left::Expr: DeviceGpuExpr<Left::Item>,
     Right::Expr: DeviceGpuExpr<Right::Item>,
-    Op: PredicateOp2<(Left::Item,)>,
+    Op: BinaryPredicateOp<(Left::Item,)>,
 {
     type Runtime = Left::Runtime;
 
@@ -974,7 +1405,7 @@ macro_rules! impl_tuple_search {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Less: PredicateOp2<(
+            Less: BinaryPredicateOp<(
                 impl_tuple_search!(@item_ty $first),
                 $( impl_tuple_search!(@item_ty $rest) ),+
             )>,
@@ -1003,11 +1434,11 @@ macro_rules! impl_tuple_search {
                 _less: GpuOp<Less>,
             ) -> Result<Option<(usize, usize)>, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let len = self.$first_field.len();
+                let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $field = stage_search_column(policy, &self.$field)?;
                 )+
-                let len = $first_field.len();
                 if len == 0 {
                     return Ok(None);
                 }
@@ -1025,15 +1456,25 @@ macro_rules! impl_tuple_search {
                     $minmax_element_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Less,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(current_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.slot0.0.clone(), $field.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot1.0.clone(), $field.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot2.0.clone(), $field.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot3.0.clone(), $field.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                         unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
@@ -1053,15 +1494,25 @@ macro_rules! impl_tuple_search {
                         $minmax_index_kernel::launch_unchecked::<
                             <$first as KernelColumn>::Item,
                             $( <$rest as KernelColumn>::Item, )+
+                            <$first as KernelColumn>::Expr,
+                            $( <$rest as KernelColumn>::Expr, )+
                             Less,
                             <$first as KernelColumn>::Runtime,
                         >(
                             client,
                             CubeCount::Static(next_count_u32, 1, 1),
                             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                            unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                             $(
-                                unsafe { BufferArg::from_raw_parts($field.handle.clone(), len) },
+                                unsafe { BufferArg::from_raw_parts($field.slot0.0.clone(), $field.slot0.1) },
+                                unsafe { BufferArg::from_raw_parts($field.slot1.0.clone(), $field.slot1.1) },
+                                unsafe { BufferArg::from_raw_parts($field.slot2.0.clone(), $field.slot2.1) },
+                                unsafe { BufferArg::from_raw_parts($field.slot3.0.clone(), $field.slot3.1) },
+                                unsafe { BufferArg::from_raw_parts($field.slot_offsets.clone(), 4) },
                             )+
                             unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
                             unsafe { BufferArg::from_raw_parts(candidate_len_handle.clone(), 1) },
@@ -1097,7 +1548,7 @@ macro_rules! impl_tuple_search {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Pred: PredicateOp2<(
+            Pred: BinaryPredicateOp<(
                 impl_tuple_search!(@item_ty $first),
                 $( impl_tuple_search!(@item_ty $rest) ),+
             )>,
@@ -1110,11 +1561,11 @@ macro_rules! impl_tuple_search {
                 _pred: GpuOp<Pred>,
             ) -> Result<Option<usize>, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let len = self.$first_field.len();
+                let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $field = stage_search_column(policy, &self.$field)?;
                 )+
-                let len = $first_field.len();
                 if len < 2 {
                     return Ok(None);
                 }
@@ -1125,15 +1576,25 @@ macro_rules! impl_tuple_search {
                     $adjacent_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Pred,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.slot0.0.clone(), $field.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot1.0.clone(), $field.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot2.0.clone(), $field.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot3.0.clone(), $field.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
@@ -1157,7 +1618,7 @@ macro_rules! impl_tuple_search {
             $(
                 <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
             )+
-            Less: PredicateOp2<(
+            Less: BinaryPredicateOp<(
                 impl_tuple_search!(@item_ty $first),
                 $( impl_tuple_search!(@item_ty $rest) ),+
             )>,
@@ -1176,11 +1637,11 @@ macro_rules! impl_tuple_search {
                 _less: GpuOp<Less>,
             ) -> Result<(usize, usize), Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let len = self.$first_field.len();
+                let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $field = stage_search_column(policy, &self.$field)?;
                 )+
-                let len = $first_field.len();
                 if len == 0 {
                     return Ok((0, 0));
                 }
@@ -1203,15 +1664,25 @@ macro_rules! impl_tuple_search {
                     $lower_bound_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Less,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.0.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(first_value_handle.clone(), 1) },
                         $(
@@ -1222,15 +1693,25 @@ macro_rules! impl_tuple_search {
                     $upper_bound_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Less,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.0.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(first_value_handle.clone(), 1) },
                         $(
@@ -1252,11 +1733,11 @@ macro_rules! impl_tuple_search {
                 _less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let len = self.$first_field.len();
+                let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $field = stage_search_column(policy, &self.$field)?;
                 )+
-                let len = $first_field.len();
                 if len == 0 {
                     return Ok(0);
                 }
@@ -1278,15 +1759,25 @@ macro_rules! impl_tuple_search {
                     $lower_bound_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Less,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.0.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(first_value_handle.clone(), 1) },
                         $(
@@ -1306,11 +1797,11 @@ macro_rules! impl_tuple_search {
                 _less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let len = self.$first_field.len();
+                let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $field = stage_search_column(policy, &self.$field)?;
                 )+
-                let len = $first_field.len();
                 if len == 0 {
                     return Ok(0);
                 }
@@ -1332,15 +1823,25 @@ macro_rules! impl_tuple_search {
                     $upper_bound_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Less,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.0.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(first_value_handle.clone(), 1) },
                         $(
@@ -1359,11 +1860,11 @@ macro_rules! impl_tuple_search {
                 _less: GpuOp<Less>,
             ) -> Result<usize, Error> {
                 ReadOnlySoA::validate(&self)?;
-                let $first_field = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
+                let len = self.$first_field.len();
+                let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
-                    let $field = super::device_expr_collect_with_policy(policy, &self.$field)?;
+                    let $field = stage_search_column(policy, &self.$field)?;
                 )+
-                let len = $first_field.len();
                 if len <= 1 {
                     return Ok(len);
                 }
@@ -1374,15 +1875,25 @@ macro_rules! impl_tuple_search {
                     $sorted_break_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
                         Less,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.handle.clone(), len) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($field.handle.clone(), len) },
+                            unsafe { BufferArg::from_raw_parts($field.slot0.0.clone(), $field.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot1.0.clone(), $field.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot2.0.clone(), $field.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot3.0.clone(), $field.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
@@ -1445,7 +1956,7 @@ macro_rules! impl_tuple_pair_search {
                 <$right_rest as KernelColumn>::Expr:
                     DeviceGpuExpr<<$right_rest as KernelColumn>::Item>,
             )+
-            Op: PredicateOp2<(
+            Op: BinaryPredicateOp<(
                 <$first as KernelColumn>::Item,
                 $( <$rest as KernelColumn>::Item ),+
             )>,
@@ -1472,16 +1983,11 @@ macro_rules! impl_tuple_pair_search {
             ) -> Result<Option<usize>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                let $right_first_value = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
-                $(
-                    let $left_value = super::device_expr_collect_with_policy(policy, &self.$field)?;
-                    let $right_value = super::device_expr_collect_with_policy(policy, &other.$field)?;
-                )+
-
-                let min_len = $left_first.len().min($right_first_value.len());
+                let left_len = self.$first_field.len();
+                let right_len = other.$first_field.len();
+                let min_len = left_len.min(right_len);
                 if min_len == 0 {
-                    return if $left_first.len() == $right_first_value.len() {
+                    return if left_len == right_len {
                         Ok(None)
                     } else {
                         Ok(Some(0))
@@ -1490,24 +1996,52 @@ macro_rules! impl_tuple_pair_search {
 
                 let block_count_u32 = search_block_count(min_len)?;
                 let client = policy.client();
+                let $left_first = stage_search_column(policy, &self.$first_field)?;
+                let $right_first_value = stage_search_column(policy, &other.$first_field)?;
+                $(
+                    let $left_value = stage_search_column(policy, &self.$field)?;
+                    let $right_value = stage_search_column(policy, &other.$field)?;
+                )+
                 let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
                 unsafe {
                     $mismatch_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        <$right_first as KernelColumn>::Expr,
+                        $(
+                            <$rest as KernelColumn>::Expr,
+                            <$right_rest as KernelColumn>::Expr,
+                        )+
                         Op,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($left_first.handle.clone(), $left_first.len()) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot2.0.clone(), $left_first.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot3.0.clone(), $left_first.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($left_value.handle.clone(), $left_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot0.0.clone(), $left_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot1.0.clone(), $left_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot2.0.clone(), $left_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot3.0.clone(), $left_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts($right_first_value.handle.clone(), $right_first_value.len()) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot0.0.clone(), $right_first_value.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot1.0.clone(), $right_first_value.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot2.0.clone(), $right_first_value.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot3.0.clone(), $right_first_value.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($right_value.handle.clone(), $right_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot0.0.clone(), $right_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot1.0.clone(), $right_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot2.0.clone(), $right_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot3.0.clone(), $right_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), min_len) },
                     );
@@ -1516,7 +2050,7 @@ macro_rules! impl_tuple_pair_search {
                 if let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? {
                     return Ok(Some(index));
                 }
-                if $left_first.len() == $right_first_value.len() {
+                if left_len == right_len {
                     Ok(None)
                 } else {
                     Ok(Some(min_len))
@@ -1531,46 +2065,73 @@ macro_rules! impl_tuple_pair_search {
             ) -> Result<Option<usize>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                let $right_first_value = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
-                $(
-                    let $left_value = super::device_expr_collect_with_policy(policy, &self.$field)?;
-                    let $right_value = super::device_expr_collect_with_policy(policy, &other.$field)?;
-                )+
-
-                if $left_first.len() == 0 || $right_first_value.len() == 0 {
+                let input_len = self.$first_field.len();
+                let needle_len = other.$first_field.len();
+                if input_len == 0 || needle_len == 0 {
                     return Ok(None);
                 }
 
-                let block_count_u32 = search_block_count($left_first.len())?;
+                let block_count_u32 = search_block_count(input_len)?;
                 let client = policy.client();
-                let flag_handle = client.empty($left_first.len() * std::mem::size_of::<u32>());
+                let needle_len_u32 =
+                    u32::try_from(needle_len).map_err(|_| Error::LengthTooLarge { len: needle_len })?;
+                let needle_len_handle = client.create_from_slice(u32::as_bytes(&[needle_len_u32]));
+                let $left_first = stage_search_column(policy, &self.$first_field)?;
+                let $right_first_value = stage_search_column(policy, &other.$first_field)?;
+                $(
+                    let $left_value = stage_search_column(policy, &self.$field)?;
+                    let $right_value = stage_search_column(policy, &other.$field)?;
+                )+
+                let flag_handle = client.empty(input_len * std::mem::size_of::<u32>());
                 unsafe {
                     $find_first_of_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        <$right_first as KernelColumn>::Expr,
+                        $(
+                            <$rest as KernelColumn>::Expr,
+                            <$right_rest as KernelColumn>::Expr,
+                        )+
                         Op,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($left_first.handle.clone(), $left_first.len()) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot2.0.clone(), $left_first.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot3.0.clone(), $left_first.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($left_value.handle.clone(), $left_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot0.0.clone(), $left_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot1.0.clone(), $left_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot2.0.clone(), $left_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot3.0.clone(), $left_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts($right_first_value.handle.clone(), $right_first_value.len()) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot0.0.clone(), $right_first_value.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot1.0.clone(), $right_first_value.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot2.0.clone(), $right_first_value.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot3.0.clone(), $right_first_value.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($right_value.handle.clone(), $right_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot0.0.clone(), $right_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot1.0.clone(), $right_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot2.0.clone(), $right_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot3.0.clone(), $right_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts(flag_handle.clone(), $left_first.len()) },
+                        unsafe { BufferArg::from_raw_parts(needle_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(flag_handle.clone(), input_len) },
                     );
                 }
                 search::first_flag(
                     policy,
                     flag_handle,
-                    $left_first.len(),
-                    $left_first.len(),
+                    input_len,
+                    input_len,
                 )
             }
 
@@ -1582,45 +2143,68 @@ macro_rules! impl_tuple_pair_search {
             ) -> Result<bool, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let $left_first = super::device_expr_collect_with_policy(policy, &self.$first_field)?;
-                let $right_first_value = super::device_expr_collect_with_policy(policy, &other.$first_field)?;
-                $(
-                    let $left_value = super::device_expr_collect_with_policy(policy, &self.$field)?;
-                    let $right_value = super::device_expr_collect_with_policy(policy, &other.$field)?;
-                )+
-
-                let min_len = $left_first.len().min($right_first_value.len());
+                let left_len = self.$first_field.len();
+                let right_len = other.$first_field.len();
+                let min_len = left_len.min(right_len);
                 if min_len == 0 {
-                    return Ok($left_first.len() < $right_first_value.len());
+                    return Ok(left_len < right_len);
                 }
 
                 let block_count_u32 = search_block_count(min_len)?;
                 let client = policy.client();
+                let $left_first = stage_search_column(policy, &self.$first_field)?;
+                let $right_first_value = stage_search_column(policy, &other.$first_field)?;
+                $(
+                    let $left_value = stage_search_column(policy, &self.$field)?;
+                    let $right_value = stage_search_column(policy, &other.$field)?;
+                )+
                 let flag_handle = client.empty(min_len * std::mem::size_of::<u32>());
                 unsafe {
                     $lexicographical_diff_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        <$right_first as KernelColumn>::Expr,
+                        $(
+                            <$rest as KernelColumn>::Expr,
+                            <$right_rest as KernelColumn>::Expr,
+                        )+
                         Op,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::Static(block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($left_first.handle.clone(), $left_first.len()) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot2.0.clone(), $left_first.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot3.0.clone(), $left_first.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($left_value.handle.clone(), $left_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot0.0.clone(), $left_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot1.0.clone(), $left_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot2.0.clone(), $left_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot3.0.clone(), $left_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts($right_first_value.handle.clone(), $right_first_value.len()) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot0.0.clone(), $right_first_value.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot1.0.clone(), $right_first_value.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot2.0.clone(), $right_first_value.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot3.0.clone(), $right_first_value.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($right_value.handle.clone(), $right_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot0.0.clone(), $right_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot1.0.clone(), $right_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot2.0.clone(), $right_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot3.0.clone(), $right_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), min_len) },
                     );
                 }
 
                 let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? else {
-                    return Ok($left_first.len() < $right_first_value.len());
+                    return Ok(left_len < right_len);
                 };
 
                 let index_handle = client.create_from_slice(u32::as_bytes(&[index as u32]));
@@ -1629,19 +2213,41 @@ macro_rules! impl_tuple_pair_search {
                     $lexicographical_compare_at_kernel::launch_unchecked::<
                         <$first as KernelColumn>::Item,
                         $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        <$right_first as KernelColumn>::Expr,
+                        $(
+                            <$rest as KernelColumn>::Expr,
+                            <$right_rest as KernelColumn>::Expr,
+                        )+
                         Op,
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
                         CubeCount::new_single(),
                         CubeDim::new_1d(1),
-                        unsafe { BufferArg::from_raw_parts($left_first.handle.clone(), $left_first.len()) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot2.0.clone(), $left_first.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot3.0.clone(), $left_first.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($left_first.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($left_value.handle.clone(), $left_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot0.0.clone(), $left_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot1.0.clone(), $left_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot2.0.clone(), $left_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot3.0.clone(), $left_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($left_value.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts($right_first_value.handle.clone(), $right_first_value.len()) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot0.0.clone(), $right_first_value.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot1.0.clone(), $right_first_value.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot2.0.clone(), $right_first_value.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot3.0.clone(), $right_first_value.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($right_first_value.slot_offsets.clone(), 4) },
                         $(
-                            unsafe { BufferArg::from_raw_parts($right_value.handle.clone(), $right_value.len()) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot0.0.clone(), $right_value.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot1.0.clone(), $right_value.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot2.0.clone(), $right_value.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot3.0.clone(), $right_value.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($right_value.slot_offsets.clone(), 4) },
                         )+
                         unsafe { BufferArg::from_raw_parts(index_handle.clone(), 1) },
                         unsafe { BufferArg::from_raw_parts(output_handle.clone(), 1) },
@@ -1656,15 +2262,15 @@ macro_rules! impl_tuple_pair_search {
     };
 }
 
-impl_tuple_search!(SoAView2<A, B> { left: 0, right: 1 }, tuple2_adjacent_flags_kernel, tuple2_sorted_break_flags_kernel, tuple2_lower_bound_flags_kernel, tuple2_upper_bound_flags_kernel, tuple2_minmax_element_partials_kernel, tuple2_minmax_index_partials_kernel);
-impl_tuple_search!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_flags_kernel, tuple3_sorted_break_flags_kernel, tuple3_lower_bound_flags_kernel, tuple3_upper_bound_flags_kernel, tuple3_minmax_element_partials_kernel, tuple3_minmax_index_partials_kernel);
+impl_tuple_search!(SoAView2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
 
-impl_tuple_pair_search!(SoAView2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_flags_kernel, tuple2_find_first_of_flags_kernel, tuple2_lexicographical_diff_flags_kernel, tuple2_lexicographical_compare_at_kernel);
-impl_tuple_pair_search!(SoAView3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_flags_kernel, tuple3_find_first_of_flags_kernel, tuple3_lexicographical_diff_flags_kernel, tuple3_lexicographical_compare_at_kernel);
-impl_tuple_search!(SoA2<A, B> { left: 0, right: 1 }, tuple2_adjacent_flags_kernel, tuple2_sorted_break_flags_kernel, tuple2_lower_bound_flags_kernel, tuple2_upper_bound_flags_kernel, tuple2_minmax_element_partials_kernel, tuple2_minmax_index_partials_kernel);
-impl_tuple_search!(SoA3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_flags_kernel, tuple3_sorted_break_flags_kernel, tuple3_lower_bound_flags_kernel, tuple3_upper_bound_flags_kernel, tuple3_minmax_element_partials_kernel, tuple3_minmax_index_partials_kernel);
-impl_tuple_pair_search!(SoA2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_flags_kernel, tuple2_find_first_of_flags_kernel, tuple2_lexicographical_diff_flags_kernel, tuple2_lexicographical_compare_at_kernel);
-impl_tuple_pair_search!(SoA3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_flags_kernel, tuple3_find_first_of_flags_kernel, tuple3_lexicographical_diff_flags_kernel, tuple3_lexicographical_compare_at_kernel);
+impl_tuple_pair_search!(SoAView2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(SoAView3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_search!(SoA2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(SoA3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
+impl_tuple_pair_search!(SoA2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(SoA3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
 
 /// Finds the minimum element index according to `Less`.
 pub fn min_element<Input, Less>(

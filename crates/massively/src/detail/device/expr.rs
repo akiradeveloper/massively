@@ -101,6 +101,7 @@ pub(crate) trait ReadOnlyKernelColumn: StorageKernelColumn {}
 /// storage-local lowering metadata; the common iterator abstraction remains
 /// logical `i -> T`.
 #[doc(hidden)]
+#[derive(Clone)]
 pub struct DeviceColumnView<R: Runtime, T> {
     pub(crate) source: DeviceVec<R, T>,
     pub(crate) offset: usize,
@@ -124,25 +125,6 @@ where
             source: DeviceVec::from_handle(source.policy_id(), source.handle.clone(), source.len()),
             offset,
             len,
-        }
-    }
-}
-
-impl<R, T> DeviceColumnView<R, T>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-{
-    pub(crate) fn materialize(self, policy: &CubePolicy<R>) -> Result<DeviceVec<R, T>, Error> {
-        if self.offset == 0 && self.len == self.source.len() {
-            Ok(self.source)
-        } else {
-            crate::primitives::range::copy_slice_with_policy(
-                policy,
-                &self.source,
-                self.offset,
-                self.len,
-            )
         }
     }
 }
@@ -529,6 +511,14 @@ impl KernelColumnBindings {
                 u32::try_from(*offset).map_err(|_| Error::LengthTooLarge { len: *offset })?;
         }
         Ok(client.create_from_slice(u32::as_bytes(&offsets)))
+    }
+
+    pub(crate) fn slot_or_first(&self, index: usize) -> &(cubecl::server::Handle, usize) {
+        let first = self
+            .slots
+            .first()
+            .expect("kernel column has at least one slot");
+        self.slots.get(index).unwrap_or(first)
     }
 }
 

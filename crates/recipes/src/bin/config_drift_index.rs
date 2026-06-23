@@ -15,11 +15,14 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, mismatch};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    expected: DeviceVec<Wgpu, u32>,
-    actual: DeviceVec<Wgpu, u32>,
-) -> common::Result<Option<usize>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    expected: DeviceVec<B, u32>,
+    actual: DeviceVec<B, u32>,
+) -> common::Result<Option<usize>>
+where
+    B: massively::Backend,
+{
     mismatch(
         exec,
         SoA1(expected.slice(..)),

@@ -245,6 +245,25 @@ fn gather_accepts_device_slice_indices() {
 }
 
 #[test]
+fn gather_if_accepts_offset_device_slices() {
+    let exec = exec();
+    let values = exec.to_device(&[99_u32, 10, 20, 30, 40, 88]).unwrap();
+    let indices = exec.to_device(&[77_u32, 3, 1, 0, 2, 66]).unwrap();
+    let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0, 0]).unwrap();
+
+    let (output,) = gather_if(
+        &exec,
+        massively::SoA1(values.slice(1..5)),
+        indices.slice(1..5),
+        (0_u32,),
+        stencil.slice(1..5),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![40, 0, 10, 0]);
+}
+
+#[test]
 fn equal_accepts_device_slices() {
     let exec = exec();
     let left = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
@@ -276,6 +295,104 @@ fn merge_accepts_device_slices() {
     .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3, 4]);
+}
+
+#[test]
+fn merge_by_key_accepts_offset_device_slices_with_tuple_values() {
+    let exec = exec();
+    let left_keys = exec.to_device(&[99_u32, 1, 3, 88]).unwrap();
+    let left_a = exec.to_device(&[999.0_f32, 100.0, 300.0, 888.0]).unwrap();
+    let left_b = exec.to_device(&[999_u32, 10, 30, 888]).unwrap();
+    let right_keys = exec.to_device(&[77_u32, 2, 4, 66]).unwrap();
+    let right_a = exec.to_device(&[777.0_f32, 200.0, 400.0, 666.0]).unwrap();
+    let right_b = exec.to_device(&[777_u32, 20, 40, 666]).unwrap();
+
+    let ((keys,), (a, b)) = merge_by_key(
+        &exec,
+        massively::SoA1(left_keys.slice(1..3)),
+        massively::SoA2(left_a.slice(1..3), left_b.slice(1..3)),
+        massively::SoA1(right_keys.slice(1..3)),
+        massively::SoA2(right_a.slice(1..3), right_b.slice(1..3)),
+        LessU32,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2, 3, 4]);
+    assert_eq!(exec.to_host(&a).unwrap(), vec![100.0, 200.0, 300.0, 400.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 20, 30, 40]);
+}
+
+#[test]
+fn tuple_set_algorithms_accept_offset_device_slices() {
+    let exec = exec();
+    let left_a = exec
+        .to_device(&[99.0_f32, 1.0, 2.0, 2.0, 4.0, 88.0])
+        .unwrap();
+    let left_b = exec.to_device(&[99_u32, 10, 20, 21, 40, 88]).unwrap();
+    let right_a = exec.to_device(&[77.0_f32, 2.0, 3.0, 4.0, 66.0]).unwrap();
+    let right_b = exec.to_device(&[77_u32, 20, 30, 40, 66]).unwrap();
+
+    let (union_a, union_b) = set_union(
+        &exec,
+        massively::SoA2(left_a.slice(1..5), left_b.slice(1..5)),
+        massively::SoA2(right_a.slice(1..4), right_b.slice(1..4)),
+        MixedTupleLess,
+    )
+    .unwrap();
+    let (intersection_a, intersection_b) = set_intersection(
+        &exec,
+        massively::SoA2(left_a.slice(1..5), left_b.slice(1..5)),
+        massively::SoA2(right_a.slice(1..4), right_b.slice(1..4)),
+        MixedTupleLess,
+    )
+    .unwrap();
+    let (difference_a, difference_b) = set_difference(
+        &exec,
+        massively::SoA2(left_a.slice(1..5), left_b.slice(1..5)),
+        massively::SoA2(right_a.slice(1..4), right_b.slice(1..4)),
+        MixedTupleLess,
+    )
+    .unwrap();
+
+    assert_eq!(
+        exec.to_host(&union_a).unwrap(),
+        vec![1.0, 2.0, 2.0, 3.0, 4.0]
+    );
+    assert_eq!(exec.to_host(&union_b).unwrap(), vec![10, 20, 21, 30, 40]);
+    assert_eq!(exec.to_host(&intersection_a).unwrap(), vec![2.0, 4.0]);
+    assert_eq!(exec.to_host(&intersection_b).unwrap(), vec![20, 40]);
+    assert_eq!(exec.to_host(&difference_a).unwrap(), vec![1.0, 2.0]);
+    assert_eq!(exec.to_host(&difference_b).unwrap(), vec![10, 21]);
+}
+
+#[test]
+fn minmax_element_accepts_offset_device_slice() {
+    let exec = exec();
+    let values = exec
+        .to_device(&[99.0_f32, 4.0, 1.0, 3.0, 5.0, 88.0])
+        .unwrap();
+
+    let result = minmax_element(&exec, massively::SoA1(values.slice(1..5)), Less).unwrap();
+
+    assert_eq!(result, Some((1, 3)));
+}
+
+#[test]
+fn tuple_minmax_element_accepts_offset_device_slices() {
+    let exec = exec();
+    let values = exec
+        .to_device(&[99.0_f32, 3.0, 1.0, 3.0, 4.0, 88.0])
+        .unwrap();
+    let tags = exec.to_device(&[99_u32, 30, 10, 20, 40, 88]).unwrap();
+
+    let result = minmax_element(
+        &exec,
+        massively::SoA2(values.slice(1..5), tags.slice(1..5)),
+        MixedTupleLess,
+    )
+    .unwrap();
+
+    assert_eq!(result, Some((1, 3)));
 }
 
 #[test]

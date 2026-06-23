@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use massively::Wgpu;
-use massively::algorithm::op::{BinaryOp1, PredicateOp1, PredicateOp2, UnaryOp};
+use massively::algorithm::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::prelude::*;
 
 struct AddOne;
@@ -62,7 +62,7 @@ where
 struct TupleU32Less;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32,)> for TupleU32Less
+impl<B> BinaryPredicateOp<B, (u32,)> for TupleU32Less
 where
     B: Backend,
 {
@@ -74,7 +74,7 @@ where
 struct PairU32Less;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32, u32)> for PairU32Less
+impl<B> BinaryPredicateOp<B, (u32, u32)> for PairU32Less
 where
     B: Backend,
 {
@@ -86,7 +86,7 @@ where
 struct PairEqual;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32, u32)> for PairEqual
+impl<B> BinaryPredicateOp<B, (u32, u32)> for PairEqual
 where
     B: Backend,
 {
@@ -98,7 +98,7 @@ where
 struct PairDifference;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (u32, u32)> for PairDifference
+impl<B> ReductionOp<B, (u32, u32)> for PairDifference
 where
     B: Backend,
 {
@@ -110,7 +110,7 @@ where
 struct TripleU32Less;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32, u32, u32)> for TripleU32Less
+impl<B> BinaryPredicateOp<B, (u32, u32, u32)> for TripleU32Less
 where
     B: Backend,
 {
@@ -122,7 +122,7 @@ where
 struct PairFirstOdd;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (u32, u32)> for PairFirstOdd
+impl<B> PredicateOp<B, (u32, u32)> for PairFirstOdd
 where
     B: Backend,
 {
@@ -198,7 +198,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Less: PredicateOp2<B, S1::Item>,
+    Less: BinaryPredicateOp<B, S1::Item>,
 {
     massively::sort(exec, source, less)
 }
@@ -211,7 +211,7 @@ fn minmax_element2<B, S1, Less>(
 where
     B: Backend,
     S1: MIter<B>,
-    Less: PredicateOp2<B, S1::Item>,
+    Less: BinaryPredicateOp<B, S1::Item>,
 {
     massively::minmax_element(exec, source, less)
 }
@@ -224,7 +224,7 @@ fn adjacent_find2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp2<B, S1::Item>,
+    Pred: BinaryPredicateOp<B, S1::Item>,
 {
     massively::adjacent_find(exec, source, pred)
 }
@@ -238,7 +238,7 @@ fn lower_bound2<B, S1, Less>(
 where
     B: Backend,
     S1: MIter<B>,
-    Less: PredicateOp2<B, S1::Item>,
+    Less: BinaryPredicateOp<B, S1::Item>,
 {
     massively::lower_bound(exec, source, value, less)
 }
@@ -251,7 +251,7 @@ fn is_sorted2<B, S1, Less>(
 where
     B: Backend,
     S1: MIter<B>,
-    Less: PredicateOp2<B, S1::Item>,
+    Less: BinaryPredicateOp<B, S1::Item>,
 {
     massively::is_sorted(exec, source, less)
 }
@@ -304,7 +304,7 @@ fn count_if2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp1<B, S1::Item>,
+    Pred: PredicateOp<B, S1::Item>,
 {
     massively::count_if(exec, source, pred)
 }
@@ -317,7 +317,7 @@ fn find_if2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp1<B, S1::Item>,
+    Pred: PredicateOp<B, S1::Item>,
 {
     massively::find_if(exec, source, pred)
 }
@@ -331,7 +331,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp1<B, S1::Item>,
+    Pred: PredicateOp<B, S1::Item>,
 {
     massively::remove_if(exec, source, pred)
 }
@@ -345,7 +345,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp1<B, S1::Item>,
+    Pred: PredicateOp<B, S1::Item>,
 {
     massively::partition(exec, source, pred)
 }
@@ -358,7 +358,7 @@ fn is_partitioned2<B, S1, Pred>(
 where
     B: Backend,
     S1: MIter<B>,
-    Pred: PredicateOp1<B, S1::Item>,
+    Pred: PredicateOp<B, S1::Item>,
 {
     massively::is_partitioned(exec, source, pred)
 }
@@ -372,7 +372,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp2<B, S1::Item>,
+    Pred: BinaryPredicateOp<B, S1::Item>,
 {
     massively::unique(exec, source, pred)
 }
@@ -386,7 +386,7 @@ where
     B: Backend,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Op: BinaryOp1<B, S1::Item>,
+    Op: ReductionOp<B, S1::Item>,
 {
     massively::adjacent_difference(exec, source, op)
 }

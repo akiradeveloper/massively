@@ -1,5 +1,5 @@
 use crate::{
-    detail::op::kernel::{BinaryOp2, PredicateOp2},
+    detail::op::kernel::{BinaryOp, BinaryPredicateOp},
     device::{DeviceVec, KernelColumnBindings, SoA1, SoA2, SoA3},
     error::Error,
     expr::DeviceGpuExpr,
@@ -84,7 +84,7 @@ where
     B: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -154,7 +154,7 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -232,60 +232,6 @@ where
     })
 }
 
-pub(crate) fn inclusive_scan_by_key_device_vec<R, K, T, KeyEq, Op>(
-    policy: &CubePolicy<R>,
-    keys: &DeviceVec<R, K>,
-    values: &DeviceVec<R, T>,
-    _key_eq: GpuOp<KeyEq>,
-    _op: GpuOp<Op>,
-) -> Result<DeviceVec<R, T>, Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
-{
-    super::ensure_same_len(values.len(), keys.len())?;
-
-    let output_handle =
-        inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(policy, keys, &values.handle)?;
-    Ok(DeviceVec::from_handle(
-        policy.id(),
-        output_handle,
-        values.len(),
-    ))
-}
-
-pub(crate) fn exclusive_scan_by_key_device_vec<R, K, T, KeyEq, Op>(
-    policy: &CubePolicy<R>,
-    keys: &DeviceVec<R, K>,
-    values: &DeviceVec<R, T>,
-    init: T,
-    _key_eq: GpuOp<KeyEq>,
-    _op: GpuOp<Op>,
-) -> Result<DeviceVec<R, T>, Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
-{
-    super::ensure_same_len(values.len(), keys.len())?;
-
-    let client = policy.client();
-    let inclusive_handle =
-        inclusive_scan_by_key_handle::<R, K, T, KeyEq, Op>(policy, keys, &values.handle)?;
-    let output_handle =
-        make_scan_by_key_exclusive::<R, K, T, KeyEq, Op>(client, keys, &inclusive_handle, init)?;
-    Ok(DeviceVec::from_handle(
-        policy.id(),
-        output_handle,
-        values.len(),
-    ))
-}
-
 pub(crate) fn inclusive_scan_by_key_device_expr<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
     policy: &CubePolicy<R>,
     key_bindings: &KernelColumnBindings,
@@ -298,8 +244,8 @@ where
     T: CubePrimitive + CubeElement,
     KeyExpr: DeviceGpuExpr<K>,
     ValueExpr: DeviceGpuExpr<T>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 {
     let output_handle =
         inclusive_scan_by_key_device_expr_handle::<R, K, T, KeyExpr, ValueExpr, KeyEq, Op>(
@@ -324,8 +270,8 @@ where
     T: CubePrimitive + CubeElement,
     KeyExpr: DeviceGpuExpr<K>,
     ValueExpr: DeviceGpuExpr<T>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 {
     let client = policy.client();
     let inclusive_handle =
@@ -370,8 +316,8 @@ where
     KeyExpr: DeviceGpuExpr<K>,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 {
     let (left, right) = inclusive_scan_tuple2_by_key_values_device_expr_handle::<
         R,
@@ -416,8 +362,8 @@ where
     KeyExpr: DeviceGpuExpr<K>,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 {
     let inclusive = inclusive_scan_tuple2_by_key_values_device_expr_handle::<
         R,
@@ -474,8 +420,8 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let (first, second, third) = inclusive_scan_tuple3_by_key_values_device_expr_handle::<
         R,
@@ -535,8 +481,8 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let inclusive = inclusive_scan_tuple3_by_key_values_device_expr_handle::<
         R,
@@ -573,80 +519,14 @@ where
     })
 }
 
-macro_rules! define_scan_tuple_value_by_key_device_vec {
+macro_rules! define_scan_tuple_value_by_key_handle {
     (
-        $inclusive_fn:ident,
-        $exclusive_fn:ident,
         $handle_fn:ident,
-        $exclusive_handle_fn:ident,
-        $output:ident,
         $handles:ty,
         $block_kernel:ident,
         $add_prefix_kernel:ident,
-        $exclusive_kernel:ident,
-        ( $( $ty:ident: $value:ident: $out:ident: $tail:ident: $tail_vec:ident: $prefix:ident: $init:tt ),+ )
+        ( $( $ty:ident: $value:ident: $out:ident: $tail:ident: $tail_vec:ident: $prefix:ident ),+ )
     ) => {
-        pub(crate) fn $inclusive_fn<R, K, $( $ty ),+, KeyEq, Op>(
-            policy: &CubePolicy<R>,
-            keys: &DeviceVec<R, K>,
-            $( $value: &DeviceVec<R, $ty>, )+
-            _key_eq: GpuOp<KeyEq>,
-            _op: GpuOp<Op>,
-        ) -> Result<$output<$( DeviceVec<R, $ty> ),+>, Error>
-        where
-            R: Runtime,
-            K: CubePrimitive + CubeElement,
-            $( $ty: CubePrimitive + CubeElement, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
-        {
-            $(
-                super::ensure_same_len($value.len(), keys.len())?;
-            )+
-            let ($( $out, )+) = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
-                policy,
-                keys,
-                $( &$value.handle, )+
-            )?;
-            Ok($output {
-                $( $value: DeviceVec::from_handle(policy.id(), $out, $value.len()), )+
-            })
-        }
-
-        pub(crate) fn $exclusive_fn<R, K, $( $ty ),+, KeyEq, Op>(
-            policy: &CubePolicy<R>,
-            keys: &DeviceVec<R, K>,
-            $( $value: &DeviceVec<R, $ty>, )+
-            init: ($( $ty ),+),
-            _key_eq: GpuOp<KeyEq>,
-            _op: GpuOp<Op>,
-        ) -> Result<$output<$( DeviceVec<R, $ty> ),+>, Error>
-        where
-            R: Runtime,
-            K: CubePrimitive + CubeElement,
-            $( $ty: CubePrimitive + CubeElement, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
-        {
-            $(
-                super::ensure_same_len($value.len(), keys.len())?;
-            )+
-            let inclusive = $handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
-                policy,
-                keys,
-                $( &$value.handle, )+
-            )?;
-            let ($( $out, )+) = $exclusive_handle_fn::<R, K, $( $ty, )+ KeyEq, Op>(
-                policy,
-                keys,
-                inclusive,
-                init,
-            )?;
-            Ok($output {
-                $( $value: DeviceVec::from_handle(policy.id(), $out, $value.len()), )+
-            })
-        }
-
         fn $handle_fn<R, K, $( $ty ),+, KeyEq, Op>(
             policy: &CubePolicy<R>,
             keys: &DeviceVec<R, K>,
@@ -656,8 +536,8 @@ macro_rules! define_scan_tuple_value_by_key_device_vec {
             R: Runtime,
             K: CubePrimitive + CubeElement,
             $( $ty: CubePrimitive + CubeElement, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
+            KeyEq: BinaryPredicateOp<K>,
+            Op: BinaryOp<($( $ty ),+)>,
         {
             let len = keys.len();
             let client = policy.client();
@@ -737,79 +617,18 @@ macro_rules! define_scan_tuple_value_by_key_device_vec {
 
             Ok(($( $out, )+))
         }
-
-        fn $exclusive_handle_fn<R, K, $( $ty ),+, KeyEq, Op>(
-            policy: &CubePolicy<R>,
-            keys: &DeviceVec<R, K>,
-            inclusive: $handles,
-            init: ($( $ty ),+),
-        ) -> Result<$handles, Error>
-        where
-            R: Runtime,
-            K: CubePrimitive + CubeElement,
-            $( $ty: CubePrimitive + CubeElement, )+
-            KeyEq: PredicateOp2<K>,
-            Op: BinaryOp2<($( $ty ),+)>,
-        {
-            let len = keys.len();
-            if len == 0 {
-                return Ok(($( {
-                    let _ = core::mem::size_of::<$ty>();
-                    policy.empty_handle()
-                }, )+));
-            }
-
-            let client = policy.client();
-            $(
-                let $out = client.empty(len * std::mem::size_of::<$ty>());
-            )+
-            let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-            let num_blocks_u32 =
-                u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-            $(
-                let $value = client.create_from_slice($ty::as_bytes(&[init.$init]));
-            )+
-            unsafe {
-                $exclusive_kernel::launch_unchecked::<K, $( $ty, )+ KeyEq, Op, R>(
-                    client,
-                    CubeCount::Static(num_blocks_u32, 1, 1),
-                    CubeDim::new_1d(BLOCK_SCAN_SIZE),
-                    unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
-                    $(
-                        unsafe { BufferArg::from_raw_parts(inclusive.$init.clone(), len) },
-                    )+
-                    $(
-                        unsafe { BufferArg::from_raw_parts($value.clone(), 1) },
-                    )+
-                    $(
-                        unsafe { BufferArg::from_raw_parts($out.clone(), len) },
-                    )+
-                );
-            }
-
-            Ok(($( $out, )+))
-        }
     };
 }
 
-define_scan_tuple_value_by_key_device_vec!(
-    inclusive_scan_tuple2_by_key_values_device_vec,
-    exclusive_scan_tuple2_by_key_values_device_vec,
+define_scan_tuple_value_by_key_handle!(
     inclusive_scan_tuple2_by_key_values_handle,
-    make_scan_tuple2_by_key_values_exclusive,
-    SoA2,
     (cubecl::server::Handle, cubecl::server::Handle),
     scan_by_key_tuple2_block_kernel,
     scan_by_key_tuple2_add_block_prefix_kernel,
-    scan_by_key_tuple2_make_exclusive_kernel,
-    (A: left: output_a: block_tail_a: block_tail_a_vec: prefix_a: 0, B: right: output_b: block_tail_b: block_tail_b_vec: prefix_b: 1)
+    (A: left: output_a: block_tail_a: block_tail_a_vec: prefix_a, B: right: output_b: block_tail_b: block_tail_b_vec: prefix_b)
 );
-define_scan_tuple_value_by_key_device_vec!(
-    inclusive_scan_tuple3_by_key_values_device_vec,
-    exclusive_scan_tuple3_by_key_values_device_vec,
+define_scan_tuple_value_by_key_handle!(
     inclusive_scan_tuple3_by_key_values_handle,
-    make_scan_tuple3_by_key_values_exclusive,
-    SoA3,
     (
         cubecl::server::Handle,
         cubecl::server::Handle,
@@ -817,8 +636,7 @@ define_scan_tuple_value_by_key_device_vec!(
     ),
     scan_by_key_tuple3_block_kernel,
     scan_by_key_tuple3_add_block_prefix_kernel,
-    scan_by_key_tuple3_make_exclusive_kernel,
-    (A: first: output_a: block_tail_a: block_tail_a_vec: prefix_a: 0, B: second: output_b: block_tail_b: block_tail_b_vec: prefix_b: 1, C: third: output_c: block_tail_c: block_tail_c_vec: prefix_c: 2)
+    (A: first: output_a: block_tail_a: block_tail_a_vec: prefix_a, B: second: output_b: block_tail_b: block_tail_b_vec: prefix_b, C: third: output_c: block_tail_c: block_tail_c_vec: prefix_c)
 );
 
 macro_rules! define_scan_tuple_by_key_device_vec {
@@ -832,6 +650,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
         $exclusive_kernel:ident,
         ( $( $ty:ident: $key:ident: $tail_handle:ident: $tail_vec:ident ),+ )
     ) => {
+        #[allow(dead_code)]
         pub(crate) fn $inclusive_fn<R, $( $ty ),+, T, KeyEq, Op>(
             policy: &CubePolicy<R>,
             $( $key: &DeviceVec<R, $ty>, )+
@@ -843,8 +662,8 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             R: Runtime,
             $( $ty: CubePrimitive + CubeElement, )+
             T: CubePrimitive + CubeElement,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         {
             let len = values.len();
             $(
@@ -862,6 +681,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             ))
         }
 
+        #[allow(dead_code)]
         pub(crate) fn $exclusive_fn<R, $( $ty ),+, T, KeyEq, Op>(
             policy: &CubePolicy<R>,
             $( $key: &DeviceVec<R, $ty>, )+
@@ -874,8 +694,8 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             R: Runtime,
             $( $ty: CubePrimitive + CubeElement, )+
             T: CubePrimitive + CubeElement,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         {
             let len = values.len();
             $(
@@ -909,8 +729,8 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             R: Runtime,
             $( $ty: CubePrimitive + CubeElement, )+
             T: CubePrimitive + CubeElement,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         {
             let mut len = None;
             $(
@@ -994,6 +814,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             Ok(output_handle)
         }
 
+        #[allow(dead_code)]
         pub(crate) fn $exclusive_handle_fn<R, $( $ty ),+, T, KeyEq, Op>(
             client: &ComputeClient<R>,
             $( $key: &DeviceVec<R, $ty>, )+
@@ -1004,8 +825,8 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             R: Runtime,
             $( $ty: CubePrimitive + CubeElement, )+
             T: CubePrimitive + CubeElement,
-            KeyEq: PredicateOp2<($( $ty ),+)>,
-            Op: BinaryOp2<T>,
+            KeyEq: BinaryPredicateOp<($( $ty ),+)>,
+            Op: BinaryOp<T>,
         {
             let mut len = None;
             $(
@@ -1076,7 +897,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
-    Op: BinaryOp2<(A,)>,
+    Op: BinaryOp<(A,)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1145,7 +966,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
-    Op: BinaryOp2<(A,)>,
+    Op: BinaryOp<(A,)>,
 {
     let inclusive = inclusive_scan_tuple1_device_expr::<R, A, ExprA, Op>(policy, a_bindings, len)?;
     let (output_a,) =
@@ -1163,7 +984,7 @@ fn inclusive_scan_tuple1_handles<R, A, Op>(
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(A,)>,
+    Op: BinaryOp<(A,)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1218,7 +1039,7 @@ fn make_tuple1_exclusive<R, A, Op>(
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(A,)>,
+    Op: BinaryOp<(A,)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1256,7 +1077,7 @@ where
     B: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1350,7 +1171,7 @@ where
     B: CubePrimitive + CubeElement,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 {
     let inclusive = inclusive_scan_tuple2_device_expr::<R, A, B, ExprA, ExprB, Op>(
         policy, a_bindings, b_bindings, len,
@@ -1378,7 +1199,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1446,7 +1267,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(A, B)>,
+    Op: BinaryOp<(A, B)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1492,7 +1313,7 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1618,7 +1439,7 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let inclusive = inclusive_scan_tuple3_device_expr::<R, A, B, C, ExprA, ExprB, ExprC, Op>(
         policy, a_bindings, b_bindings, c_bindings, len,
@@ -1657,7 +1478,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1747,7 +1568,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
-    Op: BinaryOp2<(A, B, C)>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1796,8 +1617,8 @@ where
     R: Runtime,
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 {
     let len = keys.len();
     let client = policy.client();
@@ -1869,8 +1690,8 @@ where
     T: CubePrimitive + CubeElement,
     KeyExpr: DeviceGpuExpr<K>,
     ValueExpr: DeviceGpuExpr<T>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 {
     let client = policy.client();
     if len == 0 {
@@ -1963,45 +1784,6 @@ where
     Ok(output_handle)
 }
 
-fn make_scan_by_key_exclusive<R, K, T, KeyEq, Op>(
-    client: &ComputeClient<R>,
-    keys: &DeviceVec<R, K>,
-    inclusive_handle: &cubecl::server::Handle,
-    init: T,
-) -> Result<cubecl::server::Handle, Error>
-where
-    R: Runtime,
-    K: CubePrimitive + CubeElement,
-    T: CubePrimitive + CubeElement,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
-{
-    let len = keys.len();
-    if len == 0 {
-        return Ok(crate::policy::empty_handle(client));
-    }
-
-    let output_handle = client.empty(len * std::mem::size_of::<T>());
-    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let init_handle = client.create_from_slice(T::as_bytes(&[init]));
-    unsafe {
-        scan_by_key_make_exclusive_kernel::launch_unchecked::<K, T, KeyEq, Op, R>(
-            client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
-            CubeDim::new_1d(BLOCK_SCAN_SIZE),
-            unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(inclusive_handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(init_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
-        );
-    }
-
-    Ok(output_handle)
-}
-
 fn make_scan_by_key_device_expr_exclusive<R, K, T, KeyExpr, KeyEq, Op>(
     client: &ComputeClient<R>,
     key_bindings: &KernelColumnBindings,
@@ -2014,8 +1796,8 @@ where
     K: CubePrimitive + CubeElement,
     T: CubePrimitive + CubeElement,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<T>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<T>,
 {
     if len == 0 {
         return Ok(crate::policy::empty_handle(client));
@@ -2083,8 +1865,8 @@ where
     KeyExpr: DeviceGpuExpr<K>,
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -2214,8 +1996,8 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B)>,
 {
     if len == 0 {
         return Ok((policy.empty_handle(), policy.empty_handle()));
@@ -2301,8 +2083,8 @@ where
     ExprA: DeviceGpuExpr<A>,
     ExprB: DeviceGpuExpr<B>,
     ExprC: DeviceGpuExpr<C>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 {
     let client = policy.client();
     if len == 0 {
@@ -2470,8 +2252,8 @@ where
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
     KeyExpr: DeviceGpuExpr<K>,
-    KeyEq: PredicateOp2<K>,
-    Op: BinaryOp2<(A, B, C)>,
+    KeyEq: BinaryPredicateOp<K>,
+    Op: BinaryOp<(A, B, C)>,
 {
     if len == 0 {
         return Ok((

@@ -16,7 +16,7 @@
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::{PredicateOp1, UnaryOp};
+use massively::op::{PredicateOp, UnaryOp};
 use massively::{DeviceVec, Executor, SoA3, Wgpu, copy_if, partition, transform};
 
 struct SuspiciousTransaction;
@@ -40,7 +40,7 @@ where
 struct HighRiskTransaction;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (u32, f32, u32)> for HighRiskTransaction
+impl<B> PredicateOp<B, (u32, f32, u32)> for HighRiskTransaction
 where
     B: massively::Backend,
 {
@@ -49,23 +49,26 @@ where
     }
 }
 
-struct Group {
-    account_id: DeviceVec<Wgpu, u32>,
-    amount: DeviceVec<Wgpu, f32>,
-    risk_score: DeviceVec<Wgpu, u32>,
+struct Group<B: massively::Backend> {
+    account_id: DeviceVec<B, u32>,
+    amount: DeviceVec<B, f32>,
+    risk_score: DeviceVec<B, u32>,
 }
 
-struct Output {
-    high_risk: Group,
-    review_needed: Group,
+struct Output<B: massively::Backend> {
+    high_risk: Group<B>,
+    review_needed: Group<B>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    account_id: DeviceVec<Wgpu, u32>,
-    amount: DeviceVec<Wgpu, f32>,
-    risk_score: DeviceVec<Wgpu, u32>,
-) -> common::Result<Output> {
+fn solve<B>(
+    exec: &Executor<B>,
+    account_id: DeviceVec<B, u32>,
+    amount: DeviceVec<B, f32>,
+    risk_score: DeviceVec<B, u32>,
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (flag,) = transform(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),

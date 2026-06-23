@@ -14,7 +14,10 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, is_sorted_until};
 
-fn solve(exec: &Executor<Wgpu>, timestamp: DeviceVec<Wgpu, u32>) -> common::Result<usize> {
+fn solve<B>(exec: &Executor<B>, timestamp: DeviceVec<B, u32>) -> common::Result<usize>
+where
+    B: massively::Backend,
+{
     is_sorted_until(exec, SoA1(timestamp.slice(..)), common::LessU32)
 }
 

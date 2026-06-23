@@ -32,26 +32,49 @@ where
 {
     input.validate()?;
     indices.validate()?;
-
-    let input = super::device_expr_collect_with_policy(policy, input)?;
-    let indices = super::device_expr_collect_with_policy(policy, indices)?;
-    super::ensure_same_len(indices.len, stencil.len())?;
+    super::ensure_same_len(indices.len(), stencil.len())?;
     let flags = stencil.selection_handles_with_policy(policy, false)?;
 
-    let output = primitive_range::filled(policy, indices.len, default)?;
-    let num_blocks = indices.len.div_ceil(BLOCK_API_SIZE as usize);
+    let len = indices.len();
+    let output = primitive_range::filled(policy, len, default)?;
+    let num_blocks = len.div_ceil(BLOCK_API_SIZE as usize);
     let num_blocks_u32 =
         u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
     let client = policy.client();
+    let input_bindings = input.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
+    let input_slot0 = input_bindings.slot_or_first(0);
+    let input_slot1 = input_bindings.slot_or_first(1);
+    let input_slot2 = input_bindings.slot_or_first(2);
+    let input_slot3 = input_bindings.slot_or_first(3);
+    let index_slot0 = index_bindings.slot_or_first(0);
+    let index_slot1 = index_bindings.slot_or_first(1);
+    let index_slot2 = index_bindings.slot_or_first(2);
+    let index_slot3 = index_bindings.slot_or_first(3);
+    let input_slot_offsets = input_bindings.slot_offsets_handle(client)?;
+    let index_slot_offsets = index_bindings.slot_offsets_handle(client)?;
 
-    if indices.len != 0 {
+    if len != 0 {
         unsafe {
-            gather_if_flags_kernel::launch_unchecked::<InputSource::Item, InputSource::Runtime>(
+            gather_if_flags_kernel::launch_unchecked::<
+                InputSource::Item,
+                InputSource::Expr,
+                IndexSource::Expr,
+                InputSource::Runtime,
+            >(
                 client,
                 CubeCount::Static(num_blocks_u32, 1, 1),
                 CubeDim::new_1d(BLOCK_API_SIZE),
-                unsafe { BufferArg::from_raw_parts(input.handle.clone(), input.len) },
-                unsafe { BufferArg::from_raw_parts(indices.handle.clone(), indices.len) },
+                unsafe { BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(input_slot2.0.clone(), input_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(input_slot3.0.clone(), input_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(input_slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 4) },
                 unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
                 unsafe { BufferArg::from_raw_parts(output.handle.clone(), output.len) },
             );

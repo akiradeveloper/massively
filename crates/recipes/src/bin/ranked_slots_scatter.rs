@@ -16,18 +16,21 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA2, Wgpu, scatter};
 
-struct Output {
-    item_id: DeviceVec<Wgpu, u32>,
-    score: DeviceVec<Wgpu, f32>,
+struct Output<B: massively::Backend> {
+    item_id: DeviceVec<B, u32>,
+    score: DeviceVec<B, f32>,
 }
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    item_id: DeviceVec<Wgpu, u32>,
-    score: DeviceVec<Wgpu, f32>,
-    rank_index: DeviceVec<Wgpu, u32>,
+fn solve<B>(
+    exec: &Executor<B>,
+    item_id: DeviceVec<B, u32>,
+    score: DeviceVec<B, f32>,
+    rank_index: DeviceVec<B, u32>,
     len: usize,
-) -> common::Result<Output> {
+) -> common::Result<Output<B>>
+where
+    B: massively::Backend,
+{
     let (item_id, score) = scatter(
         exec,
         SoA2(item_id.slice(..), score.slice(..)),

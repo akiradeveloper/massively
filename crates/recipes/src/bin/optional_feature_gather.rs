@@ -15,12 +15,15 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, gather_if};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    value: DeviceVec<Wgpu, f32>,
-    index: DeviceVec<Wgpu, u32>,
-    available: DeviceVec<Wgpu, u32>,
-) -> common::Result<DeviceVec<Wgpu, f32>> {
+fn solve<B>(
+    exec: &Executor<B>,
+    value: DeviceVec<B, f32>,
+    index: DeviceVec<B, u32>,
+    available: DeviceVec<B, u32>,
+) -> common::Result<DeviceVec<B, f32>>
+where
+    B: massively::Backend,
+{
     let (out,) = gather_if(
         exec,
         SoA1(value.slice(..)),

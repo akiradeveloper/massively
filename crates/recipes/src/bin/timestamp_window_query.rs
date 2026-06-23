@@ -16,12 +16,15 @@ mod common;
 
 use massively::{DeviceVec, Executor, SoA1, Wgpu, lower_bound};
 
-fn solve(
-    exec: &Executor<Wgpu>,
-    timestamp: DeviceVec<Wgpu, u32>,
+fn solve<B>(
+    exec: &Executor<B>,
+    timestamp: DeviceVec<B, u32>,
     start: u32,
     end: u32,
-) -> common::Result<(usize, usize)> {
+) -> common::Result<(usize, usize)>
+where
+    B: massively::Backend,
+{
     let lower = lower_bound(exec, SoA1(timestamp.slice(..)), (start,), common::LessU32)?;
     let upper = lower_bound(exec, SoA1(timestamp.slice(..)), (end,), common::LessU32)?;
     Ok((lower, upper))

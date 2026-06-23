@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use cubecl::prelude::*;
-use massively::op::{BinaryOp1, BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp};
+use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 
 pub type Result = std::result::Result<(), massively::Error>;
 
@@ -36,7 +36,7 @@ where
 pub struct PairProduct;
 
 #[cubecl::cube]
-impl<B> BinaryOp2<B, (f32,), (f32,)> for PairProduct
+impl<B> BinaryOp<B, (f32,), (f32,)> for PairProduct
 where
     B: massively::Backend,
 {
@@ -50,7 +50,7 @@ where
 pub struct SumF32;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (f32,)> for SumF32
+impl<B> ReductionOp<B, (f32,)> for SumF32
 where
     B: massively::Backend,
 {
@@ -62,7 +62,7 @@ where
 pub struct TupleSumF32;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (f32,)> for TupleSumF32
+impl<B> ReductionOp<B, (f32,)> for TupleSumF32
 where
     B: massively::Backend,
 {
@@ -74,7 +74,7 @@ where
 pub struct SumU32;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (u32,)> for SumU32
+impl<B> ReductionOp<B, (u32,)> for SumU32
 where
     B: massively::Backend,
 {
@@ -86,7 +86,7 @@ where
 pub struct MulF32;
 
 #[cubecl::cube]
-impl<B> BinaryOp1<B, (f32,)> for MulF32
+impl<B> ReductionOp<B, (f32,)> for MulF32
 where
     B: massively::Backend,
 {
@@ -98,7 +98,7 @@ where
 pub struct LessF32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (f32,)> for LessF32
+impl<B> BinaryPredicateOp<B, (f32,)> for LessF32
 where
     B: massively::Backend,
 {
@@ -110,7 +110,7 @@ where
 pub struct LessU32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32,)> for LessU32
+impl<B> BinaryPredicateOp<B, (u32,)> for LessU32
 where
     B: massively::Backend,
 {
@@ -122,7 +122,7 @@ where
 pub struct EqualF32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (f32,)> for EqualF32
+impl<B> BinaryPredicateOp<B, (f32,)> for EqualF32
 where
     B: massively::Backend,
 {
@@ -134,7 +134,7 @@ where
 pub struct EqualU32;
 
 #[cubecl::cube]
-impl<B> PredicateOp2<B, (u32,)> for EqualU32
+impl<B> BinaryPredicateOp<B, (u32,)> for EqualU32
 where
     B: massively::Backend,
 {
@@ -146,7 +146,7 @@ where
 pub struct Positive;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (f32,)> for Positive
+impl<B> PredicateOp<B, (f32,)> for Positive
 where
     B: massively::Backend,
 {
@@ -158,7 +158,7 @@ where
 pub struct GreaterThanTwo;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (f32,)> for GreaterThanTwo
+impl<B> PredicateOp<B, (f32,)> for GreaterThanTwo
 where
     B: massively::Backend,
 {
@@ -170,7 +170,7 @@ where
 pub struct EvenU32;
 
 #[cubecl::cube]
-impl<B> PredicateOp1<B, (u32,)> for EvenU32
+impl<B> PredicateOp<B, (u32,)> for EvenU32
 where
     B: massively::Backend,
 {
