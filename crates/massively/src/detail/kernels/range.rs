@@ -10,6 +10,17 @@ pub(crate) fn fill_kernel<T: CubePrimitive>(value: &[T], len: &[u32], output: &m
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tabulate_kernel<T: CubePrimitive, Op: UnaryOp<u32, Output = T>>(
+    len: &[u32],
+    output: &mut [T],
+) {
+    let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    if unit < (len[0] as usize) {
+        output[unit] = Op::apply(unit as u32);
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn copy_kernel<T: CubePrimitive>(input: &[T], output: &mut [T]) {
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {
@@ -22,6 +33,19 @@ pub(crate) fn copy_slice_kernel<T: CubePrimitive>(input: &[T], offset: &[u32], o
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {
         output[unit] = input[offset[0] as usize + unit];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn copy_slice_to_slice_kernel<T: CubePrimitive>(
+    input: &[T],
+    metadata: &[u32],
+    output: &mut [T],
+) {
+    let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let len = metadata[2] as usize;
+    if unit < len {
+        output[metadata[1] as usize + unit] = input[metadata[0] as usize + unit];
     }
 }
 

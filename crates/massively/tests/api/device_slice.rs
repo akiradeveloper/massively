@@ -33,6 +33,75 @@ fn executor_filled_allocates_owned_device_vec() {
 }
 
 #[test]
+fn device_slice_can_be_sliced_again() {
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
+    let slice = input.slice(1..5);
+
+    assert_eq!(exec.to_host(&slice.slice(1..3)).unwrap(), vec![30, 40]);
+    assert_eq!(exec.to_host(&slice.slice(..2)).unwrap(), vec![20, 30]);
+    assert_eq!(exec.to_host(&slice.slice(2..)).unwrap(), vec![40, 50]);
+}
+
+#[test]
+fn device_slice_mut_can_be_sliced_as_read_only() {
+    let exec = exec();
+    let mut input = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
+    let slice = input.slice_mut(1..5);
+
+    assert_eq!(exec.to_host(&slice.slice(1..3)).unwrap(), vec![30, 40]);
+}
+
+#[test]
+fn executor_copy_copies_between_device_slices() {
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
+    let mut output = exec.to_device(&[1_u32, 2, 3, 4, 5, 6]).unwrap();
+
+    exec.copy(input.slice(1..4), output.slice_mut(2..5))
+        .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 20, 30, 40, 6]);
+}
+
+#[test]
+fn executor_copy_accepts_nested_mutable_destination_slice() {
+    let exec = exec();
+    let input = exec.to_device(&[7_u32, 8, 9]).unwrap();
+    let mut output = exec.to_device(&[0_u32, 1, 2, 3, 4, 5]).unwrap();
+
+    {
+        let mut middle = output.slice_mut(1..5);
+        exec.copy(input.slice(..2), middle.slice_mut(1..3)).unwrap();
+    }
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 7, 8, 4, 5]);
+}
+
+#[test]
+fn executor_copy_rejects_mismatched_lengths() {
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let mut output = exec.to_device(&[0_u32, 0]).unwrap();
+
+    assert!(exec.copy(input.slice(..), output.slice_mut(..)).is_err());
+}
+
+#[test]
+fn executor_copy_rejects_other_executor_data() {
+    let data_exec = exec();
+    let other_exec = exec();
+    let input = data_exec.to_device(&[10_u32, 20]).unwrap();
+    let mut output = data_exec.to_device(&[0_u32, 0]).unwrap();
+
+    assert!(
+        other_exec
+            .copy(input.slice(..), output.slice_mut(..))
+            .is_err()
+    );
+}
+
+#[test]
 fn algorithms_reject_other_executor_data() {
     let data_exec = exec();
     let other_exec = exec();

@@ -2,13 +2,12 @@
 
 pub(crate) mod api;
 pub(crate) mod device;
-pub(crate) mod error;
 pub(crate) mod expr;
 pub(crate) mod kernels;
-pub mod op;
 pub(crate) mod policy;
 pub(crate) mod primitives;
 
+pub(crate) use crate::algorithm::op;
 pub(crate) use api::{
     MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output,
     TransformUnaryOutput, adjacent_difference, adjacent_find, all_of, any_of, copy_if, count_if,
@@ -20,7 +19,6 @@ pub(crate) use api::{
     unique, unique_by_key, upper_bound,
 };
 pub(crate) use device::DeviceVec;
-pub use error::Error;
 pub(crate) use policy::CubePolicy;
 
 #[cfg(feature = "cuda")]

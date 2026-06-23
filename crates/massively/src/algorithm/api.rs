@@ -1,32 +1,25 @@
-//! Public API for `massively`.
+//! Public algorithm API implementation for `massively`.
 //!
 //! This crate intentionally keeps CubeCL runtime types out of public algorithm
 //! signatures. The implementation delegates to the internal detail layer.
 
 use std::any::Any;
 use std::marker::PhantomData;
-use std::ops::{Bound, RangeBounds};
 
 use cubecl::frontend::PartialOrdExpand;
 
-pub use crate::detail::Error;
-pub use crate::detail::op;
+use crate::algorithm::op;
+use crate::algorithm::{MItem, MIter, MVec, SoA1, SoA2, SoA3};
+use crate::runtime::{Backend, DeviceSlice, DeviceVec, Executor, Scalar};
 
-mod sealed {
+pub use crate::Error;
+
+pub(crate) mod sealed {
     use super::{Error, Executor, MIter, MVec, op};
 
     pub trait Backend {
         type Runtime: cubecl::prelude::Runtime;
     }
-
-    pub trait Value: cubecl::prelude::CubeType {}
-    impl<T> Value for T where T: cubecl::prelude::CubeType {}
-
-    pub trait Scalar:
-        Value + cubecl::prelude::CubePrimitive + cubecl::prelude::CubeElement
-    {
-    }
-    impl<T> Scalar for T where T: cubecl::prelude::CubePrimitive + cubecl::prelude::CubeElement {}
 
     pub trait ToHostDispatch<B: super::Backend> {
         type Output;
@@ -56,7 +49,7 @@ mod sealed {
             policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
         ) -> Result<Option<crate::detail::DeviceVec<<B as Backend>::Runtime, T>>, Error>
         where
-            T: super::Scalar<B>,
+            T: super::Scalar,
         {
             Ok(self
                 .column_view_inner::<T>()?
@@ -71,7 +64,7 @@ mod sealed {
             Error,
         >
         where
-            T: super::Scalar<B>,
+            T: super::Scalar,
         {
             Ok(self
                 .column_inner::<T>()
@@ -86,7 +79,7 @@ mod sealed {
             Error,
         >
         where
-            T: super::Scalar<B>,
+            T: super::Scalar,
         {
             if index == 0 {
                 self.column_view_inner::<T>()
@@ -132,7 +125,7 @@ mod sealed {
         ) -> Result<(KeyOutput, ValueOutput), Error>
         where
             Self: MIter<B>,
-            K: super::Scalar<B> + 'static,
+            K: super::Scalar + 'static,
             Less: op::PredicateOp2<B, (K,)>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -146,7 +139,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Values: MIter<B>,
-            <Self as MIter<B>>::Item: super::sealed::Value,
+            <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
             Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -164,7 +157,7 @@ mod sealed {
         ) -> Result<(KeyOutput, ValueOutput), Error>
         where
             Self: MIter<B>,
-            K: super::Scalar<B> + 'static,
+            K: super::Scalar + 'static,
             Eq: op::PredicateOp2<B, (K,)>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -178,7 +171,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Values: MIter<B>,
-            <Self as MIter<B>>::Item: super::sealed::Value,
+            <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
             Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -197,7 +190,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            K: super::Scalar<B> + 'static,
+            K: super::Scalar + 'static,
             KeyEq: op::PredicateOp2<B, (K,)>,
             Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -212,7 +205,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Values: MIter<B>,
-            <Self as MIter<B>>::Item: super::sealed::Value,
+            <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
             KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
             Output: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -233,7 +226,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: MIter<B>,
-            K: super::Scalar<B> + 'static,
+            K: super::Scalar + 'static,
             KeyEq: op::PredicateOp2<B, (K,)>,
             Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             Output: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -249,7 +242,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Values: MIter<B>,
-            <Self as MIter<B>>::Item: super::sealed::Value,
+            <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
             KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
             Output: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -270,7 +263,7 @@ mod sealed {
         ) -> Result<(KeyOutput, ValueOutput), Error>
         where
             Self: MIter<B>,
-            K: super::Scalar<B> + 'static,
+            K: super::Scalar + 'static,
             KeyEq: op::PredicateOp2<B, (K,)>,
             Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
             KeyOutput: MVec<B, Item = (K,)>,
@@ -287,7 +280,7 @@ mod sealed {
         where
             Self: MIter<B>,
             Values: MIter<B>,
-            <Self as MIter<B>>::Item: super::sealed::Value,
+            <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
             KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
             KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -309,7 +302,7 @@ mod sealed {
         where
             Self: MIter<B>,
             RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
-            K: super::Scalar<B> + 'static,
+            K: super::Scalar + 'static,
             Less: op::PredicateOp2<B, (K,)>,
             KeyOutput: MVec<B, Item = (K,)>,
             ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -949,7 +942,7 @@ mod sealed {
             RightKeys: MIter<B, Item = <Self as MIter<B>>::Item>,
             LeftValues: MIter<B>,
             RightValues: MIter<B, Item = <LeftValues as MIter<B>>::Item>,
-            <Self as MIter<B>>::Item: super::sealed::Value,
+            <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
             Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
             KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
             ValueOutput: MVec<B, Item = <LeftValues as MIter<B>>::Item>,
@@ -968,7 +961,7 @@ mod sealed {
         ) -> Result<<Self as super::MItem<B>>::Inner, Error>
         where
             Self: super::MItem<B>,
-            Input: super::Scalar<B>,
+            Input: super::Scalar,
             Op: op::UnaryOp<B, (Input,), Output = Self>,
         {
             let _ = (policy, input, op);
@@ -985,8 +978,8 @@ mod sealed {
         ) -> Result<<Self as super::MItem<B>>::Inner, Error>
         where
             Self: super::MItem<B>,
-            Left: super::Scalar<B>,
-            Right: super::Scalar<B>,
+            Left: super::Scalar,
+            Right: super::Scalar,
             Op: op::UnaryOp<B, (Left, Right), Output = Self>,
         {
             let _ = (policy, left, right, op);
@@ -1004,9 +997,9 @@ mod sealed {
         ) -> Result<<Self as super::MItem<B>>::Inner, Error>
         where
             Self: super::MItem<B>,
-            First: super::Scalar<B>,
-            Second: super::Scalar<B>,
-            Third: super::Scalar<B>,
+            First: super::Scalar,
+            Second: super::Scalar,
+            Third: super::Scalar,
             Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
         {
             let _ = (policy, first, second, third, op);
@@ -1070,7 +1063,7 @@ mod sealed {
         ) -> Result<Output, Error>
         where
             Self: super::MItem<B>,
-            LeftScalar: super::Scalar<B> + 'static,
+            LeftScalar: super::Scalar + 'static,
             LeftIter: MIter<B, Item = (LeftScalar,)>,
             RightIter: MIter<B, Item = Self>,
             TransformOp: op::BinaryOp2<B, (LeftScalar,), Self, Output = Output>,
@@ -1082,342 +1075,6 @@ mod sealed {
                 message: "inner_product is not supported for this iterator shape".to_string(),
             })
         }
-    }
-}
-
-/// Execution backend marker.
-///
-/// Backend implementations hide the CubeCL runtime type used by the lower
-/// implementation layer.
-pub trait Backend: sealed::Backend + Copy + Clone + Default + 'static {}
-
-/// Scalar value that can be stored in one device column.
-pub trait Scalar<B: Backend>: sealed::Value + sealed::Scalar {}
-impl<B, T> Scalar<B> for T
-where
-    B: Backend,
-    T: sealed::Value + sealed::Scalar,
-{
-}
-
-/// Device-resident data that can be copied back to host memory by an executor.
-pub trait ToHost<B: Backend>:
-    sealed::ToHostDispatch<B, Output = <Self as ToHost<B>>::Output>
-{
-    type Output;
-}
-
-impl<B, T> ToHost<B> for T
-where
-    B: Backend,
-    T: sealed::ToHostDispatch<B>,
-{
-    type Output = <T as sealed::ToHostDispatch<B>>::Output;
-}
-
-/// WGPU backend marker.
-#[cfg(feature = "wgpu")]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Wgpu;
-
-#[cfg(feature = "wgpu")]
-impl sealed::Backend for Wgpu {
-    type Runtime = cubecl::wgpu::WgpuRuntime;
-}
-
-#[cfg(feature = "wgpu")]
-impl Backend for Wgpu {}
-
-/// Execution context for a facade backend.
-#[derive(Debug)]
-pub struct Executor<B: Backend> {
-    inner: crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-    _backend: PhantomData<fn() -> B>,
-}
-
-impl<B: Backend> Clone for Executor<B> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            _backend: PhantomData,
-        }
-    }
-}
-
-impl<B: Backend> Executor<B> {
-    #[cfg(any(feature = "cuda", feature = "hip", feature = "wgpu"))]
-    fn from_inner(inner: crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>) -> Self {
-        Self {
-            inner,
-            _backend: PhantomData,
-        }
-    }
-
-    fn ensure_policy_id(&self, id: crate::detail::policy::CubePolicyId) -> Result<(), Error> {
-        if self.inner.id() == id {
-            Ok(())
-        } else {
-            Err(Error::Launch {
-                message: "executor does not own this device data".to_string(),
-            })
-        }
-    }
-
-    fn policy(&self) -> &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime> {
-        &self.inner
-    }
-
-    /// Copies host data to device-resident storage.
-    pub fn to_device<T>(&self, input: &[T]) -> Result<DeviceVec<B, T>, Error>
-    where
-        T: Scalar<B>,
-    {
-        Ok(DeviceVec::from_inner(self.inner.to_device(input)?))
-    }
-
-    /// Allocates device-resident storage and fills it with `value`.
-    pub fn filled<T>(&self, len: usize, value: T) -> Result<DeviceVec<B, T>, Error>
-    where
-        T: Scalar<B>,
-    {
-        Ok(DeviceVec::from_inner(self.inner.device_filled(len, value)?))
-    }
-
-    /// Copies device-resident storage back to host memory.
-    pub fn to_host<Input>(&self, input: &Input) -> Result<<Input as ToHost<B>>::Output, Error>
-    where
-        Input: ToHost<B>,
-    {
-        input.to_host_with(self)
-    }
-
-    /// Waits until all previously submitted work for this executor is complete.
-    pub fn sync(&self) -> Result<(), Error> {
-        futures_lite::future::block_on(self.inner.client().sync()).map_err(|err| Error::Launch {
-            message: err.to_string(),
-        })
-    }
-}
-
-#[cfg(feature = "wgpu")]
-impl Executor<Wgpu> {
-    /// Creates a WGPU executor backed by the default device.
-    pub fn new() -> Self {
-        Self::from_inner(crate::detail::CubeWgpu::new())
-    }
-
-    /// Creates a WGPU executor backed by the CPU adapter.
-    pub fn cpu() -> Self {
-        Self::from_inner(crate::detail::CubeWgpu::cpu())
-    }
-}
-
-#[cfg(feature = "wgpu")]
-impl Default for Executor<Wgpu> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Owned device column.
-#[derive(Debug)]
-pub struct DeviceVec<B: Backend, T> {
-    inner: crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,
-    _backend: PhantomData<fn() -> B>,
-}
-
-impl<B, T> DeviceVec<B, T>
-where
-    B: Backend,
-{
-    fn from_inner(inner: crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>) -> Self {
-        Self {
-            inner,
-            _backend: PhantomData,
-        }
-    }
-
-    /// Returns the number of elements.
-    pub fn len(&self) -> usize {
-        self.inner.len()
-    }
-
-    /// Returns whether this column is empty.
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_empty()
-    }
-
-    /// Returns a read-only device slice for the given range.
-    ///
-    /// The range is checked like a Rust slice range and panics if it is out of
-    /// bounds or if the start is greater than the end.
-    pub fn slice<R>(&self, range: R) -> DeviceSlice<'_, B, T>
-    where
-        R: RangeBounds<usize>,
-    {
-        let (offset, len) = resolve_slice_range(self.len(), range);
-        DeviceSlice {
-            source: self,
-            offset,
-            len,
-        }
-    }
-}
-
-impl<B, T> sealed::ToHostDispatch<B> for DeviceVec<B, T>
-where
-    B: Backend,
-    T: Scalar<B>,
-{
-    type Output = Vec<T>;
-
-    fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error> {
-        exec.ensure_policy_id(self.inner.policy_id())?;
-        self.inner.read_to_host(exec.policy())
-    }
-}
-
-/// Read-only view into a contiguous range of a [`DeviceVec`].
-#[derive(Debug)]
-pub struct DeviceSlice<'a, B: Backend, T> {
-    source: &'a DeviceVec<B, T>,
-    offset: usize,
-    len: usize,
-}
-
-impl<'a, B, T> Copy for DeviceSlice<'a, B, T> where B: Backend {}
-
-impl<'a, B, T> Clone for DeviceSlice<'a, B, T>
-where
-    B: Backend,
-{
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<'a, B, T> DeviceSlice<'a, B, T>
-where
-    B: Backend,
-{
-    /// Returns the number of elements in this slice.
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Returns whether this slice is empty.
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    fn materialize_with(&self, exec: &Executor<B>) -> Result<DeviceVec<B, T>, Error>
-    where
-        T: Scalar<B>,
-    {
-        exec.ensure_policy_id(self.source.inner.policy_id())?;
-        Ok(DeviceVec::from_inner(
-            crate::detail::primitives::range::copy_slice_with_policy(
-                exec.policy(),
-                &self.source.inner,
-                self.offset,
-                self.len,
-            )?,
-        ))
-    }
-}
-
-impl<'a, B, T> sealed::ToHostDispatch<B> for DeviceSlice<'a, B, T>
-where
-    B: Backend,
-    T: Scalar<B>,
-{
-    type Output = Vec<T>;
-
-    fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error> {
-        self.materialize_with(exec)?
-            .inner
-            .read_to_host(exec.policy())
-    }
-}
-
-/// Single-column structure-of-arrays container.
-#[derive(Clone, Copy, Debug)]
-pub struct SoA1<A>(pub A);
-
-/// Two-column structure-of-arrays container.
-#[derive(Clone, Copy, Debug)]
-pub struct SoA2<A, B>(pub A, pub B);
-
-/// Three-column structure-of-arrays container.
-#[derive(Clone, Copy, Debug)]
-pub struct SoA3<A, B, C>(pub A, pub B, pub C);
-
-impl<A> From<(A,)> for SoA1<A> {
-    fn from(value: (A,)) -> Self {
-        Self(value.0)
-    }
-}
-
-impl<A, B> From<(A, B)> for SoA2<A, B> {
-    fn from(value: (A, B)) -> Self {
-        Self(value.0, value.1)
-    }
-}
-
-impl<A, B, C> From<(A, B, C)> for SoA3<A, B, C> {
-    fn from(value: (A, B, C)) -> Self {
-        Self(value.0, value.1, value.2)
-    }
-}
-
-fn resolve_slice_range<R>(len: usize, range: R) -> (usize, usize)
-where
-    R: RangeBounds<usize>,
-{
-    let start = match range.start_bound() {
-        Bound::Included(&start) => start,
-        Bound::Excluded(&start) => start.checked_add(1).expect("slice start overflow"),
-        Bound::Unbounded => 0,
-    };
-    let end = match range.end_bound() {
-        Bound::Included(&end) => end.checked_add(1).expect("slice end overflow"),
-        Bound::Excluded(&end) => end,
-        Bound::Unbounded => len,
-    };
-    assert!(
-        start <= end,
-        "slice start ({start}) is greater than slice end ({end})"
-    );
-    assert!(
-        end <= len,
-        "slice end ({end}) is out of bounds for DeviceVec of length {len}"
-    );
-    (start, end - start)
-}
-
-/// Logical item handled by massively algorithms.
-///
-/// An `MItem` is one element of an [`MIter`] or [`MVec`]. The current public
-/// model represents items as tuples such as `(T,)`, `(T, U)`, and `(T, U, V)`;
-/// internally those tuples are stored as SoA device columns for backend `B`.
-pub trait MItem<B: Backend>: sealed::MItemDispatch<B> + sealed::Value + Sized + 'static {
-    #[doc(hidden)]
-    type Inner;
-}
-
-/// Owned massively vector for a logical item.
-pub trait MVec<B: Backend>: Sized {
-    type Item: MItem<B>;
-
-    #[doc(hidden)]
-    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self;
-
-    /// Returns the logical length.
-    fn len(&self) -> usize;
-
-    /// Returns whether this array has no elements.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
     }
 }
 
@@ -1454,7 +1111,7 @@ fn column_view_at<B, Iter, T>(
 where
     B: Backend,
     Iter: MIter<B>,
-    T: Scalar<B> + 'static,
+    T: Scalar + 'static,
 {
     <Iter as sealed::MIterDispatch<B>>::column_view_by_index_inner::<T>(iter, index)?.ok_or_else(
         || Error::Launch {
@@ -1512,7 +1169,7 @@ impl<B, Op, Output> KernelTuple1InnerProductOp<B, Op, Output> {
 impl<B, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
-    T: Scalar<B>,
+    T: Scalar,
     Op: op::UnaryOp<B, (T,), Output = (T,)>,
 {
     type Output = T;
@@ -1526,7 +1183,7 @@ where
 impl<B, T, Op> crate::detail::op::kernel::BinaryOp2<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
-    T: Scalar<B>,
+    T: Scalar,
     Op: op::BinaryOp1<B, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> T {
@@ -1538,7 +1195,7 @@ where
 impl<B, T, Op> crate::detail::op::kernel::PredicateOp1<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
-    T: Scalar<B>,
+    T: Scalar,
     Op: op::PredicateOp1<B, (T,)>,
 {
     fn apply(input: T) -> bool {
@@ -1550,7 +1207,7 @@ where
 impl<B, T, Op> crate::detail::op::kernel::PredicateOp2<T> for KernelTuple1Op<B, Op>
 where
     B: Backend,
-    T: Scalar<B>,
+    T: Scalar,
     Op: op::PredicateOp2<B, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> bool {
@@ -1563,8 +1220,8 @@ impl<B, Left, Right, Op, Output> op::UnaryOp<B, (Left, Right)>
     for KernelTuple1InnerProductOp<B, Op, Output>
 where
     B: Backend,
-    Left: Scalar<B>,
-    Right: Scalar<B>,
+    Left: Scalar,
+    Right: Scalar,
     Output: MItem<B>,
     Output: 'static,
     Op: op::BinaryOp2<B, (Left,), (Right,), Output = Output>,
@@ -1684,7 +1341,7 @@ macro_rules! impl_mitem_tuple {
         impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar, )+
         {
             type Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+);
         }
@@ -1692,7 +1349,7 @@ macro_rules! impl_mitem_tuple {
         impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar, )+
         {
             type Item = ($( $ty, )+);
 
@@ -1709,7 +1366,7 @@ macro_rules! impl_mitem_tuple {
         impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar, )+
         {
             fn transform_unary<Input, Op>(
                 policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
@@ -1720,7 +1377,7 @@ macro_rules! impl_mitem_tuple {
                 op: Op,
             ) -> Result<<Self as MItem<B>>::Inner, Error>
             where
-                Input: Scalar<B>,
+                Input: Scalar,
                 Op: op::UnaryOp<B, (Input,), Output = Self>,
                 Self: crate::detail::TransformUnaryOutput<
                     <B as sealed::Backend>::Runtime,
@@ -1759,8 +1416,8 @@ macro_rules! impl_mitem_tuple {
                 op: Op,
             ) -> Result<<Self as MItem<B>>::Inner, Error>
             where
-                Left: Scalar<B>,
-                Right: Scalar<B>,
+                Left: Scalar,
+                Right: Scalar,
                 Op: op::UnaryOp<B, (Left, Right), Output = Self>,
                 Self: crate::detail::TransformSoA2Output<
                     <B as sealed::Backend>::Runtime,
@@ -1805,9 +1462,9 @@ macro_rules! impl_mitem_tuple {
                 op: Op,
             ) -> Result<<Self as MItem<B>>::Inner, Error>
             where
-                First: Scalar<B>,
-                Second: Scalar<B>,
-                Third: Scalar<B>,
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
                 Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
                 Self: crate::detail::TransformSoA3Output<
                     <B as sealed::Backend>::Runtime,
@@ -1905,7 +1562,7 @@ macro_rules! impl_mitem_tuple {
                 reduce_op: ReduceOp,
             ) -> Result<Output, Error>
             where
-                LeftScalar: Scalar<B> + 'static,
+                LeftScalar: Scalar + 'static,
                 LeftIter: MIter<B, Item = (LeftScalar,)>,
                 RightIter: MIter<B, Item = Self>,
                 TransformOp: op::BinaryOp2<B, (LeftScalar,), Self, Output = Output>,
@@ -1936,7 +1593,7 @@ macro_rules! impl_wide_mitem_tuple {
         impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar, )+
         {
             type Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+);
         }
@@ -1944,14 +1601,14 @@ macro_rules! impl_wide_mitem_tuple {
         impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar, )+
         {
         }
 
         impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
         where
             B: Backend,
-            $( $ty: Scalar<B>, )+
+            $( $ty: Scalar, )+
         {
             type Item = ($( $ty, )+);
 
@@ -1993,7 +1650,7 @@ impl_wide_mitem_tuple!(
 impl<B, T> MVec<B> for SoA1<DeviceVec<B, T>>
 where
     B: Backend,
-    T: Scalar<B>,
+    T: Scalar,
 {
     type Item = (T,);
 
@@ -2009,8 +1666,8 @@ where
 impl<B, A, C> MVec<B> for SoA2<DeviceVec<B, A>, DeviceVec<B, C>>
 where
     B: Backend,
-    A: Scalar<B>,
-    C: Scalar<B>,
+    A: Scalar,
+    C: Scalar,
 {
     type Item = (A, C);
 
@@ -2029,9 +1686,9 @@ where
 impl<B, A, C, D> MVec<B> for SoA3<DeviceVec<B, A>, DeviceVec<B, C>, DeviceVec<B, D>>
 where
     B: Backend,
-    A: Scalar<B>,
-    C: Scalar<B>,
-    D: Scalar<B>,
+    A: Scalar,
+    C: Scalar,
+    D: Scalar,
 {
     type Item = (A, C, D);
 
@@ -2048,29 +1705,10 @@ where
     }
 }
 
-/// Massively iterator.
-pub trait MIter<B: Backend>: sealed::MIterDispatch<B> + Sized {
-    type Item: MItem<B>;
-
-    #[doc(hidden)]
-    type Inner;
-
-    #[doc(hidden)]
-    fn into_inner(self) -> Self::Inner;
-
-    /// Returns the logical length.
-    fn len(&self) -> usize;
-
-    /// Returns whether this slice has no elements.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
 impl<'a, B, T> MIter<B> for SoA1<DeviceSlice<'a, B, T>>
 where
     B: Backend,
-    T: Scalar<B> + 'static,
+    T: Scalar + 'static,
     (T,): MItem<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
 {
     type Item = (T,);
@@ -2092,7 +1730,7 @@ where
 impl<'a, B, T> sealed::MIterDispatch<B> for SoA1<DeviceSlice<'a, B, T>>
 where
     B: Backend,
-    T: Scalar<B> + 'static,
+    T: Scalar + 'static,
     (T,): MItem<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
@@ -2106,7 +1744,7 @@ where
         Error,
     >
     where
-        U: Scalar<B>,
+        U: Scalar,
     {
         let source = self.0.source as &dyn Any;
         let source = match source.downcast_ref::<DeviceVec<B, U>>() {
@@ -2180,7 +1818,7 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K: Scalar<B> + 'static,
+        K: Scalar + 'static,
         Less: op::PredicateOp2<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -2205,7 +1843,7 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Values: MIter<B>,
-        <Self as MIter<B>>::Item: sealed::Value,
+        <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
         Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -2228,7 +1866,7 @@ where
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K: Scalar<B> + 'static,
+        K: Scalar + 'static,
         Eq: op::PredicateOp2<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -2253,7 +1891,7 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Values: MIter<B>,
-        <Self as MIter<B>>::Item: sealed::Value,
+        <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
         Eq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -2277,7 +1915,7 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K: Scalar<B> + 'static,
+        K: Scalar + 'static,
         KeyEq: op::PredicateOp2<B, (K,)>,
         Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -2301,7 +1939,7 @@ where
     ) -> Result<Output, Error>
     where
         Values: MIter<B>,
-        <Self as MIter<B>>::Item: sealed::Value,
+        <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
         KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
         Output: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -2327,7 +1965,7 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K: Scalar<B> + 'static,
+        K: Scalar + 'static,
         KeyEq: op::PredicateOp2<B, (K,)>,
         Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -2353,7 +1991,7 @@ where
     ) -> Result<Output, Error>
     where
         Values: MIter<B>,
-        <Self as MIter<B>>::Item: sealed::Value,
+        <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
         KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
         Output: MVec<B, Item = <Values as MIter<B>>::Item>,
@@ -2379,7 +2017,7 @@ where
         _op: Op,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K: Scalar<B> + 'static,
+        K: Scalar + 'static,
         KeyEq: op::PredicateOp2<B, (K,)>,
         Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = (K,)>,
@@ -2409,7 +2047,7 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Values: MIter<B>,
-        <Self as MIter<B>>::Item: sealed::Value,
+        <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
         KeyEq: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         Op: op::BinaryOp1<B, <Values as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -2436,7 +2074,7 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
-        K: Scalar<B> + 'static,
+        K: Scalar + 'static,
         Less: op::PredicateOp2<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -2478,7 +2116,7 @@ where
         RightKeys: MIter<B, Item = <Self as MIter<B>>::Item>,
         LeftValues: MIter<B>,
         RightValues: MIter<B, Item = <LeftValues as MIter<B>>::Item>,
-        <Self as MIter<B>>::Item: sealed::Value,
+        <Self as MIter<B>>::Item: cubecl::prelude::CubeType,
         Less: op::PredicateOp2<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
         ValueOutput: MVec<B, Item = <LeftValues as MIter<B>>::Item>,
@@ -3213,7 +2851,7 @@ macro_rules! impl_miter_soa {
         impl<'a, B, $( $ty ),+> MIter<B> for $name<$( DeviceSlice<'a, B, $ty> ),+>
         where
             B: Backend,
-            $( $ty: Scalar<B> + 'static, )+
+            $( $ty: Scalar + 'static, )+
             ($( $ty, )+): MItem<
                 B,
                 Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
@@ -3240,7 +2878,7 @@ macro_rules! impl_miter_soa {
         impl<'a, B, $( $ty ),+> sealed::MIterDispatch<B> for $name<$( DeviceSlice<'a, B, $ty> ),+>
         where
             B: Backend,
-            $( $ty: Scalar<B> + 'static, )+
+            $( $ty: Scalar + 'static, )+
             ($( $ty, )+): MItem<
                 B,
                 Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+),
@@ -3261,7 +2899,7 @@ macro_rules! impl_miter_soa {
                 Error,
             >
             where
-                T: Scalar<B>,
+                T: Scalar,
             {
                 $(
                     if index == $idx {
@@ -3352,7 +2990,7 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar<B> + 'static,
+                K: Scalar + 'static,
                 Less: op::PredicateOp2<B, (K,)>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -3373,7 +3011,7 @@ macro_rules! impl_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar<B> + 'static,
+                K: Scalar + 'static,
                 Eq: op::PredicateOp2<B, (K,)>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -3396,7 +3034,7 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K: Scalar<B> + 'static,
+                K: Scalar + 'static,
                 KeyEq: op::PredicateOp2<B, (K,)>,
                 Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -3422,7 +3060,7 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K: Scalar<B> + 'static,
+                K: Scalar + 'static,
                 KeyEq: op::PredicateOp2<B, (K,)>,
                 Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 Output: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -3449,7 +3087,7 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar<B> + 'static,
+                K: Scalar + 'static,
                 KeyEq: op::PredicateOp2<B, (K,)>,
                 Op: op::BinaryOp1<B, <Self as MIter<B>>::Item>,
                 KeyOutput: MVec<B, Item = (K,)>,
@@ -3481,7 +3119,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
-                K: Scalar<B> + 'static,
+                K: Scalar + 'static,
                 Less: op::PredicateOp2<B, (K,)>,
                 KeyOutput: MVec<B, Item = (K,)>,
                 ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,

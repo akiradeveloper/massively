@@ -1,84 +1,49 @@
 //! Multi-platform GPU parallel algorithms for Rust.
 #![allow(private_interfaces)]
 //!
-//! `massively` provides Thrust-style free-function algorithms over
-//! device-resident data. Backends are CubeCL runtimes, so the same API can target
-//! WGPU, CUDA, and HIP where the corresponding CubeCL backend is available.
+//! `massively` is a Thrust-inspired algorithm layer on top of CubeCL.
 //!
-//! # Memory Boundaries
+//! The crate is organized around two public layers:
 //!
-//! Host/device transfers are explicit. Use [`Executor::to_device`] to copy a host
-//! slice to the device, and [`Executor::to_host`] to copy device storage back to
-//! the host. Since v0.7, algorithms take `&Executor<B>` as their first argument;
-//! device storage does not own the execution context used for launches or reads.
+//! - [`runtime`] prepares the execution backend, owns host/device transfers, and
+//!   manages device memory such as [`DeviceVec`], [`DeviceSlice`], and
+//!   [`DeviceSliceMut`].
+//! - [`algorithm`] provides Structure-of-Arrays inputs, massively item/vector
+//!   traits, CubeCL-backed operation traits, and parallel algorithms such as
+//!   [`transform`], [`reduce`], and [`sort`].
 //!
-//! # Data Model
-//!
-//! A [`DeviceVec`] is one owned GPU column. Algorithms read borrowed
-//! [`DeviceSlice`] inputs: borrow one column as `SoA1(xs.slice(..))`, or combine
-//! several borrowed columns as `SoA2(xs.slice(..), ys.slice(..))` or
-//! `SoA3(xs.slice(..), ys.slice(..), zs.slice(..))`.
-//!
-//! Algorithm outputs are owned device storage: a [`DeviceVec`] for one output
-//! column, or a tuple of [`DeviceVec`] columns for multi-column output.
-//!
-//! # v0.7 By-Key Shape
-//!
-//! By-key algorithms accept one key column and one or more value columns. If an
-//! application needs a compound key, build a single key column first and pass
-//! that key to the by-key algorithm.
-//!
-//! Stencil algorithms such as [`copy_if`], [`replace_if`], [`gather_if`], and
-//! [`scatter_if`] accept one `u32` flag column. A flag value of `0` is false;
-//! any non-zero value is true. Predicate markers remain the API for
-//! [`remove_if`], [`count_if`], [`find_if`], and partition-style queries.
-//!
-//! Tuple keys are intentionally not part of the v0.7 public by-key API:
-//!
-//! ```compile_fail
-//! use cubecl::prelude::*;
-//! use massively::{Executor, Wgpu, sort_by_key};
-//!
-//! struct TupleLess;
-//!
-//! #[cubecl::cube]
-//! impl massively::op::PredicateOp2<Wgpu, (u32, u32)> for TupleLess {
-//!     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
-//!         lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
-//!     }
-//! }
-//!
-//! fn main() -> Result<(), massively::Error> {
-//!     let exec = Executor::<Wgpu>::cpu();
-//!     let key_a = exec.to_device(&[1_u32, 2, 3])?;
-//!     let key_b = exec.to_device(&[10_u32, 20, 30])?;
-//!     let values = exec.to_device(&[100_u32, 200, 300])?;
-//!
-//!     let _ = sort_by_key::<Wgpu, _, _, _, _, _, _>(
-//!         &exec,
-//!         massively::SoA2(key_a.slice(..), key_b.slice(..)),
-//!         massively::SoA1(values.slice(..)),
-//!         TupleLess,
-//!     )?;
-//!
-//!     Ok(())
-//! }
-//! ```
+//! User-defined operations are written as CubeCL cube traits. Low-level CubeCL
+//! runtime, launch, and storage details remain internal implementation details.
 
-mod api;
+pub mod algorithm;
 mod detail;
+mod error;
+pub mod runtime;
 
-pub use api::*;
-pub use detail::op;
+pub use algorithm::op;
+pub use algorithm::{
+    MItem, MIter, MVec, SoA1, SoA2, SoA3, adjacent_difference, adjacent_find, all_of, any_of,
+    copy_if, count_if, equal, equal_range, exclusive_scan, exclusive_scan_by_key, find_first_of,
+    find_if, gather, gather_if, inclusive_scan, inclusive_scan_by_key, inner_product,
+    is_partitioned, is_sorted, is_sorted_until, lexicographical_compare, lower_bound, max_element,
+    merge, merge_by_key, min_element, minmax_element, mismatch, none_of, partition, reduce,
+    reduce_by_key, remove_if, replace_if, reverse, scatter, scatter_if, set_difference,
+    set_intersection, set_union, sort, sort_by_key, stable_sort, stable_sort_by_key, transform,
+    unique, unique_by_key, upper_bound,
+};
+pub use error::Error;
+#[cfg(feature = "wgpu")]
+pub use runtime::Wgpu;
+pub use runtime::{Backend, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 
 /// Common facade traits and types.
 ///
 /// Algorithm functions are intentionally not included; call them through the
 /// `massively::` namespace.
 pub mod prelude {
-    pub use crate::api::{
-        Backend, DeviceSlice, DeviceVec, Executor, MIter, MVec, SoA1, SoA2, SoA3,
+    pub use crate::{
+        Backend, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIter, MVec, SoA1, SoA2, SoA3,
     };
 }
 
-pub(crate) use detail::{device, error, expr, kernels, policy, primitives};
+pub(crate) use detail::{device, expr, kernels, policy, primitives};
