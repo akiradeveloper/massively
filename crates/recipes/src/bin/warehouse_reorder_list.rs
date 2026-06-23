@@ -1,0 +1,86 @@
+//! # Problem
+//!
+//! Return products whose stock is below the three-day sales target, sorted by
+//! urgency descending.
+//!
+//! # Task
+//!
+//! Implement `solve(sku, stock, daily_sales) -> reordered rows`.
+//!
+//! # GPU Algorithm
+//!
+//! 1. Transform `(stock, daily_sales)` to urgency.
+//! 2. Copy rows with non-zero urgency.
+//! 3. Sort by urgency and reverse.
+
+mod common;
+
+use cubecl::prelude::*;
+use massively::op::UnaryOp;
+use massively::{DeviceVec, Executor, SoA1, SoA2, Wgpu, copy_if, reverse, sort_by_key, transform};
+
+struct InventoryUrgency;
+
+#[cubecl::cube]
+impl<B> UnaryOp<B, (u32, u32)> for InventoryUrgency
+where
+    B: massively::Backend,
+{
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32)) -> (u32,) {
+        let stock = input.0;
+        let daily_sales = input.1;
+        let target = daily_sales * 3_u32;
+        if target > stock {
+            (target - stock,)
+        } else {
+            (0_u32,)
+        }
+    }
+}
+
+struct Output {
+    sku: DeviceVec<Wgpu, u32>,
+    urgency: DeviceVec<Wgpu, u32>,
+}
+
+fn solve(
+    exec: &Executor<Wgpu>,
+    sku: DeviceVec<Wgpu, u32>,
+    stock: DeviceVec<Wgpu, u32>,
+    daily_sales: DeviceVec<Wgpu, u32>,
+) -> common::Result<Output> {
+    let (urgency,) = transform(
+        exec,
+        SoA2(stock.slice(..), daily_sales.slice(..)),
+        InventoryUrgency,
+    )?;
+    let (sku, urgency) = copy_if(
+        exec,
+        SoA2(sku.slice(..), urgency.slice(..)),
+        urgency.slice(..),
+    )?;
+    let ((urgency,), (sku,)) = sort_by_key(
+        exec,
+        SoA1(urgency.slice(..)),
+        SoA1(sku.slice(..)),
+        common::LessU32,
+    )?;
+    let (urgency,) = reverse(exec, SoA1(urgency.slice(..)))?;
+    let (sku,) = reverse(exec, SoA1(sku.slice(..)))?;
+    Ok(Output { sku, urgency })
+}
+
+fn main() -> common::Result {
+    let exec = Executor::<Wgpu>::cpu();
+    let output = solve(
+        &exec,
+        exec.to_device(&[100, 200, 300, 400])?,
+        exec.to_device(&[10, 2, 50, 1])?,
+        exec.to_device(&[3, 2, 10, 4])?,
+    )?;
+    assert_eq!(exec.to_host(&output.sku)?, vec![400, 200]);
+    assert_eq!(exec.to_host(&output.urgency)?, vec![11, 4]);
+    Ok(())
+}

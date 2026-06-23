@@ -2,9 +2,9 @@
 
 pub(crate) mod api;
 pub mod op;
+mod soa;
+mod traits;
 
-use crate::Backend;
-use crate::algorithm::api::sealed;
 pub use api::{
     adjacent_difference, adjacent_find, all_of, any_of, copy_if, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_if,
@@ -14,79 +14,5 @@ pub use api::{
     replace_if, reverse, scatter, scatter_if, set_difference, set_intersection, set_union, sort,
     sort_by_key, stable_sort, stable_sort_by_key, transform, unique, unique_by_key, upper_bound,
 };
-use cubecl::prelude::CubeType;
-
-/// Single-column structure-of-arrays container.
-#[derive(Clone, Copy, Debug)]
-pub struct SoA1<A>(pub A);
-
-/// Two-column structure-of-arrays container.
-#[derive(Clone, Copy, Debug)]
-pub struct SoA2<A, B>(pub A, pub B);
-
-/// Three-column structure-of-arrays container.
-#[derive(Clone, Copy, Debug)]
-pub struct SoA3<A, B, C>(pub A, pub B, pub C);
-
-impl<A> From<(A,)> for SoA1<A> {
-    fn from(value: (A,)) -> Self {
-        Self(value.0)
-    }
-}
-
-impl<A, B> From<(A, B)> for SoA2<A, B> {
-    fn from(value: (A, B)) -> Self {
-        Self(value.0, value.1)
-    }
-}
-
-impl<A, B, C> From<(A, B, C)> for SoA3<A, B, C> {
-    fn from(value: (A, B, C)) -> Self {
-        Self(value.0, value.1, value.2)
-    }
-}
-
-/// Logical item handled by massively algorithms.
-///
-/// An `MItem` is one element of an [`MIter`] or [`MVec`]. The current public
-/// model represents items as tuples such as `(T,)`, `(T, U)`, and `(T, U, V)`;
-/// internally those tuples are stored as SoA device columns for backend `B`.
-pub trait MItem<B: Backend>: sealed::MItemDispatch<B> + CubeType + Sized + 'static {
-    #[doc(hidden)]
-    type Inner;
-}
-
-/// Owned massively vector for a logical item.
-pub trait MVec<B: Backend>: Sized {
-    type Item: MItem<B>;
-
-    #[doc(hidden)]
-    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self;
-
-    /// Returns the logical length.
-    fn len(&self) -> usize;
-
-    /// Returns whether this array has no elements.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-/// Massively iterator.
-pub trait MIter<B: Backend>: sealed::MIterDispatch<B> + Sized {
-    type Item: MItem<B>;
-
-    #[doc(hidden)]
-    type Inner;
-
-    #[doc(hidden)]
-    fn into_inner(self) -> Self::Inner;
-
-    /// Returns the logical length.
-    fn len(&self) -> usize;
-
-    /// Returns whether this slice has no elements.
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
+pub use soa::{SoA1, SoA2, SoA3};
+pub use traits::{MItem, MIter, MVec};
