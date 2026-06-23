@@ -1,0 +1,35 @@
+//! # Problem
+//!
+//! Given two sorted campaign customer lists, return customers present in both.
+//!
+//! # Task
+//!
+//! Implement `solve(a, b) -> intersection`.
+//!
+//! # GPU Algorithm
+//!
+//! 1. Use `set_intersection` on sorted ranges.
+
+mod common;
+
+use massively::{DeviceVec, Executor, SoA1, Wgpu, set_intersection};
+
+fn solve(
+    exec: &Executor<Wgpu>,
+    a: DeviceVec<Wgpu, u32>,
+    b: DeviceVec<Wgpu, u32>,
+) -> common::Result<DeviceVec<Wgpu, u32>> {
+    let (out,) = set_intersection(exec, SoA1(a.slice(..)), SoA1(b.slice(..)), common::LessU32)?;
+    Ok(out)
+}
+
+fn main() -> common::Result {
+    let exec = Executor::<Wgpu>::cpu();
+    let out = solve(
+        &exec,
+        exec.to_device(&[1, 2, 4, 8])?,
+        exec.to_device(&[2, 3, 4])?,
+    )?;
+    assert_eq!(exec.to_host(&out)?, vec![2, 4]);
+    Ok(())
+}

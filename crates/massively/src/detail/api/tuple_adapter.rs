@@ -1,0 +1,95 @@
+use std::marker::PhantomData;
+
+use crate::detail::op::kernel::{BinaryOp2, PredicateOp1, PredicateOp2, UnaryOp};
+use cubecl::prelude::*;
+
+#[doc(hidden)]
+pub struct Tuple1Less<Less> {
+    _less: PhantomData<fn() -> Less>,
+}
+
+impl<Less> Default for Tuple1Less<Less> {
+    fn default() -> Self {
+        Self { _less: PhantomData }
+    }
+}
+
+#[cubecl::cube]
+impl<T, Less> PredicateOp2<T> for Tuple1Less<Less>
+where
+    T: CubePrimitive + CubeElement,
+    Less: PredicateOp2<(T,)>,
+{
+    fn apply(lhs: T, rhs: T) -> bool {
+        Less::apply((lhs,), (rhs,))
+    }
+}
+
+#[doc(hidden)]
+pub struct Tuple1BinaryOp<Op> {
+    _op: PhantomData<fn() -> Op>,
+}
+
+impl<Op> Default for Tuple1BinaryOp<Op> {
+    fn default() -> Self {
+        Self { _op: PhantomData }
+    }
+}
+
+#[cubecl::cube]
+impl<T, Op> BinaryOp2<T> for Tuple1BinaryOp<Op>
+where
+    T: CubePrimitive + CubeElement,
+    Op: BinaryOp2<(T,)>,
+{
+    fn apply(lhs: T, rhs: T) -> T {
+        Op::apply((lhs,), (rhs,)).0
+    }
+}
+
+#[doc(hidden)]
+pub struct Tuple1InnerProductZipper<Op> {
+    _op: PhantomData<fn() -> Op>,
+}
+
+impl<Op> Default for Tuple1InnerProductZipper<Op> {
+    fn default() -> Self {
+        Self { _op: PhantomData }
+    }
+}
+
+#[cubecl::cube]
+impl<Left, Right, Op> UnaryOp<(Left, Right)> for Tuple1InnerProductZipper<Op>
+where
+    Left: CubePrimitive + CubeElement,
+    Right: CubePrimitive + CubeElement,
+    Op: UnaryOp<((Left,), (Right,))>,
+{
+    type Output = Op::Output;
+
+    fn apply(input: (Left, Right)) -> Self::Output {
+        Op::apply(((input.0,), (input.1,)))
+    }
+}
+
+#[doc(hidden)]
+pub struct Tuple1PredicateOp<Op> {
+    _op: PhantomData<fn() -> Op>,
+}
+
+impl<Op> Default for Tuple1PredicateOp<Op> {
+    fn default() -> Self {
+        Self { _op: PhantomData }
+    }
+}
+
+#[cubecl::cube]
+impl<T, Op> PredicateOp1<T> for Tuple1PredicateOp<Op>
+where
+    T: CubePrimitive + CubeElement,
+    Op: PredicateOp1<(T,)>,
+{
+    fn apply(input: T) -> bool {
+        Op::apply((input,))
+    }
+}

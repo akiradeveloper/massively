@@ -1,0 +1,12 @@
+[package]
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+name = "recipes"
+publish = false
+repository.workspace = true
+version = "0.1.0"
+
+[dependencies]
+cubecl.workspace = true
+massively = { path = "../massively" }

@@ -1,0 +1,59 @@
+//! # Problem
+//!
+//! Merge two timestamp-sorted event feeds.
+//!
+//! # Task
+//!
+//! Implement `solve(left, right) -> merged_feed`.
+//!
+//! # GPU Algorithm
+//!
+//! 1. Keep timestamps sorted.
+//! 2. Use `merge_by_key` and carry event ids as values.
+
+mod common;
+
+use massively::{DeviceVec, Executor, SoA1, Wgpu, merge_by_key};
+
+struct Output {
+    timestamp: DeviceVec<Wgpu, u32>,
+    event_id: DeviceVec<Wgpu, u32>,
+}
+
+fn solve(
+    exec: &Executor<Wgpu>,
+    left_timestamp: DeviceVec<Wgpu, u32>,
+    left_event_id: DeviceVec<Wgpu, u32>,
+    right_timestamp: DeviceVec<Wgpu, u32>,
+    right_event_id: DeviceVec<Wgpu, u32>,
+) -> common::Result<Output> {
+    let ((timestamp,), (event_id,)) = merge_by_key(
+        exec,
+        SoA1(left_timestamp.slice(..)),
+        SoA1(left_event_id.slice(..)),
+        SoA1(right_timestamp.slice(..)),
+        SoA1(right_event_id.slice(..)),
+        common::LessU32,
+    )?;
+    Ok(Output {
+        timestamp,
+        event_id,
+    })
+}
+
+fn main() -> common::Result {
+    let exec = Executor::<Wgpu>::cpu();
+    let output = solve(
+        &exec,
+        exec.to_device(&[1, 4, 8])?,
+        exec.to_device(&[10, 40, 80])?,
+        exec.to_device(&[2, 3, 9])?,
+        exec.to_device(&[20, 30, 90])?,
+    )?;
+    assert_eq!(exec.to_host(&output.timestamp)?, vec![1, 2, 3, 4, 8, 9]);
+    assert_eq!(
+        exec.to_host(&output.event_id)?,
+        vec![10, 20, 30, 40, 80, 90]
+    );
+    Ok(())
+}

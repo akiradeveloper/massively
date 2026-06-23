@@ -2,6 +2,7 @@
 members = [
     "crates/massively",
     "crates/oracle",
+    "crates/recipes",
 ]
 resolver = "3"
 
