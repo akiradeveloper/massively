@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, equal_range};
+use massively::{DeviceVec, Executor, SoA1, equal_range};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -21,13 +21,13 @@ fn solve<B>(
     target: u32,
 ) -> common::Result<(usize, usize)>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     equal_range(exec, SoA1(score.slice(..)), (target,), common::LessU32)
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let range = solve(&exec, exec.to_device(&[10, 20, 20, 20, 30])?, 20)?;
     assert_eq!(range, (1, 4));
     Ok(())

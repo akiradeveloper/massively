@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, lower_bound};
+use massively::{DeviceVec, Executor, SoA1, lower_bound};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -23,7 +23,7 @@ fn solve<B>(
     end: u32,
 ) -> common::Result<(usize, usize)>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let lower = lower_bound(exec, SoA1(timestamp.slice(..)), (start,), common::LessU32)?;
     let upper = lower_bound(exec, SoA1(timestamp.slice(..)), (end,), common::LessU32)?;
@@ -31,7 +31,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let range = solve(&exec, exec.to_device(&[10, 20, 30, 40, 50])?, 20, 45)?;
     assert_eq!(range, (1, 4));
     Ok(())

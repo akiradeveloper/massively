@@ -12,7 +12,7 @@ use cubecl::prelude::*;
 #[cube]
 pub trait TabulateOp<B, T>: 'static + Send + Sync
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     T: crate::Scalar,
 {
     /// Generates one output value from its logical index.
@@ -32,7 +32,7 @@ impl<B, Op, Output> KernelTabulateOp<B, Op, Output> {
 #[cubecl::cube]
 impl<B, Op, Output> crate::algorithm::op::kernel::UnaryOp<u32> for KernelTabulateOp<B, Op, Output>
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     Output: crate::Scalar,
     Op: TabulateOp<B, Output>,
 {

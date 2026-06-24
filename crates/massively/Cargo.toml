@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.12.0"
+version = "0.13.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -251,6 +251,10 @@ path = "examples/runtime/copy.rs"
 [[example]]
 name = "runtime-filled"
 path = "examples/runtime/filled.rs"
+
+[[example]]
+name = "runtime-random"
+path = "examples/runtime/random.rs"
 
 [[example]]
 name = "runtime-tabulate"

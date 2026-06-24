@@ -3,21 +3,23 @@
 //!
 //! `massively` is a Thrust-inspired algorithm layer on top of CubeCL.
 //!
-//! The crate is organized around two public layers:
+//! The crate is organized around three public layers:
 //!
-//! - [`runtime`] prepares the execution backend, owns host/device transfers, and
-//!   manages device memory such as [`DeviceVec`], [`DeviceSlice`], and
-//!   [`DeviceSliceMut`].
+//! - [`runtime`] prepares a CubeCL runtime from a device, owns host/device
+//!   transfers, and manages device memory such as [`DeviceVec`],
+//!   [`DeviceSlice`], and [`DeviceSliceMut`].
 //! - [`algorithm`] provides Structure-of-Arrays inputs, massively item/vector
 //!   traits, CubeCL-backed operation traits, and parallel algorithms such as
 //!   [`transform`], [`reduce`], and [`sort`].
+//! - [`random`] generates GPU-side pseudo-random columns.
 //!
 //! User-defined operations are written as CubeCL cube traits. Low-level CubeCL
-//! runtime, launch, and storage details remain internal implementation details.
+//! launch and storage details remain internal implementation details.
 
 pub mod algorithm;
 mod detail;
 mod error;
+pub mod random;
 pub mod runtime;
 
 pub use algorithm::op;
@@ -32,9 +34,7 @@ pub use algorithm::{
     unique, unique_by_key, upper_bound,
 };
 pub use error::Error;
-#[cfg(feature = "wgpu")]
-pub use runtime::Wgpu;
-pub use runtime::{Backend, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
+pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 
 /// Common facade traits and types.
 ///
@@ -42,7 +42,7 @@ pub use runtime::{Backend, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Sca
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        Backend, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIter, MVec, SoA1, SoA2, SoA3,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIter, MVec, SoA1, SoA2, SoA3,
     };
 }
 

@@ -1,9 +1,10 @@
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, Wgpu, gather_if};
+use massively::{Executor, gather_if};
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let values = exec.to_device(&[10.0_f32, -20.0, 30.0])?;
     let indices = exec.to_device(&[2_u32, 0, 1])?;
     let stencil = exec.to_device(&[1_u32, 1, 0])?;

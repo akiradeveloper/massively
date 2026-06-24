@@ -13,17 +13,17 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, minmax_element};
+use massively::{DeviceVec, Executor, SoA1, minmax_element};
 
 fn solve<B>(exec: &Executor<B>, price: DeviceVec<B, f32>) -> common::Result<Option<(usize, usize)>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     minmax_element(exec, SoA1(price.slice(..)), common::LessF32)
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let indices = solve(&exec, exec.to_device(&[9.0, 3.5, 12.0, 7.0])?)?;
     assert_eq!(indices, Some((1, 2)));
     Ok(())

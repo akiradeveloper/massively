@@ -9,8 +9,8 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Generate sample indices.
-//! 2. Map each index to a deterministic point and then to an inside flag.
+//! 1. Generate deterministic pseudo-random x/y columns on the GPU.
+//! 2. Map each point to an inside flag.
 //! 3. Reduce the flags.
 //! 4. Convert the count to a pi estimate on the host.
 
@@ -18,35 +18,22 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::runtime::op::TabulateOp;
-use massively::{Executor, SoA1, Wgpu, reduce, transform};
+use massively::{Executor, SoA1, SoA2, random, reduce, transform};
 
-struct Index;
-
-#[cubecl::cube]
-impl<B> TabulateOp<B, u32> for Index
-where
-    B: massively::Backend,
-{
-    fn apply(index: u32) -> u32 {
-        index
-    }
-}
+const SCALE: u32 = 1_000_000;
 
 struct InsideQuarterCircle;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32,)> for InsideQuarterCircle
+impl<B> UnaryOp<B, (u32, u32)> for InsideQuarterCircle
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     type Output = (u32,);
 
-    fn apply(input: (u32,)) -> (u32,) {
-        let a = (input.0 * 37_u32 + 17_u32) % 100_u32;
-        let b = (input.0 * 57_u32 + 31_u32) % 100_u32;
-        let x = (a as f32) / 100.0;
-        let y = (b as f32) / 100.0;
+    fn apply(input: (u32, u32)) -> (u32,) {
+        let x = (input.0 as f32) / SCALE as f32;
+        let y = (input.1 as f32) / SCALE as f32;
         if x * x + y * y <= 1.0 {
             (1_u32,)
         } else {
@@ -57,16 +44,17 @@ where
 
 fn solve<B>(exec: &Executor<B>, samples: usize) -> common::Result<f32>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
-    let indices = exec.tabulate(samples, Index)?;
-    let (inside,) = transform(exec, SoA1(indices.slice(..)), InsideQuarterCircle)?;
+    let x = random::uniform_dist_u32(exec, 0, SCALE, samples, 0x1234_5678)?;
+    let y = random::uniform_dist_u32(exec, 0, SCALE, samples, 0x8765_4321)?;
+    let (inside,) = transform(exec, SoA2(x.slice(..), y.slice(..)), InsideQuarterCircle)?;
     let (hits,) = reduce(exec, SoA1(inside.slice(..)), (0_u32,), common::SumU32)?;
     Ok(4.0 * hits as f32 / samples as f32)
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let pi = solve(&exec, 10_000)?;
     common::assert_f32_near(pi, 3.14, 0.12);
     Ok(())

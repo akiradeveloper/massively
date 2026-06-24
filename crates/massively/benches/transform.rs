@@ -1,15 +1,16 @@
+use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Backend, SIZES, dense_f32, sync};
+use common::{Runtime, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, Wgpu, transform};
+use massively::{DeviceVec, Executor, transform};
 
 struct MulTwo;
 
 #[cubecl::cube]
-impl UnaryOp<Wgpu, (f32,)> for MulTwo {
+impl UnaryOp<WgpuRuntime, (f32,)> for MulTwo {
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -17,7 +18,7 @@ impl UnaryOp<Wgpu, (f32,)> for MulTwo {
     }
 }
 
-fn check_transform(exec: &Executor<Wgpu>) {
+fn check_transform(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let (output,) = transform(&exec, massively::SoA1(values.slice(..)), MulTwo).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
@@ -25,7 +26,7 @@ fn check_transform(exec: &Executor<Wgpu>) {
 
 fn bench_transform(c: &mut Criterion) {
     let mut transform_group = c.benchmark_group("transform");
-    for backend in Backend::available() {
+    for backend in Runtime::available() {
         let exec = backend.exec();
         check_transform(&exec);
 
@@ -34,7 +35,7 @@ fn bench_transform(c: &mut Criterion) {
             sync(&exec);
             transform_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) =
+                    let output: (DeviceVec<WgpuRuntime, f32>,) =
                         transform(&exec, massively::SoA1(black_box(values.slice(..))), MulTwo)
                             .unwrap();
                     sync(&exec);

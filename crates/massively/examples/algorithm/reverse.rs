@@ -1,9 +1,10 @@
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, Wgpu, reverse};
+use massively::{Executor, reverse};
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0])?;
 
     let (output,) = reverse(&exec, massively::SoA1(values.slice(..)))?;

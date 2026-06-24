@@ -1,17 +1,18 @@
 #![allow(dead_code)]
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
-use massively::{Executor, Wgpu};
+use massively::Executor;
 
 pub const SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024, 1024 * 1024];
 pub const SORT_SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024];
 
 #[derive(Clone, Copy)]
-pub enum Backend {
+pub enum Runtime {
     Cpu,
     Gpu,
 }
 
-impl Backend {
+impl Runtime {
     pub fn available() -> Vec<Self> {
         let mut backends = vec![Self::Cpu];
         if Self::gpu_available() {
@@ -27,10 +28,10 @@ impl Backend {
         }
     }
 
-    pub fn exec(self) -> Executor<Wgpu> {
+    pub fn exec(self) -> Executor<WgpuRuntime> {
         match self {
-            Self::Cpu => Executor::<Wgpu>::cpu(),
-            Self::Gpu => Executor::<Wgpu>::new(),
+            Self::Cpu => Executor::<WgpuRuntime>::new(WgpuDevice::Cpu),
+            Self::Gpu => Executor::<WgpuRuntime>::new(WgpuDevice::default()),
         }
     }
 
@@ -61,6 +62,6 @@ pub fn half_select_flags(len: usize) -> Vec<u32> {
     (0..len).map(|index| (index % 2 == 0) as u32).collect()
 }
 
-pub fn sync(exec: &Executor<Wgpu>) {
+pub fn sync(exec: &Executor<WgpuRuntime>) {
     exec.sync().unwrap();
 }

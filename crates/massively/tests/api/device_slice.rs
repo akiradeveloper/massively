@@ -107,7 +107,7 @@ fn algorithms_reject_other_executor_data() {
     let other_exec = exec();
     let input = data_exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let result = transform::<_, _, (massively::DeviceVec<Wgpu, f32>,), _>(
+    let result = transform::<_, _, (massively::DeviceVec<WgpuRuntime, f32>,), _>(
         &other_exec,
         massively::SoA1(input.slice(..)),
         Double,

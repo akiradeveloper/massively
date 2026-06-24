@@ -1,26 +1,20 @@
-//! Execution context and backend traits shared by runtime memory and algorithms.
+//! Execution context shared by runtime memory and algorithms.
 
 use std::marker::PhantomData;
 
-use cubecl::prelude::{CubeElement, CubePrimitive};
+use cubecl::prelude::{CubeElement, CubePrimitive, Runtime};
 
 use crate::Error;
 use crate::algorithm::api::sealed;
 use crate::runtime::op::KernelTabulateOp;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 
-/// Execution backend marker.
-///
-/// Backend implementations hide the CubeCL runtime type used by the lower
-/// implementation layer.
-pub trait Backend: sealed::Backend + Copy + Clone + Default + 'static {}
-
 /// Scalar value that can be stored in one device column.
 pub trait Scalar: CubePrimitive + CubeElement {}
 impl<T> Scalar for T where T: CubePrimitive + CubeElement {}
 
 /// Device-resident data that can be copied back to host memory by an executor.
-pub trait ToHost<B: Backend>:
+pub trait ToHost<B: Runtime>:
     sealed::ToHostDispatch<B, Output = <Self as ToHost<B>>::Output>
 {
     type Output;
@@ -28,33 +22,20 @@ pub trait ToHost<B: Backend>:
 
 impl<B, T> ToHost<B> for T
 where
-    B: Backend,
+    B: Runtime,
     T: sealed::ToHostDispatch<B>,
 {
     type Output = <T as sealed::ToHostDispatch<B>>::Output;
 }
 
-/// WGPU backend marker.
-#[cfg(feature = "wgpu")]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Wgpu;
-
-#[cfg(feature = "wgpu")]
-impl sealed::Backend for Wgpu {
-    type Runtime = cubecl::wgpu::WgpuRuntime;
-}
-
-#[cfg(feature = "wgpu")]
-impl Backend for Wgpu {}
-
-/// Execution context for a facade backend.
+/// Execution context for a CubeCL runtime.
 #[derive(Debug)]
-pub struct Executor<B: Backend> {
-    pub(crate) inner: crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+pub struct Executor<B: Runtime> {
+    pub(crate) inner: crate::detail::CubePolicy<B>,
     pub(crate) _backend: PhantomData<fn() -> B>,
 }
 
-impl<B: Backend> Clone for Executor<B> {
+impl<B: Runtime> Clone for Executor<B> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -63,11 +44,16 @@ impl<B: Backend> Clone for Executor<B> {
     }
 }
 
-impl<B: Backend> Executor<B> {
-    #[cfg(any(feature = "cuda", feature = "hip", feature = "wgpu"))]
-    fn from_inner(inner: crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>) -> Self {
+impl<B: Runtime> Executor<B> {
+    /// Creates an executor for the given CubeCL device.
+    pub fn new(device: B::Device) -> Self {
+        Self::from_device(&device)
+    }
+
+    /// Creates an executor for the given CubeCL device reference.
+    pub fn from_device(device: &B::Device) -> Self {
         Self {
-            inner,
+            inner: crate::detail::CubePolicy::from_device(device),
             _backend: PhantomData,
         }
     }
@@ -85,7 +71,7 @@ impl<B: Backend> Executor<B> {
         }
     }
 
-    pub(crate) fn policy(&self) -> &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime> {
+    pub(crate) fn policy(&self) -> &crate::detail::CubePolicy<B> {
         &self.inner
     }
 
@@ -163,25 +149,5 @@ impl<B: Backend> Executor<B> {
         futures_lite::future::block_on(self.inner.client().sync()).map_err(|err| Error::Launch {
             message: err.to_string(),
         })
-    }
-}
-
-#[cfg(feature = "wgpu")]
-impl Executor<Wgpu> {
-    /// Creates a WGPU executor backed by the default device.
-    pub fn new() -> Self {
-        Self::from_inner(crate::detail::CubeWgpu::new())
-    }
-
-    /// Creates a WGPU executor backed by the CPU adapter.
-    pub fn cpu() -> Self {
-        Self::from_inner(crate::detail::CubeWgpu::cpu())
-    }
-}
-
-#[cfg(feature = "wgpu")]
-impl Default for Executor<Wgpu> {
-    fn default() -> Self {
-        Self::new()
     }
 }

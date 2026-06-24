@@ -1,17 +1,18 @@
+use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Backend, SIZES, dense_f32, sync};
+use common::{Runtime, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
 use massively::{
-    DeviceVec, Executor, Wgpu, exclusive_scan_by_key, inclusive_scan, inclusive_scan_by_key,
+    DeviceVec, Executor, exclusive_scan_by_key, inclusive_scan, inclusive_scan_by_key,
 };
 
 struct Sum;
 
 #[cubecl::cube]
-impl ReductionOp<Wgpu, (f32,)> for Sum {
+impl ReductionOp<WgpuRuntime, (f32,)> for Sum {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
@@ -20,7 +21,7 @@ impl ReductionOp<Wgpu, (f32,)> for Sum {
 struct KeyEq;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<Wgpu, (u32,)> for KeyEq {
+impl BinaryPredicateOp<WgpuRuntime, (u32,)> for KeyEq {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 == rhs.0
     }
@@ -30,13 +31,13 @@ fn keys(len: usize) -> Vec<u32> {
     (0..len).map(|index| (index / 8) as u32).collect()
 }
 
-fn check_scan(exec: &Executor<Wgpu>) {
+fn check_scan(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let (output,) = inclusive_scan(&exec, massively::SoA1(values.slice(..)), Sum).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![1.0, 3.0, 6.0, 10.0]);
 }
 
-fn check_scan_by_key(exec: &Executor<Wgpu>) {
+fn check_scan_by_key(exec: &Executor<WgpuRuntime>) {
     let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
     let (output,) = inclusive_scan_by_key(
@@ -63,7 +64,7 @@ fn check_scan_by_key(exec: &Executor<Wgpu>) {
 
 fn bench_scan(c: &mut Criterion) {
     let mut scan_group = c.benchmark_group("inclusive_scan");
-    for backend in Backend::available() {
+    for backend in Runtime::available() {
         let exec = backend.exec();
         check_scan(&exec);
 
@@ -72,7 +73,7 @@ fn bench_scan(c: &mut Criterion) {
             sync(&exec);
             scan_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) =
+                    let output: (DeviceVec<WgpuRuntime, f32>,) =
                         inclusive_scan(&exec, massively::SoA1(black_box(values.slice(..))), Sum)
                             .unwrap();
                     sync(&exec);
@@ -84,7 +85,7 @@ fn bench_scan(c: &mut Criterion) {
     scan_group.finish();
 
     let mut by_key_group = c.benchmark_group("inclusive_scan_by_key");
-    for backend in Backend::available() {
+    for backend in Runtime::available() {
         let exec = backend.exec();
         check_scan_by_key(&exec);
 
@@ -94,7 +95,7 @@ fn bench_scan(c: &mut Criterion) {
             sync(&exec);
             by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) = inclusive_scan_by_key(
+                    let output: (DeviceVec<WgpuRuntime, f32>,) = inclusive_scan_by_key(
                         &exec,
                         massively::SoA1(black_box(keys.slice(..))),
                         massively::SoA1(black_box(values.slice(..))),
@@ -111,7 +112,7 @@ fn bench_scan(c: &mut Criterion) {
     by_key_group.finish();
 
     let mut exclusive_by_key_group = c.benchmark_group("exclusive_scan_by_key");
-    for backend in Backend::available() {
+    for backend in Runtime::available() {
         let exec = backend.exec();
         check_scan_by_key(&exec);
 
@@ -121,7 +122,7 @@ fn bench_scan(c: &mut Criterion) {
             sync(&exec);
             exclusive_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) = exclusive_scan_by_key(
+                    let output: (DeviceVec<WgpuRuntime, f32>,) = exclusive_scan_by_key(
                         &exec,
                         massively::SoA1(black_box(keys.slice(..))),
                         massively::SoA1(black_box(values.slice(..))),

@@ -1,9 +1,10 @@
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, Wgpu, stable_sort_by_key};
+use massively::{Executor, stable_sort_by_key};
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let keys = exec.to_device(&[2_u32, 0, 1])?;
     let values = exec.to_device(&[20.0_f32, 0.0, 10.0])?;
 

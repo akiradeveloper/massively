@@ -1,13 +1,14 @@
 //! Public algorithm API implementation for `massively`.
 //!
-//! This crate intentionally keeps CubeCL runtime types out of public algorithm
-//! signatures. The implementation delegates to the internal detail layer.
+//! Public algorithm API implementation for `massively`.
 
 use std::any::Any;
 
+use cubecl::prelude::Runtime;
+
 use crate::algorithm::op;
 use crate::algorithm::{MItem, MIter, MVec, SoA1, SoA2, SoA3};
-use crate::runtime::{Backend, DeviceSlice, DeviceVec, Executor, Scalar};
+use crate::runtime::{DeviceSlice, DeviceVec, Executor, Scalar};
 
 pub use crate::Error;
 
@@ -15,7 +16,7 @@ pub(crate) mod sealed;
 
 fn array_from_inner<B, Item, Output>(inner: <Item as MItem<B>>::Inner) -> Output
 where
-    B: Backend,
+    B: Runtime,
     Item: MItem<B>,
     Output: MVec<B, Item = Item>,
 {
@@ -23,11 +24,11 @@ where
 }
 
 fn gather_index_inner<B, Indices>(
-    _policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+    _policy: &crate::detail::CubePolicy<B>,
     indices: &Indices,
-) -> Result<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, u32>, Error>
+) -> Result<crate::detail::device::DeviceColumnView<B, u32>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Indices: MIter<B, Item = (u32,)>,
 {
     <Indices as sealed::MIterDispatch<B>>::column_view_inner::<u32>(indices)?.ok_or_else(|| {
@@ -42,9 +43,9 @@ fn column_view_at<B, Iter, T>(
     iter: &Iter,
     index: usize,
     algorithm: &str,
-) -> Result<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, T>, Error>
+) -> Result<crate::detail::device::DeviceColumnView<B, T>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Iter: MIter<B>,
     T: Scalar + 'static,
 {
@@ -57,7 +58,7 @@ where
 
 fn validate_input<B, Input>(exec: &Executor<B>, input: &Input) -> Result<(), Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
 {
     <Input as sealed::MIterDispatch<B>>::validate_executor(input, exec)
@@ -65,7 +66,7 @@ where
 
 fn validate_slice<B, T>(exec: &Executor<B>, slice: &DeviceSlice<'_, B, T>) -> Result<(), Error>
 where
-    B: Backend,
+    B: Runtime,
 {
     exec.ensure_policy_id(slice.source.inner.policy_id())
 }
@@ -79,7 +80,7 @@ pub fn adjacent_difference<B, Input, Output, Op>(
     op: Op,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Op: op::ReductionOp<B, Input::Item>,
@@ -95,7 +96,7 @@ pub fn adjacent_find<B, Input, Pred>(
     pred: Pred,
 ) -> Result<Option<usize>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -106,7 +107,7 @@ where
 /// Returns whether all elements satisfy `pred`.
 pub fn all_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::PredicateOp<B, Input::Item>,
 {
@@ -117,7 +118,7 @@ where
 /// Returns whether any element satisfies `pred`.
 pub fn any_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::PredicateOp<B, Input::Item>,
 {
@@ -132,7 +133,7 @@ pub fn copy_if<B, Input, Output>(
     stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -148,7 +149,7 @@ pub fn count_if<B, Input, Pred>(
     pred: Pred,
 ) -> Result<usize, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::PredicateOp<B, Input::Item>,
 {
@@ -164,7 +165,7 @@ pub fn equal<B, Left, Right, Eq>(
     eq: Eq,
 ) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Eq: op::BinaryPredicateOp<B, Left::Item>,
@@ -182,7 +183,7 @@ pub fn equal_range<B, Input, Less>(
     less: Less,
 ) -> Result<(usize, usize), Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -198,7 +199,7 @@ pub fn exclusive_scan<B, Input, Output, Op>(
     op: Op,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Op: op::ReductionOp<B, Input::Item>,
@@ -217,7 +218,7 @@ pub fn exclusive_scan_by_key<B, Keys, Values, KeyEq, Op, Output>(
     op: Op,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Keys: MIter<B>,
     Values: MIter<B>,
     KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
@@ -244,7 +245,7 @@ pub fn find_first_of<B, Input, Needles, Eq>(
     eq: Eq,
 ) -> Result<Option<usize>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Needles: MIter<B, Item = Input::Item>,
     Eq: op::BinaryPredicateOp<B, Input::Item>,
@@ -261,7 +262,7 @@ pub fn find_if<B, Input, Pred>(
     pred: Pred,
 ) -> Result<Option<usize>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::PredicateOp<B, Input::Item>,
 {
@@ -276,7 +277,7 @@ pub fn gather<B, Input, Output>(
     indices: DeviceSlice<'_, B, u32>,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -294,7 +295,7 @@ pub fn gather_if<B, Input, Output>(
     stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -317,7 +318,7 @@ pub fn inclusive_scan<B, Input, Output, Op>(
     op: Op,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Op: op::ReductionOp<B, Input::Item>,
@@ -335,7 +336,7 @@ pub fn inclusive_scan_by_key<B, Keys, Values, KeyEq, Op, Output>(
     op: Op,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Keys: MIter<B>,
     Values: MIter<B>,
     KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
@@ -363,7 +364,7 @@ pub fn inner_product<B, Left, Right, ZipperOp, ReduceOp>(
     reduce_op: ReduceOp,
 ) -> Result<ZipperOp::Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B>,
     ZipperOp: op::BinaryOp<B, Left::Item, Right::Item>,
@@ -387,7 +388,7 @@ pub fn is_partitioned<B, Input, Pred>(
     pred: Pred,
 ) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::PredicateOp<B, Input::Item>,
 {
@@ -402,7 +403,7 @@ pub fn is_sorted<B, Input, Less>(
     less: Less,
 ) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -417,7 +418,7 @@ pub fn is_sorted_until<B, Input, Less>(
     less: Less,
 ) -> Result<usize, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -433,7 +434,7 @@ pub fn lexicographical_compare<B, Left, Right, Less>(
     less: Less,
 ) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Less: op::BinaryPredicateOp<B, Left::Item>,
@@ -456,7 +457,7 @@ pub fn lower_bound<B, Input, Less>(
     less: Less,
 ) -> Result<usize, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -471,7 +472,7 @@ pub fn max_element<B, Input, Less>(
     less: Less,
 ) -> Result<Option<usize>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -487,7 +488,7 @@ pub fn merge<B, Left, Right, Output, Less>(
     less: Less,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
@@ -508,7 +509,7 @@ pub fn merge_by_key<B, LeftKeys, LeftValues, RightKeys, RightValues, Less, KeyOu
     less: Less,
 ) -> Result<(KeyOutput, ValueOutput), Error>
 where
-    B: Backend,
+    B: Runtime,
     LeftKeys: MIter<B>,
     RightKeys: MIter<B, Item = LeftKeys::Item>,
     LeftValues: MIter<B>,
@@ -537,7 +538,7 @@ pub fn min_element<B, Input, Less>(
     less: Less,
 ) -> Result<Option<usize>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -552,7 +553,7 @@ pub fn minmax_element<B, Input, Less>(
     less: Less,
 ) -> Result<Option<(usize, usize)>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {
@@ -568,7 +569,7 @@ pub fn mismatch<B, Left, Right, Eq>(
     eq: Eq,
 ) -> Result<Option<usize>, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Eq: op::BinaryPredicateOp<B, Left::Item>,
@@ -581,7 +582,7 @@ where
 /// Returns whether no elements satisfy `pred`.
 pub fn none_of<B, Input, Pred>(exec: &Executor<B>, source: Input, pred: Pred) -> Result<bool, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Pred: op::PredicateOp<B, Input::Item>,
 {
@@ -596,7 +597,7 @@ pub fn partition<B, Input, Output, Pred>(
     pred: Pred,
 ) -> Result<(Output, Output), Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Pred: op::PredicateOp<B, Input::Item>,
@@ -613,7 +614,7 @@ pub fn reduce<B, Input, Op>(
     op: Op,
 ) -> Result<Input::Item, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Op: op::ReductionOp<B, Input::Item>,
 {
@@ -631,7 +632,7 @@ pub fn reduce_by_key<B, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
     op: Op,
 ) -> Result<(KeyOutput, ValueOutput), Error>
 where
-    B: Backend,
+    B: Runtime,
     Keys: MIter<B>,
     Values: MIter<B>,
     KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
@@ -658,7 +659,7 @@ pub fn remove_if<B, Input, Output, Pred>(
     pred: Pred,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Pred: op::PredicateOp<B, Input::Item>,
@@ -675,7 +676,7 @@ pub fn replace_if<B, Input, Output>(
     stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -692,7 +693,7 @@ where
 /// Reverses a massively iterator into an owned vector.
 pub fn reverse<B, Input, Output>(exec: &Executor<B>, source: Input) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -709,7 +710,7 @@ pub fn scatter<B, Input, Output>(
     default: Input::Item,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -734,7 +735,7 @@ pub fn scatter_if<B, Input, Output>(
     stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
 {
@@ -759,7 +760,7 @@ pub fn set_difference<B, Left, Right, Output, Less>(
     less: Less,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
@@ -778,7 +779,7 @@ pub fn set_intersection<B, Left, Right, Output, Less>(
     less: Less,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
@@ -797,7 +798,7 @@ pub fn set_union<B, Left, Right, Output, Less>(
     less: Less,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Left: MIter<B>,
     Right: MIter<B, Item = Left::Item>,
     Output: MVec<B, Item = Left::Item>,
@@ -815,7 +816,7 @@ pub fn sort<B, Input, Output, Less>(
     less: Less,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
@@ -832,7 +833,7 @@ pub fn sort_by_key<B, Keys, Values, Less, KeyOutput, ValueOutput>(
     less: Less,
 ) -> Result<(KeyOutput, ValueOutput), Error>
 where
-    B: Backend,
+    B: Runtime,
     Keys: MIter<B>,
     Values: MIter<B>,
     Less: op::BinaryPredicateOp<B, Keys::Item>,
@@ -851,7 +852,7 @@ pub fn stable_sort<B, Input, Output, Less>(
     less: Less,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
@@ -867,7 +868,7 @@ pub fn stable_sort_by_key<B, Keys, Values, Less, KeyOutput, ValueOutput>(
     less: Less,
 ) -> Result<(KeyOutput, ValueOutput), Error>
 where
-    B: Backend,
+    B: Runtime,
     Keys: MIter<B>,
     Values: MIter<B>,
     Less: op::BinaryPredicateOp<B, Keys::Item>,
@@ -884,7 +885,7 @@ pub fn transform<B, Input, Output, Op>(
     op: Op,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B>,
     Op: op::UnaryOp<B, Input::Item, Output = Output::Item>,
@@ -900,7 +901,7 @@ pub fn unique<B, Input, Output, Pred>(
     pred: Pred,
 ) -> Result<Output, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Output: MVec<B, Item = Input::Item>,
     Pred: op::BinaryPredicateOp<B, Input::Item>,
@@ -917,7 +918,7 @@ pub fn unique_by_key<B, Keys, Values, Eq, KeyOutput, ValueOutput>(
     eq: Eq,
 ) -> Result<(KeyOutput, ValueOutput), Error>
 where
-    B: Backend,
+    B: Runtime,
     Keys: MIter<B>,
     Values: MIter<B>,
     Eq: op::BinaryPredicateOp<B, Keys::Item>,
@@ -937,7 +938,7 @@ pub fn upper_bound<B, Input, Less>(
     less: Less,
 ) -> Result<usize, Error>
 where
-    B: Backend,
+    B: Runtime,
     Input: MIter<B>,
     Less: op::BinaryPredicateOp<B, Input::Item>,
 {

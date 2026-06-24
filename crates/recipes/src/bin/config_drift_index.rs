@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, mismatch};
+use massively::{DeviceVec, Executor, SoA1, mismatch};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -21,7 +21,7 @@ fn solve<B>(
     actual: DeviceVec<B, u32>,
 ) -> common::Result<Option<usize>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     mismatch(
         exec,
@@ -32,7 +32,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let index = solve(
         &exec,
         exec.to_device(&[1, 4, 9, 16])?,

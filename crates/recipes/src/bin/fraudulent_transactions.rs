@@ -17,14 +17,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::{PredicateOp, UnaryOp};
-use massively::{DeviceVec, Executor, SoA3, Wgpu, copy_if, partition, transform};
+use massively::{DeviceVec, Executor, SoA3, copy_if, partition, transform};
 
 struct SuspiciousTransaction;
 
 #[cubecl::cube]
 impl<B> UnaryOp<B, (u32, f32, u32)> for SuspiciousTransaction
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     type Output = (u32,);
 
@@ -42,20 +42,20 @@ struct HighRiskTransaction;
 #[cubecl::cube]
 impl<B> PredicateOp<B, (u32, f32, u32)> for HighRiskTransaction
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     fn apply(input: (u32, f32, u32)) -> bool {
         input.1 >= 200.0 || input.2 >= 90_u32
     }
 }
 
-struct Group<B: massively::Backend> {
+struct Group<B: cubecl::prelude::Runtime> {
     account_id: DeviceVec<B, u32>,
     amount: DeviceVec<B, f32>,
     risk_score: DeviceVec<B, u32>,
 }
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     high_risk: Group<B>,
     review_needed: Group<B>,
 }
@@ -67,7 +67,7 @@ fn solve<B>(
     risk_score: DeviceVec<B, u32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (flag,) = transform(
         exec,
@@ -102,7 +102,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[1, 2, 3, 4])?,

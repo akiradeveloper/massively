@@ -1,9 +1,10 @@
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, Wgpu, stable_sort};
+use massively::{Executor, stable_sort};
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let values = exec.to_device(&[3.0_f32, 1.0, 2.0])?;
 
     let (output,) = stable_sort(&exec, massively::SoA1(values.slice(..)), common::LessF32)?;

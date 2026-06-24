@@ -14,16 +14,16 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, reduce_by_key, sort};
+use massively::{DeviceVec, Executor, SoA1, reduce_by_key, sort};
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     category_id: DeviceVec<B, u32>,
     count: DeviceVec<B, u32>,
 }
 
 fn solve<B>(exec: &Executor<B>, category_id: DeviceVec<B, u32>) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (sorted,) = sort(exec, SoA1(category_id.slice(..)), common::LessU32)?;
     let ones = exec.filled(sorted.len(), 1_u32)?;
@@ -39,7 +39,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(&exec, exec.to_device(&[2, 1, 2, 3, 1, 2])?)?;
     assert_eq!(exec.to_host(&output.category_id)?, vec![1, 2, 3]);
     assert_eq!(exec.to_host(&output.count)?, vec![2, 3, 1]);

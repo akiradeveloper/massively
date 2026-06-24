@@ -1,9 +1,10 @@
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, Wgpu, any_of};
+use massively::{Executor, any_of};
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let values = exec.to_device(&[-1.0_f32, -2.0, 3.0])?;
 
     let result = any_of(&exec, massively::SoA1(values.slice(..)), common::Positive)?;

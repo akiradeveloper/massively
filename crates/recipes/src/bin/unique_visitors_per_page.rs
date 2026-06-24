@@ -16,14 +16,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, SoA1, SoA2, Wgpu, reduce_by_key, sort, unique};
+use massively::{DeviceVec, Executor, SoA1, SoA2, reduce_by_key, sort, unique};
 
 struct LessVisitPair;
 
 #[cubecl::cube]
 impl<B> BinaryPredicateOp<B, (u32, u32)> for LessVisitPair
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
@@ -35,14 +35,14 @@ struct EqualVisitPair;
 #[cubecl::cube]
 impl<B> BinaryPredicateOp<B, (u32, u32)> for EqualVisitPair
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1
     }
 }
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     page_id: DeviceVec<B, u32>,
     unique_count: DeviceVec<B, u32>,
 }
@@ -53,7 +53,7 @@ fn solve<B>(
     user_id: DeviceVec<B, u32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (page_id, user_id) = sort(
         exec,
@@ -81,7 +81,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[2, 1, 1, 2, 1, 2])?,

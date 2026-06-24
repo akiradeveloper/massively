@@ -1,8 +1,9 @@
 use std::marker::PhantomData;
 
 use cubecl::frontend::PartialOrdExpand;
+use cubecl::prelude::Runtime;
 
-use super::{Backend, MItem, Scalar, op};
+use super::{MItem, Scalar, op};
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -37,7 +38,7 @@ impl<B, Op, Output> KernelTuple1InnerProductOp<B, Op, Output> {
 #[cubecl::cube]
 impl<B, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
     Op: op::UnaryOp<B, (T,), Output = (T,)>,
 {
@@ -51,7 +52,7 @@ where
 #[cubecl::cube]
 impl<B, T, Op> crate::detail::op::kernel::BinaryOp<T> for KernelTuple1Op<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
     Op: op::ReductionOp<B, (T,)>,
 {
@@ -63,7 +64,7 @@ where
 #[cubecl::cube]
 impl<B, T, Op> crate::detail::op::kernel::PredicateOp<T> for KernelTuple1Op<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
     Op: op::PredicateOp<B, (T,)>,
 {
@@ -75,7 +76,7 @@ where
 #[cubecl::cube]
 impl<B, T, Op> crate::detail::op::kernel::BinaryPredicateOp<T> for KernelTuple1Op<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
     Op: op::BinaryPredicateOp<B, (T,)>,
 {
@@ -88,7 +89,7 @@ where
 impl<B, Left, Right, Op, Output> op::UnaryOp<B, (Left, Right)>
     for KernelTuple1InnerProductOp<B, Op, Output>
 where
-    B: Backend,
+    B: Runtime,
     Left: Scalar,
     Right: Scalar,
     Output: MItem<B>,
@@ -105,7 +106,7 @@ where
 #[cubecl::cube]
 impl<B, Input, Op> crate::detail::op::kernel::UnaryOp<Input> for KernelOp<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     Input: MItem<B>,
     Op: op::UnaryOp<B, Input>,
 {
@@ -119,7 +120,7 @@ where
 #[cubecl::cube]
 impl<B, Item, Op> crate::detail::op::kernel::BinaryOp<Item> for KernelOp<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     Item: MItem<B>,
     Op: op::ReductionOp<B, Item>,
 {
@@ -131,7 +132,7 @@ where
 #[cubecl::cube]
 impl<B, Item, Op> crate::detail::op::kernel::PredicateOp<Item> for KernelOp<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     Item: MItem<B>,
     Op: op::PredicateOp<B, Item>,
 {
@@ -143,7 +144,7 @@ where
 #[cubecl::cube]
 impl<B, Item, Op> crate::detail::op::kernel::BinaryPredicateOp<Item> for KernelOp<B, Op>
 where
-    B: Backend,
+    B: Runtime,
     Item: MItem<B>,
     Op: op::BinaryPredicateOp<B, Item>,
 {
@@ -158,7 +159,7 @@ pub struct StencilFlag;
 #[cubecl::cube]
 impl<B> op::PredicateOp<B, (u32,)> for StencilFlag
 where
-    B: Backend,
+    B: Runtime,
 {
     fn apply(input: (u32,)) -> bool {
         input.0 > 0

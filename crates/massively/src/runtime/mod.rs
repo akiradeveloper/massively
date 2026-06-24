@@ -3,30 +3,28 @@
 mod executor;
 pub mod op;
 
-#[cfg(feature = "wgpu")]
-pub use executor::Wgpu;
-pub use executor::{Backend, Executor, Scalar, ToHost};
+pub use executor::{Executor, Scalar, ToHost};
 
 use std::marker::PhantomData;
 use std::ops::{Bound, RangeBounds};
+
+use cubecl::prelude::Runtime;
 
 use crate::Error;
 use crate::algorithm::api::sealed;
 
 /// Owned device column.
 #[derive(Debug)]
-pub struct DeviceVec<B: Backend, T> {
-    pub(crate) inner: crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,
+pub struct DeviceVec<B: Runtime, T> {
+    pub(crate) inner: crate::detail::DeviceVec<B, T>,
     pub(crate) _backend: PhantomData<fn() -> B>,
 }
 
 impl<B, T> DeviceVec<B, T>
 where
-    B: Backend,
+    B: Runtime,
 {
-    pub(crate) fn from_inner(
-        inner: crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,
-    ) -> Self {
+    pub(crate) fn from_inner(inner: crate::detail::DeviceVec<B, T>) -> Self {
         Self {
             inner,
             _backend: PhantomData,
@@ -78,7 +76,7 @@ where
 
 impl<B, T> sealed::ToHostDispatch<B> for DeviceVec<B, T>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
 {
     type Output = Vec<T>;
@@ -91,17 +89,17 @@ where
 
 /// Read-only view into a contiguous range of a [`DeviceVec`].
 #[derive(Debug)]
-pub struct DeviceSlice<'a, B: Backend, T> {
+pub struct DeviceSlice<'a, B: Runtime, T> {
     pub(crate) source: &'a DeviceVec<B, T>,
     pub(crate) offset: usize,
     pub(crate) len: usize,
 }
 
-impl<'a, B, T> Copy for DeviceSlice<'a, B, T> where B: Backend {}
+impl<'a, B, T> Copy for DeviceSlice<'a, B, T> where B: Runtime {}
 
 impl<'a, B, T> Clone for DeviceSlice<'a, B, T>
 where
-    B: Backend,
+    B: Runtime,
 {
     fn clone(&self) -> Self {
         *self
@@ -110,7 +108,7 @@ where
 
 impl<'a, B, T> DeviceSlice<'a, B, T>
 where
-    B: Backend,
+    B: Runtime,
 {
     /// Returns the number of elements in this slice.
     pub fn len(&self) -> usize {
@@ -156,7 +154,7 @@ where
 
 impl<'a, B, T> sealed::ToHostDispatch<B> for DeviceSlice<'a, B, T>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
 {
     type Output = Vec<T>;
@@ -170,7 +168,7 @@ where
 
 /// Mutable view into a contiguous range of a [`DeviceVec`].
 #[derive(Debug)]
-pub struct DeviceSliceMut<'a, B: Backend, T> {
+pub struct DeviceSliceMut<'a, B: Runtime, T> {
     pub(crate) source: &'a mut DeviceVec<B, T>,
     pub(crate) offset: usize,
     pub(crate) len: usize,
@@ -178,7 +176,7 @@ pub struct DeviceSliceMut<'a, B: Backend, T> {
 
 impl<'a, B, T> DeviceSliceMut<'a, B, T>
 where
-    B: Backend,
+    B: Runtime,
 {
     /// Returns the number of elements in this slice.
     pub fn len(&self) -> usize {

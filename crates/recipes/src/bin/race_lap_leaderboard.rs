@@ -14,9 +14,9 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, reduce_by_key, sort_by_key};
+use massively::{DeviceVec, Executor, SoA1, reduce_by_key, sort_by_key};
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     racer_id: DeviceVec<B, u32>,
     total_time_ms: DeviceVec<B, u32>,
 }
@@ -27,7 +27,7 @@ fn solve<B>(
     lap_time_ms: DeviceVec<B, u32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let ((racer_id,), (lap_time_ms,)) = sort_by_key(
         exec,
@@ -56,7 +56,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[2, 1, 2, 1, 3])?,
