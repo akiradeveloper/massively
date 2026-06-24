@@ -63,3 +63,19 @@ Run one with Cargo:
 cargo run -p massively --example transform
 cargo run -p massively --example runtime-tabulate
 ```
+
+## Recipes
+
+Runnable recipes live under `crates/recipes`. They are small, LeetCode-style
+programs that combine the algorithm APIs into practical GPU data-processing
+tasks. Each recipe defines a backend-agnostic `solve` function and uses `main`
+only for a compact sample case with assertions.
+
+Run one with Cargo:
+
+```sh
+cargo run -p recipes --bin monte_carlo_pi
+cargo run -p recipes --bin merge_ranked_feeds
+```
+
+See `crates/recipes/README.md` for the full recipe list.
