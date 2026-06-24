@@ -12,17 +12,17 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, is_sorted_until};
+use massively::{DeviceVec, Executor, SoA1, is_sorted_until};
 
 fn solve<B>(exec: &Executor<B>, timestamp: DeviceVec<B, u32>) -> common::Result<usize>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     is_sorted_until(exec, SoA1(timestamp.slice(..)), common::LessU32)
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let index = solve(&exec, exec.to_device(&[10, 20, 30, 25, 40])?)?;
     assert_eq!(index, 3);
     Ok(())

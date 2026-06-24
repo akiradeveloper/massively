@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, lexicographical_compare};
+use massively::{DeviceVec, Executor, SoA1, lexicographical_compare};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -21,7 +21,7 @@ fn solve<B>(
     right: DeviceVec<B, u32>,
 ) -> common::Result<bool>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     lexicographical_compare(
         exec,
@@ -32,7 +32,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let older = solve(
         &exec,
         exec.to_device(&[1, 4, 9])?,

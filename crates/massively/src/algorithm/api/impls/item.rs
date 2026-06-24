@@ -44,15 +44,15 @@ macro_rules! impl_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
         impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
         where
-            B: Backend,
+            B: Runtime,
             $( $ty: Scalar, )+
         {
-            type Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+);
+            type Inner = ($( crate::detail::DeviceVec<B, $ty>, )+);
         }
 
         impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
         where
-            B: Backend,
+            B: Runtime,
             $( $ty: Scalar, )+
         {
             type Item = ($( $ty, )+);
@@ -69,13 +69,13 @@ macro_rules! impl_mitem_tuple {
 
         impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
         where
-            B: Backend,
+            B: Runtime,
             $( $ty: Scalar, )+
         {
             fn transform_unary<Input, Op>(
-                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                policy: &crate::detail::CubePolicy<B>,
                 input: crate::detail::device::DeviceColumnView<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Input,
                 >,
                 op: Op,
@@ -84,23 +84,23 @@ macro_rules! impl_mitem_tuple {
                 Input: Scalar,
                 Op: op::UnaryOp<B, (Input,), Output = Self>,
                 Self: crate::detail::TransformUnaryOutput<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Input,
                     KernelOp<B, Op>,
                 >,
                 <Self as crate::detail::MItemStorage<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                 >>::Storage: crate::detail::MaterializeOutput<
-                    Runtime = <B as sealed::Backend>::Runtime,
+                    Runtime = B,
                     Output = ($(
-                        crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>,
+                        crate::detail::DeviceVec<B, $ty>,
                     )+),
                 >,
             {
                 let _ = op;
                 let storage =
                     <Self as crate::detail::TransformUnaryOutput<
-                        <B as sealed::Backend>::Runtime,
+                        B,
                         Input,
                         KernelOp<B, Op>,
                     >>::run(policy, input)?;
@@ -108,13 +108,13 @@ macro_rules! impl_mitem_tuple {
             }
 
             fn transform_binary<Left, Right, Op>(
-                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                policy: &crate::detail::CubePolicy<B>,
                 left: crate::detail::device::DeviceColumnView<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Left,
                 >,
                 right: crate::detail::device::DeviceColumnView<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Right,
                 >,
                 op: Op,
@@ -124,24 +124,24 @@ macro_rules! impl_mitem_tuple {
                 Right: Scalar,
                 Op: op::UnaryOp<B, (Left, Right), Output = Self>,
                 Self: crate::detail::TransformSoA2Output<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Left,
                     Right,
                     KernelOp<B, Op>,
                 >,
                 <Self as crate::detail::MItemStorage<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                 >>::Storage: crate::detail::MaterializeOutput<
-                    Runtime = <B as sealed::Backend>::Runtime,
+                    Runtime = B,
                     Output = ($(
-                        crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>,
+                        crate::detail::DeviceVec<B, $ty>,
                     )+),
                 >,
             {
                 let _ = op;
                 let storage =
                     <Self as crate::detail::TransformSoA2Output<
-                        <B as sealed::Backend>::Runtime,
+                        B,
                         Left,
                         Right,
                         KernelOp<B, Op>,
@@ -150,17 +150,17 @@ macro_rules! impl_mitem_tuple {
             }
 
             fn transform_ternary<First, Second, Third, Op>(
-                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                policy: &crate::detail::CubePolicy<B>,
                 first: crate::detail::device::DeviceColumnView<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     First,
                 >,
                 second: crate::detail::device::DeviceColumnView<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Second,
                 >,
                 third: crate::detail::device::DeviceColumnView<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     Third,
                 >,
                 op: Op,
@@ -171,25 +171,25 @@ macro_rules! impl_mitem_tuple {
                 Third: Scalar,
                 Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
                 Self: crate::detail::TransformSoA3Output<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                     First,
                     Second,
                     Third,
                     KernelOp<B, Op>,
                 >,
                 <Self as crate::detail::MItemStorage<
-                    <B as sealed::Backend>::Runtime,
+                    B,
                 >>::Storage: crate::detail::MaterializeOutput<
-                    Runtime = <B as sealed::Backend>::Runtime,
+                    Runtime = B,
                     Output = ($(
-                        crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>,
+                        crate::detail::DeviceVec<B, $ty>,
                     )+),
                 >,
             {
                 let _ = op;
                 let storage =
                     <Self as crate::detail::TransformSoA3Output<
-                        <B as sealed::Backend>::Runtime,
+                        B,
                         First,
                         Second,
                         Third,
@@ -204,7 +204,7 @@ macro_rules! impl_mitem_tuple {
             }
 
             fn reduce_inner<Op>(
-                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                policy: &crate::detail::CubePolicy<B>,
                 input: <Self as MItem<B>>::Inner,
                 init: Self,
                 op: Op,
@@ -223,7 +223,7 @@ macro_rules! impl_mitem_tuple {
                 ReduceOp,
                 Output,
             >(
-                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                policy: &crate::detail::CubePolicy<B>,
                 left: LeftIter,
                 right: RightIter,
                 transform_op: TransformOp,
@@ -258,7 +258,7 @@ macro_rules! impl_mitem_tuple {
                 ReduceOp,
                 Output,
             >(
-                policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+                policy: &crate::detail::CubePolicy<B>,
                 left: LeftIter,
                 right: RightIter,
                 transform_op: TransformOp,
@@ -296,22 +296,22 @@ macro_rules! impl_wide_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
         impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
         where
-            B: Backend,
+            B: Runtime,
             $( $ty: Scalar, )+
         {
-            type Inner = ($( crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, $ty>, )+);
+            type Inner = ($( crate::detail::DeviceVec<B, $ty>, )+);
         }
 
         impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
         where
-            B: Backend,
+            B: Runtime,
             $( $ty: Scalar, )+
         {
         }
 
         impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
         where
-            B: Backend,
+            B: Runtime,
             $( $ty: Scalar, )+
         {
             type Item = ($( $ty, )+);
@@ -353,7 +353,7 @@ impl_wide_mitem_tuple!(
 
 impl<B, T> MVec<B> for SoA1<DeviceVec<B, T>>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar,
 {
     type Item = (T,);
@@ -369,7 +369,7 @@ where
 
 impl<B, A, C> MVec<B> for SoA2<DeviceVec<B, A>, DeviceVec<B, C>>
 where
-    B: Backend,
+    B: Runtime,
     A: Scalar,
     C: Scalar,
 {
@@ -389,7 +389,7 @@ where
 
 impl<B, A, C, D> MVec<B> for SoA3<DeviceVec<B, A>, DeviceVec<B, C>, DeviceVec<B, D>>
 where
-    B: Backend,
+    B: Runtime,
     A: Scalar,
     C: Scalar,
     D: Scalar,

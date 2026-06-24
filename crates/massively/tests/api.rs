@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
 mod common;
 
@@ -54,6 +55,8 @@ mod minmax_element;
 mod mismatch;
 #[path = "api/partition.rs"]
 mod partition;
+#[path = "api/random.rs"]
+mod random;
 #[path = "api/reduce.rs"]
 mod reduce;
 #[path = "api/reduce_by_key.rs"]
@@ -93,9 +96,9 @@ mod zip;
 
 #[test]
 fn public_api_is_available_from_massively() {
-    let exec = massively::Executor::<massively::Wgpu>::cpu();
+    let exec = massively::Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
-    let _: massively::runtime::DeviceSlice<'_, massively::Wgpu, u32> = input.slice(..);
+    let _: massively::runtime::DeviceSlice<'_, WgpuRuntime, u32> = input.slice(..);
 
     assert_eq!(exec.to_host(&input).unwrap(), vec![1, 2, 3]);
 

@@ -14,9 +14,9 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA2, Wgpu, scatter};
+use massively::{DeviceVec, Executor, SoA2, scatter};
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     item_id: DeviceVec<B, u32>,
     score: DeviceVec<B, f32>,
 }
@@ -29,7 +29,7 @@ fn solve<B>(
     len: usize,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (item_id, score) = scatter(
         exec,
@@ -42,7 +42,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[10, 20, 30])?,

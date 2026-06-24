@@ -14,9 +14,9 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, exclusive_scan, reduce};
+use massively::{DeviceVec, Executor, SoA1, exclusive_scan, reduce};
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     offset: DeviceVec<B, u32>,
     total_slots: u32,
 }
@@ -27,7 +27,7 @@ fn solve<B>(
     slot_count: DeviceVec<B, u32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (offset,) = exclusive_scan(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
     let (total_slots,) = reduce(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
@@ -38,7 +38,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[0, 0, 1, 1])?,

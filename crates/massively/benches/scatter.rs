@@ -1,15 +1,16 @@
+use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Backend, SIZES, dense_f32, reverse_indices, sync};
+use common::{Runtime, SIZES, dense_f32, reverse_indices, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, Wgpu, scatter, transform};
+use massively::{DeviceVec, Executor, scatter, transform};
 
 struct MulTwo;
 
 #[cubecl::cube]
-impl UnaryOp<Wgpu, (f32,)> for MulTwo {
+impl UnaryOp<WgpuRuntime, (f32,)> for MulTwo {
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -17,7 +18,7 @@ impl UnaryOp<Wgpu, (f32,)> for MulTwo {
     }
 }
 
-fn check_scatter(exec: &Executor<Wgpu>) {
+fn check_scatter(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
     let (output,) = scatter(
@@ -33,7 +34,7 @@ fn check_scatter(exec: &Executor<Wgpu>) {
 
 fn bench_scatter(c: &mut Criterion) {
     let mut group = c.benchmark_group("scatter");
-    for backend in Backend::available() {
+    for backend in Runtime::available() {
         let exec = backend.exec();
         check_scatter(&exec);
 
@@ -44,7 +45,7 @@ fn bench_scatter(c: &mut Criterion) {
             sync(&exec);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) = scatter(
+                    let output: (DeviceVec<WgpuRuntime, f32>,) = scatter(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),

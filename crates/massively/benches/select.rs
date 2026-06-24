@@ -1,8 +1,9 @@
+use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Backend, SIZES, sync};
+use common::{Runtime, SIZES, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use massively::{DeviceVec, Executor, Wgpu, copy_if};
+use massively::{DeviceVec, Executor, copy_if};
 
 fn alternating_signed(len: usize) -> Vec<f32> {
     (0..len)
@@ -19,7 +20,7 @@ fn alternating_flags(len: usize) -> Vec<u32> {
         .collect()
 }
 
-fn check_copy_if(exec: &Executor<Wgpu>) {
+fn check_copy_if(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
     let (output,) = copy_if(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
@@ -28,7 +29,7 @@ fn check_copy_if(exec: &Executor<Wgpu>) {
 
 fn bench_select(c: &mut Criterion) {
     let mut copy_group = c.benchmark_group("copy_if");
-    for backend in Backend::available() {
+    for backend in Runtime::available() {
         let exec = backend.exec();
         check_copy_if(&exec);
 
@@ -38,7 +39,7 @@ fn bench_select(c: &mut Criterion) {
             sync(&exec);
             copy_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<Wgpu, f32>,) = copy_if(
+                    let output: (DeviceVec<WgpuRuntime, f32>,) = copy_if(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         black_box(stencil.slice(..)),

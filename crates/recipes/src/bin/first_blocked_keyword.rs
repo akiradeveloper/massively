@@ -12,7 +12,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, find_first_of};
+use massively::{DeviceVec, Executor, SoA1, find_first_of};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -20,7 +20,7 @@ fn solve<B>(
     blocked_keyword_id: DeviceVec<B, u32>,
 ) -> common::Result<Option<usize>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     find_first_of(
         exec,
@@ -31,7 +31,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let index = solve(
         &exec,
         exec.to_device(&[7, 9, 11, 13])?,

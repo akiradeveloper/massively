@@ -15,14 +15,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::{PredicateOp, UnaryOp};
-use massively::{DeviceVec, Executor, SoA3, Wgpu, remove_if, transform};
+use massively::{DeviceVec, Executor, SoA3, remove_if, transform};
 
 struct AdvanceParticle;
 
 #[cubecl::cube]
 impl<B> UnaryOp<B, (f32, f32, f32)> for AdvanceParticle
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     type Output = (f32, f32, f32);
 
@@ -38,14 +38,14 @@ struct OutsideParticleBox;
 #[cubecl::cube]
 impl<B> PredicateOp<B, (f32, f32, f32)> for OutsideParticleBox
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     fn apply(input: (f32, f32, f32)) -> bool {
         input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0
     }
 }
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     x: DeviceVec<B, f32>,
     y: DeviceVec<B, f32>,
     vx: DeviceVec<B, f32>,
@@ -58,7 +58,7 @@ fn solve<B>(
     vx: DeviceVec<B, f32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (x, y, vx) = transform(
         exec,
@@ -74,7 +74,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[0.0, 9.5, 4.0])?,

@@ -13,9 +13,9 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, merge_by_key, reduce_by_key};
+use massively::{DeviceVec, Executor, SoA1, merge_by_key, reduce_by_key};
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     sku: DeviceVec<B, u32>,
     delta: DeviceVec<B, f32>,
 }
@@ -28,7 +28,7 @@ fn solve<B>(
     right_delta: DeviceVec<B, f32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let ((sku,), (delta,)) = merge_by_key(
         exec,
@@ -50,7 +50,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[1, 2, 4])?,

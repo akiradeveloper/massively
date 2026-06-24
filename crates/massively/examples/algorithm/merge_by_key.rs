@@ -1,9 +1,10 @@
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, Wgpu, merge_by_key};
+use massively::{Executor, merge_by_key};
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let left_keys = exec.to_device(&[0_u32, 2])?;
     let left_values = exec.to_device(&[0.0_f32, 20.0])?;
     let right_keys = exec.to_device(&[1_u32, 3])?;

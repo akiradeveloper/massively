@@ -1,4 +1,5 @@
 #![allow(dead_code, unused_imports)]
+pub(crate) use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
 pub(crate) use cubecl::prelude::*;
 pub(crate) use massively::algorithm::op::{
@@ -6,7 +7,7 @@ pub(crate) use massively::algorithm::op::{
 };
 pub(crate) use massively::runtime::op::TabulateOp;
 pub(crate) use massively::{
-    Executor, Wgpu, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
+    Executor, adjacent_difference, adjacent_find, copy_if, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_if,
     inclusive_scan, inclusive_scan_by_key, inner_product, is_partitioned, is_sorted,
     is_sorted_until, lexicographical_compare, lower_bound, max_element, merge, merge_by_key,
@@ -15,21 +16,21 @@ pub(crate) use massively::{
     transform, unique, unique_by_key, upper_bound,
 };
 
-pub(crate) fn exec() -> Executor<Wgpu> {
-    Executor::<Wgpu>::cpu()
+pub(crate) fn exec() -> Executor<WgpuRuntime> {
+    Executor::<WgpuRuntime>::new(WgpuDevice::Cpu)
 }
 
 pub(crate) struct Sum;
 
 #[cubecl::cube]
-impl ReductionOp<massively::Wgpu, (f32,)> for Sum {
+impl ReductionOp<WgpuRuntime, (f32,)> for Sum {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
 }
 
 #[cubecl::cube]
-impl ReductionOp<massively::Wgpu, (u32,)> for Sum {
+impl ReductionOp<WgpuRuntime, (u32,)> for Sum {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         (lhs.0 + rhs.0,)
     }
@@ -38,7 +39,7 @@ impl ReductionOp<massively::Wgpu, (u32,)> for Sum {
 pub(crate) struct SquareIndex;
 
 #[cubecl::cube]
-impl TabulateOp<massively::Wgpu, u32> for SquareIndex {
+impl TabulateOp<WgpuRuntime, u32> for SquareIndex {
     fn apply(input: u32) -> u32 {
         input * input
     }
@@ -47,7 +48,7 @@ impl TabulateOp<massively::Wgpu, u32> for SquareIndex {
 pub(crate) struct HalfIndex;
 
 #[cubecl::cube]
-impl TabulateOp<massively::Wgpu, f32> for HalfIndex {
+impl TabulateOp<WgpuRuntime, f32> for HalfIndex {
     fn apply(input: u32) -> f32 {
         input as f32 * 0.5
     }
@@ -56,21 +57,21 @@ impl TabulateOp<massively::Wgpu, f32> for HalfIndex {
 pub(crate) struct TupleSum;
 
 #[cubecl::cube]
-impl ReductionOp<massively::Wgpu, (f32,)> for TupleSum {
+impl ReductionOp<WgpuRuntime, (f32,)> for TupleSum {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
     }
 }
 
 #[cubecl::cube]
-impl ReductionOp<massively::Wgpu, (f32, u32)> for TupleSum {
+impl ReductionOp<WgpuRuntime, (f32, u32)> for TupleSum {
     fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> (f32, u32) {
         (lhs.0 + rhs.0, lhs.1 + rhs.1)
     }
 }
 
 #[cubecl::cube]
-impl ReductionOp<massively::Wgpu, (f32, u32, f32)> for TupleSum {
+impl ReductionOp<WgpuRuntime, (f32, u32, f32)> for TupleSum {
     fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> (f32, u32, f32) {
         (lhs.0 + rhs.0, lhs.1 + rhs.1, lhs.2 + rhs.2)
     }
@@ -79,7 +80,7 @@ impl ReductionOp<massively::Wgpu, (f32, u32, f32)> for TupleSum {
 pub(crate) struct TupleProduct;
 
 #[cubecl::cube]
-impl BinaryOp<massively::Wgpu, (f32,), (f32,)> for TupleProduct {
+impl BinaryOp<WgpuRuntime, (f32,), (f32,)> for TupleProduct {
     type Output = (f32,);
 
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
@@ -90,7 +91,7 @@ impl BinaryOp<massively::Wgpu, (f32,), (f32,)> for TupleProduct {
 pub(crate) struct TupleWeightedProduct;
 
 #[cubecl::cube]
-impl BinaryOp<massively::Wgpu, (f32,), (u32,)> for TupleWeightedProduct {
+impl BinaryOp<WgpuRuntime, (f32,), (u32,)> for TupleWeightedProduct {
     type Output = (f32,);
 
     fn apply(lhs: (f32,), rhs: (u32,)) -> (f32,) {
@@ -101,7 +102,7 @@ impl BinaryOp<massively::Wgpu, (f32,), (u32,)> for TupleWeightedProduct {
 pub(crate) struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32,)> for Less {
+impl BinaryPredicateOp<WgpuRuntime, (f32,)> for Less {
     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -110,7 +111,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32,)> for Less {
 pub(crate) struct LessU32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (u32,)> for LessU32 {
+impl BinaryPredicateOp<WgpuRuntime, (u32,)> for LessU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
     }
@@ -119,7 +120,7 @@ impl BinaryPredicateOp<massively::Wgpu, (u32,)> for LessU32 {
 pub(crate) struct MixedTupleLess;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, u32)> for MixedTupleLess {
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32)> for MixedTupleLess {
     fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
         lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
     }
@@ -128,7 +129,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, u32)> for MixedTupleLess {
 pub(crate) struct MixedTupleEqual;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, u32)> for MixedTupleEqual {
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32)> for MixedTupleEqual {
     fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1
     }
@@ -137,7 +138,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, u32)> for MixedTupleEqual {
 pub(crate) struct MixedTupleFirstEqual;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, u32)> for MixedTupleFirstEqual {
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32)> for MixedTupleFirstEqual {
     fn apply(lhs: (f32, u32), rhs: (f32, u32)) -> bool {
         lhs.0 == rhs.0
     }
@@ -146,7 +147,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, u32)> for MixedTupleFirstEqual {
 pub(crate) struct MixedTuple3Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, u32, f32)> for MixedTuple3Less {
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32)> for MixedTuple3Less {
     fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> bool {
         lhs.1 < rhs.1 || (lhs.1 == rhs.1 && lhs.0 < rhs.0)
     }
@@ -155,7 +156,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, u32, f32)> for MixedTuple3Less {
 pub(crate) struct MixedTuple3Equal;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, u32, f32)> for MixedTuple3Equal {
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32)> for MixedTuple3Equal {
     fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
     }
@@ -164,7 +165,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, u32, f32)> for MixedTuple3Equal {
 pub(crate) struct MixedTuple3FirstEqual;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, u32, f32)> for MixedTuple3FirstEqual {
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32)> for MixedTuple3FirstEqual {
     fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> bool {
         lhs.0 == rhs.0
     }
@@ -173,7 +174,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, u32, f32)> for MixedTuple3FirstEqu
 pub(crate) struct Tuple4Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, f32, f32, f32)> for Tuple4Less {
+impl BinaryPredicateOp<WgpuRuntime, (f32, f32, f32, f32)> for Tuple4Less {
     fn apply(lhs: (f32, f32, f32, f32), rhs: (f32, f32, f32, f32)) -> bool {
         lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
     }
@@ -182,7 +183,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, f32, f32, f32)> for Tuple4Less {
 pub(crate) struct Tuple4Equal;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (f32, f32, f32, f32)> for Tuple4Equal {
+impl BinaryPredicateOp<WgpuRuntime, (f32, f32, f32, f32)> for Tuple4Equal {
     fn apply(lhs: (f32, f32, f32, f32), rhs: (f32, f32, f32, f32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2 && lhs.3 == rhs.3
     }
@@ -191,8 +192,7 @@ impl BinaryPredicateOp<massively::Wgpu, (f32, f32, f32, f32)> for Tuple4Equal {
 pub(crate) struct Tuple12Less;
 
 #[cubecl::cube]
-impl
-    BinaryPredicateOp<massively::Wgpu, (f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, f32)>
+impl BinaryPredicateOp<WgpuRuntime, (f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, f32, f32)>
     for Tuple12Less
 {
     fn apply(
@@ -206,8 +206,7 @@ impl
 pub(crate) struct Tuple12MixedLess;
 
 #[cubecl::cube]
-impl
-    BinaryPredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedLess
 {
     fn apply(
@@ -221,8 +220,7 @@ impl
 pub(crate) struct Tuple12MixedTailLess;
 
 #[cubecl::cube]
-impl
-    BinaryPredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedTailLess
 {
     fn apply(
@@ -236,7 +234,7 @@ impl
 pub(crate) struct EqualU32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (u32,)> for EqualU32 {
+impl BinaryPredicateOp<WgpuRuntime, (u32,)> for EqualU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 == rhs.0
     }
@@ -245,7 +243,7 @@ impl BinaryPredicateOp<massively::Wgpu, (u32,)> for EqualU32 {
 pub(crate) struct SameParityU32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (u32,)> for SameParityU32 {
+impl BinaryPredicateOp<WgpuRuntime, (u32,)> for SameParityU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 % 2 == rhs.0 % 2
     }
@@ -254,7 +252,7 @@ impl BinaryPredicateOp<massively::Wgpu, (u32,)> for SameParityU32 {
 pub(crate) struct NeverEqualU32;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<massively::Wgpu, (u32,)> for NeverEqualU32 {
+impl BinaryPredicateOp<WgpuRuntime, (u32,)> for NeverEqualU32 {
     fn apply(lhs: (u32,), _rhs: (u32,)) -> bool {
         lhs.0 != lhs.0
     }
@@ -263,8 +261,7 @@ impl BinaryPredicateOp<massively::Wgpu, (u32,)> for NeverEqualU32 {
 pub(crate) struct Tuple12MixedEqual;
 
 #[cubecl::cube]
-impl
-    BinaryPredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedEqual
 {
     fn apply(
@@ -278,7 +275,7 @@ impl
 pub(crate) struct Double;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32,)> for Double {
+impl UnaryOp<WgpuRuntime, (f32,)> for Double {
     type Output = (f32,);
 
     fn apply(input: (f32,)) -> (f32,) {
@@ -289,7 +286,7 @@ impl UnaryOp<massively::Wgpu, (f32,)> for Double {
 pub(crate) struct ScalarToTuple5Mixed;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32,)> for ScalarToTuple5Mixed {
+impl UnaryOp<WgpuRuntime, (f32,)> for ScalarToTuple5Mixed {
     type Output = (f32, u32, f32, u32, f32);
 
     fn apply(input: (f32,)) -> (f32, u32, f32, u32, f32) {
@@ -306,7 +303,7 @@ impl UnaryOp<massively::Wgpu, (f32,)> for ScalarToTuple5Mixed {
 pub(crate) struct ScalarToTuple12Mixed;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (u32,)> for ScalarToTuple12Mixed {
+impl UnaryOp<WgpuRuntime, (u32,)> for ScalarToTuple12Mixed {
     type Output = (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32);
 
     fn apply(input: (u32,)) -> (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32) {
@@ -330,7 +327,7 @@ impl UnaryOp<massively::Wgpu, (u32,)> for ScalarToTuple12Mixed {
 pub(crate) struct GreaterThanFour;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32,)> for GreaterThanFour {
+impl PredicateOp<WgpuRuntime, (f32,)> for GreaterThanFour {
     fn apply(input: (f32,)) -> bool {
         input.0 > 4.0
     }
@@ -339,7 +336,7 @@ impl PredicateOp<massively::Wgpu, (f32,)> for GreaterThanFour {
 pub(crate) struct F32GreaterThanOne;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32,)> for F32GreaterThanOne {
+impl PredicateOp<WgpuRuntime, (f32,)> for F32GreaterThanOne {
     fn apply(input: (f32,)) -> bool {
         input.0 > 1.0
     }
@@ -348,7 +345,7 @@ impl PredicateOp<massively::Wgpu, (f32,)> for F32GreaterThanOne {
 pub(crate) struct NonZero;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (u32,)> for NonZero {
+impl PredicateOp<WgpuRuntime, (u32,)> for NonZero {
     fn apply(input: (u32,)) -> bool {
         input.0 != 0
     }
@@ -357,7 +354,7 @@ impl PredicateOp<massively::Wgpu, (u32,)> for NonZero {
 pub(crate) struct U32IsTwenty;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (u32,)> for U32IsTwenty {
+impl PredicateOp<WgpuRuntime, (u32,)> for U32IsTwenty {
     fn apply(input: (u32,)) -> bool {
         input.0 == 20
     }
@@ -366,7 +363,7 @@ impl PredicateOp<massively::Wgpu, (u32,)> for U32IsTwenty {
 pub(crate) struct MixedStencilKeep;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32)> for MixedStencilKeep {
+impl PredicateOp<WgpuRuntime, (f32, u32)> for MixedStencilKeep {
     fn apply(input: (f32, u32)) -> bool {
         input.0 > 1.0 && input.1 != 0
     }
@@ -375,7 +372,7 @@ impl PredicateOp<massively::Wgpu, (f32, u32)> for MixedStencilKeep {
 pub(crate) struct Tuple12MixedFirstGreaterThanOne;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl PredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedFirstGreaterThanOne
 {
     fn apply(input: (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)) -> bool {
@@ -386,7 +383,7 @@ impl PredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, 
 pub(crate) struct Tuple12MixedTailPredicate;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl PredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedTailPredicate
 {
     fn apply(input: (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)) -> bool {
@@ -397,7 +394,7 @@ impl PredicateOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, 
 pub(crate) struct PairMixedSplit;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32)> for PairMixedSplit {
+impl UnaryOp<WgpuRuntime, (f32, u32)> for PairMixedSplit {
     type Output = (f32, u32);
 
     fn apply(input: (f32, u32)) -> (f32, u32) {
@@ -408,7 +405,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32)> for PairMixedSplit {
 pub(crate) struct PairScaleAndTag;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32)> for PairScaleAndTag {
+impl UnaryOp<WgpuRuntime, (f32, u32)> for PairScaleAndTag {
     type Output = (f32, u32);
 
     fn apply(input: (f32, u32)) -> (f32, u32) {
@@ -419,7 +416,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32)> for PairScaleAndTag {
 pub(crate) struct Tuple3MixedSplit;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32)> for Tuple3MixedSplit {
+impl UnaryOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedSplit {
     type Output = (f32, u32, f32);
 
     fn apply(input: (f32, u32, f32)) -> (f32, u32, f32) {
@@ -430,7 +427,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32, f32)> for Tuple3MixedSplit {
 pub(crate) struct Tuple4MixedSplit;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32)> for Tuple4MixedSplit {
+impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32)> for Tuple4MixedSplit {
     type Output = (f32, u32, f32, u32);
 
     fn apply(input: (f32, u32, f32, u32)) -> (f32, u32, f32, u32) {
@@ -446,7 +443,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32)> for Tuple4MixedSplit {
 pub(crate) struct Tuple3To5MixedSplit;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32)> for Tuple3To5MixedSplit {
+impl UnaryOp<WgpuRuntime, (f32, u32, f32)> for Tuple3To5MixedSplit {
     type Output = (f32, u32, f32, u32, f32);
 
     fn apply(input: (f32, u32, f32)) -> (f32, u32, f32, u32, f32) {
@@ -463,7 +460,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32, f32)> for Tuple3To5MixedSplit {
 pub(crate) struct Tuple5To3MixedSplit;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32)> for Tuple5To3MixedSplit {
+impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32, f32)> for Tuple5To3MixedSplit {
     type Output = (f32, u32, f32);
 
     fn apply(input: (f32, u32, f32, u32, f32)) -> (f32, u32, f32) {
@@ -478,7 +475,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32)> for Tuple5To3MixedSplit
 pub(crate) struct Tuple2To12MixedExpand;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32)> for Tuple2To12MixedExpand {
+impl UnaryOp<WgpuRuntime, (f32, u32)> for Tuple2To12MixedExpand {
     type Output = (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32);
 
     fn apply(input: (f32, u32)) -> (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32) {
@@ -502,7 +499,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32)> for Tuple2To12MixedExpand {
 pub(crate) struct Tuple12To2MixedProject;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12To2MixedProject
 {
     type Output = (f32, u32);
@@ -521,7 +518,7 @@ macro_rules! impl_tuple_wide_mixed_split {
         ($($out:expr),+)
     ) => {
         #[cubecl::cube]
-        impl UnaryOp<massively::Wgpu, ($($ty), +)> for TupleWideMixedSplit {
+        impl UnaryOp<WgpuRuntime, ($($ty), +)> for TupleWideMixedSplit {
             type Output = ($($ty),+);
 
             fn apply($input: ($($ty),+)) -> ($($ty),+) {
@@ -633,7 +630,7 @@ impl_tuple_wide_mixed_split!(
 pub(crate) struct Tuple12MixedSplit;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedSplit
 {
     type Output = (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32);
@@ -661,7 +658,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32,
 pub(crate) struct Tuple12MixedChecksum;
 
 #[cubecl::cube]
-impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
+impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32, f32, u32)>
     for Tuple12MixedChecksum
 {
     type Output = (f32,);
@@ -685,7 +682,7 @@ impl UnaryOp<massively::Wgpu, (f32, u32, f32, u32, f32, u32, f32, u32, f32, u32,
 pub(crate) struct PairMixedFirstPositive;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32)> for PairMixedFirstPositive {
+impl PredicateOp<WgpuRuntime, (f32, u32)> for PairMixedFirstPositive {
     fn apply(input: (f32, u32)) -> bool {
         input.0 > 0.0
     }
@@ -694,7 +691,7 @@ impl PredicateOp<massively::Wgpu, (f32, u32)> for PairMixedFirstPositive {
 pub(crate) struct PairMixedTagIsTwenty;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32)> for PairMixedTagIsTwenty {
+impl PredicateOp<WgpuRuntime, (f32, u32)> for PairMixedTagIsTwenty {
     fn apply(input: (f32, u32)) -> bool {
         input.1 == 20
     }
@@ -703,7 +700,7 @@ impl PredicateOp<massively::Wgpu, (f32, u32)> for PairMixedTagIsTwenty {
 pub(crate) struct Tuple3MixedTagIsTwenty;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32, f32)> for Tuple3MixedTagIsTwenty {
+impl PredicateOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedTagIsTwenty {
     fn apply(input: (f32, u32, f32)) -> bool {
         input.1 == 20 && input.2 > 0.0
     }
@@ -712,7 +709,7 @@ impl PredicateOp<massively::Wgpu, (f32, u32, f32)> for Tuple3MixedTagIsTwenty {
 pub(crate) struct Tuple3MixedFirstPositive;
 
 #[cubecl::cube]
-impl PredicateOp<massively::Wgpu, (f32, u32, f32)> for Tuple3MixedFirstPositive {
+impl PredicateOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedFirstPositive {
     fn apply(input: (f32, u32, f32)) -> bool {
         input.0 > 0.0
     }

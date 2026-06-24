@@ -20,12 +20,3 @@ pub(crate) use api::{
 };
 pub(crate) use device::DeviceVec;
 pub(crate) use policy::CubePolicy;
-
-#[cfg(feature = "cuda")]
-pub(crate) use policy::CubeCuda;
-
-#[cfg(feature = "hip")]
-pub(crate) use policy::CubeHip;
-
-#[cfg(feature = "wgpu")]
-pub(crate) use policy::CubeWgpu;

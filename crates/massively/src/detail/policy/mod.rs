@@ -1,12 +1,3 @@
-mod backends;
-
-#[cfg(feature = "cuda")]
-pub use backends::CubeCuda;
-#[cfg(feature = "hip")]
-pub use backends::CubeHip;
-#[cfg(feature = "wgpu")]
-pub use backends::CubeWgpu;
-
 use cubecl::prelude::*;
 use std::fmt;
 use std::sync::Arc;

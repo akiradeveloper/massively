@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, inclusive_scan_by_key};
+use massively::{DeviceVec, Executor, SoA1, inclusive_scan_by_key};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -21,7 +21,7 @@ fn solve<B>(
     amount_delta: DeviceVec<B, f32>,
 ) -> common::Result<DeviceVec<B, f32>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (balance,) = inclusive_scan_by_key(
         exec,
@@ -34,7 +34,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let balance = solve(
         &exec,
         exec.to_device(&[1, 1, 2, 2, 2])?,

@@ -13,7 +13,7 @@ use cubecl::prelude::*;
 /// #[cubecl::cube]
 /// impl<B> massively::op::UnaryOp<B, (f32,)> for AddOne
 /// where
-///     B: massively::Backend,
+///     B: cubecl::prelude::Runtime,
 /// {
 ///     type Output = (f32,);
 ///
@@ -25,7 +25,7 @@ use cubecl::prelude::*;
 #[cube]
 pub trait UnaryOp<B, Input>: 'static + Send + Sync
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     Input: crate::MItem<B>,
 {
     /// Output value produced for one logical input element.
@@ -40,7 +40,7 @@ where
 #[cube]
 pub trait BinaryOp<B, X, Y>: 'static + Send + Sync
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     X: crate::MItem<B>,
     Y: crate::MItem<B>,
 {
@@ -60,7 +60,7 @@ where
 /// #[cubecl::cube]
 /// impl<B> massively::op::ReductionOp<B, (f32,)> for Sum
 /// where
-///     B: massively::Backend,
+///     B: cubecl::prelude::Runtime,
 /// {
 ///     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
 ///         (lhs.0 + rhs.0,)
@@ -70,7 +70,7 @@ where
 #[cube]
 pub trait ReductionOp<B, X>: 'static + Send + Sync
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     X: crate::MItem<B>,
 {
     /// Combines two values.
@@ -92,7 +92,7 @@ where
 /// #[cubecl::cube]
 /// impl<B> massively::op::PredicateOp<B, (f32,)> for Positive
 /// where
-///     B: massively::Backend,
+///     B: cubecl::prelude::Runtime,
 /// {
 ///     fn apply(input: (f32,)) -> bool {
 ///         input.0 > 0.0
@@ -102,7 +102,7 @@ where
 #[cube]
 pub trait PredicateOp<B, T>: 'static + Send + Sync
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     T: crate::MItem<B>,
 {
     /// Returns whether the element should be processed.
@@ -119,7 +119,7 @@ where
 /// #[cubecl::cube]
 /// impl<B> massively::op::BinaryPredicateOp<B, (f32,)> for Less
 /// where
-///     B: massively::Backend,
+///     B: cubecl::prelude::Runtime,
 /// {
 ///     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
 ///         lhs.0 < rhs.0
@@ -129,7 +129,7 @@ where
 #[cube]
 pub trait BinaryPredicateOp<B, T>: 'static + Send + Sync
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     T: crate::MItem<B>,
 {
     /// Returns whether the pair matches.
@@ -143,7 +143,7 @@ pub struct Equal;
 #[cube]
 impl<B, T> BinaryPredicateOp<B, (T,)> for Equal
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     T: CubePrimitive + CubeElement + PartialEq,
 {
     fn apply(lhs: (T,), rhs: (T,)) -> bool {
@@ -154,7 +154,7 @@ where
 #[cube]
 impl<B, A, C> BinaryPredicateOp<B, (A, C)> for Equal
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     A: CubePrimitive + CubeElement + PartialEq,
     C: CubePrimitive + CubeElement + PartialEq,
 {
@@ -166,7 +166,7 @@ where
 #[cube]
 impl<B, A, C, D> BinaryPredicateOp<B, (A, C, D)> for Equal
 where
-    B: crate::Backend,
+    B: cubecl::prelude::Runtime,
     A: CubePrimitive + CubeElement + PartialEq,
     C: CubePrimitive + CubeElement + PartialEq,
     D: CubePrimitive + CubeElement + PartialEq,
@@ -176,7 +176,7 @@ where
     }
 }
 
-/// Backend-local operation traits used by generated CubeCL kernels.
+/// Runtime-local operation traits used by generated CubeCL kernels.
 ///
 /// These are intentionally crate-private. They allow the detail layer to keep
 /// scalar kernels scalar while the public API exposes only `MItem` operators.

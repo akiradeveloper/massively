@@ -1,33 +1,29 @@
 use super::{Error, Executor, MIter, MVec, op};
 
-pub trait Backend {
-    type Runtime: cubecl::prelude::Runtime;
-}
+use cubecl::prelude::Runtime;
 
-pub trait ToHostDispatch<B: super::Backend> {
+pub trait ToHostDispatch<B: Runtime> {
     type Output;
 
     fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error>;
 }
 
-pub trait MIterDispatch<B: super::Backend>: Sized {
+pub trait MIterDispatch<B: Runtime>: Sized {
     fn validate_executor(&self, _exec: &Executor<B>) -> Result<(), Error> {
         Ok(())
     }
 
-    fn index_inner(&self) -> Option<(&crate::detail::DeviceVec<<B as Backend>::Runtime, u32>,)> {
+    fn index_inner(&self) -> Option<(&crate::detail::DeviceVec<B, u32>,)> {
         None
     }
 
-    fn column_inner<T: 'static>(
-        &self,
-    ) -> Option<&crate::detail::DeviceVec<<B as Backend>::Runtime, T>> {
+    fn column_inner<T: 'static>(&self) -> Option<&crate::detail::DeviceVec<B, T>> {
         None
     }
 
     fn column_view_inner<T: 'static>(
         &self,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, T>>, Error>
+    ) -> Result<Option<crate::detail::device::DeviceColumnView<B, T>>, Error>
     where
         T: super::Scalar,
     {
@@ -39,7 +35,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     fn column_view_by_index_inner<T: 'static>(
         &self,
         index: usize,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, T>>, Error>
+    ) -> Result<Option<crate::detail::device::DeviceColumnView<B, T>>, Error>
     where
         T: super::Scalar,
     {
@@ -52,7 +48,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn transform_dispatch<Op, Output, Y>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         op: Op,
     ) -> Result<Output, Error>
     where
@@ -63,7 +59,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn reverse_dispatch<Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
@@ -71,7 +67,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn sort_dispatch<Less, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         less: Less,
     ) -> Result<Output, Error>
     where
@@ -81,8 +77,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn sort_by_single_key_dispatch<K, Less, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
@@ -94,7 +90,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn sort_by_key_dispatch<Values, Less, KeyOutput, ValueOutput>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _values: Values,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -113,8 +109,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
@@ -126,7 +122,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn unique_by_key_dispatch<Values, Eq, KeyOutput, ValueOutput>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _values: Values,
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -145,8 +141,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         key_eq: KeyEq,
         op: Op,
     ) -> Result<Output, Error>
@@ -159,7 +155,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _values: Values,
         _key_eq: KeyEq,
         _op: Op,
@@ -180,8 +176,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         key_eq: KeyEq,
         _init: <Self as MIter<B>>::Item,
         op: Op,
@@ -195,7 +191,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _values: Values,
         _key_eq: KeyEq,
         _init: <Values as MIter<B>>::Item,
@@ -217,8 +213,8 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         key_eq: KeyEq,
         _init: <Self as MIter<B>>::Item,
         op: Op,
@@ -233,7 +229,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn reduce_by_key_dispatch<Values, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _values: Values,
         _key_eq: KeyEq,
         _init: <Values as MIter<B>>::Item,
@@ -255,9 +251,9 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        left_keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
-        right_keys: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, K>,
+        _policy: &crate::detail::CubePolicy<B>,
+        left_keys: crate::detail::device::DeviceColumnView<B, K>,
+        right_keys: crate::detail::device::DeviceColumnView<B, K>,
         _right_values: RightValues,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -277,7 +273,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn gather_dispatch<Indices, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         indices: Indices,
     ) -> Result<Output, Error>
     where
@@ -287,7 +283,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn gather_if_dispatch<Indices, Stencil, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _indices: Indices,
         _default: <Self as MIter<B>>::Item,
         _stencil: Stencil,
@@ -305,7 +301,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn scatter_dispatch<Indices, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _indices: Indices,
         _len: usize,
         _default: <Self as MIter<B>>::Item,
@@ -322,7 +318,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn scatter_if_dispatch<Indices, Stencil, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _indices: Indices,
         _len: usize,
         _default: <Self as MIter<B>>::Item,
@@ -341,7 +337,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn reduce_dispatch<Op>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _init: <Self as MIter<B>>::Item,
         op: Op,
     ) -> Result<<Self as MIter<B>>::Item, Error>
@@ -351,7 +347,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn inclusive_scan_dispatch<Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         op: Op,
     ) -> Result<Output, Error>
     where
@@ -361,7 +357,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn exclusive_scan_dispatch<Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _init: <Self as MIter<B>>::Item,
         op: Op,
     ) -> Result<Output, Error>
@@ -372,7 +368,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn adjacent_difference_dispatch<Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         op: Op,
     ) -> Result<Output, Error>
     where
@@ -382,7 +378,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn copy_if_dispatch<Stencil, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _stencil: Stencil,
     ) -> Result<Output, Error>
     where
@@ -392,7 +388,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn remove_if_dispatch<Pred, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<Output, Error>
     where
@@ -402,7 +398,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn count_if_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<usize, Error>
     where
@@ -411,7 +407,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn all_of_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -420,7 +416,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn any_of_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -429,7 +425,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn none_of_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -438,7 +434,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn find_if_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<Option<usize>, Error>
     where
@@ -447,7 +443,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn partition_dispatch<Pred, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<(Output, Output), Error>
     where
@@ -457,7 +453,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn is_partitioned_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -466,7 +462,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn replace_if_dispatch<Stencil, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         replacement: <Self as MIter<B>>::Item,
         _stencil: Stencil,
     ) -> Result<Output, Error>
@@ -478,9 +474,9 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     #[doc(hidden)]
     fn selection_stencil_dispatch<Pred>(
         &self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _invert: bool,
-    ) -> Result<crate::detail::api::PrecomputedSelection<<B as Backend>::Runtime>, Error>
+    ) -> Result<crate::detail::api::PrecomputedSelection<B>, Error>
     where
         Self: MIter<B>,
         Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
@@ -492,7 +488,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn unique_dispatch<Pred, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<Output, Error>
     where
@@ -502,7 +498,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn min_element_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         less: Less,
     ) -> Result<Option<usize>, Error>
     where
@@ -511,7 +507,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn max_element_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         less: Less,
     ) -> Result<Option<usize>, Error>
     where
@@ -520,7 +516,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn minmax_element_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         less: Less,
     ) -> Result<Option<(usize, usize)>, Error>
     where
@@ -529,7 +525,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn adjacent_find_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         pred: Pred,
     ) -> Result<Option<usize>, Error>
     where
@@ -538,7 +534,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn equal_dispatch<Right, Eq>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _eq: Eq,
     ) -> Result<bool, Error>
@@ -554,7 +550,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn mismatch_dispatch<Right, Eq>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -570,7 +566,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn find_first_of_dispatch<Needles, Eq>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _needles: Needles,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -586,7 +582,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn lower_bound_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         value: <Self as MIter<B>>::Item,
         _less: Less,
     ) -> Result<usize, Error>
@@ -596,7 +592,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn upper_bound_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         value: <Self as MIter<B>>::Item,
         _less: Less,
     ) -> Result<usize, Error>
@@ -606,7 +602,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn equal_range_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         value: <Self as MIter<B>>::Item,
         _less: Less,
     ) -> Result<(usize, usize), Error>
@@ -616,7 +612,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn is_sorted_until_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         less: Less,
     ) -> Result<usize, Error>
     where
@@ -625,7 +621,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn is_sorted_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         less: Less,
     ) -> Result<bool, Error>
     where
@@ -634,7 +630,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn lexicographical_compare_dispatch<Right, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _less: Less,
     ) -> Result<bool, Error>
@@ -650,7 +646,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn merge_dispatch<Right, Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -667,7 +663,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn set_union_dispatch<Right, Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -684,7 +680,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn set_intersection_dispatch<Right, Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -701,7 +697,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn set_difference_dispatch<Right, Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -718,7 +714,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn inner_product_dispatch<Right, TransformOp, ReduceOp, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Right,
         _transform_op: TransformOp,
         _init: Output,
@@ -739,7 +735,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn equal_same_dispatch<Eq>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _eq: Eq,
     ) -> Result<bool, Error>
@@ -754,7 +750,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn mismatch_same_dispatch<Eq>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -769,7 +765,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn find_first_of_same_dispatch<Eq>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _needles: Self,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -784,7 +780,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn lexicographical_compare_same_dispatch<Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _less: Less,
     ) -> Result<bool, Error>
@@ -799,7 +795,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn merge_same_dispatch<Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -815,7 +811,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn set_union_same_dispatch<Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -831,7 +827,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn set_intersection_same_dispatch<Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -847,7 +843,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn set_difference_same_dispatch<Output, Less>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -863,7 +859,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn inner_product_same_dispatch<TransformOp, ReduceOp, Output>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right: Self,
         _transform_op: TransformOp,
         _init: Output,
@@ -883,7 +879,7 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
 
     fn merge_by_key_dispatch<RightKeys, LeftValues, RightValues, Less, KeyOutput, ValueOutput>(
         self,
-        _policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        _policy: &crate::detail::CubePolicy<B>,
         _right_keys: RightKeys,
         _left_values: LeftValues,
         _right_values: RightValues,
@@ -905,10 +901,10 @@ pub trait MIterDispatch<B: super::Backend>: Sized {
     }
 }
 
-pub trait MItemDispatch<B: super::Backend>: Sized {
+pub trait MItemDispatch<B: Runtime>: Sized {
     fn transform_unary<Input, Op>(
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        input: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Input>,
+        policy: &crate::detail::CubePolicy<B>,
+        input: crate::detail::device::DeviceColumnView<B, Input>,
         op: Op,
     ) -> Result<<Self as super::MItem<B>>::Inner, Error>
     where
@@ -923,9 +919,9 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
     }
 
     fn transform_binary<Left, Right, Op>(
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        left: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Left>,
-        right: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Right>,
+        policy: &crate::detail::CubePolicy<B>,
+        left: crate::detail::device::DeviceColumnView<B, Left>,
+        right: crate::detail::device::DeviceColumnView<B, Right>,
         op: Op,
     ) -> Result<<Self as super::MItem<B>>::Inner, Error>
     where
@@ -941,10 +937,10 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
     }
 
     fn transform_ternary<First, Second, Third, Op>(
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
-        first: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, First>,
-        second: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Second>,
-        third: crate::detail::device::DeviceColumnView<<B as Backend>::Runtime, Third>,
+        policy: &crate::detail::CubePolicy<B>,
+        first: crate::detail::device::DeviceColumnView<B, First>,
+        second: crate::detail::device::DeviceColumnView<B, Second>,
+        third: crate::detail::device::DeviceColumnView<B, Third>,
         op: Op,
     ) -> Result<<Self as super::MItem<B>>::Inner, Error>
     where
@@ -961,7 +957,7 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
     }
 
     fn reduce_inner<Op>(
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         input: <Self as super::MItem<B>>::Inner,
         init: Self,
         op: Op,
@@ -977,7 +973,7 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
     }
 
     fn inner_product_with_right_item<LeftIter, RightIter, TransformOp, ReduceOp, Output>(
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         left: LeftIter,
         right: RightIter,
         transform_op: TransformOp,
@@ -1006,7 +1002,7 @@ pub trait MItemDispatch<B: super::Backend>: Sized {
         ReduceOp,
         Output,
     >(
-        policy: &crate::detail::CubePolicy<<B as Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         left: LeftIter,
         right: RightIter,
         transform_op: TransformOp,

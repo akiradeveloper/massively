@@ -57,7 +57,7 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - adjacent_find(xs: &[]a, eq: a->a->bool) -> int?
 - all_of(xs: &[]a, p: a->bool) -> bool
 - any_of(xs: &[]a, p: a->bool) -> bool
-- copy_if(xs: &[]a, stencil: &[u32]) -> []a
+- copy_where(xs: &[]a, stencil: &[u32]) -> []a
 - count_if(xs: &[]a, p: a->bool) -> int
 - equal(xs: &[]a, ys: &[]a, eq: a->a->bool) -> bool
 - equal_range(xs: &[]a, v: a, cmp: a->a->bool) -> int
@@ -66,7 +66,7 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - find_first_of(xs: &[]a, needles: &[]a, eq: a->a->bool) -> int?
 - find_if(xs: &[]a, p: a->bool) -> int?
 - gather(xs: &[]a, indices: &[u32]) -> []a
-- gather_if(xs: &[]a, indices: &[u32], default: a, stencil: &[u32]) -> []a
+- gather_where(xs: &[]a, indices: &[u32], default: a, stencil: &[u32]) -> []a
 - inclusive_scan(xs: &[]a, op: a->a->a) -> []a
 - inclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, sum: a->a->a) -> []a
 - inner_product(xs: &[]a, ys: &[]b, zipper: a->b->c, zero: c, sum: c->c->c) -> c
@@ -85,11 +85,11 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - partition(xs: &[]a, p: a->bool) -> ([]a, []a)
 - reduce(xs: &[]a, zero: a, sum: a->a->a) -> a
 - reduce_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, zero: a, sum: a->a->a) -> ([]k, []a)
-- remove_if(xs: &[]a, p: a->bool) -> []a
-- replace_if(xs: &[]a, v: a, stencil: &[u32]) -> []a
+- remove_where(xs: &[]a, stencil: &[u32]) -> []a
+- replace_where(xs: &[]a, v: a, stencil: &[u32]) -> []a
 - reverse(xs: &[]a) -> []a
 - scatter(xs: &[]a, indices: &[u32], len: usize, default: a) -> []a
-- scatter_if(xs: &[]a, indices: &[u32], len: usize, default: a, stencil: &[u32]) -> []a
+- scatter_where(xs: &[]a, indices: &[u32], len: usize, default: a, stencil: &[u32]) -> []a
 - set_difference(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
 - set_intersection(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
 - set_union(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a

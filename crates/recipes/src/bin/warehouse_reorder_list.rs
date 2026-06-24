@@ -17,14 +17,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, SoA1, SoA2, Wgpu, copy_if, reverse, sort_by_key, transform};
+use massively::{DeviceVec, Executor, SoA1, SoA2, copy_if, reverse, sort_by_key, transform};
 
 struct InventoryUrgency;
 
 #[cubecl::cube]
 impl<B> UnaryOp<B, (u32, u32)> for InventoryUrgency
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     type Output = (u32,);
 
@@ -40,7 +40,7 @@ where
     }
 }
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     sku: DeviceVec<B, u32>,
     urgency: DeviceVec<B, u32>,
 }
@@ -52,7 +52,7 @@ fn solve<B>(
     daily_sales: DeviceVec<B, u32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (urgency,) = transform(
         exec,
@@ -76,7 +76,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[100, 200, 300, 400])?,

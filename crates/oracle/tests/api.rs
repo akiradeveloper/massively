@@ -1,21 +1,24 @@
 use cubecl::prelude::*;
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::{
-    DeviceVec, Executor as ApiExecutor, Wgpu as ApiWgpu,
-    adjacent_difference as api_adjacent_difference, adjacent_find, all_of as api_all_of,
-    any_of as api_any_of, copy_if as api_copy_if, count_if as api_count_if, equal, equal_range,
-    exclusive_scan as api_exclusive_scan, exclusive_scan_by_key, find_first_of,
-    find_if as api_find_if, gather as api_gather, gather_if, inclusive_scan as api_inclusive_scan,
-    inclusive_scan_by_key, inner_product, is_partitioned as api_is_partitioned, is_sorted,
-    is_sorted_until, lexicographical_compare, lower_bound, max_element, merge, merge_by_key,
-    min_element, minmax_element, mismatch, none_of as api_none_of, partition as api_partition,
-    reduce as api_reduce, reduce_by_key, remove_if as api_remove_if, replace_if as api_replace_if,
-    reverse as api_reverse, scatter, scatter_if, set_difference, set_intersection, set_union,
-    sort as api_sort, sort_by_key, stable_sort, stable_sort_by_key, transform as api_transform,
-    unique as api_unique, unique_by_key, upper_bound,
+    DeviceVec, Executor as ApiExecutor, adjacent_difference as api_adjacent_difference,
+    adjacent_find, all_of as api_all_of, any_of as api_any_of, copy_if as api_copy_if,
+    count_if as api_count_if, equal, equal_range, exclusive_scan as api_exclusive_scan,
+    exclusive_scan_by_key, find_first_of, find_if as api_find_if, gather as api_gather, gather_if,
+    inclusive_scan as api_inclusive_scan, inclusive_scan_by_key, inner_product,
+    is_partitioned as api_is_partitioned, is_sorted, is_sorted_until, lexicographical_compare,
+    lower_bound, max_element, merge, merge_by_key, min_element, minmax_element, mismatch,
+    none_of as api_none_of, partition as api_partition, reduce as api_reduce, reduce_by_key,
+    remove_if as api_remove_if, replace_if as api_replace_if, reverse as api_reverse, scatter,
+    scatter_if, set_difference, set_intersection, set_union, sort as api_sort, sort_by_key,
+    stable_sort, stable_sort_by_key, transform as api_transform, unique as api_unique,
+    unique_by_key, upper_bound,
 };
 use proptest::prelude::*;
 use std::sync::{Mutex, MutexGuard};
+
+type ApiRuntime = WgpuRuntime;
 
 const CASES: u32 = 24;
 const MAX_LEN: usize = 64;
@@ -24,7 +27,7 @@ static GPU_LOCK: Mutex<()> = Mutex::new(());
 struct TransformMap;
 
 #[cubecl::cube]
-impl UnaryOp<ApiWgpu, (u32,)> for TransformMap {
+impl UnaryOp<ApiRuntime, (u32,)> for TransformMap {
     type Output = (u32,);
 
     fn apply(input: (u32,)) -> (u32,) {
@@ -35,7 +38,7 @@ impl UnaryOp<ApiWgpu, (u32,)> for TransformMap {
 struct TupleMaxOp;
 
 #[cubecl::cube]
-impl ReductionOp<ApiWgpu, (u32,)> for TupleMaxOp {
+impl ReductionOp<ApiRuntime, (u32,)> for TupleMaxOp {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         if lhs.0 > rhs.0 { lhs } else { rhs }
     }
@@ -44,7 +47,7 @@ impl ReductionOp<ApiWgpu, (u32,)> for TupleMaxOp {
 struct TuplePairMax;
 
 #[cubecl::cube]
-impl BinaryOp<ApiWgpu, (u32,), (u32,)> for TuplePairMax {
+impl BinaryOp<ApiRuntime, (u32,), (u32,)> for TuplePairMax {
     type Output = (u32,);
 
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
@@ -55,7 +58,7 @@ impl BinaryOp<ApiWgpu, (u32,), (u32,)> for TuplePairMax {
 struct TupleKeep;
 
 #[cubecl::cube]
-impl PredicateOp<ApiWgpu, (u32,)> for TupleKeep {
+impl PredicateOp<ApiRuntime, (u32,)> for TupleKeep {
     fn apply(input: (u32,)) -> bool {
         input.0 % 2 == 0
     }
@@ -64,7 +67,7 @@ impl PredicateOp<ApiWgpu, (u32,)> for TupleKeep {
 struct TupleSameLowNibble;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<ApiWgpu, (u32,)> for TupleSameLowNibble {
+impl BinaryPredicateOp<ApiRuntime, (u32,)> for TupleSameLowNibble {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         (lhs.0 % 16) == (rhs.0 % 16)
     }
@@ -73,7 +76,7 @@ impl BinaryPredicateOp<ApiWgpu, (u32,)> for TupleSameLowNibble {
 struct TupleBucketThenValueLess;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<ApiWgpu, (u32,)> for TupleBucketThenValueLess {
+impl BinaryPredicateOp<ApiRuntime, (u32,)> for TupleBucketThenValueLess {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         let lhs_key = lhs.0 % 16;
         let rhs_key = rhs.0 % 16;
@@ -85,11 +88,11 @@ fn transform_map(input: &[u32]) -> Vec<u32> {
     input.iter().map(|value| value / 3 + 17).collect()
 }
 
-fn exec() -> ApiExecutor<ApiWgpu> {
-    ApiExecutor::cpu()
+fn exec() -> ApiExecutor<ApiRuntime> {
+    ApiExecutor::<ApiRuntime>::new(WgpuDevice::Cpu)
 }
 
-fn api_exec() -> ApiExecutor<ApiWgpu> {
+fn api_exec() -> ApiExecutor<ApiRuntime> {
     exec()
 }
 
@@ -97,7 +100,7 @@ fn slice_range(input: &[u32]) -> std::ops::Range<usize> {
     1..input.len() + 1
 }
 
-fn padded_device(exec: &ApiExecutor<ApiWgpu>, input: &[u32]) -> DeviceVec<ApiWgpu, u32> {
+fn padded_device(exec: &ApiExecutor<ApiRuntime>, input: &[u32]) -> DeviceVec<ApiRuntime, u32> {
     let mut padded = Vec::with_capacity(input.len() + 2);
     padded.push(0xface_feed);
     padded.extend_from_slice(input);

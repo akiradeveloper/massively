@@ -3,13 +3,14 @@
 This directory contains small runnable programs for public `massively` APIs.
 
 - `algorithm/`: one example per `massively::algorithm` free-function API.
-- `runtime/`: runtime setup, host/device transfer, allocation, initialization,
-  and memory-copy examples.
+- `runtime/`: CubeCL runtime/device setup, host/device transfer, allocation,
+  initialization, random generation, and memory-copy examples.
 
 Run one example:
 
 ```sh
 cargo run --example sort
+cargo run --example runtime-random
 cargo run --example runtime-tabulate
 ```
 

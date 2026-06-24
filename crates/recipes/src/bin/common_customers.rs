@@ -12,7 +12,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, Wgpu, set_intersection};
+use massively::{DeviceVec, Executor, SoA1, set_intersection};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -20,14 +20,14 @@ fn solve<B>(
     b: DeviceVec<B, u32>,
 ) -> common::Result<DeviceVec<B, u32>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (out,) = set_intersection(exec, SoA1(a.slice(..)), SoA1(b.slice(..)), common::LessU32)?;
     Ok(out)
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let out = solve(
         &exec,
         exec.to_device(&[1, 2, 4, 8])?,

@@ -15,14 +15,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, SoA1, Wgpu, adjacent_find};
+use massively::{DeviceVec, Executor, SoA1, adjacent_find};
 
 struct TemperatureSpike;
 
 #[cubecl::cube]
 impl<B> BinaryPredicateOp<B, (f32,)> for TemperatureSpike
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
         rhs.0 > lhs.0 + 5.0
@@ -31,13 +31,13 @@ where
 
 fn solve<B>(exec: &Executor<B>, temperature: DeviceVec<B, f32>) -> common::Result<Option<usize>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     adjacent_find(exec, SoA1(temperature.slice(..)), TemperatureSpike)
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let index = solve(&exec, exec.to_device(&[20.0, 21.0, 30.0, 31.0])?)?;
     assert_eq!(index, Some(1));
     Ok(())

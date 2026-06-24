@@ -2,12 +2,12 @@ use super::*;
 
 impl<'a, B, T> MIter<B> for SoA1<DeviceSlice<'a, B, T>>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar + 'static,
-    (T,): MItem<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
+    (T,): MItem<B, Inner = (crate::detail::DeviceVec<B, T>,)>,
 {
     type Item = (T,);
-    type Inner = (crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, T>,);
+    type Inner = (crate::detail::device::DeviceColumnView<B, T>,);
 
     fn len(&self) -> usize {
         self.0.len()
@@ -24,9 +24,9 @@ where
 
 impl<'a, B, T> sealed::MIterDispatch<B> for SoA1<DeviceSlice<'a, B, T>>
 where
-    B: Backend,
+    B: Runtime,
     T: Scalar + 'static,
-    (T,): MItem<B, Inner = (crate::detail::DeviceVec<<B as sealed::Backend>::Runtime, T>,)>,
+    (T,): MItem<B, Inner = (crate::detail::DeviceVec<B, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
         exec.ensure_policy_id(self.0.source.inner.policy_id())
@@ -34,10 +34,7 @@ where
 
     fn column_view_inner<U: 'static>(
         &self,
-    ) -> Result<
-        Option<crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, U>>,
-        Error,
-    >
+    ) -> Result<Option<crate::detail::device::DeviceColumnView<B, U>>, Error>
     where
         U: Scalar,
     {
@@ -55,9 +52,9 @@ where
 
     fn selection_stencil_dispatch<Pred>(
         &self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         invert: bool,
-    ) -> Result<crate::detail::api::PrecomputedSelection<<B as sealed::Backend>::Runtime>, Error>
+    ) -> Result<crate::detail::api::PrecomputedSelection<B>, Error>
     where
         Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
     {
@@ -69,7 +66,7 @@ where
 
     fn transform_dispatch<Op, Output, Y>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         op: Op,
     ) -> Result<Output, Error>
     where
@@ -84,7 +81,7 @@ where
 
     fn reverse_dispatch<Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
     ) -> Result<Output, Error>
     where
         Output: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -95,7 +92,7 @@ where
 
     fn sort_dispatch<Less, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _less: Less,
     ) -> Result<Output, Error>
     where
@@ -108,8 +105,8 @@ where
 
     fn sort_by_single_key_dispatch<K, Less, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
@@ -132,7 +129,7 @@ where
 
     fn sort_by_key_dispatch<Values, Less, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         values: Values,
         less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -156,8 +153,8 @@ where
 
     fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
@@ -180,7 +177,7 @@ where
 
     fn unique_by_key_dispatch<Values, Eq, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         values: Values,
         eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -204,8 +201,8 @@ where
 
     fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _key_eq: KeyEq,
         _op: Op,
     ) -> Result<Output, Error>
@@ -228,7 +225,7 @@ where
 
     fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         values: Values,
         key_eq: KeyEq,
         op: Op,
@@ -254,8 +251,8 @@ where
 
     fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _key_eq: KeyEq,
         init: <Self as MIter<B>>::Item,
         _op: Op,
@@ -280,7 +277,7 @@ where
 
     fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         values: Values,
         key_eq: KeyEq,
         init: <Values as MIter<B>>::Item,
@@ -307,8 +304,8 @@ where
 
     fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        keys: crate::detail::device::DeviceColumnView<B, K>,
         _key_eq: KeyEq,
         init: <Self as MIter<B>>::Item,
         _op: Op,
@@ -336,7 +333,7 @@ where
 
     fn reduce_by_key_dispatch<Values, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         values: Values,
         key_eq: KeyEq,
         init: <Values as MIter<B>>::Item,
@@ -363,9 +360,9 @@ where
 
     fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
-        left_keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
-        right_keys: crate::detail::device::DeviceColumnView<<B as sealed::Backend>::Runtime, K>,
+        policy: &crate::detail::CubePolicy<B>,
+        left_keys: crate::detail::device::DeviceColumnView<B, K>,
+        right_keys: crate::detail::device::DeviceColumnView<B, K>,
         right_values: RightValues,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
@@ -403,7 +400,7 @@ where
 
     fn merge_by_key_dispatch<RightKeys, LeftValues, RightValues, Less, KeyOutput, ValueOutput>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right_keys: RightKeys,
         left_values: LeftValues,
         right_values: RightValues,
@@ -443,7 +440,7 @@ where
 
     fn gather_dispatch<Indices, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         indices: Indices,
     ) -> Result<Output, Error>
     where
@@ -457,7 +454,7 @@ where
 
     fn reduce_dispatch<Op>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         init: <Self as MIter<B>>::Item,
         _op: Op,
     ) -> Result<<Self as MIter<B>>::Item, Error>
@@ -469,7 +466,7 @@ where
 
     fn inclusive_scan_dispatch<Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _op: Op,
     ) -> Result<Output, Error>
     where
@@ -483,7 +480,7 @@ where
 
     fn exclusive_scan_dispatch<Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         init: <Self as MIter<B>>::Item,
         _op: Op,
     ) -> Result<Output, Error>
@@ -502,7 +499,7 @@ where
 
     fn adjacent_difference_dispatch<Op, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _op: Op,
     ) -> Result<Output, Error>
     where
@@ -519,7 +516,7 @@ where
 
     fn copy_if_dispatch<Stencil, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         stencil: Stencil,
     ) -> Result<Output, Error>
     where
@@ -540,7 +537,7 @@ where
 
     fn remove_if_dispatch<Pred, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<Output, Error>
     where
@@ -554,7 +551,7 @@ where
 
     fn count_if_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<usize, Error>
     where
@@ -565,7 +562,7 @@ where
 
     fn all_of_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -576,7 +573,7 @@ where
 
     fn any_of_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -587,7 +584,7 @@ where
 
     fn none_of_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -598,7 +595,7 @@ where
 
     fn find_if_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<Option<usize>, Error>
     where
@@ -609,7 +606,7 @@ where
 
     fn partition_dispatch<Pred, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<(Output, Output), Error>
     where
@@ -626,7 +623,7 @@ where
 
     fn is_partitioned_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<bool, Error>
     where
@@ -637,7 +634,7 @@ where
 
     fn replace_if_dispatch<Stencil, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         replacement: <Self as MIter<B>>::Item,
         stencil: Stencil,
     ) -> Result<Output, Error>
@@ -660,7 +657,7 @@ where
 
     fn unique_dispatch<Pred, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<Output, Error>
     where
@@ -673,7 +670,7 @@ where
 
     fn min_element_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _less: Less,
     ) -> Result<Option<usize>, Error>
     where
@@ -684,7 +681,7 @@ where
 
     fn max_element_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _less: Less,
     ) -> Result<Option<usize>, Error>
     where
@@ -695,7 +692,7 @@ where
 
     fn minmax_element_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _less: Less,
     ) -> Result<Option<(usize, usize)>, Error>
     where
@@ -706,7 +703,7 @@ where
 
     fn adjacent_find_dispatch<Pred>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _pred: Pred,
     ) -> Result<Option<usize>, Error>
     where
@@ -717,7 +714,7 @@ where
 
     fn lower_bound_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         value: <Self as MIter<B>>::Item,
         _less: Less,
     ) -> Result<usize, Error>
@@ -729,7 +726,7 @@ where
 
     fn upper_bound_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         value: <Self as MIter<B>>::Item,
         _less: Less,
     ) -> Result<usize, Error>
@@ -741,7 +738,7 @@ where
 
     fn equal_range_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         value: <Self as MIter<B>>::Item,
         _less: Less,
     ) -> Result<(usize, usize), Error>
@@ -753,7 +750,7 @@ where
 
     fn is_sorted_until_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _less: Less,
     ) -> Result<usize, Error>
     where
@@ -764,7 +761,7 @@ where
 
     fn is_sorted_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         _less: Less,
     ) -> Result<bool, Error>
     where
@@ -775,7 +772,7 @@ where
 
     fn gather_if_dispatch<Indices, Stencil, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         indices: Indices,
         default: <Self as MIter<B>>::Item,
         stencil: Stencil,
@@ -802,7 +799,7 @@ where
 
     fn scatter_dispatch<Indices, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         indices: Indices,
         len: usize,
         default: <Self as MIter<B>>::Item,
@@ -818,7 +815,7 @@ where
 
     fn scatter_if_dispatch<Indices, Stencil, Output>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         indices: Indices,
         len: usize,
         default: <Self as MIter<B>>::Item,
@@ -847,7 +844,7 @@ where
 
     fn equal_dispatch<Right, Eq>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _eq: Eq,
     ) -> Result<bool, Error>
@@ -862,7 +859,7 @@ where
 
     fn mismatch_dispatch<Right, Eq>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -877,7 +874,7 @@ where
 
     fn find_first_of_dispatch<Needles, Eq>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         needles: Needles,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -892,7 +889,7 @@ where
 
     fn lexicographical_compare_dispatch<Right, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _less: Less,
     ) -> Result<bool, Error>
@@ -912,7 +909,7 @@ where
 
     fn merge_dispatch<Right, Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -929,7 +926,7 @@ where
 
     fn set_union_dispatch<Right, Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -947,7 +944,7 @@ where
 
     fn set_intersection_dispatch<Right, Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -965,7 +962,7 @@ where
 
     fn set_difference_dispatch<Right, Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Right,
         _less: Less,
     ) -> Result<Output, Error>
@@ -983,7 +980,7 @@ where
 
     fn equal_same_dispatch<Eq>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _eq: Eq,
     ) -> Result<bool, Error>
@@ -1000,7 +997,7 @@ where
 
     fn mismatch_same_dispatch<Eq>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -1017,7 +1014,7 @@ where
 
     fn find_first_of_same_dispatch<Eq>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         needles: Self,
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
@@ -1034,7 +1031,7 @@ where
 
     fn lexicographical_compare_same_dispatch<Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _less: Less,
     ) -> Result<bool, Error>
@@ -1051,7 +1048,7 @@ where
 
     fn merge_same_dispatch<Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -1070,7 +1067,7 @@ where
 
     fn set_union_same_dispatch<Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -1089,7 +1086,7 @@ where
 
     fn set_intersection_same_dispatch<Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _less: Less,
     ) -> Result<Output, Error>
@@ -1108,7 +1105,7 @@ where
 
     fn set_difference_same_dispatch<Output, Less>(
         self,
-        policy: &crate::detail::CubePolicy<<B as sealed::Backend>::Runtime>,
+        policy: &crate::detail::CubePolicy<B>,
         right: Self,
         _less: Less,
     ) -> Result<Output, Error>

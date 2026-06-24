@@ -14,9 +14,9 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA2, Wgpu, gather};
+use massively::{DeviceVec, Executor, SoA2, gather};
 
-struct Output<B: massively::Backend> {
+struct Output<B: cubecl::prelude::Runtime> {
     age: DeviceVec<B, u32>,
     score: DeviceVec<B, f32>,
 }
@@ -28,7 +28,7 @@ fn solve<B>(
     row_index: DeviceVec<B, u32>,
 ) -> common::Result<Output<B>>
 where
-    B: massively::Backend,
+    B: cubecl::prelude::Runtime,
 {
     let (age, score) = gather(
         exec,
@@ -39,7 +39,7 @@ where
 }
 
 fn main() -> common::Result {
-    let exec = Executor::<Wgpu>::cpu();
+    let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
         exec.to_device(&[21, 35, 50])?,
