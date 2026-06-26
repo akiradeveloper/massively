@@ -7,8 +7,9 @@ use std::any::Any;
 use cubecl::prelude::Runtime;
 
 use crate::algorithm::op;
-use crate::algorithm::{MItem, MIter, MVec, SoA1, SoA2, SoA3};
-use crate::runtime::{DeviceSlice, DeviceVec, Executor, Scalar};
+use crate::algorithm::{MItem, MIter, MIterMut, MVec, SoA1, SoA2, SoA3};
+use crate::error::ensure_same_len;
+use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 
 pub use crate::Error;
 
@@ -62,6 +63,14 @@ where
     Input: MIter<B>,
 {
     <Input as sealed::MIterDispatch<B>>::validate_executor(input, exec)
+}
+
+fn validate_output<B, Output>(exec: &Executor<B>, output: &Output) -> Result<(), Error>
+where
+    B: Runtime,
+    Output: MIterMut<B>,
+{
+    <Output as sealed::MIterMutDispatch<B>>::validate_executor(output, exec)
 }
 
 fn validate_slice<B, T>(exec: &Executor<B>, slice: &DeviceSlice<'_, B, T>) -> Result<(), Error>
@@ -127,7 +136,7 @@ where
 }
 
 /// Copies elements whose `u32` stencil flag is non-zero.
-pub fn copy_if<B, Input, Output>(
+pub fn copy_where<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
     stencil: DeviceSlice<'_, B, u32>,
@@ -139,7 +148,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_slice(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::copy_if_dispatch(source, exec.policy(), SoA1(stencil))
+    <Input as sealed::MIterDispatch<B>>::copy_where_dispatch(source, exec.policy(), SoA1(stencil))
 }
 
 /// Counts elements satisfying `pred`.
@@ -270,44 +279,47 @@ where
     <Input as sealed::MIterDispatch<B>>::find_if_dispatch(source, exec.policy(), pred)
 }
 
-/// Gathers a massively iterator at index positions into an owned vector.
+/// Gathers a massively iterator at index positions into `out`.
 pub fn gather<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
     indices: DeviceSlice<'_, B, u32>,
-) -> Result<Output, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     B: Runtime,
     Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
+    Output: MIterMut<B, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_slice(exec, &indices)?;
-    <Input as sealed::MIterDispatch<B>>::gather_dispatch(source, exec.policy(), SoA1(indices))
+    validate_output(exec, &out)?;
+    <Input as sealed::MIterDispatch<B>>::gather_dispatch(source, exec.policy(), SoA1(indices), out)
 }
 
 /// Gathers elements whose `u32` stencil flag is non-zero.
-pub fn gather_if<B, Input, Output>(
+pub fn gather_where<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
     indices: DeviceSlice<'_, B, u32>,
-    default: Input::Item,
     stencil: DeviceSlice<'_, B, u32>,
-) -> Result<Output, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     B: Runtime,
     Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
+    Output: MIterMut<B, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_slice(exec, &indices)?;
     validate_slice(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::gather_if_dispatch(
+    validate_output(exec, &out)?;
+    <Input as sealed::MIterDispatch<B>>::gather_where_dispatch(
         source,
         exec.policy(),
         SoA1(indices),
-        default,
         SoA1(stencil),
+        out,
     )
 }
 
@@ -652,27 +664,10 @@ where
     )
 }
 
-/// Removes elements satisfying `pred`.
-pub fn remove_if<B, Input, Output, Pred>(
+/// Removes elements whose `u32` stencil flag is non-zero.
+pub fn remove_where<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
-    pred: Pred,
-) -> Result<Output, Error>
-where
-    B: Runtime,
-    Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
-    Pred: op::PredicateOp<B, Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::remove_if_dispatch(source, exec.policy(), pred)
-}
-
-/// Replaces elements whose `u32` stencil flag is non-zero.
-pub fn replace_if<B, Input, Output>(
-    exec: &Executor<B>,
-    source: Input,
-    replacement: Input::Item,
     stencil: DeviceSlice<'_, B, u32>,
 ) -> Result<Output, Error>
 where
@@ -682,12 +677,23 @@ where
 {
     validate_input(exec, &source)?;
     validate_slice(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::replace_if_dispatch(
-        source,
-        exec.policy(),
-        replacement,
-        SoA1(stencil),
-    )
+    <Input as sealed::MIterDispatch<B>>::remove_where_dispatch(source, exec.policy(), SoA1(stencil))
+}
+
+/// Replaces elements whose `u32` stencil flag is non-zero.
+pub fn replace_where<B, Output>(
+    exec: &Executor<B>,
+    replacement: Output::Item,
+    stencil: DeviceSlice<'_, B, u32>,
+    out: Output,
+) -> Result<(), Error>
+where
+    B: Runtime,
+    Output: MIterMut<B>,
+{
+    validate_slice(exec, &stencil)?;
+    validate_output(exec, &out)?;
+    out.replace_where_inner(exec.policy(), replacement, SoA1(stencil))
 }
 
 /// Reverses a massively iterator into an owned vector.
@@ -701,54 +707,47 @@ where
     <Input as sealed::MIterDispatch<B>>::reverse_dispatch(source, exec.policy())
 }
 
-/// Scatters values into a newly allocated output.
+/// Scatters values into `out`.
 pub fn scatter<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
     indices: DeviceSlice<'_, B, u32>,
-    len: usize,
-    default: Input::Item,
-) -> Result<Output, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     B: Runtime,
     Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
+    Output: MIterMut<B, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_slice(exec, &indices)?;
-    <Input as sealed::MIterDispatch<B>>::scatter_dispatch(
-        source,
-        exec.policy(),
-        SoA1(indices),
-        len,
-        default,
-    )
+    validate_output(exec, &out)?;
+    <Input as sealed::MIterDispatch<B>>::scatter_dispatch(source, exec.policy(), SoA1(indices), out)
 }
 
 /// Scatters values whose `u32` stencil flag is non-zero into a newly allocated output.
-pub fn scatter_if<B, Input, Output>(
+pub fn scatter_where<B, Input, Output>(
     exec: &Executor<B>,
     source: Input,
     indices: DeviceSlice<'_, B, u32>,
-    len: usize,
-    default: Input::Item,
     stencil: DeviceSlice<'_, B, u32>,
-) -> Result<Output, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     B: Runtime,
     Input: MIter<B>,
-    Output: MVec<B, Item = Input::Item>,
+    Output: MIterMut<B, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_slice(exec, &indices)?;
     validate_slice(exec, &stencil)?;
-    <Input as sealed::MIterDispatch<B>>::scatter_if_dispatch(
+    validate_output(exec, &out)?;
+    <Input as sealed::MIterDispatch<B>>::scatter_where_dispatch(
         source,
         exec.policy(),
         SoA1(indices),
-        len,
-        default,
         SoA1(stencil),
+        out,
     )
 }
 
@@ -883,15 +882,43 @@ pub fn transform<B, Input, Output, Op>(
     exec: &Executor<B>,
     source: Input,
     op: Op,
-) -> Result<Output, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     B: Runtime,
     Input: MIter<B>,
-    Output: MVec<B>,
+    Output: MIterMut<B>,
     Op: op::UnaryOp<B, Input::Item, Output = Output::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::transform_dispatch(source, exec.policy(), op)
+    validate_output(exec, &out)?;
+    <Input as sealed::MIterDispatch<B>>::transform_dispatch(source, exec.policy(), op, out)
+}
+
+/// Applies a unary transform where the `u32` stencil flag is non-zero.
+pub fn transform_where<B, Input, Output, Op>(
+    exec: &Executor<B>,
+    source: Input,
+    op: Op,
+    stencil: DeviceSlice<'_, B, u32>,
+    out: Output,
+) -> Result<(), Error>
+where
+    B: Runtime,
+    Input: MIter<B>,
+    Output: MIterMut<B>,
+    Op: op::UnaryOp<B, Input::Item, Output = Output::Item>,
+{
+    validate_input(exec, &source)?;
+    validate_slice(exec, &stencil)?;
+    validate_output(exec, &out)?;
+    <Input as sealed::MIterDispatch<B>>::transform_where_dispatch(
+        source,
+        exec.policy(),
+        op,
+        SoA1(stencil),
+        out,
+    )
 }
 
 /// Removes consecutive duplicates under `pred`.

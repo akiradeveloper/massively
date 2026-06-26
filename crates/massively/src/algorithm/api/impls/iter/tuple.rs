@@ -109,23 +109,44 @@ macro_rules! impl_miter_soa {
                 )
             }
 
-            fn transform_dispatch<Op, Output, Y>(
+            fn transform_dispatch<Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 op: Op,
-            ) -> Result<Output, Error>
+                output: Output,
+            ) -> Result<(), Error>
             where
-                Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Y>,
-                Y: MItem<B>,
-                Output: MVec<B, Item = Y>,
+                Output: MIterMut<B>,
+                Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Output::Item>,
             {
                 let input = self.into_inner();
-                let inner = <Y as sealed::MItemDispatch<B>>::$transform(
+                let inner = <Output::Item as sealed::MItemDispatch<B>>::$transform(
                     policy,
                     $( input.$idx, )+
                     op,
                 )?;
-                Ok(array_from_inner::<B, Y, Output>(inner))
+                output.write_from_inner(policy, inner)
+            }
+
+            fn transform_where_dispatch<Op, Stencil, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                op: Op,
+                stencil: Stencil,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Stencil: MIter<B, Item = (u32,)>,
+                Output: MIterMut<B>,
+                Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Output::Item>,
+            {
+                let input = self.into_inner();
+                let inner = <Output::Item as sealed::MItemDispatch<B>>::$transform(
+                    policy,
+                    $( input.$idx, )+
+                    op,
+                )?;
+                output.write_where_from_inner(policy, inner, stencil)
             }
 
             fn reverse_dispatch<Output>(
@@ -323,19 +344,30 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 indices: Indices,
-            ) -> Result<Output, Error>
+                output: Output,
+            ) -> Result<(), Error>
             where
                 Indices: MIter<B, Item = (u32,)>,
-                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
             {
                 let indices = gather_index_inner::<B, Indices>(policy, &indices)?;
                 let input = self.into_inner();
-                let inner = crate::detail::gather(
-                    policy,
-                    impl_miter_view!(input; $( $idx ),+),
-                    indices,
-                )?;
-                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
+                $(
+                    let $tmp = <Output as sealed::MIterMutDispatch<B>>::column_mut_view_by_index_inner::<$ty>(
+                        &output,
+                        $idx,
+                    )?
+                    .ok_or_else(|| Error::Launch {
+                        message: "gather output must match input shape".to_string(),
+                    })?;
+                    crate::detail::api::device_expr_gather_into_with_policy(
+                        policy,
+                        &input.$idx,
+                        &indices,
+                        &$tmp,
+                    )?;
+                )+
+                Ok(())
             }
 
             fn reduce_dispatch<Op>(
@@ -407,7 +439,7 @@ macro_rules! impl_miter_soa {
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
 
-            fn copy_if_dispatch<Stencil, Output>(
+            fn copy_where_dispatch<Stencil, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 stencil: Stencil,
@@ -421,7 +453,7 @@ macro_rules! impl_miter_soa {
                         &stencil, policy, false,
                     )?;
                 let input = self.into_inner();
-                let inner = crate::detail::copy_if(
+                let inner = crate::detail::copy_where(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     stencil,
@@ -444,6 +476,29 @@ macro_rules! impl_miter_soa {
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<B, Pred>::new(),
+                )?;
+                Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
+            }
+
+            fn remove_where_dispatch<Stencil, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                stencil: Stencil,
+            ) -> Result<Output, Error>
+            where
+                Stencil: MIter<B, Item = (u32,)>,
+                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+            {
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, policy, true,
+                    )?;
+                let input = self.into_inner();
+                let inner = crate::detail::copy_where(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    stencil,
+                    KernelOp::<B, StencilFlag>::new(),
                 )?;
                 Ok(array_from_inner::<B, ($( $ty, )+), Output>(inner))
             }
@@ -541,7 +596,7 @@ macro_rules! impl_miter_soa {
                 crate::detail::is_partitioned(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Pred>::new())
             }
 
-            fn replace_if_dispatch<Stencil, Output>(
+            fn replace_where_dispatch<Stencil, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 replacement: <Self as MIter<B>>::Item,
@@ -556,7 +611,7 @@ macro_rules! impl_miter_soa {
                         &stencil, policy, false,
                     )?;
                 let input = self.into_inner();
-                let inner = crate::detail::replace_if(
+                let inner = crate::detail::replace_where(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     replacement,
@@ -695,17 +750,17 @@ macro_rules! impl_miter_soa {
                 crate::detail::is_sorted(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<B, Less>::new())
             }
 
-            fn gather_if_dispatch<Indices, Stencil, Output>(
+            fn gather_where_dispatch<Indices, Stencil, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 indices: Indices,
-                default: <Self as MIter<B>>::Item,
                 stencil: Stencil,
-            ) -> Result<Output, Error>
+                output: Output,
+            ) -> Result<(), Error>
             where
                 Indices: MIter<B, Item = (u32,)>,
                 Stencil: MIter<B, Item = (u32,)>,
-                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
             {
                 let indices = gather_index_inner::<B, Indices>(policy, &indices)?;
                 let stencil =
@@ -713,52 +768,67 @@ macro_rules! impl_miter_soa {
                         &stencil, policy, false,
                     )?;
                 let input = self.into_inner();
-                let inner = crate::detail::gather_if(
-                    policy,
-                    impl_miter_view!(input; $( $idx ),+),
-                    indices,
-                    stencil,
-                    default,
-                    KernelOp::<B, StencilFlag>::new(),
-                )?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                $(
+                    let $tmp = <Output as sealed::MIterMutDispatch<B>>::column_mut_view_by_index_inner::<$ty>(
+                        &output,
+                        $idx,
+                    )?
+                    .ok_or_else(|| Error::Launch {
+                        message: "gather_where output must match input shape".to_string(),
+                    })?;
+                    crate::detail::api::device_expr_gather_where_into_with_policy(
+                        policy,
+                        &input.$idx,
+                        &indices,
+                        &stencil,
+                        &$tmp,
+                        KernelOp::<B, StencilFlag>::new(),
+                    )?;
+                )+
+                Ok(())
             }
 
             fn scatter_dispatch<Indices, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 indices: Indices,
-                len: usize,
-                default: <Self as MIter<B>>::Item,
-            ) -> Result<Output, Error>
+                output: Output,
+            ) -> Result<(), Error>
             where
                 Indices: MIter<B, Item = (u32,)>,
-                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
             {
                 let indices = gather_index_inner::<B, Indices>(policy, &indices)?;
                 let input = self.into_inner();
-                let inner = crate::detail::scatter(
-                    policy,
-                    impl_miter_view!(input; $( $idx ),+),
-                    indices,
-                    len,
-                    default,
-                )?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                $(
+                    let $tmp = <Output as sealed::MIterMutDispatch<B>>::column_mut_view_by_index_inner::<$ty>(
+                        &output,
+                        $idx,
+                    )?
+                    .ok_or_else(|| Error::Launch {
+                        message: "scatter output must match input shape".to_string(),
+                    })?;
+                    crate::detail::api::device_expr_scatter_into_with_policy(
+                        policy,
+                        &input.$idx,
+                        &indices,
+                        &$tmp,
+                    )?;
+                )+
+                Ok(())
             }
 
-            fn scatter_if_dispatch<Indices, Stencil, Output>(
+            fn scatter_where_dispatch<Indices, Stencil, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 indices: Indices,
-                len: usize,
-                default: <Self as MIter<B>>::Item,
                 stencil: Stencil,
-            ) -> Result<Output, Error>
+                output: Output,
+            ) -> Result<(), Error>
             where
                 Indices: MIter<B, Item = (u32,)>,
                 Stencil: MIter<B, Item = (u32,)>,
-                Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+                Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
             {
                 let indices = gather_index_inner::<B, Indices>(policy, &indices)?;
                 let stencil =
@@ -766,16 +836,24 @@ macro_rules! impl_miter_soa {
                         &stencil, policy, false,
                     )?;
                 let input = self.into_inner();
-                let inner = crate::detail::scatter_if(
-                    policy,
-                    impl_miter_view!(input; $( $idx ),+),
-                    indices,
-                    len,
-                    default,
-                    stencil,
-                    KernelOp::<B, StencilFlag>::new(),
-                )?;
-                Ok(array_from_inner::<B, <Self as MIter<B>>::Item, Output>(inner))
+                $(
+                    let $tmp = <Output as sealed::MIterMutDispatch<B>>::column_mut_view_by_index_inner::<$ty>(
+                        &output,
+                        $idx,
+                    )?
+                    .ok_or_else(|| Error::Launch {
+                        message: "scatter_where output must match input shape".to_string(),
+                    })?;
+                    crate::detail::api::device_expr_scatter_where_into_with_policy(
+                        policy,
+                        &input.$idx,
+                        &indices,
+                        &stencil,
+                        &$tmp,
+                        KernelOp::<B, StencilFlag>::new(),
+                    )?;
+                )+
+                Ok(())
             }
 
             fn equal_dispatch<Right, Eq>(
@@ -1110,5 +1188,162 @@ macro_rules! impl_miter_soa {
     };
 }
 
+macro_rules! impl_miter_mut_soa {
+    ($name:ident; $( $ty:ident : $idx:tt ),+) => {
+        impl<'a, B, $( $ty ),+> MIterMut<B> for $name<$( DeviceSliceMut<'a, B, $ty> ),+>
+        where
+            B: Runtime,
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<
+                B,
+                Inner = ($( crate::detail::DeviceVec<B, $ty>, )+),
+            >,
+        {
+            type Item = ($( $ty, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnMutView<B, $ty>, )+);
+
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+
+            fn into_inner(self) -> Self::Inner {
+                ($(
+                    crate::detail::device::DeviceColumnMutView::from_slice(
+                        &self.$idx.source.inner,
+                        self.$idx.offset,
+                        self.$idx.len,
+                    ),
+                )+)
+            }
+
+            fn write_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                inner: <Self::Item as MItem<B>>::Inner,
+            ) -> Result<(), Error> {
+                let output = self.into_inner();
+                $(
+                    {
+                        let input =
+                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        crate::detail::api::device_expr_collect_into_with_policy(
+                            policy,
+                            &input,
+                            &output.$idx,
+                        )?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn write_where_from_inner<Stencil>(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                inner: <Self::Item as MItem<B>>::Inner,
+                stencil: Stencil,
+            ) -> Result<(), Error>
+            where
+                Stencil: MIter<B, Item = (u32,)>,
+            {
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, policy, false,
+                    )?;
+                let output = self.into_inner();
+                $(
+                    {
+                        let input =
+                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        crate::detail::api::device_expr_copy_where_into_with_policy(
+                            policy,
+                            &input,
+                            &stencil,
+                            &output.$idx,
+                            KernelOp::<B, StencilFlag>::new(),
+                        )?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn replace_where_inner<Stencil>(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                replacement: Self::Item,
+                stencil: Stencil,
+            ) -> Result<(), Error>
+            where
+                Stencil: MIter<B, Item = (u32,)>,
+            {
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, policy, false,
+                    )?;
+                let output = self.into_inner();
+                $(
+                    crate::detail::api::replace_where_into_with_policy(
+                        policy,
+                        replacement.$idx,
+                        &stencil,
+                        &output.$idx,
+                        KernelOp::<B, StencilFlag>::new(),
+                    )?;
+                )+
+                Ok(())
+            }
+        }
+
+        impl<'a, B, $( $ty ),+> sealed::MIterMutDispatch<B> for $name<$( DeviceSliceMut<'a, B, $ty> ),+>
+        where
+            B: Runtime,
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<
+                B,
+                Inner = ($( crate::detail::DeviceVec<B, $ty>, )+),
+            >,
+        {
+            fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
+                $(
+                    exec.ensure_policy_id(self.$idx.source.inner.policy_id())?;
+                )+
+                $(
+                    ensure_same_len(self.$idx.len(), self.0.len())?;
+                )+
+                Ok(())
+            }
+
+            fn column_mut_view_by_index_inner<U: 'static>(
+                &self,
+                index: usize,
+            ) -> Result<
+                Option<crate::detail::device::DeviceColumnMutView<B, U>>,
+                Error,
+            >
+            where
+                U: Scalar,
+            {
+                $(
+                    if index == $idx {
+                        let source = &*self.$idx.source as &dyn Any;
+                        let source = match source.downcast_ref::<DeviceVec<B, U>>() {
+                            Some(source) => source,
+                            None => return Ok(None),
+                        };
+                        return Ok(Some(crate::detail::device::DeviceColumnMutView::from_slice(
+                            &source.inner,
+                            self.$idx.offset,
+                            self.$idx.len,
+                        )));
+                    }
+                )+
+                Ok(None)
+            }
+
+        }
+    };
+}
+
 impl_miter_soa!(SoA2; A: 0: a, C: 1: c => transform_binary);
 impl_miter_soa!(SoA3; A: 0: a, C: 1: c, D: 2: d => transform_ternary);
+impl_miter_mut_soa!(SoA2; A: 0, C: 1);
+impl_miter_mut_soa!(SoA3; A: 0, C: 1, D: 2);

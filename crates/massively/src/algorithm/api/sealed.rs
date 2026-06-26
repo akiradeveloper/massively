@@ -1,4 +1,4 @@
-use super::{Error, Executor, MIter, MVec, op};
+use super::{Error, Executor, MIter, MIterMut, MVec, op};
 
 use cubecl::prelude::Runtime;
 
@@ -6,6 +6,50 @@ pub trait ToHostDispatch<B: Runtime> {
     type Output;
 
     fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error>;
+}
+
+pub trait MIterMutDispatch<B: Runtime>: Sized {
+    fn validate_executor(&self, _exec: &Executor<B>) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn column_mut_view_inner<T: 'static>(
+        &self,
+    ) -> Result<Option<crate::detail::device::DeviceColumnMutView<B, T>>, Error>
+    where
+        T: super::Scalar,
+    {
+        Ok(None)
+    }
+
+    fn column_mut_view_by_index_inner<T: 'static>(
+        &self,
+        index: usize,
+    ) -> Result<Option<crate::detail::device::DeviceColumnMutView<B, T>>, Error>
+    where
+        T: super::Scalar,
+    {
+        if index == 0 {
+            self.column_mut_view_inner::<T>()
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn replace_where_dispatch<Stencil>(
+        self,
+        _policy: &crate::detail::CubePolicy<B>,
+        _replacement: <Self as MIterMut<B>>::Item,
+        _stencil: Stencil,
+    ) -> Result<(), Error>
+    where
+        Self: MIterMut<B>,
+        Stencil: MIter<B, Item = (u32,)>,
+    {
+        Err(Error::Launch {
+            message: "replace_where is not supported for this output shape".to_string(),
+        })
+    }
 }
 
 pub trait MIterDispatch<B: Runtime>: Sized {
@@ -46,16 +90,29 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         }
     }
 
-    fn transform_dispatch<Op, Output, Y>(
+    fn transform_dispatch<Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<B>,
         op: Op,
-    ) -> Result<Output, Error>
+        output: Output,
+    ) -> Result<(), Error>
     where
         Self: MIter<B>,
-        Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Y>,
-        Y: super::MItem<B>,
-        Output: MVec<B, Item = Y>;
+        Output: MIterMut<B>,
+        Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Output::Item>;
+
+    fn transform_where_dispatch<Op, Stencil, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<B>,
+        op: Op,
+        stencil: Stencil,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<B>,
+        Stencil: MIter<B, Item = (u32,)>,
+        Output: MIterMut<B>,
+        Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Output::Item>;
 
     fn reverse_dispatch<Output>(
         self,
@@ -275,27 +332,28 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<B>,
         indices: Indices,
-    ) -> Result<Output, Error>
+        output: Output,
+    ) -> Result<(), Error>
     where
         Self: MIter<B>,
         Indices: MIter<B, Item = (u32,)>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>;
+        Output: MIterMut<B, Item = <Self as MIter<B>>::Item>;
 
-    fn gather_if_dispatch<Indices, Stencil, Output>(
+    fn gather_where_dispatch<Indices, Stencil, Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
         _indices: Indices,
-        _default: <Self as MIter<B>>::Item,
         _stencil: Stencil,
-    ) -> Result<Output, Error>
+        _output: Output,
+    ) -> Result<(), Error>
     where
         Self: MIter<B>,
         Indices: MIter<B, Item = (u32,)>,
         Stencil: MIter<B, Item = (u32,)>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
-            message: "gather_if is not supported for this iterator shape".to_string(),
+            message: "gather_where is not supported for this iterator shape".to_string(),
         })
     }
 
@@ -303,35 +361,33 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         self,
         _policy: &crate::detail::CubePolicy<B>,
         _indices: Indices,
-        _len: usize,
-        _default: <Self as MIter<B>>::Item,
-    ) -> Result<Output, Error>
+        _output: Output,
+    ) -> Result<(), Error>
     where
         Self: MIter<B>,
         Indices: MIter<B, Item = (u32,)>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
             message: "scatter is not supported for this iterator shape".to_string(),
         })
     }
 
-    fn scatter_if_dispatch<Indices, Stencil, Output>(
+    fn scatter_where_dispatch<Indices, Stencil, Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
         _indices: Indices,
-        _len: usize,
-        _default: <Self as MIter<B>>::Item,
         _stencil: Stencil,
-    ) -> Result<Output, Error>
+        _output: Output,
+    ) -> Result<(), Error>
     where
         Self: MIter<B>,
         Indices: MIter<B, Item = (u32,)>,
         Stencil: MIter<B, Item = (u32,)>,
-        Output: MVec<B, Item = <Self as MIter<B>>::Item>,
+        Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
-            message: "scatter_if is not supported for this iterator shape".to_string(),
+            message: "scatter_where is not supported for this iterator shape".to_string(),
         })
     }
 
@@ -376,7 +432,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
-    fn copy_if_dispatch<Stencil, Output>(
+    fn copy_where_dispatch<Stencil, Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
         _stencil: Stencil,
@@ -394,6 +450,16 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     where
         Self: MIter<B>,
         Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
+        Output: MVec<B, Item = <Self as MIter<B>>::Item>;
+
+    fn remove_where_dispatch<Stencil, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<B>,
+        _stencil: Stencil,
+    ) -> Result<Output, Error>
+    where
+        Self: MIter<B>,
+        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn count_if_dispatch<Pred>(
@@ -460,7 +526,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Self: MIter<B>,
         Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
-    fn replace_if_dispatch<Stencil, Output>(
+    fn replace_where_dispatch<Stencil, Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
         replacement: <Self as MIter<B>>::Item,

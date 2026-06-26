@@ -7,8 +7,8 @@ mod common;
 mod adjacent_difference;
 #[path = "api/adjacent_find.rs"]
 mod adjacent_find;
-#[path = "api/copy_if.rs"]
-mod copy_if;
+#[path = "api/copy_where.rs"]
+mod copy_where;
 #[path = "api/count_if.rs"]
 mod count_if;
 #[path = "api/device_slice.rs"]
@@ -27,8 +27,8 @@ mod find_first_of;
 mod find_if;
 #[path = "api/gather.rs"]
 mod gather;
-#[path = "api/gather_if.rs"]
-mod gather_if;
+#[path = "api/gather_where.rs"]
+mod gather_where;
 #[path = "api/inclusive_scan.rs"]
 mod inclusive_scan;
 #[path = "api/inclusive_scan_by_key.rs"]
@@ -61,16 +61,16 @@ mod random;
 mod reduce;
 #[path = "api/reduce_by_key.rs"]
 mod reduce_by_key;
-#[path = "api/remove_if.rs"]
-mod remove_if;
-#[path = "api/replace_if.rs"]
-mod replace_if;
+#[path = "api/remove_where.rs"]
+mod remove_where;
+#[path = "api/replace_where.rs"]
+mod replace_where;
 #[path = "api/reverse.rs"]
 mod reverse;
 #[path = "api/scatter.rs"]
 mod scatter;
-#[path = "api/scatter_if.rs"]
-mod scatter_if;
+#[path = "api/scatter_where.rs"]
+mod scatter_where;
 #[path = "api/set_difference.rs"]
 mod set_difference;
 #[path = "api/set_intersection.rs"]

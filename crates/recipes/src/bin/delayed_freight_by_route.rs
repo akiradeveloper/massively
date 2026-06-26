@@ -9,13 +9,13 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Compact delayed rows with `copy_if`.
+//! 1. Compact delayed rows with `copy_where`.
 //! 2. Sort delayed weights by route id with `sort_by_key`.
 //! 3. Sum weights per route with `reduce_by_key`.
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, SoA2, copy_if, reduce_by_key, sort_by_key};
+use massively::{DeviceVec, Executor, SoA1, SoA2, copy_where, reduce_by_key, sort_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     route_id: DeviceVec<B, u32>,
@@ -31,7 +31,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (delayed_route, delayed_weight) = copy_if(
+    let (delayed_route, delayed_weight) = copy_where(
         exec,
         SoA2(route_id.slice(..), weight.slice(..)),
         delayed.slice(..),

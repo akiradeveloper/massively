@@ -17,7 +17,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, SoA1, SoA2, copy_if, reverse, sort_by_key, transform};
+use massively::{DeviceVec, Executor, SoA1, SoA2, copy_where, reverse, sort_by_key, transform};
 
 struct InventoryUrgency;
 
@@ -59,7 +59,7 @@ where
         SoA2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
     )?;
-    let (sku, urgency) = copy_if(
+    let (sku, urgency) = copy_where(
         exec,
         SoA2(sku.slice(..), urgency.slice(..)),
         urgency.slice(..),

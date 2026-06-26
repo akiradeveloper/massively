@@ -3,16 +3,16 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::{
     DeviceVec, Executor as ApiExecutor, adjacent_difference as api_adjacent_difference,
-    adjacent_find, all_of as api_all_of, any_of as api_any_of, copy_if as api_copy_if,
+    adjacent_find, all_of as api_all_of, any_of as api_any_of, copy_where as api_copy_where,
     count_if as api_count_if, equal, equal_range, exclusive_scan as api_exclusive_scan,
-    exclusive_scan_by_key, find_first_of, find_if as api_find_if, gather as api_gather, gather_if,
-    inclusive_scan as api_inclusive_scan, inclusive_scan_by_key, inner_product,
+    exclusive_scan_by_key, find_first_of, find_if as api_find_if, gather as api_gather,
+    gather_where, inclusive_scan as api_inclusive_scan, inclusive_scan_by_key, inner_product,
     is_partitioned as api_is_partitioned, is_sorted, is_sorted_until, lexicographical_compare,
     lower_bound, max_element, merge, merge_by_key, min_element, minmax_element, mismatch,
     none_of as api_none_of, partition as api_partition, reduce as api_reduce, reduce_by_key,
-    remove_if as api_remove_if, replace_if as api_replace_if, reverse as api_reverse, scatter,
-    scatter_if, set_difference, set_intersection, set_union, sort as api_sort, sort_by_key,
-    stable_sort, stable_sort_by_key, transform as api_transform, unique as api_unique,
+    remove_where as api_remove_where, replace_where as api_replace_where, reverse as api_reverse,
+    scatter, scatter_where, set_difference, set_intersection, set_union, sort as api_sort,
+    sort_by_key, stable_sort, stable_sort_by_key, transform as api_transform, unique as api_unique,
     unique_by_key, upper_bound,
 };
 use proptest::prelude::*;
@@ -151,7 +151,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let (output_g,) = api_transform(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TransformMap).unwrap();
+        let mut output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        api_transform(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TransformMap, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), transform_map(&input));
     }
 
@@ -191,23 +192,25 @@ proptest! {
     }
 
     #[test]
-    fn copy_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
+    fn copy_where_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let exec = api_exec();
         let stencil = stencil_flags(&input);
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
-        let (output_g,) = api_copy_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil))).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::copy_if(&input, &stencil));
+        let (output_g,) = api_copy_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::copy_where(&input, &stencil));
     }
 
     #[test]
-    fn remove_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
+    fn remove_where_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let exec = api_exec();
+        let stencil = stencil_flags(&input);
         let input_g = padded_device(&exec, &input);
-        let (output_g,) = api_remove_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::remove_if(&input));
+        let stencil_g = padded_device(&exec, &stencil);
+        let (output_g,) = api_remove_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::remove_where(&input, &stencil));
     }
 
     #[test]
@@ -270,14 +273,14 @@ proptest! {
     }
 
     #[test]
-    fn replace_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), replacement in any::<u32>()) {
+    fn replace_where_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), replacement in any::<u32>()) {
         let _guard = gpu_lock();
         let exec = api_exec();
         let stencil = stencil_flags(&input);
-        let input_g = padded_device(&exec, &input);
+        let mut output_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
-        let (output_g,) = api_replace_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), (replacement,), stencil_g.slice(slice_range(&stencil))).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::replace_if(&input, replacement, &stencil));
+        api_replace_where(&exec, (replacement,), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(slice_range(&input)))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(slice_range(&input))).unwrap(), oracle::replace_where(&input, replacement, &stencil));
     }
 
     #[test]
@@ -305,12 +308,13 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let indices_g = padded_device(&exec, &indices);
-        let (output_g,) = api_gather(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices))).unwrap();
+        let mut output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
+        api_gather(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::gather(&input, &indices));
     }
 
     #[test]
-    fn gather_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
+    fn gather_where_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let indices = reverse_indices(input.len());
         let stencil = oracle::gather(&stencil_flags(&input), &indices);
@@ -320,12 +324,12 @@ proptest! {
         let stencil_g = padded_device(&exec, &stencil);
         prop_assert_eq!(
             {
-                let (output_g,) =
-                    gather_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), (0_u32,), stencil_g.slice(slice_range(&stencil)))
-                        .unwrap();
+                let mut output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
+                gather_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..)))
+                    .unwrap();
                 exec.to_host(&output_g).unwrap()
             },
-            oracle::gather_if(&input, &indices, &stencil)
+            oracle::gather_where(&input, &indices, &stencil)
         );
     }
 
@@ -337,12 +341,13 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let indices_g = padded_device(&exec, &indices);
-        let (output_g,) = scatter(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), input.len(), (default,)).unwrap();
+        let mut output_g = exec.to_device(&vec![default; input.len()]).unwrap();
+        scatter(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::scatter(&input, &indices, input.len(), default));
     }
 
     #[test]
-    fn scatter_if_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
+    fn scatter_where_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let indices = reverse_indices(input.len());
         let default = 0xdead_beef;
@@ -353,10 +358,11 @@ proptest! {
         let stencil_g = padded_device(&exec, &stencil);
         prop_assert_eq!(
             {
-                let (output_g,) = scatter_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), input.len(), (default,), stencil_g.slice(slice_range(&stencil))).unwrap();
+                let mut output_g = exec.to_device(&vec![default; input.len()]).unwrap();
+                scatter_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
                 exec.to_host(&output_g).unwrap()
             },
-            oracle::scatter_if(&input, &indices, input.len(), default, &stencil)
+            oracle::scatter_where(&input, &indices, input.len(), default, &stencil)
         );
     }
 

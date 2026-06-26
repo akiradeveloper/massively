@@ -135,21 +135,6 @@ where
             len,
         }
     }
-
-    pub(crate) fn materialize_with(&self, exec: &Executor<B>) -> Result<DeviceVec<B, T>, Error>
-    where
-        T: Scalar,
-    {
-        exec.ensure_policy_id(self.source.inner.policy_id())?;
-        Ok(DeviceVec::from_inner(
-            crate::detail::primitives::range::copy_slice_with_policy(
-                exec.policy(),
-                &self.source.inner,
-                self.offset,
-                self.len,
-            )?,
-        ))
-    }
 }
 
 impl<'a, B, T> sealed::ToHostDispatch<B> for DeviceSlice<'a, B, T>
@@ -160,9 +145,15 @@ where
     type Output = Vec<T>;
 
     fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error> {
-        self.materialize_with(exec)?
-            .inner
-            .read_to_host(exec.policy())
+        exec.ensure_policy_id(self.source.inner.policy_id())?;
+        let mut values = self.source.inner.read_to_host(exec.policy())?;
+        let end = self
+            .offset
+            .checked_add(self.len)
+            .ok_or(Error::LengthTooLarge { len: self.len })?;
+        values.drain(end..);
+        values.drain(..self.offset);
+        Ok(values)
     }
 }
 

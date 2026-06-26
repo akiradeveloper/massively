@@ -11,7 +11,7 @@
 //! - [`algorithm`] provides Structure-of-Arrays inputs, massively item/vector
 //!   traits, CubeCL-backed operation traits, and parallel algorithms such as
 //!   [`transform`], [`reduce`], and [`sort`].
-//! - [`random`] generates GPU-side pseudo-random columns.
+//! - [`util`] provides helper facilities such as GPU-side random columns.
 //!
 //! User-defined operations are written as CubeCL cube traits. Low-level CubeCL
 //! launch and storage details remain internal implementation details.
@@ -19,19 +19,19 @@
 pub mod algorithm;
 mod detail;
 mod error;
-pub mod random;
 pub mod runtime;
+pub mod util;
 
 pub use algorithm::op;
 pub use algorithm::{
-    MItem, MIter, MVec, SoA1, SoA2, SoA3, adjacent_difference, adjacent_find, all_of, any_of,
-    copy_if, count_if, equal, equal_range, exclusive_scan, exclusive_scan_by_key, find_first_of,
-    find_if, gather, gather_if, inclusive_scan, inclusive_scan_by_key, inner_product,
-    is_partitioned, is_sorted, is_sorted_until, lexicographical_compare, lower_bound, max_element,
-    merge, merge_by_key, min_element, minmax_element, mismatch, none_of, partition, reduce,
-    reduce_by_key, remove_if, replace_if, reverse, scatter, scatter_if, set_difference,
-    set_intersection, set_union, sort, sort_by_key, stable_sort, stable_sort_by_key, transform,
-    unique, unique_by_key, upper_bound,
+    MItem, MIter, MIterMut, MVec, SoA1, SoA2, SoA3, adjacent_difference, adjacent_find, all_of,
+    any_of, copy_where, count_if, equal, equal_range, exclusive_scan, exclusive_scan_by_key,
+    find_first_of, find_if, gather, gather_where, inclusive_scan, inclusive_scan_by_key,
+    inner_product, is_partitioned, is_sorted, is_sorted_until, lexicographical_compare,
+    lower_bound, max_element, merge, merge_by_key, min_element, minmax_element, mismatch, none_of,
+    partition, reduce, reduce_by_key, remove_where, replace_where, reverse, scatter, scatter_where,
+    set_difference, set_intersection, set_union, sort, sort_by_key, stable_sort,
+    stable_sort_by_key, transform, transform_where, unique, unique_by_key, upper_bound,
 };
 pub use error::Error;
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
@@ -42,7 +42,7 @@ pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIter, MVec, SoA1, SoA2, SoA3,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIter, MIterMut, MVec, SoA1, SoA2, SoA3,
     };
 }
 

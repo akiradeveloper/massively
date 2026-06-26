@@ -40,6 +40,26 @@ pub(crate) fn device_collect_expr_block_kernel<T: CubePrimitive, Expr: DeviceGpu
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn device_collect_expr_into_block_kernel<T: CubePrimitive, Expr: DeviceGpuExpr<T>>(
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        output[output_offset[0] as usize + global] =
+            Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn device_collect_expr_reverse_block_kernel<T: CubePrimitive, Expr: DeviceGpuExpr<T>>(
     output: &mut [T],
     slot0: &[T],
@@ -1826,34 +1846,6 @@ define_tuple_lexicographical_device_expr_kernels!(
 );
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn copy_if_expr_flags_kernel<
-    T: CubePrimitive,
-    Expr: GpuExpr<T>,
-    Pred: PredicateOp<T>,
->(
-    input: &[T],
-    indices: &[u32],
-    rhs: &[T],
-    rhs_indices: &[u32],
-    len: &[u32],
-    invert: &[u32],
-    flags: &mut [u32],
-    values: &mut [T],
-) {
-    let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let value = Expr::eval(input, indices, rhs, rhs_indices, unit);
-        values[unit] = value;
-        let selected = Pred::apply(value);
-        if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
-            flags[unit] = 1u32;
-        } else {
-            flags[unit] = 0u32;
-        }
-    }
-}
-
-#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn copy_if_expr_flag_only_kernel<
     T: CubePrimitive,
     Expr: GpuExpr<T>,
@@ -2029,6 +2021,45 @@ pub(crate) fn gather_device_expr_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn gather_device_expr_into_kernel<
+    T: CubePrimitive,
+    ValueExpr: GpuExpr<T>,
+    IndexExpr: GpuExpr<u32>,
+>(
+    value_input: &[T],
+    value_indices: &[u32],
+    value_rhs: &[T],
+    value_rhs_indices: &[u32],
+    index_input: &[u32],
+    index_indices: &[u32],
+    index_rhs: &[u32],
+    index_rhs_indices: &[u32],
+    len: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let index = IndexExpr::eval(
+            index_input,
+            index_indices,
+            index_rhs,
+            index_rhs_indices,
+            global,
+        );
+        output[output_offset[0] as usize + global] = ValueExpr::eval(
+            value_input,
+            value_indices,
+            value_rhs,
+            value_rhs_indices,
+            index as usize,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn scatter_expr_kernel<
     T: CubePrimitive,
     ValueExpr: GpuExpr<T>,
@@ -2064,6 +2095,46 @@ pub(crate) fn scatter_expr_kernel<
             global,
         );
         output[index as usize] = value;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn scatter_expr_into_kernel<
+    T: CubePrimitive,
+    ValueExpr: GpuExpr<T>,
+    IndexExpr: GpuExpr<u32>,
+>(
+    value_input: &[T],
+    value_indices: &[u32],
+    value_rhs: &[T],
+    value_rhs_indices: &[u32],
+    index_input: &[u32],
+    index_indices: &[u32],
+    index_rhs: &[u32],
+    index_rhs_indices: &[u32],
+    len: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let value = ValueExpr::eval(
+            value_input,
+            value_indices,
+            value_rhs,
+            value_rhs_indices,
+            global,
+        );
+        let index = IndexExpr::eval(
+            index_input,
+            index_indices,
+            index_rhs,
+            index_rhs_indices,
+            global,
+        );
+        output[output_offset[0] as usize + index as usize] = value;
     }
 }
 

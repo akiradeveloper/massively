@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.13.0"
+version = "0.14.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -69,8 +69,8 @@ name = "any-of"
 path = "examples/algorithm/any_of.rs"
 
 [[example]]
-name = "copy-if"
-path = "examples/algorithm/copy_if.rs"
+name = "copy-where"
+path = "examples/algorithm/copy_where.rs"
 
 [[example]]
 name = "count-if"
@@ -105,8 +105,8 @@ name = "gather"
 path = "examples/algorithm/gather.rs"
 
 [[example]]
-name = "gather-if"
-path = "examples/algorithm/gather_if.rs"
+name = "gather-where"
+path = "examples/algorithm/gather_where.rs"
 
 [[example]]
 name = "inclusive-scan"
@@ -181,12 +181,12 @@ name = "reduce-by-key"
 path = "examples/algorithm/reduce_by_key.rs"
 
 [[example]]
-name = "remove-if"
-path = "examples/algorithm/remove_if.rs"
+name = "remove-where"
+path = "examples/algorithm/remove_where.rs"
 
 [[example]]
-name = "replace-if"
-path = "examples/algorithm/replace_if.rs"
+name = "replace-where"
+path = "examples/algorithm/replace_where.rs"
 
 [[example]]
 name = "reverse"
@@ -197,8 +197,8 @@ name = "scatter"
 path = "examples/algorithm/scatter.rs"
 
 [[example]]
-name = "scatter-if"
-path = "examples/algorithm/scatter_if.rs"
+name = "scatter-where"
+path = "examples/algorithm/scatter_where.rs"
 
 [[example]]
 name = "set-difference"
@@ -253,8 +253,8 @@ name = "runtime-filled"
 path = "examples/runtime/filled.rs"
 
 [[example]]
-name = "runtime-random"
-path = "examples/runtime/random.rs"
+name = "util-random"
+path = "examples/util/random.rs"
 
 [[example]]
 name = "runtime-tabulate"

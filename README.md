@@ -24,8 +24,8 @@ The library is organized around three public layers.
 - `algorithm` provides Structure-of-Arrays inputs, massively item/vector
   traits, CubeCL-backed operation traits, and algorithms such as `transform`,
   `reduce`, `scan`, `sort`, and `gather`.
-- `random` generates GPU-side pseudo-random columns for uniform integer and
-  approximate normal floating-point distributions.
+- `util::random` generates GPU-side pseudo-random columns for uniform integer,
+  uniform floating-point, and approximate normal floating-point distributions.
 
 Host/device movement is explicit. Device storage does not own the execution
 context; algorithms take an `Executor` so launches, transfers, and ownership
@@ -72,13 +72,14 @@ and random generation for that runtime.
 API examples live under `crates/massively/examples`.
 
 - `examples/runtime`: allocation, transfer, initialization, and device copy
+- `examples/util`: utility examples such as random generation
 - `examples/algorithm`: one small runnable example per algorithm API
 
 Run one with Cargo:
 
 ```sh
 cargo run -p massively --example transform
-cargo run -p massively --example runtime-random
+cargo run -p massively --example util-random
 cargo run -p massively --example runtime-tabulate
 ```
 

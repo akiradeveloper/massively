@@ -18,7 +18,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{Executor, SoA1, SoA2, random, reduce, transform};
+use massively::{Executor, SoA1, SoA2, reduce, transform, util::random};
 
 const SCALE: u32 = 1_000_000;
 
@@ -46,8 +46,8 @@ fn solve<B>(exec: &Executor<B>, samples: usize) -> common::Result<f32>
 where
     B: cubecl::prelude::Runtime,
 {
-    let x = random::uniform_dist_u32(exec, 0, SCALE, samples, 0x1234_5678)?;
-    let y = random::uniform_dist_u32(exec, 0, SCALE, samples, 0x8765_4321)?;
+    let x = random::uniform_distribution_u32(exec, samples, 0, SCALE, 0x1234_5678)?;
+    let y = random::uniform_distribution_u32(exec, samples, 0, SCALE, 0x8765_4321)?;
     let (inside,) = transform(exec, SoA2(x.slice(..), y.slice(..)), InsideQuarterCircle)?;
     let (hits,) = reduce(exec, SoA1(inside.slice(..)), (0_u32,), common::SumU32)?;
     Ok(4.0 * hits as f32 / samples as f32)

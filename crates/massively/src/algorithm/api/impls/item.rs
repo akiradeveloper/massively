@@ -351,6 +351,162 @@ impl_wide_mitem_tuple!(
     L: l
 );
 
+macro_rules! impl_miter_mut_tuple {
+    ($( $ty:ident : $var:ident : $idx:tt ),+) => {
+        impl<'a, B, $( $ty ),+> MIterMut<B> for ($( DeviceSliceMut<'a, B, $ty>, )+)
+        where
+            B: Runtime,
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<B, Inner = ($( crate::detail::DeviceVec<B, $ty>, )+)>,
+        {
+            type Item = ($( $ty, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnMutView<B, $ty>, )+);
+
+            fn into_inner(self) -> Self::Inner {
+                ($(
+                    crate::detail::device::DeviceColumnMutView::from_slice(
+                        &self.$idx.source.inner,
+                        self.$idx.offset,
+                        self.$idx.len,
+                    ),
+                )+)
+            }
+
+            fn write_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                inner: <Self::Item as MItem<B>>::Inner,
+            ) -> Result<(), Error> {
+                let output = self.into_inner();
+                $(
+                    {
+                        let input =
+                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        crate::detail::api::device_expr_collect_into_with_policy(
+                            policy,
+                            &input,
+                            &output.$idx,
+                        )?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn write_where_from_inner<Stencil>(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                inner: <Self::Item as MItem<B>>::Inner,
+                stencil: Stencil,
+            ) -> Result<(), Error>
+            where
+                Stencil: MIter<B, Item = (u32,)>,
+            {
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, policy, false,
+                    )?;
+                let output = self.into_inner();
+                $(
+                    {
+                        let input =
+                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        crate::detail::api::device_expr_copy_where_into_with_policy(
+                            policy,
+                            &input,
+                            &stencil,
+                            &output.$idx,
+                            KernelOp::<B, StencilFlag>::new(),
+                        )?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn replace_where_inner<Stencil>(
+                self,
+                policy: &crate::detail::CubePolicy<B>,
+                replacement: Self::Item,
+                stencil: Stencil,
+            ) -> Result<(), Error>
+            where
+                Stencil: MIter<B, Item = (u32,)>,
+            {
+                let stencil =
+                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
+                        &stencil, policy, false,
+                    )?;
+                let output = self.into_inner();
+                $(
+                    crate::detail::api::replace_where_into_with_policy(
+                        policy,
+                        replacement.$idx,
+                        &stencil,
+                        &output.$idx,
+                        KernelOp::<B, StencilFlag>::new(),
+                    )?;
+                )+
+                Ok(())
+            }
+
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+        }
+
+        impl<'a, B, $( $ty ),+> sealed::MIterMutDispatch<B> for ($( DeviceSliceMut<'a, B, $ty>, )+)
+        where
+            B: Runtime,
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<B, Inner = ($( crate::detail::DeviceVec<B, $ty>, )+)>,
+        {
+            fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
+                $(
+                    exec.ensure_policy_id(self.$idx.source.inner.policy_id())?;
+                    ensure_same_len(self.$idx.len(), self.0.len())?;
+                )+
+                Ok(())
+            }
+
+            fn column_mut_view_by_index_inner<U: 'static>(
+                &self,
+                index: usize,
+            ) -> Result<Option<crate::detail::device::DeviceColumnMutView<B, U>>, Error>
+            where
+                U: Scalar,
+            {
+                $(
+                    if index == $idx {
+                        let source = &*self.$idx.source as &dyn Any;
+                        let source = match source.downcast_ref::<DeviceVec<B, U>>() {
+                            Some(source) => source,
+                            None => return Ok(None),
+                        };
+                        return Ok(Some(crate::detail::device::DeviceColumnMutView::from_slice(
+                            &source.inner,
+                            self.$idx.offset,
+                            self.$idx.len,
+                        )));
+                    }
+                )+
+                Ok(None)
+            }
+        }
+    };
+}
+
+impl_miter_mut_tuple!(A: a: 0);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10);
+impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10, L: l: 11);
+
 impl<B, T> MVec<B> for SoA1<DeviceVec<B, T>>
 where
     B: Runtime,

@@ -47,6 +47,78 @@ pub(crate) fn gather_if_flags_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn gather_if_flags_into_kernel<
+    T: CubePrimitive,
+    InputExpr: crate::expr::DeviceGpuExpr<T>,
+    IndexExpr: crate::expr::DeviceGpuExpr<u32>,
+>(
+    input_slot0: &[T],
+    input_slot1: &[T],
+    input_slot2: &[T],
+    input_slot3: &[T],
+    input_slot_offsets: &[u32],
+    index_slot0: &[u32],
+    index_slot1: &[u32],
+    index_slot2: &[u32],
+    index_slot3: &[u32],
+    index_slot_offsets: &[u32],
+    flags: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        let index = IndexExpr::eval(
+            index_slot0,
+            index_slot1,
+            index_slot2,
+            index_slot3,
+            index_slot_offsets,
+            global,
+        ) as usize;
+        output[output_offset[0] as usize + global] = InputExpr::eval(
+            input_slot0,
+            input_slot1,
+            input_slot2,
+            input_slot3,
+            input_slot_offsets,
+            index,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn copy_if_flags_into_kernel<
+    T: CubePrimitive,
+    InputExpr: crate::expr::DeviceGpuExpr<T>,
+>(
+    input_slot0: &[T],
+    input_slot1: &[T],
+    input_slot2: &[T],
+    input_slot3: &[T],
+    input_slot_offsets: &[u32],
+    flags: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        output[output_offset[0] as usize + global] = InputExpr::eval(
+            input_slot0,
+            input_slot1,
+            input_slot2,
+            input_slot3,
+            input_slot_offsets,
+            global,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn scatter_if_flags_kernel<
     T: CubePrimitive,
     ValueExpr: crate::expr::DeviceGpuExpr<T>,
@@ -78,6 +150,49 @@ pub(crate) fn scatter_if_flags_kernel<
             global,
         ) as usize;
         output[index] = ValueExpr::eval(
+            value_slot0,
+            value_slot1,
+            value_slot2,
+            value_slot3,
+            value_slot_offsets,
+            global,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn scatter_if_flags_into_kernel<
+    T: CubePrimitive,
+    ValueExpr: crate::expr::DeviceGpuExpr<T>,
+    IndexExpr: crate::expr::DeviceGpuExpr<u32>,
+>(
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_slot_offsets: &[u32],
+    index_slot0: &[u32],
+    index_slot1: &[u32],
+    index_slot2: &[u32],
+    index_slot3: &[u32],
+    index_slot_offsets: &[u32],
+    flags: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        let index = IndexExpr::eval(
+            index_slot0,
+            index_slot1,
+            index_slot2,
+            index_slot3,
+            index_slot_offsets,
+            global,
+        ) as usize;
+        output[output_offset[0] as usize + index] = ValueExpr::eval(
             value_slot0,
             value_slot1,
             value_slot2,
@@ -756,6 +871,21 @@ pub(crate) fn replace_device_expr_with_flags_kernel<T: CubePrimitive, Expr: Devi
         } else {
             output[global] = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
         }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn replace_with_flags_into_kernel<T: CubePrimitive>(
+    replacement: &[T],
+    flags: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        output[output_offset[0] as usize + global] = replacement[0];
     }
 }
 

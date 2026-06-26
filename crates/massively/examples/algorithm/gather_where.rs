@@ -1,23 +1,23 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
-use massively::{Executor, scatter_if};
+use massively::{Executor, gather_where};
 
 fn main() -> common::Result {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let values = exec.to_device(&[10.0_f32, -20.0, 30.0])?;
     let indices = exec.to_device(&[2_u32, 0, 1])?;
-    let stencil = exec.to_device(&[1_u32, 0, 1])?;
+    let stencil = exec.to_device(&[1_u32, 1, 0])?;
 
-    let (output,) = scatter_if(
+    let mut output = exec.to_device(&[0.0_f32; 3])?;
+    gather_where(
         &exec,
         massively::SoA1(values.slice(..)),
         indices.slice(..),
-        3,
-        (0.0_f32,),
         stencil.slice(..),
+        massively::SoA1(output.slice_mut(..)),
     )?;
 
-    assert_eq!(exec.to_host(&output)?, vec![0.0, 30.0, 10.0]);
+    assert_eq!(exec.to_host(&output)?, vec![30.0, 10.0, 0.0]);
     Ok(())
 }

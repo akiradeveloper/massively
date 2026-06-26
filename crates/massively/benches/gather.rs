@@ -3,12 +3,19 @@ mod common;
 
 use common::{Runtime, SIZES, dense_f32, reverse_indices, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use massively::{DeviceVec, Executor, gather};
+use massively::{Executor, gather};
 
 fn check_gather(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[10.0_f32, 20.0, 30.0, 40.0]).unwrap();
     let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let (output,) = gather(&exec, massively::SoA1(values.slice(..)), indices.slice(..)).unwrap();
+    let mut output = exec.to_device(&[0.0_f32; 4]).unwrap();
+    gather(
+        exec,
+        massively::SoA1(values.slice(..)),
+        indices.slice(..),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
 }
 
@@ -21,17 +28,19 @@ fn bench_gather(c: &mut Criterion) {
         for &len in SIZES {
             let values = exec.to_device(&dense_f32(len)).unwrap();
             let indices = exec.to_device(&reverse_indices(len)).unwrap();
+            let mut output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             sync(&exec);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<WgpuRuntime, f32>,) = gather(
+                    gather(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
+                        massively::SoA1(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);
-                    black_box(output)
+                    black_box(output.len())
                 })
             });
         }
