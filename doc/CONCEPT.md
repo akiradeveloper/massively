@@ -65,8 +65,8 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - exclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, zero: a, sum: a->a->a) -> []a
 - find_first_of(xs: &[]a, needles: &[]a, eq: a->a->bool) -> int?
 - find_if(xs: &[]a, p: a->bool) -> int?
-- gather(xs: &[]a, indices: &[u32]) -> []a
-- gather_where(xs: &[]a, indices: &[u32], default: a, stencil: &[u32]) -> []a
+- gather(xs: &[]a, indices: &[u32], out: &mut[]a)
+- gather_where(xs: &[]a, indices: &[u32], stencil: &[u32], out: &mut[]a)
 - inclusive_scan(xs: &[]a, op: a->a->a) -> []a
 - inclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, sum: a->a->a) -> []a
 - inner_product(xs: &[]a, ys: &[]b, zipper: a->b->c, zero: c, sum: c->c->c) -> c
@@ -86,10 +86,10 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - reduce(xs: &[]a, zero: a, sum: a->a->a) -> a
 - reduce_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, zero: a, sum: a->a->a) -> ([]k, []a)
 - remove_where(xs: &[]a, stencil: &[u32]) -> []a
-- replace_where(xs: &[]a, v: a, stencil: &[u32]) -> []a
+- replace_where(v: a, stencil: &[u32], out: &mut[]a)
 - reverse(xs: &[]a) -> []a
-- scatter(xs: &[]a, indices: &[u32], len: usize, default: a) -> []a
-- scatter_where(xs: &[]a, indices: &[u32], len: usize, default: a, stencil: &[u32]) -> []a
+- scatter(xs: &[]a, indices: &[u32], out: &mut[]a)
+- scatter_where(xs: &[]a, indices: &[u32], stencil: &[u32], out: &mut[]a)
 - set_difference(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
 - set_intersection(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
 - set_union(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
@@ -97,7 +97,8 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - sort_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
 - stable_sort(xs: &[]a, cmp: a->a->bool) -> []a
 - stable_sort_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
-- transform(xs: &[]a, op: a->b) -> []b
+- transform(xs: &[]a, op: a->b, out: &mut[]b)
+- transform_where(xs: &[]a, op: a->b, stencil: &[u32], out: &mut[]b)
 - unique(xs: &[]a, eq: a->a->bool) -> []a
 - unique_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
 - upper_bound(xs: &[]a, v: a, cmp: a->a->bool) -> int

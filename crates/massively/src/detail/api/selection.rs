@@ -133,11 +133,11 @@ pub trait SelectInput<Pred> {
 pub trait OwnedSelectionInput {}
 
 #[doc(hidden)]
-pub trait CopyIfInput<Stencil, Pred> {
+pub trait CopyWhereInput<Stencil, Pred> {
     type Runtime: Runtime;
     type Output;
 
-    fn copy_if_input(
+    fn copy_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
@@ -145,7 +145,7 @@ pub trait CopyIfInput<Stencil, Pred> {
     ) -> Result<Self::Output, Error>;
 }
 
-impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for SoAView1<Source>
+impl<Source, Stencil, Pred> CopyWhereInput<Stencil, Pred> for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -156,7 +156,7 @@ where
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(
+    fn copy_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
@@ -177,7 +177,7 @@ where
     }
 }
 
-impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for Source
+impl<Source, Stencil, Pred> CopyWhereInput<Stencil, Pred> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
@@ -187,13 +187,13 @@ where
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(
+    fn copy_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Source> as CopyIfInput<Stencil, Pred>>::copy_if_input(
+        <SoAView1<Source> as CopyWhereInput<Stencil, Pred>>::copy_where_input(
             SoAView1 { source: self },
             policy,
             stencil,
@@ -202,7 +202,7 @@ where
     }
 }
 
-impl<Source, Stencil, Pred> CopyIfInput<Stencil, Pred> for (Source,)
+impl<Source, Stencil, Pred> CopyWhereInput<Stencil, Pred> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
@@ -212,13 +212,13 @@ where
     type Runtime = Source::Runtime;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn copy_if_input(
+    fn copy_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <Source as CopyIfInput<Stencil, Pred>>::copy_if_input(self.0, policy, stencil, pred)
+        <Source as CopyWhereInput<Stencil, Pred>>::copy_where_input(self.0, policy, stencil, pred)
     }
 }
 
@@ -226,7 +226,7 @@ impl<Source, Pred> SelectInput<Pred> for SoAView1<Source>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item> + GpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
@@ -240,7 +240,7 @@ where
     ) -> Result<Self::Output, Error> {
         self.source.validate()?;
         Ok(SoA1 {
-            source: super::device_expr_copy_if_with_policy::<Source, Pred>(
+            source: super::device_expr_copy_where_with_policy::<Source, Pred>(
                 policy,
                 &self.source,
                 invert,
@@ -253,7 +253,7 @@ impl<Source, Pred> SelectInput<Pred> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item> + GpuExpr<Source::Item>,
     Pred: PredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
@@ -278,7 +278,7 @@ impl<Source, Pred> SelectInput<Pred> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: GpuExpr<Source::Item>,
+    Source::Expr: DeviceGpuExpr<Source::Item> + GpuExpr<Source::Item>,
     Pred: PredicateOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
@@ -351,20 +351,20 @@ macro_rules! impl_selection_tuple_input {
         {
         }
 
-        impl<$( $ty ),+, Stencil, Pred> CopyIfInput<Stencil, Pred> for ($( $ty ),+)
+        impl<$( $ty ),+, Stencil, Pred> CopyWhereInput<Stencil, Pred> for ($( $ty ),+)
         where
-            $view<$( $ty ),+>: CopyIfInput<Stencil, Pred>,
+            $view<$( $ty ),+>: CopyWhereInput<Stencil, Pred>,
         {
-            type Runtime = <$view<$( $ty ),+> as CopyIfInput<Stencil, Pred>>::Runtime;
-            type Output = <$view<$( $ty ),+> as CopyIfInput<Stencil, Pred>>::Output;
+            type Runtime = <$view<$( $ty ),+> as CopyWhereInput<Stencil, Pred>>::Runtime;
+            type Output = <$view<$( $ty ),+> as CopyWhereInput<Stencil, Pred>>::Output;
 
-            fn copy_if_input(
+            fn copy_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 stencil: Stencil,
                 pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
-                <$view<$( $ty ),+> as CopyIfInput<Stencil, Pred>>::copy_if_input(
+                <$view<$( $ty ),+> as CopyWhereInput<Stencil, Pred>>::copy_where_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     stencil,
@@ -672,9 +672,9 @@ macro_rules! impl_tuple_selection {
     };
 }
 
-macro_rules! impl_tuple_copy_if {
+macro_rules! impl_tuple_copy_where {
     ($input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+, Stencil, Pred> CopyIfInput<Stencil, Pred>
+        impl<$first, $( $rest ),+, Stencil, Pred> CopyWhereInput<Stencil, Pred>
             for $input<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
@@ -696,7 +696,7 @@ macro_rules! impl_tuple_copy_if {
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn copy_if_input(
+            fn copy_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 stencil: Stencil,
@@ -727,10 +727,10 @@ macro_rules! impl_tuple_copy_if {
     };
 }
 
-impl_tuple_copy_if!(SoAView2 -> SoA2<A, B> { left, right });
-impl_tuple_copy_if!(SoA2 -> SoA2<A, B> { left, right });
-impl_tuple_copy_if!(SoAView3 -> SoA3<A, B, C> { first, second, third });
-impl_tuple_copy_if!(SoA3 -> SoA3<A, B, C> { first, second, third });
+impl_tuple_copy_where!(SoAView2 -> SoA2<A, B> { left, right });
+impl_tuple_copy_where!(SoA2 -> SoA2<A, B> { left, right });
+impl_tuple_copy_where!(SoAView3 -> SoA3<A, B, C> { first, second, third });
+impl_tuple_copy_where!(SoA3 -> SoA3<A, B, C> { first, second, third });
 
 impl_tuple_selection!(SoA2<A, B> { left, right }, tuple2_predicate_device_expr_flags_kernel);
 impl_tuple_selection!(SoA3<A, B, C> { first, second, third }, tuple3_predicate_device_expr_flags_kernel);
@@ -1099,20 +1099,20 @@ impl_partition_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 })
 ///
 /// This is a borrowing algorithm. It reads the input and returns newly owned SoA
 /// storage containing the selected values.
-pub fn copy_if<Source, Stencil, Pred>(
-    policy: &CubePolicy<<Source as CopyIfInput<Stencil, Pred>>::Runtime>,
+pub fn copy_where<Source, Stencil, Pred>(
+    policy: &CubePolicy<<Source as CopyWhereInput<Stencil, Pred>>::Runtime>,
     source: Source,
     stencil: Stencil,
     _pred: Pred,
-) -> Result<<<Source as CopyIfInput<Stencil, Pred>>::Output as MaterializeOutput>::Output, Error>
+) -> Result<<<Source as CopyWhereInput<Stencil, Pred>>::Output as MaterializeOutput>::Output, Error>
 where
-    Source: CopyIfInput<Stencil, Pred>,
-    <Source as CopyIfInput<Stencil, Pred>>::Output:
-        MaterializeOutput<Runtime = <Source as CopyIfInput<Stencil, Pred>>::Runtime>,
+    Source: CopyWhereInput<Stencil, Pred>,
+    <Source as CopyWhereInput<Stencil, Pred>>::Output:
+        MaterializeOutput<Runtime = <Source as CopyWhereInput<Stencil, Pred>>::Runtime>,
 {
     materialize(
         policy,
-        source.copy_if_input(policy, stencil, GpuOp::<Pred>::new())?,
+        source.copy_where_input(policy, stencil, GpuOp::<Pred>::new())?,
     )
 }
 

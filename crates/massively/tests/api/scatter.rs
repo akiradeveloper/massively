@@ -7,18 +7,18 @@ fn scatter_accepts_heterogeneous_columns() {
     let ids = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 3]).unwrap();
 
-    let scattered = scatter(
+    let mut out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let mut out_ids = exec.to_device(&[0_u32; 4]).unwrap();
+    scatter(
         &exec,
         massively::SoA2(values.slice(..), ids.slice(..)),
         indices.slice(..),
-        4,
-        (0.0_f32, 0_u32),
+        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
-    let (values, ids) = scattered;
 
-    assert_eq!(exec.to_host(&values).unwrap(), vec![2.0, 0.0, 1.0, 3.0]);
-    assert_eq!(exec.to_host(&ids).unwrap(), vec![20, 0, 10, 30]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![2.0, 0.0, 1.0, 3.0]);
+    assert_eq!(exec.to_host(&out_ids).unwrap(), vec![20, 0, 10, 30]);
 }
 
 #[cfg(any())]

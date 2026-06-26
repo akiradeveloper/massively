@@ -68,13 +68,6 @@ pub trait KernelColumn {
     fn len(&self) -> usize;
     fn validate(&self) -> Result<(), Error>;
 
-    fn staged_value_handle(
-        &self,
-        _bindings: &KernelColumnBindings,
-    ) -> Option<cubecl::server::Handle> {
-        None
-    }
-
     fn stage(&self, policy: &CubePolicy<Self::Runtime>) -> Result<KernelColumnBindings, Error>
     where
         Self: KernelColumnAt<S0>,
@@ -120,6 +113,28 @@ where
         }
     }
 
+    pub(crate) fn from_slice(source: &DeviceVec<R, T>, offset: usize, len: usize) -> Self {
+        Self {
+            source: DeviceVec::from_handle(source.policy_id(), source.handle.clone(), source.len()),
+            offset,
+            len,
+        }
+    }
+}
+
+/// Writable view over one storage-backed device column.
+#[doc(hidden)]
+#[derive(Clone)]
+pub struct DeviceColumnMutView<R: Runtime, T> {
+    pub(crate) source: DeviceVec<R, T>,
+    pub(crate) offset: usize,
+    pub(crate) len: usize,
+}
+
+impl<R, T> DeviceColumnMutView<R, T>
+where
+    R: Runtime,
+{
     pub(crate) fn from_slice(source: &DeviceVec<R, T>, offset: usize, len: usize) -> Self {
         Self {
             source: DeviceVec::from_handle(source.policy_id(), source.handle.clone(), source.len()),
@@ -545,13 +560,6 @@ where
     fn validate(&self) -> Result<(), Error> {
         Ok(())
     }
-
-    fn staged_value_handle(
-        &self,
-        bindings: &KernelColumnBindings,
-    ) -> Option<cubecl::server::Handle> {
-        Some(bindings.input.clone())
-    }
 }
 
 impl<'a, R, T> StorageKernelColumn for &'a DeviceVec<R, T> where R: Runtime {}
@@ -624,17 +632,6 @@ where
 
     fn validate(&self) -> Result<(), Error> {
         Ok(())
-    }
-
-    fn staged_value_handle(
-        &self,
-        bindings: &KernelColumnBindings,
-    ) -> Option<cubecl::server::Handle> {
-        if self.offset == 0 {
-            Some(bindings.input.clone())
-        } else {
-            None
-        }
     }
 }
 
@@ -722,13 +719,6 @@ where
 
     fn validate(&self) -> Result<(), Error> {
         Ok(())
-    }
-
-    fn staged_value_handle(
-        &self,
-        bindings: &KernelColumnBindings,
-    ) -> Option<cubecl::server::Handle> {
-        Some(bindings.input.clone())
     }
 }
 

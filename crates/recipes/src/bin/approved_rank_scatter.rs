@@ -9,11 +9,11 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Use `scatter_if` with approved flags as the stencil.
+//! 1. Use `scatter_where` with approved flags as the stencil.
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, scatter_if};
+use massively::{DeviceVec, Executor, SoA1, scatter_where};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,7 +25,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = scatter_if(
+    let (out,) = scatter_where(
         exec,
         SoA1(item_id.slice(..)),
         slot.slice(..),

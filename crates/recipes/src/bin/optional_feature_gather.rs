@@ -9,11 +9,11 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Use `gather_if` with availability flags as the stencil.
+//! 1. Use `gather_where` with availability flags as the stencil.
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, gather_if};
+use massively::{DeviceVec, Executor, SoA1, gather_where};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -24,7 +24,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = gather_if(
+    let (out,) = gather_where(
         exec,
         SoA1(value.slice(..)),
         index.slice(..),

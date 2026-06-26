@@ -1,7 +1,7 @@
-pub fn remove_if(input: &[u32]) -> Vec<u32> {
+pub fn copy_where(input: &[u32], stencil: &[u32]) -> Vec<u32> {
     let mut output = Vec::new();
     for i in 0..input.len() {
-        if !crate::keep(input[i]) {
+        if stencil[i] != 0 {
             output.push(input[i]);
         }
     }

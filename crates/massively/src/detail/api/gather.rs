@@ -15,7 +15,7 @@ use cubecl::prelude::*;
 
 const BLOCK_API_SIZE: u32 = 256;
 
-fn gather_if_one<InputSource, IndexSource, Stencil, Pred>(
+fn gather_where_one<InputSource, IndexSource, Stencil, Pred>(
     policy: &CubePolicy<InputSource::Runtime>,
     input: &InputSource,
     indices: &IndexSource,
@@ -363,9 +363,9 @@ impl_gather_input_index_source!(SoA2<A, B>);
 impl_gather_input_index_source!(SoAView3<A, B, C>);
 impl_gather_input_index_source!(SoA3<A, B, C>);
 
-/// Input accepted by [`gather_if`].
+/// Input accepted by [`gather_where`].
 #[doc(hidden)]
-pub trait GatherIfInput<Indices, Stencil, Pred> {
+pub trait GatherWhereInput<Indices, Stencil, Pred> {
     /// Runtime used by this input.
     type Runtime: Runtime;
 
@@ -375,7 +375,7 @@ pub trait GatherIfInput<Indices, Stencil, Pred> {
     type Default;
 
     /// Gathers selected elements into default-initialized output.
-    fn gather_if_input(
+    fn gather_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: Indices,
@@ -385,7 +385,7 @@ pub trait GatherIfInput<Indices, Stencil, Pred> {
     ) -> Result<Self::Output, Error>;
 }
 
-impl<InputSource, IndexSource, Stencil, Pred> GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>
+impl<InputSource, IndexSource, Stencil, Pred> GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>
     for SoAView1<InputSource>
 where
     Self: ReadOnlySoA<Item = (InputSource::Item,), Scalar = InputSource::Item>,
@@ -401,7 +401,7 @@ where
     type Output = SoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
     type Default = (InputSource::Item,);
 
-    fn gather_if_input(
+    fn gather_where_input(
         self,
         policy: &CubePolicy<InputSource::Runtime>,
         indices: SoAView1<IndexSource>,
@@ -410,7 +410,7 @@ where
         _pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
         Ok(SoA1 {
-            source: gather_if_one::<InputSource, IndexSource, Stencil, Pred>(
+            source: gather_where_one::<InputSource, IndexSource, Stencil, Pred>(
                 policy,
                 &self.source,
                 &indices.source,
@@ -421,7 +421,7 @@ where
     }
 }
 
-impl<InputSource, IndexSource, Stencil, Pred> GatherIfInput<IndexSource, Stencil, Pred>
+impl<InputSource, IndexSource, Stencil, Pred> GatherWhereInput<IndexSource, Stencil, Pred>
     for InputSource
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
@@ -435,7 +435,7 @@ where
     type Output = SoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
     type Default = InputSource::Item;
 
-    fn gather_if_input(
+    fn gather_where_input(
         self,
         policy: &CubePolicy<InputSource::Runtime>,
         indices: IndexSource,
@@ -443,7 +443,7 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
+        <SoAView1<InputSource> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_where_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: indices },
@@ -454,19 +454,19 @@ where
     }
 }
 
-impl<InputSource, IndexSource, Stencil, Pred> GatherIfInput<(IndexSource,), Stencil, Pred>
+impl<InputSource, IndexSource, Stencil, Pred> GatherWhereInput<(IndexSource,), Stencil, Pred>
     for (InputSource,)
 where
-    SoAView1<InputSource>: GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+    SoAView1<InputSource>: GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
     type Runtime =
-        <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
+        <SoAView1<InputSource> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
     type Output =
-        <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+        <SoAView1<InputSource> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
     type Default =
-        <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
+        <SoAView1<InputSource> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
 
-    fn gather_if_input(
+    fn gather_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
@@ -474,7 +474,7 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<InputSource> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
+        <SoAView1<InputSource> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_where_input(
             SoAView1 { source: self.0 },
             policy,
             SoAView1 { source: indices.0 },
@@ -485,19 +485,19 @@ where
     }
 }
 
-impl<Left, Right, IndexSource, Stencil, Pred> GatherIfInput<(IndexSource,), Stencil, Pred>
+impl<Left, Right, IndexSource, Stencil, Pred> GatherWhereInput<(IndexSource,), Stencil, Pred>
     for (Left, Right)
 where
-    SoAView2<Left, Right>: GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+    SoAView2<Left, Right>: GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
     type Runtime =
-        <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
+        <SoAView2<Left, Right> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
     type Output =
-        <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+        <SoAView2<Left, Right> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
     type Default =
-        <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
+        <SoAView2<Left, Right> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
 
-    fn gather_if_input(
+    fn gather_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
@@ -505,7 +505,7 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
+        <SoAView2<Left, Right> as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_where_input(
             SoAView2 {
                 left: self.0,
                 right: self.1,
@@ -519,28 +519,28 @@ where
     }
 }
 
-impl<First, Second, Third, IndexSource, Stencil, Pred> GatherIfInput<(IndexSource,), Stencil, Pred>
-    for (First, Second, Third)
+impl<First, Second, Third, IndexSource, Stencil, Pred>
+    GatherWhereInput<(IndexSource,), Stencil, Pred> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+    SoAView3<First, Second, Third>: GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as GatherIfInput<
+    type Runtime = <SoAView3<First, Second, Third> as GatherWhereInput<
         SoAView1<IndexSource>,
         Stencil,
         Pred,
     >>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as GatherIfInput<
+    type Output = <SoAView3<First, Second, Third> as GatherWhereInput<
         SoAView1<IndexSource>,
         Stencil,
         Pred,
     >>::Output;
-    type Default = <SoAView3<First, Second, Third> as GatherIfInput<
+    type Default = <SoAView3<First, Second, Third> as GatherWhereInput<
         SoAView1<IndexSource>,
         Stencil,
         Pred,
     >>::Default;
 
-    fn gather_if_input(
+    fn gather_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
@@ -548,11 +548,11 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as GatherIfInput<
+        <SoAView3<First, Second, Third> as GatherWhereInput<
             SoAView1<IndexSource>,
             Stencil,
             Pred,
-        >>::gather_if_input(
+        >>::gather_where_input(
             SoAView3 {
                 first: self.0,
                 second: self.1,
@@ -567,11 +567,11 @@ where
     }
 }
 
-macro_rules! impl_gather_if_input {
+macro_rules! impl_gather_where_input {
     ($input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
         #[allow(non_camel_case_types)]
         impl<$first, $( $rest ),+, IndexSource, Stencil, Pred>
-            GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>
+            GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>
             for $input<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
@@ -603,7 +603,7 @@ macro_rules! impl_gather_if_input {
                 $( <$rest as KernelColumn>::Item ),+
             );
 
-            fn gather_if_input(
+            fn gather_where_input(
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 indices: SoAView1<IndexSource>,
@@ -614,7 +614,7 @@ macro_rules! impl_gather_if_input {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&indices)?;
                 let ($first_field, $( $field ),+) = default;
-                let $first_field = gather_if_one::<$first, IndexSource, Stencil, Pred>(
+                let $first_field = gather_where_one::<$first, IndexSource, Stencil, Pred>(
                     policy,
                     &self.$first_field,
                     &indices.source,
@@ -622,7 +622,7 @@ macro_rules! impl_gather_if_input {
                     $first_field,
                 )?;
                 $(
-                    let $field = gather_if_one::<$rest, IndexSource, Stencil, Pred>(
+                    let $field = gather_where_one::<$rest, IndexSource, Stencil, Pred>(
                         policy,
                         &self.$field,
                         &indices.source,
@@ -636,25 +636,25 @@ macro_rules! impl_gather_if_input {
     };
 }
 
-impl_gather_if_input!(SoAView2 -> SoA2<A, B> { left, right });
-impl_gather_if_input!(SoA2 -> SoA2<A, B> { left, right });
-impl_gather_if_input!(SoAView3 -> SoA3<A, B, C> { first, second, third });
-impl_gather_if_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
+impl_gather_where_input!(SoAView2 -> SoA2<A, B> { left, right });
+impl_gather_where_input!(SoA2 -> SoA2<A, B> { left, right });
+impl_gather_where_input!(SoAView3 -> SoA3<A, B, C> { first, second, third });
+impl_gather_where_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
 
-macro_rules! impl_gather_if_input_sources {
+macro_rules! impl_gather_where_input_sources {
     ($name:ident < $( $field_ty:ident ),+ >) => {
         impl<$( $field_ty ),+, IndexSource, Stencil, Pred>
-            GatherIfInput<IndexSource, Stencil, Pred>
+            GatherWhereInput<IndexSource, Stencil, Pred>
             for $name<$( $field_ty ),+>
         where
             IndexSource: KernelColumn + KernelColumnAt<S0>,
-            Self: GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+            Self: GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
         {
-            type Runtime = <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
-            type Output = <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
-            type Default = <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
+            type Runtime = <Self as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
+            type Output = <Self as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+            type Default = <Self as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
 
-            fn gather_if_input(
+            fn gather_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 indices: IndexSource,
@@ -662,7 +662,7 @@ macro_rules! impl_gather_if_input_sources {
                 default: Self::Default,
                 pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
-                <Self as GatherIfInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_if_input(
+                <Self as GatherWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::gather_where_input(
                     self,
                     policy,
                     SoAView1 { source: indices },
@@ -675,10 +675,10 @@ macro_rules! impl_gather_if_input_sources {
     };
 }
 
-impl_gather_if_input_sources!(SoAView2<A, B>);
-impl_gather_if_input_sources!(SoA2<A, B>);
-impl_gather_if_input_sources!(SoAView3<A, B, C>);
-impl_gather_if_input_sources!(SoA3<A, B, C>);
+impl_gather_where_input_sources!(SoAView2<A, B>);
+impl_gather_where_input_sources!(SoA2<A, B>);
+impl_gather_where_input_sources!(SoAView3<A, B, C>);
+impl_gather_where_input_sources!(SoA3<A, B, C>);
 
 /// Gathers `input[indices[i]]` into new owned device storage.
 ///
@@ -701,24 +701,24 @@ where
 /// Gathers elements whose staged stencil flag satisfies `Pred`.
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only.
-pub fn gather_if<Input, Indices, Stencil, Pred>(
-    policy: &CubePolicy<<Input as GatherIfInput<Indices, Stencil, Pred>>::Runtime>,
+pub fn gather_where<Input, Indices, Stencil, Pred>(
+    policy: &CubePolicy<<Input as GatherWhereInput<Indices, Stencil, Pred>>::Runtime>,
     input: Input,
     indices: Indices,
     stencil: Stencil,
-    default: <Input as GatherIfInput<Indices, Stencil, Pred>>::Default,
+    default: <Input as GatherWhereInput<Indices, Stencil, Pred>>::Default,
     _pred: Pred,
 ) -> Result<
-    <<Input as GatherIfInput<Indices, Stencil, Pred>>::Output as MaterializeOutput>::Output,
+    <<Input as GatherWhereInput<Indices, Stencil, Pred>>::Output as MaterializeOutput>::Output,
     Error,
 >
 where
-    Input: GatherIfInput<Indices, Stencil, Pred>,
-    <Input as GatherIfInput<Indices, Stencil, Pred>>::Output:
-        MaterializeOutput<Runtime = <Input as GatherIfInput<Indices, Stencil, Pred>>::Runtime>,
+    Input: GatherWhereInput<Indices, Stencil, Pred>,
+    <Input as GatherWhereInput<Indices, Stencil, Pred>>::Output:
+        MaterializeOutput<Runtime = <Input as GatherWhereInput<Indices, Stencil, Pred>>::Runtime>,
 {
     materialize(
         policy,
-        input.gather_if_input(policy, indices, stencil, default, GpuOp::<Pred>::new())?,
+        input.gather_where_input(policy, indices, stencil, default, GpuOp::<Pred>::new())?,
     )
 }

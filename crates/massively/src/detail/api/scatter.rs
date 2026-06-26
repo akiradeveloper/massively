@@ -36,7 +36,7 @@ where
     >(policy, values, indices, &initial)
 }
 
-fn scatter_if_one<ValueSource, IndexSource, Stencil, Pred>(
+fn scatter_where_one<ValueSource, IndexSource, Stencil, Pred>(
     policy: &CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
@@ -373,9 +373,9 @@ impl_scatter_input_index_source!(SoA2<A, B>);
 impl_scatter_input_index_source!(SoAView3<A, B, C>);
 impl_scatter_input_index_source!(SoA3<A, B, C>);
 
-/// Input accepted by [`scatter_if`].
+/// Input accepted by [`scatter_where`].
 #[doc(hidden)]
-pub trait ScatterIfInput<Indices, Stencil, Pred> {
+pub trait ScatterWhereInput<Indices, Stencil, Pred> {
     /// Runtime used by this input.
     type Runtime: Runtime;
 
@@ -385,7 +385,7 @@ pub trait ScatterIfInput<Indices, Stencil, Pred> {
     type Output;
 
     /// Scatters selected values into default-initialized output at `indices[i]`.
-    fn scatter_if_input(
+    fn scatter_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: Indices,
@@ -396,8 +396,8 @@ pub trait ScatterIfInput<Indices, Stencil, Pred> {
     ) -> Result<Self::Output, Error>;
 }
 
-impl<ValueSource, IndexSource, Stencil, Pred> ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>
-    for SoAView1<ValueSource>
+impl<ValueSource, IndexSource, Stencil, Pred>
+    ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred> for SoAView1<ValueSource>
 where
     Self: ReadOnlySoA<Item = (ValueSource::Item,), Scalar = ValueSource::Item>,
     SoAView1<IndexSource>: ReadOnlySoA<Item = (u32,), Scalar = u32>,
@@ -412,7 +412,7 @@ where
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
-    fn scatter_if_input(
+    fn scatter_where_input(
         self,
         policy: &CubePolicy<ValueSource::Runtime>,
         indices: SoAView1<IndexSource>,
@@ -424,7 +424,7 @@ where
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&indices)?;
         Ok(SoA1 {
-            source: scatter_if_one::<ValueSource, IndexSource, Stencil, Pred>(
+            source: scatter_where_one::<ValueSource, IndexSource, Stencil, Pred>(
                 policy,
                 &self.source,
                 &indices.source,
@@ -436,7 +436,7 @@ where
     }
 }
 
-impl<ValueSource, IndexSource, Stencil, Pred> ScatterIfInput<IndexSource, Stencil, Pred>
+impl<ValueSource, IndexSource, Stencil, Pred> ScatterWhereInput<IndexSource, Stencil, Pred>
     for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
@@ -450,7 +450,7 @@ where
     type Default = ValueSource::Item;
     type Output = SoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
-    fn scatter_if_input(
+    fn scatter_where_input(
         self,
         policy: &CubePolicy<ValueSource::Runtime>,
         indices: IndexSource,
@@ -461,26 +461,26 @@ where
     ) -> Result<Self::Output, Error> {
         let _ = pred;
         Ok(SoA1 {
-            source: scatter_if_one::<ValueSource, IndexSource, Stencil, Pred>(
+            source: scatter_where_one::<ValueSource, IndexSource, Stencil, Pred>(
                 policy, &self, &indices, &stencil, len, default,
             )?,
         })
     }
 }
 
-impl<ValueSource, IndexSource, Stencil, Pred> ScatterIfInput<(IndexSource,), Stencil, Pred>
+impl<ValueSource, IndexSource, Stencil, Pred> ScatterWhereInput<(IndexSource,), Stencil, Pred>
     for (ValueSource,)
 where
-    SoAView1<ValueSource>: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+    SoAView1<ValueSource>: ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
     type Runtime =
-        <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
+        <SoAView1<ValueSource> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
     type Default =
-        <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
+        <SoAView1<ValueSource> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
     type Output =
-        <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+        <SoAView1<ValueSource> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
 
-    fn scatter_if_input(
+    fn scatter_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
@@ -489,7 +489,7 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<ValueSource> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_if_input(
+        <SoAView1<ValueSource> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_where_input(
             SoAView1 { source: self.0 },
             policy,
             SoAView1 { source: indices.0 },
@@ -501,19 +501,19 @@ where
     }
 }
 
-impl<Left, Right, IndexSource, Stencil, Pred> ScatterIfInput<(IndexSource,), Stencil, Pred>
+impl<Left, Right, IndexSource, Stencil, Pred> ScatterWhereInput<(IndexSource,), Stencil, Pred>
     for (Left, Right)
 where
-    SoAView2<Left, Right>: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+    SoAView2<Left, Right>: ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
     type Runtime =
-        <SoAView2<Left, Right> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
+        <SoAView2<Left, Right> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
     type Default =
-        <SoAView2<Left, Right> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
+        <SoAView2<Left, Right> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
     type Output =
-        <SoAView2<Left, Right> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+        <SoAView2<Left, Right> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
 
-    fn scatter_if_input(
+    fn scatter_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
@@ -522,7 +522,7 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_if_input(
+        <SoAView2<Left, Right> as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_where_input(
             SoAView2 {
                 left: self.0,
                 right: self.1,
@@ -537,28 +537,28 @@ where
     }
 }
 
-impl<First, Second, Third, IndexSource, Stencil, Pred> ScatterIfInput<(IndexSource,), Stencil, Pred>
-    for (First, Second, Third)
+impl<First, Second, Third, IndexSource, Stencil, Pred>
+    ScatterWhereInput<(IndexSource,), Stencil, Pred> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+    SoAView3<First, Second, Third>: ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as ScatterIfInput<
+    type Runtime = <SoAView3<First, Second, Third> as ScatterWhereInput<
         SoAView1<IndexSource>,
         Stencil,
         Pred,
     >>::Runtime;
-    type Default = <SoAView3<First, Second, Third> as ScatterIfInput<
+    type Default = <SoAView3<First, Second, Third> as ScatterWhereInput<
         SoAView1<IndexSource>,
         Stencil,
         Pred,
     >>::Default;
-    type Output = <SoAView3<First, Second, Third> as ScatterIfInput<
+    type Output = <SoAView3<First, Second, Third> as ScatterWhereInput<
         SoAView1<IndexSource>,
         Stencil,
         Pred,
     >>::Output;
 
-    fn scatter_if_input(
+    fn scatter_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: (IndexSource,),
@@ -567,11 +567,11 @@ where
         default: Self::Default,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as ScatterIfInput<
+        <SoAView3<First, Second, Third> as ScatterWhereInput<
             SoAView1<IndexSource>,
             Stencil,
             Pred,
-        >>::scatter_if_input(
+        >>::scatter_where_input(
             SoAView3 {
                 first: self.0,
                 second: self.1,
@@ -587,9 +587,9 @@ where
     }
 }
 
-macro_rules! impl_scatter_if_input {
+macro_rules! impl_scatter_where_input {
     ($input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident, $( $field:ident ),+ }) => {
-        impl<$first, $( $rest ),+, IndexSource, Stencil, Pred> ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>
+        impl<$first, $( $rest ),+, IndexSource, Stencil, Pred> ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>
             for $input<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
@@ -621,7 +621,7 @@ macro_rules! impl_scatter_if_input {
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn scatter_if_input(
+            fn scatter_where_input(
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 indices: SoAView1<IndexSource>,
@@ -633,7 +633,7 @@ macro_rules! impl_scatter_if_input {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&indices)?;
                 let ($first_field, $( $field ),+) = default;
-                let $first_field = scatter_if_one::<$first, IndexSource, Stencil, Pred>(
+                let $first_field = scatter_where_one::<$first, IndexSource, Stencil, Pred>(
                     policy,
                     &self.$first_field,
                     &indices.source,
@@ -642,7 +642,7 @@ macro_rules! impl_scatter_if_input {
                     $first_field,
                 )?;
                 $(
-                    let $field = scatter_if_one::<$rest, IndexSource, Stencil, Pred>(
+                    let $field = scatter_where_one::<$rest, IndexSource, Stencil, Pred>(
                         policy,
                         &self.$field,
                         &indices.source,
@@ -657,24 +657,24 @@ macro_rules! impl_scatter_if_input {
     };
 }
 
-impl_scatter_if_input!(SoAView2 -> SoA2<A, B> { left, right });
-impl_scatter_if_input!(SoA2 -> SoA2<A, B> { left, right });
-impl_scatter_if_input!(SoAView3 -> SoA3<A, B, C> { first, second, third });
-impl_scatter_if_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
+impl_scatter_where_input!(SoAView2 -> SoA2<A, B> { left, right });
+impl_scatter_where_input!(SoA2 -> SoA2<A, B> { left, right });
+impl_scatter_where_input!(SoAView3 -> SoA3<A, B, C> { first, second, third });
+impl_scatter_where_input!(SoA3 -> SoA3<A, B, C> { first, second, third });
 
-macro_rules! impl_scatter_if_input_sources {
+macro_rules! impl_scatter_where_input_sources {
     ($name:ident < $( $field_ty:ident ),+ >) => {
-        impl<$( $field_ty ),+, IndexSource, Stencil, Pred> ScatterIfInput<IndexSource, Stencil, Pred>
+        impl<$( $field_ty ),+, IndexSource, Stencil, Pred> ScatterWhereInput<IndexSource, Stencil, Pred>
             for $name<$( $field_ty ),+>
         where
             IndexSource: KernelColumn + KernelColumnAt<S0>,
-            Self: ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>,
+            Self: ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>,
         {
-            type Runtime = <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
-            type Default = <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
-            type Output = <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
+            type Runtime = <Self as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Runtime;
+            type Default = <Self as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Default;
+            type Output = <Self as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::Output;
 
-            fn scatter_if_input(
+            fn scatter_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 indices: IndexSource,
@@ -683,7 +683,7 @@ macro_rules! impl_scatter_if_input_sources {
                 default: Self::Default,
                 pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
-                <Self as ScatterIfInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_if_input(
+                <Self as ScatterWhereInput<SoAView1<IndexSource>, Stencil, Pred>>::scatter_where_input(
                     self,
                     policy,
                     SoAView1 { source: indices },
@@ -697,10 +697,10 @@ macro_rules! impl_scatter_if_input_sources {
     };
 }
 
-impl_scatter_if_input_sources!(SoAView2<A, B>);
-impl_scatter_if_input_sources!(SoA2<A, B>);
-impl_scatter_if_input_sources!(SoAView3<A, B, C>);
-impl_scatter_if_input_sources!(SoA3<A, B, C>);
+impl_scatter_where_input_sources!(SoAView2<A, B>);
+impl_scatter_where_input_sources!(SoA2<A, B>);
+impl_scatter_where_input_sources!(SoAView3<A, B, C>);
+impl_scatter_where_input_sources!(SoA3<A, B, C>);
 
 /// Scatters `values[i]` into a new output at `indices[i]`.
 ///
@@ -727,25 +727,25 @@ where
 ///
 /// The output is allocated with `len` elements, initialized with `default`, and
 /// then updated for values satisfying `Pred`.
-pub fn scatter_if<Values, Indices, Stencil, Pred>(
-    policy: &CubePolicy<<Values as ScatterIfInput<Indices, Stencil, Pred>>::Runtime>,
+pub fn scatter_where<Values, Indices, Stencil, Pred>(
+    policy: &CubePolicy<<Values as ScatterWhereInput<Indices, Stencil, Pred>>::Runtime>,
     values: Values,
     indices: Indices,
     len: usize,
-    default: <Values as ScatterIfInput<Indices, Stencil, Pred>>::Default,
+    default: <Values as ScatterWhereInput<Indices, Stencil, Pred>>::Default,
     stencil: Stencil,
     _pred: Pred,
 ) -> Result<
-    <<Values as ScatterIfInput<Indices, Stencil, Pred>>::Output as MaterializeOutput>::Output,
+    <<Values as ScatterWhereInput<Indices, Stencil, Pred>>::Output as MaterializeOutput>::Output,
     Error,
 >
 where
-    Values: ScatterIfInput<Indices, Stencil, Pred>,
-    <Values as ScatterIfInput<Indices, Stencil, Pred>>::Output:
-        MaterializeOutput<Runtime = <Values as ScatterIfInput<Indices, Stencil, Pred>>::Runtime>,
+    Values: ScatterWhereInput<Indices, Stencil, Pred>,
+    <Values as ScatterWhereInput<Indices, Stencil, Pred>>::Output:
+        MaterializeOutput<Runtime = <Values as ScatterWhereInput<Indices, Stencil, Pred>>::Runtime>,
 {
     materialize(
         policy,
-        values.scatter_if_input(policy, indices, stencil, len, default, GpuOp::<Pred>::new())?,
+        values.scatter_where_input(policy, indices, stencil, len, default, GpuOp::<Pred>::new())?,
     )
 }

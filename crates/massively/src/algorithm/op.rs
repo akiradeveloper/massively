@@ -78,11 +78,11 @@ where
 }
 
 /// Compile-time predicate used by conditional algorithms such as
-/// [`remove_if`](crate::remove_if), [`count_if`](crate::count_if), and
-/// [`find_if`](crate::find_if).
+/// [`count_if`](crate::count_if) and [`find_if`](crate::find_if).
 ///
-/// Stencil algorithms such as [`copy_if`](crate::copy_if) use a `u32` flag
-/// column in the public API instead of taking a predicate marker.
+/// Stencil algorithms such as [`copy_where`](crate::copy_where) and
+/// [`remove_where`](crate::remove_where) use a `u32` flag column in the public
+/// API instead of taking a predicate marker.
 ///
 /// ```no_run
 /// use cubecl::prelude::*;

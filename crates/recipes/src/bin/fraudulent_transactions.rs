@@ -17,7 +17,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::{PredicateOp, UnaryOp};
-use massively::{DeviceVec, Executor, SoA3, copy_if, partition, transform};
+use massively::{DeviceVec, Executor, SoA3, copy_where, partition, transform};
 
 struct SuspiciousTransaction;
 
@@ -74,7 +74,7 @@ where
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         SuspiciousTransaction,
     )?;
-    let (account_id, amount, risk_score) = copy_if(
+    let (account_id, amount, risk_score) = copy_where(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         flag.slice(..),

@@ -103,12 +103,12 @@ where
 }
 
 #[doc(hidden)]
-pub trait ReplaceIfInput<Stencil, Pred> {
+pub trait ReplaceWhereInput<Stencil, Pred> {
     type Runtime: Runtime;
     type Item;
     type Output;
 
-    fn replace_if_input(
+    fn replace_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
@@ -117,7 +117,7 @@ pub trait ReplaceIfInput<Stencil, Pred> {
     ) -> Result<Self::Output, Error>;
 }
 
-impl<Source, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for SoA1<Source>
+impl<Source, Stencil, Pred> ReplaceWhereInput<Stencil, Pred> for SoA1<Source>
 where
     Self: SoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: StorageKernelColumn + KernelColumnAt<S0>,
@@ -129,7 +129,7 @@ where
     type Item = Source::Item;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn replace_if_input(
+    fn replace_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
@@ -150,7 +150,7 @@ where
     }
 }
 
-impl<Source, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for Source
+impl<Source, Stencil, Pred> ReplaceWhereInput<Stencil, Pred> for Source
 where
     Source: StorageKernelColumn + KernelColumnAt<S0>,
     Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
@@ -161,14 +161,14 @@ where
     type Item = Source::Item;
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn replace_if_input(
+    fn replace_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
         stencil: Stencil,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <SoA1<Source> as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
+        <SoA1<Source> as ReplaceWhereInput<Stencil, Pred>>::replace_where_input(
             SoA1 { source: self },
             policy,
             replacement,
@@ -178,7 +178,7 @@ where
     }
 }
 
-impl<Source, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for (Source,)
+impl<Source, Stencil, Pred> ReplaceWhereInput<Stencil, Pred> for (Source,)
 where
     Source: StorageKernelColumn + KernelColumnAt<S0>,
     Stencil: super::SelectionStencil<Pred, Runtime = Source::Runtime>,
@@ -189,14 +189,14 @@ where
     type Item = (Source::Item,);
     type Output = SoA1<DeviceVec<Source::Runtime, Source::Item>>;
 
-    fn replace_if_input(
+    fn replace_where_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         replacement: Self::Item,
         stencil: Stencil,
         pred: GpuOp<Pred>,
     ) -> Result<Self::Output, Error> {
-        <Source as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
+        <Source as ReplaceWhereInput<Stencil, Pred>>::replace_where_input(
             self.0,
             policy,
             replacement.0,
@@ -206,7 +206,7 @@ where
     }
 }
 
-macro_rules! impl_replace_if_tuple {
+macro_rules! impl_replace_where_tuple {
     (@item_ty $field:ident) => {
         <$field as KernelColumn>::Item
     };
@@ -214,7 +214,7 @@ macro_rules! impl_replace_if_tuple {
     (
         $name:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident: $first_index:tt, $( $field:ident: $index:tt ),+ }
     ) => {
-        impl<$first, $( $rest ),+, Stencil, Pred> ReplaceIfInput<Stencil, Pred>
+        impl<$first, $( $rest ),+, Stencil, Pred> ReplaceWhereInput<Stencil, Pred>
             for $name<$first, $( $rest ),+>
         where
             Self: SoA<Scalar = <$first as KernelColumn>::Item>,
@@ -234,15 +234,15 @@ macro_rules! impl_replace_if_tuple {
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Item = (
-                impl_replace_if_tuple!(@item_ty $first),
-                $( impl_replace_if_tuple!(@item_ty $rest) ),+
+                impl_replace_where_tuple!(@item_ty $first),
+                $( impl_replace_where_tuple!(@item_ty $rest) ),+
             );
             type Output = $name<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn replace_if_input(
+            fn replace_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 replacement: Self::Item,
@@ -271,10 +271,10 @@ macro_rules! impl_replace_if_tuple {
     };
 }
 
-impl_replace_if_tuple!(SoA2<A, B> { left: 0, right: 1 });
-impl_replace_if_tuple!(SoA3<A, B, C> { first: 0, second: 1, third: 2 });
+impl_replace_where_tuple!(SoA2<A, B> { left: 0, right: 1 });
+impl_replace_where_tuple!(SoA3<A, B, C> { first: 0, second: 1, third: 2 });
 
-macro_rules! impl_readonly_replace_if_tuple {
+macro_rules! impl_readonly_replace_where_tuple {
     (@item_ty $field:ident) => {
         <$field as KernelColumn>::Item
     };
@@ -282,7 +282,7 @@ macro_rules! impl_readonly_replace_if_tuple {
     (
         $input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ > { $first_field:ident: $first_index:tt, $( $field:ident: $index:tt ),+ }
     ) => {
-        impl<$first, $( $rest ),+, Stencil, Pred> ReplaceIfInput<Stencil, Pred>
+        impl<$first, $( $rest ),+, Stencil, Pred> ReplaceWhereInput<Stencil, Pred>
             for $input<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
@@ -302,15 +302,15 @@ macro_rules! impl_readonly_replace_if_tuple {
         {
             type Runtime = <$first as KernelColumn>::Runtime;
             type Item = (
-                impl_readonly_replace_if_tuple!(@item_ty $first),
-                $( impl_readonly_replace_if_tuple!(@item_ty $rest) ),+
+                impl_readonly_replace_where_tuple!(@item_ty $first),
+                $( impl_readonly_replace_where_tuple!(@item_ty $rest) ),+
             );
             type Output = $output<
                 DeviceVec<<$first as KernelColumn>::Runtime, <$first as KernelColumn>::Item>,
                 $( DeviceVec<<$rest as KernelColumn>::Runtime, <$rest as KernelColumn>::Item> ),+
             >;
 
-            fn replace_if_input(
+            fn replace_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 replacement: Self::Item,
@@ -339,27 +339,27 @@ macro_rules! impl_readonly_replace_if_tuple {
     };
 }
 
-impl_readonly_replace_if_tuple!(SoAView2 -> SoA2<A, B> { left: 0, right: 1 });
-impl_readonly_replace_if_tuple!(SoAView3 -> SoA3<A, B, C> { first: 0, second: 1, third: 2 });
+impl_readonly_replace_where_tuple!(SoAView2 -> SoA2<A, B> { left: 0, right: 1 });
+impl_readonly_replace_where_tuple!(SoAView3 -> SoA3<A, B, C> { first: 0, second: 1, third: 2 });
 
-macro_rules! impl_replace_if_tuple_input {
+macro_rules! impl_replace_where_tuple_input {
     ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
-        impl<$( $ty ),+, Stencil, Pred> ReplaceIfInput<Stencil, Pred> for ($( $ty ),+)
+        impl<$( $ty ),+, Stencil, Pred> ReplaceWhereInput<Stencil, Pred> for ($( $ty ),+)
         where
-            $view<$( $ty ),+>: ReplaceIfInput<Stencil, Pred>,
+            $view<$( $ty ),+>: ReplaceWhereInput<Stencil, Pred>,
         {
-            type Runtime = <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::Runtime;
-            type Item = <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::Item;
-            type Output = <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::Output;
+            type Runtime = <$view<$( $ty ),+> as ReplaceWhereInput<Stencil, Pred>>::Runtime;
+            type Item = <$view<$( $ty ),+> as ReplaceWhereInput<Stencil, Pred>>::Item;
+            type Output = <$view<$( $ty ),+> as ReplaceWhereInput<Stencil, Pred>>::Output;
 
-            fn replace_if_input(
+            fn replace_where_input(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 replacement: Self::Item,
                 stencil: Stencil,
                 pred: GpuOp<Pred>,
             ) -> Result<Self::Output, Error> {
-                <$view<$( $ty ),+> as ReplaceIfInput<Stencil, Pred>>::replace_if_input(
+                <$view<$( $ty ),+> as ReplaceWhereInput<Stencil, Pred>>::replace_where_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     replacement,
@@ -371,8 +371,8 @@ macro_rules! impl_replace_if_tuple_input {
     };
 }
 
-impl_replace_if_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
-impl_replace_if_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
+impl_replace_where_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
+impl_replace_where_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
 
 #[doc(hidden)]
 pub trait UniqueInput<Pred> {
@@ -1036,21 +1036,21 @@ where
 }
 
 /// Replaces elements whose staged stencil flag satisfies `Pred`.
-pub fn replace_if<R, Input, Stencil, Pred>(
+pub fn replace_where<R, Input, Stencil, Pred>(
     policy: &CubePolicy<R>,
     input: Input,
-    replacement: <Input as ReplaceIfInput<Stencil, Pred>>::Item,
+    replacement: <Input as ReplaceWhereInput<Stencil, Pred>>::Item,
     stencil: Stencil,
     _pred: Pred,
-) -> Result<<<Input as ReplaceIfInput<Stencil, Pred>>::Output as MaterializeOutput>::Output, Error>
+) -> Result<<<Input as ReplaceWhereInput<Stencil, Pred>>::Output as MaterializeOutput>::Output, Error>
 where
     R: Runtime,
-    Input: ReplaceIfInput<Stencil, Pred, Runtime = R>,
-    <Input as ReplaceIfInput<Stencil, Pred>>::Output: MaterializeOutput<Runtime = R>,
+    Input: ReplaceWhereInput<Stencil, Pred, Runtime = R>,
+    <Input as ReplaceWhereInput<Stencil, Pred>>::Output: MaterializeOutput<Runtime = R>,
 {
     materialize(
         policy,
-        input.replace_if_input(policy, replacement, stencil, GpuOp::<Pred>::new())?,
+        input.replace_where_input(policy, replacement, stencil, GpuOp::<Pred>::new())?,
     )
 }
 

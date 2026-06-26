@@ -131,53 +131,77 @@ where
     }
 }
 
-fn transform2<B, S1, S2, Op>(exec: &Executor<B>, source: S1, op: Op) -> Result<S2, massively::Error>
+fn transform2<B, S1, S2, Op>(
+    exec: &Executor<B>,
+    source: S1,
+    op: Op,
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
     S1: MIter<B>,
-    S2: MVec<B>,
+    S2: MIterMut<B>,
     Op: UnaryOp<B, S1::Item, Output = S2::Item>,
 {
-    massively::transform(exec, source, op)
+    massively::transform(exec, source, op, out)
 }
 
-fn transform3<B, S1, S2, Op>(exec: &Executor<B>, source: S1, op: Op) -> Result<S2, massively::Error>
+fn transform3<B, S1, S2, Op>(
+    exec: &Executor<B>,
+    source: S1,
+    op: Op,
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
     S1: MIter<B, Item = (u32,)>,
-    S2: MVec<B, Item = (u32,)>,
+    S2: MIterMut<B, Item = (u32,)>,
     Op: UnaryOp<B, (u32,), Output = (u32,)>,
 {
-    massively::transform(exec, source, op)
+    massively::transform(exec, source, op, out)
 }
 
-fn transform4<B, S1, S2, Op>(exec: &Executor<B>, source: S1, op: Op) -> Result<S2, massively::Error>
+fn transform4<B, S1, S2, Op>(
+    exec: &Executor<B>,
+    source: S1,
+    op: Op,
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
     S1: MIter<B, Item = (u32, u32)>,
-    S2: MVec<B, Item = (u32, u32)>,
+    S2: MIterMut<B, Item = (u32, u32)>,
     Op: UnaryOp<B, (u32, u32), Output = (u32, u32)>,
 {
-    massively::transform(exec, source, op)
+    massively::transform(exec, source, op, out)
 }
 
-fn transform5<B, S1, S2, Op>(exec: &Executor<B>, source: S1, op: Op) -> Result<S2, massively::Error>
+fn transform5<B, S1, S2, Op>(
+    exec: &Executor<B>,
+    source: S1,
+    op: Op,
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
     S1: MIter<B, Item = (u32, u32, u32)>,
-    S2: MVec<B, Item = (u32, u32, u32)>,
+    S2: MIterMut<B, Item = (u32, u32, u32)>,
     Op: UnaryOp<B, (u32, u32, u32), Output = (u32, u32, u32)>,
 {
-    massively::transform(exec, source, op)
+    massively::transform(exec, source, op, out)
 }
 
-fn transform_without_op<B, S1, S2>(exec: &Executor<B>, source: S1) -> Result<S2, massively::Error>
+fn transform_without_op<B, S1, S2>(
+    exec: &Executor<B>,
+    source: S1,
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
     S1: MIter<B, Item = (u32,)>,
-    S2: MVec<B, Item = (u32,)>,
+    S2: MIterMut<B, Item = (u32,)>,
 {
-    massively::transform(exec, source, AddOne)
+    massively::transform(exec, source, AddOne, out)
 }
 
 fn reverse2<B, S1, S2>(exec: &Executor<B>, source: S1) -> Result<S2, massively::Error>
@@ -260,16 +284,17 @@ fn gather2<B, S1, S2>(
     exec: &Executor<B>,
     source: S1,
     indices: DeviceSlice<'_, B, u32>,
-) -> Result<S2, massively::Error>
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
     S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
+    S2: MIterMut<B, Item = S1::Item>,
 {
-    massively::gather(exec, source, indices)
+    massively::gather(exec, source, indices, out)
 }
 
-fn copy_if2<B, S1, S2>(
+fn copy_where2<B, S1, S2>(
     exec: &Executor<B>,
     source: S1,
     stencil: DeviceSlice<'_, B, u32>,
@@ -279,21 +304,20 @@ where
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
 {
-    massively::copy_if(exec, source, stencil)
+    massively::copy_where(exec, source, stencil)
 }
 
-fn replace_if2<B, S1, S2>(
+fn replace_where2<B, S2>(
     exec: &Executor<B>,
-    source: S1,
-    replacement: S1::Item,
+    replacement: S2::Item,
     stencil: DeviceSlice<'_, B, u32>,
-) -> Result<S2, massively::Error>
+    out: S2,
+) -> Result<(), massively::Error>
 where
     B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
+    S2: MIterMut<B>,
 {
-    massively::replace_if(exec, source, replacement, stencil)
+    massively::replace_where(exec, replacement, stencil, out)
 }
 
 fn count_if2<B, S1, Pred>(
@@ -322,18 +346,17 @@ where
     massively::find_if(exec, source, pred)
 }
 
-fn remove_if2<B, S1, S2, Pred>(
+fn remove_where2<'a, B, S1, S2>(
     exec: &Executor<B>,
     source: S1,
-    pred: Pred,
+    stencil: DeviceSlice<'a, B, u32>,
 ) -> Result<S2, massively::Error>
 where
     B: Runtime,
     S1: MIter<B>,
     S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp<B, S1::Item>,
 {
-    massively::remove_if(exec, source, pred)
+    massively::remove_where(exec, source, stencil)
 }
 
 fn partition2<B, S1, S2, Pred>(
@@ -396,7 +419,14 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform2(&exec, SoA1(input.slice(..)), AddOne).unwrap();
+    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform2(
+        &exec,
+        SoA1(input.slice(..)),
+        AddOne,
+        SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -427,7 +457,14 @@ fn gather2_wraps_gather_with_slice_array_signature() {
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let (output,) = gather2(&exec, SoA1(input.slice(..)), indices.slice(..)).unwrap();
+    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    gather2(
+        &exec,
+        SoA1(input.slice(..)),
+        indices.slice(..),
+        SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10, 20]);
 }
@@ -437,7 +474,14 @@ fn transform3_can_fix_concrete_input_and_output_types() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform3(&exec, SoA1(input.slice(..)), AddOne).unwrap();
+    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform3(
+        &exec,
+        SoA1(input.slice(..)),
+        AddOne,
+        SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -447,7 +491,8 @@ fn transform_can_hide_op_inside_wrapper() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = transform_without_op(&exec, SoA1(input.slice(..))).unwrap();
+    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform_without_op(&exec, SoA1(input.slice(..)), SoA1(output.slice_mut(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -458,8 +503,15 @@ fn transform4_can_fix_concrete_two_column_input_and_output_types() {
     let left = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let (out_left, out_right) =
-        transform4(&exec, SoA2(left.slice(..), right.slice(..)), PairShift).unwrap();
+    let mut out_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let mut out_right = exec.to_device(&[0_u32; 3]).unwrap();
+    transform4(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        PairShift,
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![11, 22, 33]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![110, 120, 130]);
@@ -485,10 +537,18 @@ fn transform5_can_fix_concrete_three_column_input_and_output_types() {
     let second = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let third = exec.to_device(&[100_u32, 200, 300]).unwrap();
 
-    let (out_first, out_second, out_third) = transform5(
+    let mut out_first = exec.to_device(&[0_u32; 3]).unwrap();
+    let mut out_second = exec.to_device(&[0_u32; 3]).unwrap();
+    let mut out_third = exec.to_device(&[0_u32; 3]).unwrap();
+    transform5(
         &exec,
         SoA3(first.slice(..), second.slice(..), third.slice(..)),
         TripleShift,
+        SoA3(
+            out_first.slice_mut(..),
+            out_second.slice_mut(..),
+            out_third.slice_mut(..),
+        ),
     )
     .unwrap();
 
@@ -573,10 +633,18 @@ fn gather2_wraps_three_column_gather_with_slice_array_signature() {
     let third = exec.to_device(&[1000_u32, 2000, 3000]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let (out_first, out_second, out_third) = gather2(
+    let mut out_first = exec.to_device(&[0_u32; 3]).unwrap();
+    let mut out_second = exec.to_device(&[0_u32; 3]).unwrap();
+    let mut out_third = exec.to_device(&[0_u32; 3]).unwrap();
+    gather2(
         &exec,
         SoA3(first.slice(..), second.slice(..), third.slice(..)),
         indices.slice(..),
+        SoA3(
+            out_first.slice_mut(..),
+            out_second.slice_mut(..),
+            out_third.slice_mut(..),
+        ),
     )
     .unwrap();
 
@@ -590,20 +658,28 @@ fn transform2_wraps_tuple_output() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (left, right) = transform2(&exec, SoA1(input.slice(..)), Split).unwrap();
+    let mut left = exec.to_device(&[0_u32; 3]).unwrap();
+    let mut right = exec.to_device(&[0_u32; 3]).unwrap();
+    transform2(
+        &exec,
+        SoA1(input.slice(..)),
+        Split,
+        SoA2(left.slice_mut(..), right.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&left).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&right).unwrap(), vec![11, 12, 13]);
 }
 
 #[test]
-fn copy_if2_wraps_two_column_copy_if_with_tuple_source() {
+fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
 
-    let (out_left, out_right) = copy_if2(
+    let (out_left, out_right) = copy_where2(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
         stencil.slice(..),
@@ -615,22 +691,22 @@ fn copy_if2_wraps_two_column_copy_if_with_tuple_source() {
 }
 
 #[test]
-fn replace_if2_wraps_two_column_replace_if_with_tuple_replacement() {
+fn replace_where2_wraps_two_column_replace_where_with_tuple_replacement() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
-    let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
-    let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
+    let mut left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let mut right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
 
-    let (out_left, out_right) = replace_if2(
+    replace_where2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
         (7_u32, 70_u32),
         stencil.slice(..),
+        SoA2(left.slice_mut(..), right.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&out_left).unwrap(), vec![7, 20, 7, 40]);
-    assert_eq!(exec.to_host(&out_right).unwrap(), vec![70, 200, 70, 400]);
+    assert_eq!(exec.to_host(&left).unwrap(), vec![7, 20, 7, 40]);
+    assert_eq!(exec.to_host(&right).unwrap(), vec![70, 200, 70, 400]);
 }
 
 #[test]
@@ -647,13 +723,18 @@ fn predicate_queries_wrap_two_column_tuple_predicates() {
 }
 
 #[test]
-fn remove_if2_wraps_two_column_remove_if_with_tuple_predicate() {
+fn remove_where2_wraps_two_column_remove_where_with_stencil() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
+    let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
 
-    let (out_left, out_right) =
-        remove_if2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let (out_left, out_right) = remove_where2(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        stencil.slice(..),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 30]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![100, 300]);

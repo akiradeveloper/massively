@@ -1,4 +1,4 @@
-pub fn scatter_if(
+pub fn scatter_where(
     values: &[u32],
     indices: &[u32],
     len: usize,

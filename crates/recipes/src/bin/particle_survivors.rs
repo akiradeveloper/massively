@@ -9,13 +9,14 @@
 //! # GPU Algorithm
 //!
 //! 1. Transform each row to the next position.
-//! 2. Remove rows outside the box.
+//! 2. Build a stencil for rows outside the box.
+//! 3. Remove rows with a non-zero stencil.
 
 mod common;
 
 use cubecl::prelude::*;
-use massively::op::{PredicateOp, UnaryOp};
-use massively::{DeviceVec, Executor, SoA3, remove_if, transform};
+use massively::op::UnaryOp;
+use massively::{DeviceVec, Executor, SoA3, remove_where, transform};
 
 struct AdvanceParticle;
 
@@ -36,12 +37,18 @@ where
 struct OutsideParticleBox;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (f32, f32, f32)> for OutsideParticleBox
+impl<B> UnaryOp<B, (f32, f32, f32)> for OutsideParticleBox
 where
     B: cubecl::prelude::Runtime,
 {
-    fn apply(input: (f32, f32, f32)) -> bool {
-        input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0
+    type Output = (u32,);
+
+    fn apply(input: (f32, f32, f32)) -> (u32,) {
+        if input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0 {
+            (1_u32,)
+        } else {
+            (0_u32,)
+        }
     }
 }
 
@@ -65,10 +72,15 @@ where
         SoA3(x.slice(..), y.slice(..), vx.slice(..)),
         AdvanceParticle,
     )?;
-    let (x, y, vx) = remove_if(
+    let (stencil,) = transform(
         exec,
         SoA3(x.slice(..), y.slice(..), vx.slice(..)),
         OutsideParticleBox,
+    )?;
+    let (x, y, vx) = remove_where(
+        exec,
+        SoA3(x.slice(..), y.slice(..), vx.slice(..)),
+        stencil.slice(..),
     )?;
     Ok(Output { x, y, vx })
 }

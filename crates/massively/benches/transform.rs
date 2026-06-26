@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, dense_f32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, transform};
+use massively::{Executor, transform};
 
 struct MulTwo;
 
@@ -20,7 +20,14 @@ impl UnaryOp<WgpuRuntime, (f32,)> for MulTwo {
 
 fn check_transform(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let (output,) = transform(&exec, massively::SoA1(values.slice(..)), MulTwo).unwrap();
+    let mut output = exec.to_device(&[0.0_f32; 3]).unwrap();
+    transform(
+        exec,
+        massively::SoA1(values.slice(..)),
+        MulTwo,
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
@@ -32,14 +39,19 @@ fn bench_transform(c: &mut Criterion) {
 
         for &len in SIZES {
             let values = exec.to_device(&dense_f32(len)).unwrap();
+            let mut output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             sync(&exec);
             transform_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<WgpuRuntime, f32>,) =
-                        transform(&exec, massively::SoA1(black_box(values.slice(..))), MulTwo)
-                            .unwrap();
+                    transform(
+                        &exec,
+                        massively::SoA1(black_box(values.slice(..))),
+                        MulTwo,
+                        massively::SoA1(output.slice_mut(..)),
+                    )
+                    .unwrap();
                     sync(&exec);
-                    black_box(output)
+                    black_box(output.len())
                 })
             });
         }

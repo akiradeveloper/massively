@@ -1,14 +1,11 @@
-mod gather;
 mod memory;
 mod ordering;
 mod reduce;
 mod scan;
-mod scatter;
 mod search;
 mod selection;
 mod sequence;
 
-pub use gather::{gather, gather_if};
 pub use memory::{
     MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformUnaryOutput,
 };
@@ -20,20 +17,21 @@ pub use scan::{
     adjacent_difference, exclusive_scan, exclusive_scan_by_key, inclusive_scan,
     inclusive_scan_by_key,
 };
-pub use scatter::{scatter, scatter_if};
 pub use search::{
     adjacent_find, equal, equal_range, find_first_of, is_sorted, is_sorted_until,
     lexicographical_compare, lower_bound, max_element, min_element, minmax_element, mismatch,
     upper_bound,
 };
 pub use selection::{
-    all_of, any_of, copy_if, count_if, find_if, is_partitioned, none_of, partition, remove_if,
+    all_of, any_of, copy_where, count_if, find_if, is_partitioned, none_of, partition, remove_if,
 };
-pub use sequence::{replace_if, unique, unique_by_key};
+pub use sequence::{replace_where, unique, unique_by_key};
 
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},
-    device::{DeviceVec, KernelColumn, KernelColumnAt, S0, SoAView2, SoAView3},
+    device::{
+        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, S0, SoAView2, SoAView3,
+    },
     error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr},
     kernels::*,
@@ -110,6 +108,58 @@ where
     }
 
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
+}
+
+pub fn device_expr_collect_into_with_policy<ExprSource>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
+    expr: &ExprSource,
+    output: &DeviceColumnMutView<ExprSource::Runtime, ExprSource::Item>,
+) -> Result<(), Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
+{
+    expr.validate()?;
+    let len = expr.len();
+    ensure_same_len(len, output.len)?;
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let bindings = expr.stage(policy)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let block_count_u32 = api_expr_block_count(len)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let output_offset = offset_handle(client, output.offset)?;
+
+    unsafe {
+        device_collect_expr_into_block_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+    Ok(())
 }
 
 pub(super) fn device_expr_reverse_collect<ExprSource>(
@@ -228,47 +278,110 @@ where
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(super) fn device_expr_scatter_with_policy<ValueSource, IndexSource, InitialSource>(
+pub fn device_expr_gather_into_with_policy<InputSource, IndexSource>(
+    policy: &crate::policy::CubePolicy<InputSource::Runtime>,
+    input: &InputSource,
+    indices: &IndexSource,
+    output: &DeviceColumnMutView<InputSource::Runtime, InputSource::Item>,
+) -> Result<(), Error>
+where
+    InputSource: KernelColumn + KernelColumnAt<S0>,
+    InputSource::Runtime: Runtime,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    InputSource::Item: CubePrimitive + CubeElement,
+    InputSource::Expr: GpuExpr<InputSource::Item>,
+    IndexSource::Expr: GpuExpr<u32>,
+{
+    input.validate()?;
+    indices.validate()?;
+    ensure_same_len(indices.len(), output.len)?;
+    let len = indices.len();
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let block_count_u32 = api_expr_block_count(len)?;
+    let input_bindings = input.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
+    let input_offset = offset_handle(client, input_bindings.input_offset)?;
+    let input_rhs_offset = offset_handle(client, input_bindings.rhs_offset)?;
+    let index_offset = offset_handle(client, index_bindings.input_offset)?;
+    let index_rhs_offset = offset_handle(client, index_bindings.rhs_offset)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let output_offset = offset_handle(client, output.offset)?;
+
+    unsafe {
+        gather_device_expr_into_kernel::launch_unchecked::<
+            InputSource::Item,
+            InputSource::Expr,
+            IndexSource::Expr,
+            InputSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe {
+                BufferArg::from_raw_parts(input_bindings.input.clone(), input_bindings.input_len)
+            },
+            unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
+            unsafe {
+                BufferArg::from_raw_parts(input_bindings.rhs.clone(), input_bindings.rhs_len)
+            },
+            unsafe { BufferArg::from_raw_parts(input_rhs_offset.clone(), 1) },
+            unsafe {
+                BufferArg::from_raw_parts(index_bindings.input.clone(), index_bindings.input_len)
+            },
+            unsafe { BufferArg::from_raw_parts(index_offset.clone(), 1) },
+            unsafe {
+                BufferArg::from_raw_parts(index_bindings.rhs.clone(), index_bindings.rhs_len)
+            },
+            unsafe { BufferArg::from_raw_parts(index_rhs_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+    Ok(())
+}
+
+pub fn device_expr_scatter_into_with_policy<ValueSource, IndexSource>(
     policy: &crate::policy::CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
-    initial: &InitialSource,
-) -> Result<DeviceVec<ValueSource::Runtime, ValueSource::Item>, Error>
+    output: &DeviceColumnMutView<ValueSource::Runtime, ValueSource::Item>,
+) -> Result<(), Error>
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     ValueSource::Runtime: Runtime,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    InitialSource:
-        KernelColumn<Runtime = ValueSource::Runtime, Item = ValueSource::Item> + KernelColumnAt<S0>,
     ValueSource::Item: CubePrimitive + CubeElement,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
     IndexSource::Expr: GpuExpr<u32>,
-    InitialSource::Expr: DeviceGpuExpr<ValueSource::Item>,
 {
     values.validate()?;
     indices.validate()?;
     ensure_same_len(values.len(), indices.len())?;
-
-    let output = device_expr_collect_with_policy(policy, initial)?;
     let len = values.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     if len == 0 {
-        return Ok(output);
+        return Ok(());
     }
 
     let client = policy.client();
     let block_count_u32 = api_expr_block_count(len)?;
     let value_bindings = values.stage(policy)?;
     let index_bindings = indices.stage(policy)?;
-    let len_values = [len_u32];
-    let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let value_offset = offset_handle(client, value_bindings.input_offset)?;
     let value_rhs_offset = offset_handle(client, value_bindings.rhs_offset)?;
     let index_offset = offset_handle(client, index_bindings.input_offset)?;
     let index_rhs_offset = offset_handle(client, index_bindings.rhs_offset)?;
+    let output_offset = offset_handle(client, output.offset)?;
 
     unsafe {
-        scatter_expr_kernel::launch_unchecked::<
+        scatter_expr_into_kernel::launch_unchecked::<
             ValueSource::Item,
             ValueSource::Expr,
             IndexSource::Expr,
@@ -294,14 +407,250 @@ where
             },
             unsafe { BufferArg::from_raw_parts(index_rhs_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output.handle.clone(), output.len) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
         );
     }
-
-    Ok(output)
+    Ok(())
 }
 
-pub(super) fn device_expr_copy_if_with_policy<ExprSource, Pred>(
+pub fn device_expr_gather_where_into_with_policy<InputSource, IndexSource, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<InputSource::Runtime>,
+    input: &InputSource,
+    indices: &IndexSource,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<InputSource::Runtime, InputSource::Item>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    InputSource: KernelColumn + KernelColumnAt<S0>,
+    InputSource::Runtime: Runtime,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    Stencil: SelectionStencil<Pred, Runtime = InputSource::Runtime>,
+    InputSource::Item: CubePrimitive + CubeElement,
+    InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
+    IndexSource::Expr: DeviceGpuExpr<u32>,
+{
+    input.validate()?;
+    indices.validate()?;
+    ensure_same_len(indices.len(), stencil.len())?;
+    ensure_same_len(indices.len(), output.len)?;
+    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let len = indices.len();
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let input_bindings = input.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
+    let input_slot0 = input_bindings.slot_or_first(0);
+    let input_slot1 = input_bindings.slot_or_first(1);
+    let input_slot2 = input_bindings.slot_or_first(2);
+    let input_slot3 = input_bindings.slot_or_first(3);
+    let index_slot0 = index_bindings.slot_or_first(0);
+    let index_slot1 = index_bindings.slot_or_first(1);
+    let index_slot2 = index_bindings.slot_or_first(2);
+    let index_slot3 = index_bindings.slot_or_first(3);
+    let input_slot_offsets = input_bindings.slot_offsets_handle(client)?;
+    let index_slot_offsets = index_bindings.slot_offsets_handle(client)?;
+    let output_offset = offset_handle(client, output.offset)?;
+    let block_count_u32 = api_expr_block_count(len)?;
+
+    unsafe {
+        gather_if_flags_into_kernel::launch_unchecked::<
+            InputSource::Item,
+            InputSource::Expr,
+            IndexSource::Expr,
+            InputSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot2.0.clone(), input_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot3.0.clone(), input_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(input_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+    Ok(())
+}
+
+pub fn device_expr_scatter_where_into_with_policy<ValueSource, IndexSource, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<ValueSource::Runtime>,
+    values: &ValueSource,
+    indices: &IndexSource,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<ValueSource::Runtime, ValueSource::Item>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    ValueSource: KernelColumn + KernelColumnAt<S0>,
+    ValueSource::Runtime: Runtime,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    Stencil: SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
+    ValueSource::Item: CubePrimitive + CubeElement,
+    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
+    IndexSource::Expr: DeviceGpuExpr<u32>,
+{
+    values.validate()?;
+    indices.validate()?;
+    ensure_same_len(values.len(), indices.len())?;
+    ensure_same_len(values.len(), stencil.len())?;
+    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let len = values.len();
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let value_bindings = values.stage(policy)?;
+    let index_bindings = indices.stage(policy)?;
+    let value_slot0 = value_bindings.slot_or_first(0);
+    let value_slot1 = value_bindings.slot_or_first(1);
+    let value_slot2 = value_bindings.slot_or_first(2);
+    let value_slot3 = value_bindings.slot_or_first(3);
+    let index_slot0 = index_bindings.slot_or_first(0);
+    let index_slot1 = index_bindings.slot_or_first(1);
+    let index_slot2 = index_bindings.slot_or_first(2);
+    let index_slot3 = index_bindings.slot_or_first(3);
+    let value_slot_offsets = value_bindings.slot_offsets_handle(client)?;
+    let index_slot_offsets = index_bindings.slot_offsets_handle(client)?;
+    let output_offset = offset_handle(client, output.offset)?;
+    let block_count_u32 = api_expr_block_count(len)?;
+
+    unsafe {
+        scatter_if_flags_into_kernel::launch_unchecked::<
+            ValueSource::Item,
+            ValueSource::Expr,
+            IndexSource::Expr,
+            ValueSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot2.0.clone(), value_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot3.0.clone(), value_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(value_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+    Ok(())
+}
+
+pub fn replace_where_into_with_policy<R, T, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<R>,
+    replacement: T,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<R, T>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+    Stencil: SelectionStencil<Pred, Runtime = R>,
+{
+    ensure_same_len(stencil.len(), output.len)?;
+    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let len = stencil.len();
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let replacement_values = [replacement];
+    let replacement_handle = client.create_from_slice(T::as_bytes(&replacement_values));
+    let output_offset = offset_handle(client, output.offset)?;
+    let block_count_u32 = api_expr_block_count(len)?;
+
+    unsafe {
+        replace_with_flags_into_kernel::launch_unchecked::<T, R>(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(replacement_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+    Ok(())
+}
+
+pub fn device_expr_copy_where_into_with_policy<ExprSource, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
+    expr: &ExprSource,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<ExprSource::Runtime, ExprSource::Item>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
+    Stencil: SelectionStencil<Pred, Runtime = ExprSource::Runtime>,
+{
+    expr.validate()?;
+    ensure_same_len(expr.len(), stencil.len())?;
+    ensure_same_len(expr.len(), output.len)?;
+    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let len = expr.len();
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let bindings = expr.stage(policy)?;
+    let slot0 = bindings.slot_or_first(0);
+    let slot1 = bindings.slot_or_first(1);
+    let slot2 = bindings.slot_or_first(2);
+    let slot3 = bindings.slot_or_first(3);
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let output_offset = offset_handle(client, output.offset)?;
+    let block_count_u32 = api_expr_block_count(len)?;
+
+    unsafe {
+        copy_if_flags_into_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+    Ok(())
+}
+
+pub(super) fn device_expr_copy_where_with_policy<ExprSource, Pred>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
@@ -310,12 +659,13 @@ where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item> + GpuExpr<ExprSource::Item>,
     Pred: PredicateOp<ExprSource::Item>,
 {
     let handles =
         device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
-    select::compact::<ExprSource::Runtime, ExprSource::Item>(policy, handles)
+    let count = select::selected_count(policy, &handles)?;
+    device_expr_compact_with_selection_with_policy(policy, expr, &handles, count)
 }
 
 pub(super) fn device_expr_compact_with_flags_with_policy<ExprSource>(
@@ -550,56 +900,29 @@ where
     let bindings = expr.stage(policy)?;
     let input_offset = offset_handle(client, bindings.input_offset)?;
     let rhs_offset = offset_handle(client, bindings.rhs_offset)?;
-    let value_handle = expr.staged_value_handle(&bindings);
     let block_count_u32 = api_expr_block_count(len)?;
 
-    let value_handle = if let Some(value_handle) = value_handle {
-        unsafe {
-            copy_if_expr_flag_only_kernel::launch_unchecked::<
-                ExprSource::Item,
-                ExprSource::Expr,
-                Pred,
-                ExprSource::Runtime,
-            >(
-                client,
-                CubeCount::Static(block_count_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-                unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
-                unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
-                unsafe { BufferArg::from_raw_parts(rhs_offset.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
-            );
-        }
-        value_handle
-    } else {
-        let value_handle = client.empty(len * std::mem::size_of::<ExprSource::Item>());
-        unsafe {
-            copy_if_expr_flags_kernel::launch_unchecked::<
-                ExprSource::Item,
-                ExprSource::Expr,
-                Pred,
-                ExprSource::Runtime,
-            >(
-                client,
-                CubeCount::Static(block_count_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-                unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
-                unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
-                unsafe { BufferArg::from_raw_parts(rhs_offset.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
-                unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
-                unsafe { BufferArg::from_raw_parts(value_handle.clone(), len) },
-            );
-        }
-        value_handle
-    };
+    unsafe {
+        copy_if_expr_flag_only_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            Pred,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
+            unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
+            unsafe { BufferArg::from_raw_parts(rhs_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
 
-    select::handles_from_flags(policy, len, len_u32, flag_handle, value_handle)
+    select::handles_from_flags(policy, len, len_u32, flag_handle, policy.empty_handle())
 }
 
 mod selection_control;
