@@ -9,18 +9,18 @@ use crate::detail::dispatch;
 /// An `MItem` is one element of an [`crate::iter::MIter`] or [`MVec`]. The
 /// current public model represents items as tuples such as `(T,)`, `(T, U)`,
 /// and `(T, U, V)`; internally those tuples are stored as SoA device columns for
-/// backend `B`.
-pub trait MItem<B: Runtime>: dispatch::MItemDispatch<B> + CubeType + Sized + 'static {
+/// backend `R`.
+pub trait MItem<R: Runtime>: dispatch::MItemDispatch<R> + CubeType + Sized + 'static {
     #[doc(hidden)]
     type Inner;
 }
 
 /// Owned massively vector for a logical item.
-pub trait MVec<B: Runtime>: Sized {
-    type Item: MItem<B>;
+pub trait MVec<R: Runtime>: Sized {
+    type Item: MItem<R>;
 
     #[doc(hidden)]
-    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self;
+    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self;
 
     /// Returns the logical length.
     fn len(&self) -> usize;

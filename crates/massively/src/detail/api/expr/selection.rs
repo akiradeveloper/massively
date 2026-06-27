@@ -281,7 +281,7 @@ where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
     ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
     Pred: PredicateOp<ExprSource::Item>,
 {
     let handles =
@@ -342,12 +342,15 @@ where
     let invert_handle = client.create_from_slice(u32::as_bytes(&invert_values));
     let flag_handle = client.empty(len * std::mem::size_of::<u32>());
     let bindings = expr.stage(policy)?;
-    let input_offset = offset_handle(client, bindings.input_offset)?;
-    let rhs_offset = offset_handle(client, bindings.rhs_offset)?;
+    let slot0 = bindings.slot_or_first(0);
+    let slot1 = bindings.slot_or_first(1);
+    let slot2 = bindings.slot_or_first(2);
+    let slot3 = bindings.slot_or_first(3);
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
     let block_count_u32 = api_expr_block_count(len)?;
 
     unsafe {
-        copy_if_expr_flag_only_kernel::launch_unchecked::<
+        copy_if_device_expr_flag_only_kernel::launch_unchecked::<
             ExprSource::Item,
             ExprSource::Expr,
             Pred,
@@ -356,10 +359,11 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-            unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
-            unsafe { BufferArg::from_raw_parts(input_offset.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
-            unsafe { BufferArg::from_raw_parts(rhs_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },

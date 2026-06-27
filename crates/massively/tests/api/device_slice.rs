@@ -46,7 +46,7 @@ fn device_slice_can_be_sliced_again() {
 #[test]
 fn device_slice_mut_can_be_sliced_as_read_only() {
     let exec = exec();
-    let mut input = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
+    let input = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
     let slice = input.slice_mut(1..5);
 
     assert_eq!(exec.to_host(&slice.slice(1..3)).unwrap(), vec![30, 40]);
@@ -56,7 +56,7 @@ fn device_slice_mut_can_be_sliced_as_read_only() {
 fn executor_copy_copies_between_device_slices() {
     let exec = exec();
     let input = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
-    let mut output = exec.to_device(&[1_u32, 2, 3, 4, 5, 6]).unwrap();
+    let output = exec.to_device(&[1_u32, 2, 3, 4, 5, 6]).unwrap();
 
     exec.copy(input.slice(1..4), output.slice_mut(2..5))
         .unwrap();
@@ -65,13 +65,25 @@ fn executor_copy_copies_between_device_slices() {
 }
 
 #[test]
+fn device_vec_can_create_read_and_mut_slices_at_once() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30, 0, 0, 0]).unwrap();
+
+    let input = values.slice(0..3);
+    let output = values.slice_mut(3..6);
+    exec.copy(input, output).unwrap();
+
+    assert_eq!(exec.to_host(&values).unwrap(), vec![10, 20, 30, 10, 20, 30]);
+}
+
+#[test]
 fn executor_copy_accepts_nested_mutable_destination_slice() {
     let exec = exec();
     let input = exec.to_device(&[7_u32, 8, 9]).unwrap();
-    let mut output = exec.to_device(&[0_u32, 1, 2, 3, 4, 5]).unwrap();
+    let output = exec.to_device(&[0_u32, 1, 2, 3, 4, 5]).unwrap();
 
     {
-        let mut middle = output.slice_mut(1..5);
+        let middle = output.slice_mut(1..5);
         exec.copy(input.slice(..2), middle.slice_mut(1..3)).unwrap();
     }
 
@@ -82,7 +94,7 @@ fn executor_copy_accepts_nested_mutable_destination_slice() {
 fn executor_copy_rejects_mismatched_lengths() {
     let exec = exec();
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let mut output = exec.to_device(&[0_u32, 0]).unwrap();
+    let output = exec.to_device(&[0_u32, 0]).unwrap();
 
     assert!(exec.copy(input.slice(..), output.slice_mut(..)).is_err());
 }
@@ -92,7 +104,7 @@ fn executor_copy_rejects_other_executor_data() {
     let data_exec = exec();
     let other_exec = exec();
     let input = data_exec.to_device(&[10_u32, 20]).unwrap();
-    let mut output = data_exec.to_device(&[0_u32, 0]).unwrap();
+    let output = data_exec.to_device(&[0_u32, 0]).unwrap();
 
     assert!(
         other_exec
@@ -106,7 +118,7 @@ fn algorithms_reject_other_executor_data() {
     let data_exec = exec();
     let other_exec = exec();
     let input = data_exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let mut output = data_exec.to_device(&[0.0_f32; 3]).unwrap();
+    let output = data_exec.to_device(&[0.0_f32; 3]).unwrap();
 
     let result = transform(
         &other_exec,
@@ -123,7 +135,7 @@ fn transform_accepts_device_slice() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
 
-    let mut output = exec.to_device(&[0.0_f32; 2]).unwrap();
+    let output = exec.to_device(&[0.0_f32; 2]).unwrap();
     transform(
         &exec,
         massively::SoA1(input.slice(1..3)),
@@ -167,8 +179,8 @@ fn transform_accepts_multi_column_device_slices() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
 
-    let mut out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut out_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA2(values.slice(1..4), tags.slice(1..4)),
@@ -246,7 +258,7 @@ fn gather_accepts_device_slice_indices() {
     let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let indices = exec.to_device(&[99_u32, 3, 1, 0, 88]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
         massively::SoA1(values.slice(..)),
@@ -265,7 +277,7 @@ fn gather_where_accepts_offset_device_slices() {
     let indices = exec.to_device(&[77_u32, 3, 1, 0, 2, 66]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0, 0]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 4]).unwrap();
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
     gather_where(
         &exec,
         massively::SoA1(values.slice(1..5)),
@@ -592,7 +604,7 @@ fn remove_where_accepts_device_slice_input_and_stencil() {
 #[test]
 fn replace_where_accepts_device_slice_stencil() {
     let exec = exec();
-    let mut values = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
+    let values = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
 
     replace_where(
@@ -613,7 +625,7 @@ fn scatter_where_accepts_device_slice_indices_and_stencil() {
     let indices = exec.to_device(&[99_u32, 2, 1, 0, 88]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
     scatter_where(
         &exec,
         massively::SoA1(values.slice(1..4)),
@@ -635,9 +647,9 @@ fn transform_accepts_three_column_device_slices() {
         .to_device(&[0.0_f32, 100.0, 200.0, 300.0, 99.0])
         .unwrap();
 
-    let mut out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut out_b = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut out_c = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_c = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA3(a.slice(1..4), b.slice(1..4), c.slice(1..4)),
@@ -661,7 +673,7 @@ fn empty_device_slice_is_valid_input() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
     let slice = values.slice(1..1);
-    let mut output = exec.to_device(&[] as &[f32]).unwrap();
+    let output = exec.to_device(&[] as &[f32]).unwrap();
     transform(
         &exec,
         massively::SoA1(slice),

@@ -1,8 +1,8 @@
 use super::*;
 
 macro_rules! inner_product_left_item_body {
-    ($B:ident; ($left_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        <<RightIter as MIter<$B>>::Item as sealed::MItemDispatch<$B>>::inner_product_with_left_scalar::<
+    ($R:ident; ($left_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+        <<RightIter as MIter<$R>>::Item as sealed::MItemDispatch<$R>>::inner_product_with_left_scalar::<
             LeftIter,
             RightIter,
             $left_ty,
@@ -11,7 +11,7 @@ macro_rules! inner_product_left_item_body {
             Output,
         >($policy, $left, $right, $transform_op, $init, $reduce_op)
     }};
-    ($B:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+    ($R:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
         let _ = ($policy, $left, $right, $transform_op, $init, $reduce_op);
         Err(Error::Launch {
             message: "inner_product is not supported for this iterator shape".to_string(),
@@ -20,19 +20,19 @@ macro_rules! inner_product_left_item_body {
 }
 
 macro_rules! inner_product_right_item_body {
-    ($B:ident; ($right_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        let left = column_view_at::<$B, LeftIter, LeftScalar>(&$left, 0, "inner_product")?;
-        let right = column_view_at::<$B, RightIter, $right_ty>(&$right, 0, "inner_product")?;
-        let transformed = <Output as sealed::MItemDispatch<$B>>::transform_binary(
+    ($R:ident; ($right_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+        let left = column_view_at::<$R, LeftIter, LeftScalar>(&$left, 0, "inner_product")?;
+        let right = column_view_at::<$R, RightIter, $right_ty>(&$right, 0, "inner_product")?;
+        let transformed = <Output as sealed::MItemDispatch<$R>>::transform_binary(
             $policy,
             left,
             right,
-            KernelTuple1InnerProductOp::<$B, TransformOp, Output>::new(),
+            KernelTuple1InnerProductOp::<$R, TransformOp, Output>::new(),
         )?;
         let _ = $transform_op;
-        <Output as sealed::MItemDispatch<$B>>::reduce_inner($policy, transformed, $init, $reduce_op)
+        <Output as sealed::MItemDispatch<$R>>::reduce_inner($policy, transformed, $init, $reduce_op)
     }};
-    ($B:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
+    ($R:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
         let _ = ($policy, $left, $right, $transform_op, $init, $reduce_op);
         Err(Error::Launch {
             message: "inner_product is not supported for this iterator shape".to_string(),
@@ -42,22 +42,22 @@ macro_rules! inner_product_right_item_body {
 
 macro_rules! impl_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
-        impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
+        impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar, )+
         {
-            type Inner = ($( crate::detail::DeviceVec<B, $ty>, )+);
+            type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
         }
 
-        impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
+        impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar, )+
         {
             type Item = ($( $ty, )+);
 
-            fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+            fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
                 let ($( $var, )+) = inner;
                 ($( DeviceVec::from_inner($var), )+)
             }
@@ -67,133 +67,133 @@ macro_rules! impl_mitem_tuple {
             }
         }
 
-        impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
+        impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar, )+
         {
             fn transform_unary<Input, Op>(
-                policy: &crate::detail::CubePolicy<B>,
+                policy: &crate::detail::CubePolicy<R>,
                 input: crate::detail::device::DeviceColumnView<
-                    B,
+                    R,
                     Input,
                 >,
                 op: Op,
-            ) -> Result<<Self as MItem<B>>::Inner, Error>
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 Input: Scalar,
-                Op: op::UnaryOp<B, (Input,), Output = Self>,
+                Op: op::UnaryOp<R, (Input,), Output = Self>,
                 Self: crate::detail::TransformUnaryOutput<
-                    B,
+                    R,
                     Input,
-                    KernelOp<B, Op>,
+                    KernelOp<R, Op>,
                 >,
                 <Self as crate::detail::MItemStorage<
-                    B,
+                    R,
                 >>::Storage: crate::detail::MaterializeOutput<
-                    Runtime = B,
+                    Runtime = R,
                     Output = ($(
-                        crate::detail::DeviceVec<B, $ty>,
+                        crate::detail::DeviceVec<R, $ty>,
                     )+),
                 >,
             {
                 let _ = op;
                 let storage =
                     <Self as crate::detail::TransformUnaryOutput<
-                        B,
+                        R,
                         Input,
-                        KernelOp<B, Op>,
+                        KernelOp<R, Op>,
                     >>::run(policy, input)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
             fn transform_binary<Left, Right, Op>(
-                policy: &crate::detail::CubePolicy<B>,
+                policy: &crate::detail::CubePolicy<R>,
                 left: crate::detail::device::DeviceColumnView<
-                    B,
+                    R,
                     Left,
                 >,
                 right: crate::detail::device::DeviceColumnView<
-                    B,
+                    R,
                     Right,
                 >,
                 op: Op,
-            ) -> Result<<Self as MItem<B>>::Inner, Error>
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 Left: Scalar,
                 Right: Scalar,
-                Op: op::UnaryOp<B, (Left, Right), Output = Self>,
+                Op: op::UnaryOp<R, (Left, Right), Output = Self>,
                 Self: crate::detail::TransformSoA2Output<
-                    B,
+                    R,
                     Left,
                     Right,
-                    KernelOp<B, Op>,
+                    KernelOp<R, Op>,
                 >,
                 <Self as crate::detail::MItemStorage<
-                    B,
+                    R,
                 >>::Storage: crate::detail::MaterializeOutput<
-                    Runtime = B,
+                    Runtime = R,
                     Output = ($(
-                        crate::detail::DeviceVec<B, $ty>,
+                        crate::detail::DeviceVec<R, $ty>,
                     )+),
                 >,
             {
                 let _ = op;
                 let storage =
                     <Self as crate::detail::TransformSoA2Output<
-                        B,
+                        R,
                         Left,
                         Right,
-                        KernelOp<B, Op>,
+                        KernelOp<R, Op>,
                     >>::run(policy, left, right)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
             fn transform_ternary<First, Second, Third, Op>(
-                policy: &crate::detail::CubePolicy<B>,
+                policy: &crate::detail::CubePolicy<R>,
                 first: crate::detail::device::DeviceColumnView<
-                    B,
+                    R,
                     First,
                 >,
                 second: crate::detail::device::DeviceColumnView<
-                    B,
+                    R,
                     Second,
                 >,
                 third: crate::detail::device::DeviceColumnView<
-                    B,
+                    R,
                     Third,
                 >,
                 op: Op,
-            ) -> Result<<Self as MItem<B>>::Inner, Error>
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
                 Third: Scalar,
-                Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
+                Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
                 Self: crate::detail::TransformSoA3Output<
-                    B,
+                    R,
                     First,
                     Second,
                     Third,
-                    KernelOp<B, Op>,
+                    KernelOp<R, Op>,
                 >,
                 <Self as crate::detail::MItemStorage<
-                    B,
+                    R,
                 >>::Storage: crate::detail::MaterializeOutput<
-                    Runtime = B,
+                    Runtime = R,
                     Output = ($(
-                        crate::detail::DeviceVec<B, $ty>,
+                        crate::detail::DeviceVec<R, $ty>,
                     )+),
                 >,
             {
                 let _ = op;
                 let storage =
                     <Self as crate::detail::TransformSoA3Output<
-                        B,
+                        R,
                         First,
                         Second,
                         Third,
-                        KernelOp<B, Op>,
+                        KernelOp<R, Op>,
                     >>::run(
                         policy,
                         first,
@@ -204,16 +204,16 @@ macro_rules! impl_mitem_tuple {
             }
 
             fn reduce_inner<Op>(
-                policy: &crate::detail::CubePolicy<B>,
-                input: <Self as MItem<B>>::Inner,
+                policy: &crate::detail::CubePolicy<R>,
+                input: <Self as MItem<R>>::Inner,
                 init: Self,
                 op: Op,
             ) -> Result<Self, Error>
             where
-                Op: op::ReductionOp<B, Self>,
+                Op: op::ReductionOp<R, Self>,
             {
                 let _ = op;
-                crate::detail::reduce(policy, input, init, KernelOp::<B, Op>::new())
+                crate::detail::reduce(policy, input, init, KernelOp::<R, Op>::new())
             }
 
             fn inner_product_with_right_item<
@@ -223,7 +223,7 @@ macro_rules! impl_mitem_tuple {
                 ReduceOp,
                 Output,
             >(
-                policy: &crate::detail::CubePolicy<B>,
+                policy: &crate::detail::CubePolicy<R>,
                 left: LeftIter,
                 right: RightIter,
                 transform_op: TransformOp,
@@ -231,15 +231,15 @@ macro_rules! impl_mitem_tuple {
                 reduce_op: ReduceOp,
             ) -> Result<Output, Error>
             where
-                LeftIter: MIter<B, Item = Self>,
-                RightIter: MIter<B>,
+                LeftIter: MIter<R, Item = Self>,
+                RightIter: MIter<R>,
                 TransformOp:
-                    op::BinaryOp<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
-                Output: MItem<B>,
-                ReduceOp: op::ReductionOp<B, Output>,
+                    op::BinaryOp<R, Self, <RightIter as MIter<R>>::Item, Output = Output>,
+                Output: MItem<R>,
+                ReduceOp: op::ReductionOp<R, Output>,
             {
                 inner_product_left_item_body!(
-                    B;
+                    R;
                     ($( $ty ),+);
                     policy,
                     left,
@@ -258,7 +258,7 @@ macro_rules! impl_mitem_tuple {
                 ReduceOp,
                 Output,
             >(
-                policy: &crate::detail::CubePolicy<B>,
+                policy: &crate::detail::CubePolicy<R>,
                 left: LeftIter,
                 right: RightIter,
                 transform_op: TransformOp,
@@ -267,14 +267,14 @@ macro_rules! impl_mitem_tuple {
             ) -> Result<Output, Error>
             where
                 LeftScalar: Scalar + 'static,
-                LeftIter: MIter<B, Item = (LeftScalar,)>,
-                RightIter: MIter<B, Item = Self>,
-                TransformOp: op::BinaryOp<B, (LeftScalar,), Self, Output = Output>,
-                Output: MItem<B>,
-                ReduceOp: op::ReductionOp<B, Output>,
+                LeftIter: MIter<R, Item = (LeftScalar,)>,
+                RightIter: MIter<R, Item = Self>,
+                TransformOp: op::BinaryOp<R, (LeftScalar,), Self, Output = Output>,
+                Output: MItem<R>,
+                ReduceOp: op::ReductionOp<R, Output>,
             {
                 inner_product_right_item_body!(
-                    B;
+                    R;
                     ($( $ty ),+);
                     policy,
                     left,
@@ -294,29 +294,29 @@ impl_mitem_tuple!(A: a, B0: b, C: c);
 
 macro_rules! impl_wide_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
-        impl<B, $( $ty ),+> MItem<B> for ($( $ty, )+)
+        impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar, )+
         {
-            type Inner = ($( crate::detail::DeviceVec<B, $ty>, )+);
+            type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
         }
 
-        impl<B, $( $ty ),+> sealed::MItemDispatch<B> for ($( $ty, )+)
+        impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar, )+
         {
         }
 
-        impl<B, $( $ty ),+> MVec<B> for ($( DeviceVec<B, $ty>, )+)
+        impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar, )+
         {
             type Item = ($( $ty, )+);
 
-            fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+            fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
                 let ($( $var, )+) = inner;
                 ($( DeviceVec::from_inner($var), )+)
             }
@@ -353,14 +353,14 @@ impl_wide_mitem_tuple!(
 
 macro_rules! impl_miter_mut_tuple {
     ($( $ty:ident : $var:ident : $idx:tt ),+) => {
-        impl<'a, B, $( $ty ),+> MIterMut<B> for ($( DeviceSliceMut<'a, B, $ty>, )+)
+        impl<'a, R, $( $ty ),+> MIterMut<R> for ($( DeviceSliceMut<'a, R, $ty>, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<B, Inner = ($( crate::detail::DeviceVec<B, $ty>, )+)>,
+            ($( $ty, )+): MItem<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+)>,
         {
             type Item = ($( $ty, )+);
-            type Inner = ($( crate::detail::device::DeviceColumnMutView<B, $ty>, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnMutView<R, $ty>, )+);
 
             fn into_inner(self) -> Self::Inner {
                 ($(
@@ -374,8 +374,8 @@ macro_rules! impl_miter_mut_tuple {
 
             fn write_from_inner(
                 self,
-                policy: &crate::detail::CubePolicy<B>,
-                inner: <Self::Item as MItem<B>>::Inner,
+                policy: &crate::detail::CubePolicy<R>,
+                inner: <Self::Item as MItem<R>>::Inner,
             ) -> Result<(), Error> {
                 let output = self.into_inner();
                 $(
@@ -394,9 +394,9 @@ macro_rules! impl_miter_mut_tuple {
 
             fn write_where_from_inner(
                 self,
-                policy: &crate::detail::CubePolicy<B>,
-                inner: <Self::Item as MItem<B>>::Inner,
-                stencil: crate::detail::api::PrecomputedSelection<B>,
+                policy: &crate::detail::CubePolicy<R>,
+                inner: <Self::Item as MItem<R>>::Inner,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<(), Error>
             {
                 let output = self.into_inner();
@@ -409,7 +409,7 @@ macro_rules! impl_miter_mut_tuple {
                             &input,
                             &stencil,
                             &output.$idx,
-                            KernelOp::<B, StencilFlag>::new(),
+                            KernelOp::<R, StencilFlag>::new(),
                         )?;
                     }
                 )+
@@ -418,9 +418,9 @@ macro_rules! impl_miter_mut_tuple {
 
             fn replace_where_inner(
                 self,
-                policy: &crate::detail::CubePolicy<B>,
+                policy: &crate::detail::CubePolicy<R>,
                 replacement: Self::Item,
-                stencil: crate::detail::api::PrecomputedSelection<B>,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<(), Error>
             {
                 let output = self.into_inner();
@@ -430,7 +430,7 @@ macro_rules! impl_miter_mut_tuple {
                         replacement.$idx,
                         &stencil,
                         &output.$idx,
-                        KernelOp::<B, StencilFlag>::new(),
+                        KernelOp::<R, StencilFlag>::new(),
                     )?;
                 )+
                 Ok(())
@@ -441,13 +441,13 @@ macro_rules! impl_miter_mut_tuple {
             }
         }
 
-        impl<'a, B, $( $ty ),+> sealed::MIterMutDispatch<B> for ($( DeviceSliceMut<'a, B, $ty>, )+)
+        impl<'a, R, $( $ty ),+> sealed::MIterMutDispatch<R> for ($( DeviceSliceMut<'a, R, $ty>, )+)
         where
-            B: Runtime,
+            R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<B, Inner = ($( crate::detail::DeviceVec<B, $ty>, )+)>,
+            ($( $ty, )+): MItem<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+)>,
         {
-            fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
+            fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
                 $(
                     exec.ensure_policy_id(self.$idx.source.inner.policy_id())?;
                     ensure_same_len(self.$idx.len(), self.0.len())?;
@@ -458,14 +458,14 @@ macro_rules! impl_miter_mut_tuple {
             fn column_mut_view_by_index_inner<U: 'static>(
                 &self,
                 index: usize,
-            ) -> Result<Option<crate::detail::device::DeviceColumnMutView<B, U>>, Error>
+            ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, U>>, Error>
             where
                 U: Scalar,
             {
                 $(
                     if index == $idx {
                         let source = &*self.$idx.source as &dyn Any;
-                        let source = match source.downcast_ref::<DeviceVec<B, U>>() {
+                        let source = match source.downcast_ref::<DeviceVec<R, U>>() {
                             Some(source) => source,
                             None => return Ok(None),
                         };
@@ -495,14 +495,14 @@ impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: 
 impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10);
 impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10, L: l: 11);
 
-impl<B, T> MVec<B> for SoA1<DeviceVec<B, T>>
+impl<R, T> MVec<R> for SoA1<DeviceVec<R, T>>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
 {
     type Item = (T,);
 
-    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
         Self(DeviceVec::from_inner(inner.0))
     }
 
@@ -511,15 +511,15 @@ where
     }
 }
 
-impl<B, A, C> MVec<B> for SoA2<DeviceVec<B, A>, DeviceVec<B, C>>
+impl<R, A, C> MVec<R> for SoA2<DeviceVec<R, A>, DeviceVec<R, C>>
 where
-    B: Runtime,
+    R: Runtime,
     A: Scalar,
     C: Scalar,
 {
     type Item = (A, C);
 
-    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
         Self(
             DeviceVec::from_inner(inner.0),
             DeviceVec::from_inner(inner.1),
@@ -531,16 +531,16 @@ where
     }
 }
 
-impl<B, A, C, D> MVec<B> for SoA3<DeviceVec<B, A>, DeviceVec<B, C>, DeviceVec<B, D>>
+impl<R, A, C, D> MVec<R> for SoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>
 where
-    B: Runtime,
+    R: Runtime,
     A: Scalar,
     C: Scalar,
     D: Scalar,
 {
     type Item = (A, C, D);
 
-    fn from_inner(inner: <Self::Item as MItem<B>>::Inner) -> Self {
+    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
         Self(
             DeviceVec::from_inner(inner.0),
             DeviceVec::from_inner(inner.1),

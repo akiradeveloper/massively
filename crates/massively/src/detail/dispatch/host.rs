@@ -1,7 +1,7 @@
 use super::*;
 
-pub trait ToHostDispatch<B: Runtime> {
+pub trait ToHostDispatch<R: Runtime> {
     type Output;
 
-    fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error>;
+    fn to_host_with(&self, exec: &Executor<R>) -> Result<Self::Output, Error>;
 }

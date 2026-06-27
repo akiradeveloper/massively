@@ -51,6 +51,20 @@ impl<T: CubePrimitive, C: CubePrimitive> GpuExpr<C> for Slot0<T> {
 
 #[cube]
 impl<T: CubePrimitive, C: CubePrimitive> GpuExpr<C> for Slot1<T> {
+    fn eval(_input: &[C], _indices: &[u32], rhs: &[C], rhs_indices: &[u32], index: usize) -> C {
+        rhs[rhs_indices[0] as usize + index]
+    }
+}
+
+#[cube]
+impl<T: CubePrimitive, C: CubePrimitive> GpuExpr<C> for Slot2<T> {
+    fn eval(input: &[C], indices: &[u32], _rhs: &[C], _rhs_indices: &[u32], index: usize) -> C {
+        input[indices[0] as usize + index]
+    }
+}
+
+#[cube]
+impl<T: CubePrimitive, C: CubePrimitive> GpuExpr<C> for Slot3<T> {
     fn eval(input: &[C], indices: &[u32], _rhs: &[C], _rhs_indices: &[u32], index: usize) -> C {
         input[indices[0] as usize + index]
     }

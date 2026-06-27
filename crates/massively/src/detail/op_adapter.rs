@@ -9,9 +9,9 @@ use crate::value::MItem;
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct KernelOp<B, Op>(PhantomData<fn() -> (B, Op)>);
+pub struct KernelOp<R, Op>(PhantomData<fn() -> (R, Op)>);
 
-impl<B, Op> KernelOp<B, Op> {
+impl<R, Op> KernelOp<R, Op> {
     pub(super) fn new() -> Self {
         Self(PhantomData)
     }
@@ -19,9 +19,9 @@ impl<B, Op> KernelOp<B, Op> {
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct KernelTuple1Op<B, Op>(PhantomData<fn() -> (B, Op)>);
+pub struct KernelTuple1Op<R, Op>(PhantomData<fn() -> (R, Op)>);
 
-impl<B, Op> KernelTuple1Op<B, Op> {
+impl<R, Op> KernelTuple1Op<R, Op> {
     pub(super) fn new() -> Self {
         Self(PhantomData)
     }
@@ -29,20 +29,20 @@ impl<B, Op> KernelTuple1Op<B, Op> {
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default)]
-pub struct KernelTuple1InnerProductOp<B, Op, Output>(PhantomData<fn() -> (B, Op, Output)>);
+pub struct KernelTuple1InnerProductOp<R, Op, Output>(PhantomData<fn() -> (R, Op, Output)>);
 
-impl<B, Op, Output> KernelTuple1InnerProductOp<B, Op, Output> {
+impl<R, Op, Output> KernelTuple1InnerProductOp<R, Op, Output> {
     pub(super) fn new() -> Self {
         Self(PhantomData)
     }
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<B, Op>
+impl<R, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<R, Op>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
-    Op: op::UnaryOp<B, (T,), Output = (T,)>,
+    Op: op::UnaryOp<R, (T,), Output = (T,)>,
 {
     type Output = T;
 
@@ -52,11 +52,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::BinaryOp<T> for KernelTuple1Op<B, Op>
+impl<R, T, Op> crate::detail::op::kernel::BinaryOp<T> for KernelTuple1Op<R, Op>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
-    Op: op::ReductionOp<B, (T,)>,
+    Op: op::ReductionOp<R, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> T {
         Op::apply((lhs,), (rhs,)).0
@@ -64,11 +64,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::PredicateOp<T> for KernelTuple1Op<B, Op>
+impl<R, T, Op> crate::detail::op::kernel::PredicateOp<T> for KernelTuple1Op<R, Op>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
-    Op: op::PredicateOp<B, (T,)>,
+    Op: op::PredicateOp<R, (T,)>,
 {
     fn apply(input: T) -> bool {
         Op::apply((input,))
@@ -76,11 +76,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, T, Op> crate::detail::op::kernel::BinaryPredicateOp<T> for KernelTuple1Op<B, Op>
+impl<R, T, Op> crate::detail::op::kernel::BinaryPredicateOp<T> for KernelTuple1Op<R, Op>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
-    Op: op::BinaryPredicateOp<B, (T,)>,
+    Op: op::BinaryPredicateOp<R, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> bool {
         Op::apply((lhs,), (rhs,))
@@ -88,15 +88,15 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Left, Right, Op, Output> op::UnaryOp<B, (Left, Right)>
-    for KernelTuple1InnerProductOp<B, Op, Output>
+impl<R, Left, Right, Op, Output> op::UnaryOp<R, (Left, Right)>
+    for KernelTuple1InnerProductOp<R, Op, Output>
 where
-    B: Runtime,
+    R: Runtime,
     Left: Scalar,
     Right: Scalar,
-    Output: MItem<B>,
+    Output: MItem<R>,
     Output: 'static,
-    Op: op::BinaryOp<B, (Left,), (Right,), Output = Output>,
+    Op: op::BinaryOp<R, (Left,), (Right,), Output = Output>,
 {
     type Output = Output;
 
@@ -106,11 +106,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Input, Op> crate::detail::op::kernel::UnaryOp<Input> for KernelOp<B, Op>
+impl<R, Input, Op> crate::detail::op::kernel::UnaryOp<Input> for KernelOp<R, Op>
 where
-    B: Runtime,
-    Input: MItem<B>,
-    Op: op::UnaryOp<B, Input>,
+    R: Runtime,
+    Input: MItem<R>,
+    Op: op::UnaryOp<R, Input>,
 {
     type Output = Op::Output;
 
@@ -120,11 +120,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Item, Op> crate::detail::op::kernel::BinaryOp<Item> for KernelOp<B, Op>
+impl<R, Item, Op> crate::detail::op::kernel::BinaryOp<Item> for KernelOp<R, Op>
 where
-    B: Runtime,
-    Item: MItem<B>,
-    Op: op::ReductionOp<B, Item>,
+    R: Runtime,
+    Item: MItem<R>,
+    Op: op::ReductionOp<R, Item>,
 {
     fn apply(lhs: Item, rhs: Item) -> Item {
         Op::apply(lhs, rhs)
@@ -132,11 +132,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Item, Op> crate::detail::op::kernel::PredicateOp<Item> for KernelOp<B, Op>
+impl<R, Item, Op> crate::detail::op::kernel::PredicateOp<Item> for KernelOp<R, Op>
 where
-    B: Runtime,
-    Item: MItem<B>,
-    Op: op::PredicateOp<B, Item>,
+    R: Runtime,
+    Item: MItem<R>,
+    Op: op::PredicateOp<R, Item>,
 {
     fn apply(input: Item) -> bool {
         Op::apply(input)
@@ -144,11 +144,11 @@ where
 }
 
 #[cubecl::cube]
-impl<B, Item, Op> crate::detail::op::kernel::BinaryPredicateOp<Item> for KernelOp<B, Op>
+impl<R, Item, Op> crate::detail::op::kernel::BinaryPredicateOp<Item> for KernelOp<R, Op>
 where
-    B: Runtime,
-    Item: MItem<B>,
-    Op: op::BinaryPredicateOp<B, Item>,
+    R: Runtime,
+    Item: MItem<R>,
+    Op: op::BinaryPredicateOp<R, Item>,
 {
     fn apply(lhs: Item, rhs: Item) -> bool {
         Op::apply(lhs, rhs)
@@ -159,9 +159,9 @@ where
 pub struct StencilFlag;
 
 #[cubecl::cube]
-impl<B> op::PredicateOp<B, (u32,)> for StencilFlag
+impl<R> op::PredicateOp<R, (u32,)> for StencilFlag
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(input: (u32,)) -> bool {
         input.0 > 0

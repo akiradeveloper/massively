@@ -77,12 +77,12 @@ mod set_difference;
 mod set_intersection;
 #[path = "api/set_union.rs"]
 mod set_union;
+#[path = "api/slice.rs"]
+mod slice;
 #[path = "api/sort.rs"]
 mod sort;
 #[path = "api/sort_by_key.rs"]
 mod sort_by_key;
-#[path = "api/tabulate.rs"]
-mod tabulate;
 #[path = "api/transform.rs"]
 mod transform;
 #[path = "api/unique.rs"]
@@ -102,14 +102,13 @@ fn public_api_is_available_from_massively() {
 
     assert_eq!(exec.to_host(&input).unwrap(), vec![1, 2, 3]);
 
-    let generated = exec.tabulate(3, common::SquareIndex).unwrap();
     let sum = massively::algorithm::reduce(
         &exec,
-        massively::algorithm::SoA1(generated.slice(..)),
+        massively::algorithm::SoA1(input.slice(..)),
         (0_u32,),
         common::Sum,
     )
     .unwrap();
 
-    assert_eq!(sum, (5,));
+    assert_eq!(sum, (6,));
 }

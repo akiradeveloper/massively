@@ -19,19 +19,28 @@ GPU上のデータ領域を表す。
 
 ### DeviceSlice / DeviceSliceMut
 
-- 不変スライス: DeviceVec::slice<R: RangeBounds>(range: R) -> DeviceSlice
-- 可変スライス: DeviceVec::slice_mut<R: RangeBounds>(range: R) -> DeviceSliceMut
+- 不変スライス: DeviceVec::slice<R: RangeBounds>(&self, range: R) -> DeviceSlice
+- 可変スライス: DeviceVec::slice_mut<R: RangeBounds>(&self, range: R) -> DeviceSliceMut
 - スライスはスライスを作れる
   - DeviceSlice::slice -> DeviceSlice
   - DeviceSliceMut::slice -> DeviceSlice
   - DeviceSliceMut::slice_mut -> DeviceSliceMut
+
+### MSlice
+
+DeviceSliceの抽象化であり、インデックスiからスカラTへのマッピング。
+実装として、
+- DeviceSlice
+- constant_slice
+- transform_slice
+がある。
 
 ### SoA (Structure of Array)
 
 GPUで計算を行うに当たって、AoSよりSoAの方が性能上有利。
 DeviceSliceをTupleでまとめ、MIterにした上で計算に使う。
 
-MIter<n> = SoAn(MSlice, MSlice, ...)
+MIter<n> = SoAn(DeviceSlice, DeviceSlice, ...)
 MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 
 ## アルゴリズム

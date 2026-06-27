@@ -7,8 +7,8 @@ fn scatter_where_accepts_soa12_values() {
     let b = exec.to_device(&[10_u32, 0, 30]).unwrap();
     let indices = exec.to_device(&[2_u32, 1, 0]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
-    let mut out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut out_b = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
     scatter_where(
         &exec,
         massively::SoA2(a.slice(..), b.slice(..)),
@@ -29,8 +29,8 @@ fn scatter_where_accepts_u32_stencil() {
     let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
 
-    let mut out_a = exec.to_device(&[0_u32; 4]).unwrap();
-    let mut out_b = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_a = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_b = exec.to_device(&[0.0_f32; 4]).unwrap();
     scatter_where(
         &exec,
         massively::SoA2(a.slice(..), b.slice(..)),

@@ -1,7 +1,7 @@
 use super::DeviceVec;
 use crate::{
     error::{Error, ensure_same_len},
-    expr::{Slot0, Slot1, Slot2, Slot3},
+    expr::{DeviceGpuExpr, GpuExpr, Slot0, Slot1, Slot2, Slot3},
     policy::CubePolicy,
 };
 use cubecl::prelude::*;
@@ -56,14 +56,14 @@ pub struct S4;
 
 /// Internal scalar-column expression that can be lowered into GPU kernels.
 ///
-/// This is not a public API concept. Public code deals in `DeviceVec`, `zip`,
-/// and `SoA`; this trait is the private staging layer used by algorithms to pass
-/// one or more columns to kernels.
+/// This is not a public API concept. Public iterator inputs deal in
+/// `DeviceSlice` / `DeviceSliceMut` wrapped by `SoA`; this trait is the private
+/// staging layer used by algorithms to pass one or more columns to kernels.
 #[doc(hidden)]
 pub trait KernelColumn {
     type Runtime: Runtime;
-    type Item;
-    type Expr;
+    type Item: CubePrimitive;
+    type Expr: GpuExpr<Self::Item> + DeviceGpuExpr<Self::Item>;
 
     fn len(&self) -> usize;
     fn validate(&self) -> Result<(), Error>;
@@ -175,7 +175,7 @@ pub(crate) trait ReadOnlySoA {
     fn validate(&self) -> Result<(), Error>;
 }
 
-/// Storage-backed structure-of-arrays.
+/// Internal storage-backed structure-of-arrays.
 pub trait SoA {
     type Runtime: Runtime;
     type Item;
@@ -490,11 +490,16 @@ impl KernelColumnBindings {
         }
     }
 
-    fn push(&mut self, handle: cubecl::server::Handle, len: usize) {
+    pub(crate) fn push(&mut self, handle: cubecl::server::Handle, len: usize) {
         self.push_with_offset(handle, len, 0);
     }
 
-    fn push_with_offset(&mut self, handle: cubecl::server::Handle, len: usize, offset: usize) {
+    pub(crate) fn push_with_offset(
+        &mut self,
+        handle: cubecl::server::Handle,
+        len: usize,
+        offset: usize,
+    ) {
         self.slots.push((handle, len));
         self.slot_offsets.push(offset);
     }
@@ -548,6 +553,7 @@ pub trait KernelColumnAt<Start> {
 impl<'a, R, T> KernelColumn for &'a DeviceVec<R, T>
 where
     R: Runtime,
+    T: CubePrimitive,
 {
     type Runtime = R;
     type Item = T;
@@ -562,8 +568,18 @@ where
     }
 }
 
-impl<'a, R, T> StorageKernelColumn for &'a DeviceVec<R, T> where R: Runtime {}
-impl<'a, R, T> ReadOnlyKernelColumn for &'a DeviceVec<R, T> where R: Runtime {}
+impl<'a, R, T> StorageKernelColumn for &'a DeviceVec<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive,
+{
+}
+impl<'a, R, T> ReadOnlyKernelColumn for &'a DeviceVec<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive,
+{
+}
 
 impl<'a, R, T> KernelColumnAt<S0> for &'a DeviceVec<R, T>
 where
@@ -708,6 +724,7 @@ where
 impl<R, T> KernelColumn for DeviceVec<R, T>
 where
     R: Runtime,
+    T: CubePrimitive,
 {
     type Runtime = R;
     type Item = T;
@@ -722,7 +739,12 @@ where
     }
 }
 
-impl<R, T> StorageKernelColumn for DeviceVec<R, T> where R: Runtime {}
+impl<R, T> StorageKernelColumn for DeviceVec<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive,
+{
+}
 
 impl<R, T> KernelColumnAt<S0> for DeviceVec<R, T>
 where

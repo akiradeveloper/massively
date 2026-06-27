@@ -1,15 +1,15 @@
 use super::*;
 
-pub trait MItemDispatch<B: Runtime>: Sized {
+pub trait MItemDispatch<R: Runtime>: Sized {
     fn transform_unary<Input, Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        input: crate::detail::device::DeviceColumnView<B, Input>,
+        policy: &crate::detail::CubePolicy<R>,
+        input: crate::detail::device::DeviceColumnView<R, Input>,
         op: Op,
-    ) -> Result<<Self as MItem<B>>::Inner, Error>
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
-        Self: MItem<B>,
+        Self: MItem<R>,
         Input: Scalar,
-        Op: op::UnaryOp<B, (Input,), Output = Self>,
+        Op: op::UnaryOp<R, (Input,), Output = Self>,
     {
         let _ = (policy, input, op);
         Err(Error::Launch {
@@ -18,16 +18,16 @@ pub trait MItemDispatch<B: Runtime>: Sized {
     }
 
     fn transform_binary<Left, Right, Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        left: crate::detail::device::DeviceColumnView<B, Left>,
-        right: crate::detail::device::DeviceColumnView<B, Right>,
+        policy: &crate::detail::CubePolicy<R>,
+        left: crate::detail::device::DeviceColumnView<R, Left>,
+        right: crate::detail::device::DeviceColumnView<R, Right>,
         op: Op,
-    ) -> Result<<Self as MItem<B>>::Inner, Error>
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
-        Self: MItem<B>,
+        Self: MItem<R>,
         Left: Scalar,
         Right: Scalar,
-        Op: op::UnaryOp<B, (Left, Right), Output = Self>,
+        Op: op::UnaryOp<R, (Left, Right), Output = Self>,
     {
         let _ = (policy, left, right, op);
         Err(Error::Launch {
@@ -36,18 +36,18 @@ pub trait MItemDispatch<B: Runtime>: Sized {
     }
 
     fn transform_ternary<First, Second, Third, Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        first: crate::detail::device::DeviceColumnView<B, First>,
-        second: crate::detail::device::DeviceColumnView<B, Second>,
-        third: crate::detail::device::DeviceColumnView<B, Third>,
+        policy: &crate::detail::CubePolicy<R>,
+        first: crate::detail::device::DeviceColumnView<R, First>,
+        second: crate::detail::device::DeviceColumnView<R, Second>,
+        third: crate::detail::device::DeviceColumnView<R, Third>,
         op: Op,
-    ) -> Result<<Self as MItem<B>>::Inner, Error>
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
-        Self: MItem<B>,
+        Self: MItem<R>,
         First: Scalar,
         Second: Scalar,
         Third: Scalar,
-        Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
+        Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
     {
         let _ = (policy, first, second, third, op);
         Err(Error::Launch {
@@ -56,14 +56,14 @@ pub trait MItemDispatch<B: Runtime>: Sized {
     }
 
     fn reduce_inner<Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        input: <Self as MItem<B>>::Inner,
+        policy: &crate::detail::CubePolicy<R>,
+        input: <Self as MItem<R>>::Inner,
         init: Self,
         op: Op,
     ) -> Result<Self, Error>
     where
-        Self: MItem<B>,
-        Op: op::ReductionOp<B, Self>,
+        Self: MItem<R>,
+        Op: op::ReductionOp<R, Self>,
     {
         let _ = (policy, input, init, op);
         Err(Error::Launch {
@@ -72,7 +72,7 @@ pub trait MItemDispatch<B: Runtime>: Sized {
     }
 
     fn inner_product_with_right_item<LeftIter, RightIter, TransformOp, ReduceOp, Output>(
-        policy: &crate::detail::CubePolicy<B>,
+        policy: &crate::detail::CubePolicy<R>,
         left: LeftIter,
         right: RightIter,
         transform_op: TransformOp,
@@ -80,12 +80,12 @@ pub trait MItemDispatch<B: Runtime>: Sized {
         reduce_op: ReduceOp,
     ) -> Result<Output, Error>
     where
-        Self: MItem<B>,
-        LeftIter: MIter<B, Item = Self>,
-        RightIter: MIter<B>,
-        TransformOp: op::BinaryOp<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
-        Output: MItem<B>,
-        ReduceOp: op::ReductionOp<B, Output>,
+        Self: MItem<R>,
+        LeftIter: MIter<R, Item = Self>,
+        RightIter: MIter<R>,
+        TransformOp: op::BinaryOp<R, Self, <RightIter as MIter<R>>::Item, Output = Output>,
+        Output: MItem<R>,
+        ReduceOp: op::ReductionOp<R, Output>,
     {
         let _ = (policy, left, right, transform_op, init, reduce_op);
         Err(Error::Launch {
@@ -101,7 +101,7 @@ pub trait MItemDispatch<B: Runtime>: Sized {
         ReduceOp,
         Output,
     >(
-        policy: &crate::detail::CubePolicy<B>,
+        policy: &crate::detail::CubePolicy<R>,
         left: LeftIter,
         right: RightIter,
         transform_op: TransformOp,
@@ -109,13 +109,13 @@ pub trait MItemDispatch<B: Runtime>: Sized {
         reduce_op: ReduceOp,
     ) -> Result<Output, Error>
     where
-        Self: MItem<B>,
+        Self: MItem<R>,
         LeftScalar: Scalar + 'static,
-        LeftIter: MIter<B, Item = (LeftScalar,)>,
-        RightIter: MIter<B, Item = Self>,
-        TransformOp: op::BinaryOp<B, (LeftScalar,), Self, Output = Output>,
-        Output: MItem<B>,
-        ReduceOp: op::ReductionOp<B, Output>,
+        LeftIter: MIter<R, Item = (LeftScalar,)>,
+        RightIter: MIter<R, Item = Self>,
+        TransformOp: op::BinaryOp<R, (LeftScalar,), Self, Output = Output>,
+        Output: MItem<R>,
+        ReduceOp: op::ReductionOp<R, Output>,
     {
         let _ = (policy, left, right, transform_op, init, reduce_op);
         Err(Error::Launch {
