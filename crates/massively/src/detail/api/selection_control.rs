@@ -1,7 +1,7 @@
 use super::*;
 
 #[doc(hidden)]
-pub trait SelectionStencil<Pred> {
+pub(crate) trait SelectionStencil<Pred> {
     type Runtime: Runtime;
 
     fn len(&self) -> usize;

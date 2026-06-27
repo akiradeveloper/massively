@@ -487,33 +487,7 @@ where
     Ok(scan::read_u32_scalar::<Left::Runtime>(client, output_handle)? != 0)
 }
 
-/// Input accepted by min/max element queries.
-#[doc(hidden)]
-pub trait MinMaxInput<Less> {
-    /// Runtime used by this input.
-    type Runtime: Runtime;
-
-    /// Finds the minimum element index.
-    fn min_element_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error>;
-    /// Finds the maximum element index.
-    fn max_element_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error>;
-    /// Finds both minimum and maximum element indices.
-    fn minmax_element_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        less: GpuOp<Less>,
-    ) -> Result<Option<(usize, usize)>, Error>;
-}
-
-impl<Source, Less> MinMaxInput<Less> for SoAView1<Source>
+impl<Source, Less> crate::detail::read::KernelMinMaxInput<Less> for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -557,7 +531,7 @@ where
     }
 }
 
-impl<Source, Less> MinMaxInput<Less> for Source
+impl<Source, Less> crate::detail::read::KernelMinMaxInput<Less> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -571,7 +545,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<Option<usize>, Error> {
-        <SoAView1<Source> as MinMaxInput<Less>>::min_element_input(
+        <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::min_element_input(
             SoAView1 { source: self },
             policy,
             less,
@@ -583,7 +557,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<Option<usize>, Error> {
-        <SoAView1<Source> as MinMaxInput<Less>>::max_element_input(
+        <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::max_element_input(
             SoAView1 { source: self },
             policy,
             less,
@@ -595,7 +569,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<Option<(usize, usize)>, Error> {
-        <SoAView1<Source> as MinMaxInput<Less>>::minmax_element_input(
+        <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
             SoAView1 { source: self },
             policy,
             less,
@@ -603,7 +577,7 @@ where
     }
 }
 
-impl<Source, Less> MinMaxInput<Less> for (Source,)
+impl<Source, Less> crate::detail::read::KernelMinMaxInput<Less> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -617,7 +591,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<Option<usize>, Error> {
-        <Source as MinMaxInput<super::Tuple1Less<Less>>>::min_element_input(
+        <Source as crate::detail::read::KernelMinMaxInput<super::Tuple1Less<Less>>>::min_element_input(
             self.0,
             policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
@@ -629,7 +603,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<Option<usize>, Error> {
-        <Source as MinMaxInput<super::Tuple1Less<Less>>>::max_element_input(
+        <Source as crate::detail::read::KernelMinMaxInput<super::Tuple1Less<Less>>>::max_element_input(
             self.0,
             policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
@@ -641,7 +615,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<Option<(usize, usize)>, Error> {
-        <Source as MinMaxInput<super::Tuple1Less<Less>>>::minmax_element_input(
+        <Source as crate::detail::read::KernelMinMaxInput<super::Tuple1Less<Less>>>::minmax_element_input(
             self.0,
             policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
@@ -649,21 +623,7 @@ where
     }
 }
 
-/// Input accepted by adjacent-pair search.
-#[doc(hidden)]
-pub trait AdjacentFindInput<Pred> {
-    /// Runtime used by this input.
-    type Runtime: Runtime;
-
-    /// Finds the first adjacent pair that satisfies `Pred`.
-    fn adjacent_find_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        pred: GpuOp<Pred>,
-    ) -> Result<Option<usize>, Error>;
-}
-
-impl<Source, Pred> AdjacentFindInput<Pred> for SoAView1<Source>
+impl<Source, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -683,7 +643,7 @@ where
     }
 }
 
-impl<Source, Pred> AdjacentFindInput<Pred> for Source
+impl<Source, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -697,7 +657,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         pred: GpuOp<Pred>,
     ) -> Result<Option<usize>, Error> {
-        <SoAView1<Source> as AdjacentFindInput<Pred>>::adjacent_find_input(
+        <SoAView1<Source> as crate::detail::read::KernelAdjacentFindInput<Pred>>::adjacent_find_input(
             SoAView1 { source: self },
             policy,
             pred,
@@ -705,7 +665,7 @@ where
     }
 }
 
-impl<Source, Pred> AdjacentFindInput<Pred> for (Source,)
+impl<Source, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -719,7 +679,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _pred: GpuOp<Pred>,
     ) -> Result<Option<usize>, Error> {
-        <Source as AdjacentFindInput<super::Tuple1Less<Pred>>>::adjacent_find_input(
+        <Source as crate::detail::read::KernelAdjacentFindInput<super::Tuple1Less<Pred>>>::adjacent_find_input(
             self.0,
             policy,
             GpuOp::<super::Tuple1Less<Pred>>::new(),
@@ -727,50 +687,7 @@ where
     }
 }
 
-/// Input accepted by sorted single-range search.
-#[doc(hidden)]
-pub trait SortedSearchInput<Less> {
-    /// Runtime used by this input.
-    type Runtime: Runtime;
-    /// Element type.
-    type Item;
-
-    /// Returns the equal range for `value` in this sorted input.
-    fn equal_range_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        value: Self::Item,
-        less: GpuOp<Less>,
-    ) -> Result<(usize, usize), Error>;
-    /// Finds the first sorted insertion point for `value`.
-    fn lower_bound_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        value: Self::Item,
-        less: GpuOp<Less>,
-    ) -> Result<usize, Error>;
-    /// Finds the last sorted insertion point for `value`.
-    fn upper_bound_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        value: Self::Item,
-        less: GpuOp<Less>,
-    ) -> Result<usize, Error>;
-    /// Returns the first position where sorted order is broken.
-    fn is_sorted_until_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        less: GpuOp<Less>,
-    ) -> Result<usize, Error>;
-    /// Returns whether this input is sorted.
-    fn is_sorted_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        less: GpuOp<Less>,
-    ) -> Result<bool, Error>;
-}
-
-impl<Source, Less> SortedSearchInput<Less> for SoAView1<Source>
+impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for SoAView1<Source>
 where
     Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -829,11 +746,15 @@ where
         less: GpuOp<Less>,
     ) -> Result<bool, Error> {
         let len = ReadOnlySoA::len(&self);
-        Ok(self.is_sorted_until_input(policy, less)? == len)
+        Ok(
+            <Self as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
+                self, policy, less,
+            )? == len,
+        )
     }
 }
 
-impl<Source, Less> SortedSearchInput<Less> for Source
+impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -849,7 +770,7 @@ where
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error> {
-        <SoAView1<Source> as SortedSearchInput<Less>>::equal_range_input(
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::equal_range_input(
             SoAView1 { source: self },
             policy,
             value,
@@ -863,7 +784,7 @@ where
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        <SoAView1<Source> as SortedSearchInput<Less>>::lower_bound_input(
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::lower_bound_input(
             SoAView1 { source: self },
             policy,
             value,
@@ -877,7 +798,7 @@ where
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        <SoAView1<Source> as SortedSearchInput<Less>>::upper_bound_input(
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::upper_bound_input(
             SoAView1 { source: self },
             policy,
             value,
@@ -890,7 +811,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        <SoAView1<Source> as SortedSearchInput<Less>>::is_sorted_until_input(
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
             SoAView1 { source: self },
             policy,
             less,
@@ -902,7 +823,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<bool, Error> {
-        <SoAView1<Source> as SortedSearchInput<Less>>::is_sorted_input(
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_input(
             SoAView1 { source: self },
             policy,
             less,
@@ -910,7 +831,7 @@ where
     }
 }
 
-impl<Source, Less> SortedSearchInput<Less> for (Source,)
+impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -926,7 +847,7 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<(usize, usize), Error> {
-        <Source as SortedSearchInput<super::Tuple1Less<Less>>>::equal_range_input(
+        <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::equal_range_input(
             self.0,
             policy,
             value.0,
@@ -940,7 +861,7 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        <Source as SortedSearchInput<super::Tuple1Less<Less>>>::lower_bound_input(
+        <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::lower_bound_input(
             self.0,
             policy,
             value.0,
@@ -954,7 +875,7 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        <Source as SortedSearchInput<super::Tuple1Less<Less>>>::upper_bound_input(
+        <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::upper_bound_input(
             self.0,
             policy,
             value.0,
@@ -967,7 +888,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<usize, Error> {
-        <Source as SortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_until_input(
+        <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_until_input(
             self.0,
             policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
@@ -979,7 +900,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<bool, Error> {
-        <Source as SortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_input(
+        <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_input(
             self.0,
             policy,
             GpuOp::<super::Tuple1Less<Less>>::new(),
@@ -989,12 +910,12 @@ where
 
 macro_rules! impl_sorted_search_tuple_input {
     ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
-        impl<$( $ty ),+, Less> SortedSearchInput<Less> for ($( $ty ),+)
+        impl<$( $ty ),+, Less> crate::detail::read::KernelSortedSearchInput<Less> for ($( $ty ),+)
         where
-            $view<$( $ty ),+>: SortedSearchInput<Less>,
+            $view<$( $ty ),+>: crate::detail::read::KernelSortedSearchInput<Less>,
         {
-            type Runtime = <$view<$( $ty ),+> as SortedSearchInput<Less>>::Runtime;
-            type Item = <$view<$( $ty ),+> as SortedSearchInput<Less>>::Item;
+            type Runtime = <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime;
+            type Item = <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::Item;
 
             fn equal_range_input(
                 self,
@@ -1002,7 +923,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 value: Self::Item,
                 less: GpuOp<Less>,
             ) -> Result<(usize, usize), Error> {
-                <$view<$( $ty ),+> as SortedSearchInput<Less>>::equal_range_input(
+                <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::equal_range_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     value,
@@ -1016,7 +937,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 value: Self::Item,
                 less: GpuOp<Less>,
             ) -> Result<usize, Error> {
-                <$view<$( $ty ),+> as SortedSearchInput<Less>>::lower_bound_input(
+                <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::lower_bound_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     value,
@@ -1030,7 +951,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 value: Self::Item,
                 less: GpuOp<Less>,
             ) -> Result<usize, Error> {
-                <$view<$( $ty ),+> as SortedSearchInput<Less>>::upper_bound_input(
+                <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::upper_bound_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     value,
@@ -1043,7 +964,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 policy: &CubePolicy<Self::Runtime>,
                 less: GpuOp<Less>,
             ) -> Result<usize, Error> {
-                <$view<$( $ty ),+> as SortedSearchInput<Less>>::is_sorted_until_input(
+                <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     less,
@@ -1055,7 +976,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 policy: &CubePolicy<Self::Runtime>,
                 less: GpuOp<Less>,
             ) -> Result<bool, Error> {
-                <$view<$( $ty ),+> as SortedSearchInput<Less>>::is_sorted_input(
+                <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
                     less,
@@ -1068,43 +989,8 @@ macro_rules! impl_sorted_search_tuple_input {
 impl_sorted_search_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
 impl_sorted_search_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
 
-/// Pair of inputs accepted by binary search/comparison algorithms.
-#[doc(hidden)]
-pub trait PairSearchInput<Other, Op> {
-    /// Runtime used by both inputs.
-    type Runtime: Runtime;
-
-    /// Returns whether two inputs are equal under `Op`.
-    fn equal_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        op: GpuOp<Op>,
-    ) -> Result<bool, Error>;
-    /// Finds the first mismatch between two inputs.
-    fn mismatch_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error>;
-    /// Finds the first element equal to any value in `other`.
-    fn find_first_of_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error>;
-    /// Lexicographically compares two inputs.
-    fn lexicographical_compare_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        op: GpuOp<Op>,
-    ) -> Result<bool, Error>;
-}
-
-impl<Left, Right, Op> PairSearchInput<SoAView1<Right>, Op> for SoAView1<Left>
+impl<Left, Right, Op> crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>
+    for SoAView1<Left>
 where
     Self: ReadOnlySoA<Item = (Left::Item,), Scalar = Left::Item>,
     SoAView1<Right>: ReadOnlySoA<Item = (Right::Item,), Scalar = Right::Item>,
@@ -1161,7 +1047,7 @@ where
     }
 }
 
-impl<Left, Right, Op> PairSearchInput<Right, Op> for Left
+impl<Left, Right, Op> crate::detail::read::KernelPairSearchInput<Right, Op> for Left
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -1178,7 +1064,7 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::equal_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::equal_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1192,7 +1078,7 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::mismatch_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::mismatch_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1206,7 +1092,7 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::find_first_of_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::find_first_of_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1220,7 +1106,7 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        <SoAView1<Left> as PairSearchInput<SoAView1<Right>, Op>>::lexicographical_compare_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::lexicographical_compare_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1229,7 +1115,7 @@ where
     }
 }
 
-impl<Left, Right, Op> PairSearchInput<(Right,), Op> for (Left,)
+impl<Left, Right, Op> crate::detail::read::KernelPairSearchInput<(Right,), Op> for (Left,)
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -1246,7 +1132,7 @@ where
         other: (Right,),
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::equal_input(
+        <Left as crate::detail::read::KernelPairSearchInput<Right, super::Tuple1Less<Op>>>::equal_input(
             self.0,
             policy,
             other.0,
@@ -1260,7 +1146,7 @@ where
         other: (Right,),
         _op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::mismatch_input(
+        <Left as crate::detail::read::KernelPairSearchInput<Right, super::Tuple1Less<Op>>>::mismatch_input(
             self.0,
             policy,
             other.0,
@@ -1274,7 +1160,7 @@ where
         other: (Right,),
         _op: GpuOp<Op>,
     ) -> Result<Option<usize>, Error> {
-        <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::find_first_of_input(
+        <Left as crate::detail::read::KernelPairSearchInput<Right, super::Tuple1Less<Op>>>::find_first_of_input(
             self.0,
             policy,
             other.0,
@@ -1288,7 +1174,7 @@ where
         other: (Right,),
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        <Left as PairSearchInput<Right, super::Tuple1Less<Op>>>::lexicographical_compare_input(
+        <Left as crate::detail::read::KernelPairSearchInput<Right, super::Tuple1Less<Op>>>::lexicographical_compare_input(
             self.0,
             policy,
             other.0,
@@ -1304,12 +1190,13 @@ macro_rules! impl_pair_search_tuple_input {
         }
     ) => {
         impl<$( $left_ty ),+, $( $right_ty ),+, Op>
-            PairSearchInput<($( $right_ty ),+), Op> for ($( $left_ty ),+)
+            crate::detail::read::KernelPairSearchInput<($( $right_ty ),+), Op>
+            for ($( $left_ty ),+)
         where
-            $view<$( $left_ty ),+>: PairSearchInput<$view<$( $right_ty ),+>, Op>,
+            $view<$( $left_ty ),+>: crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>,
         {
             type Runtime =
-                <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::Runtime;
+                <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::Runtime;
 
             fn equal_input(
                 self,
@@ -1317,7 +1204,7 @@ macro_rules! impl_pair_search_tuple_input {
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<bool, Error> {
-                <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::equal_input(
+                <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::equal_input(
                     $view { $( $field: self.$left_index ),+ },
                     policy,
                     $view { $( $field: other.$right_index ),+ },
@@ -1331,7 +1218,7 @@ macro_rules! impl_pair_search_tuple_input {
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<Option<usize>, Error> {
-                <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::mismatch_input(
+                <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::mismatch_input(
                     $view { $( $field: self.$left_index ),+ },
                     policy,
                     $view { $( $field: other.$right_index ),+ },
@@ -1345,7 +1232,7 @@ macro_rules! impl_pair_search_tuple_input {
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<Option<usize>, Error> {
-                <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::find_first_of_input(
+                <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::find_first_of_input(
                     $view { $( $field: self.$left_index ),+ },
                     policy,
                     $view { $( $field: other.$right_index ),+ },
@@ -1359,7 +1246,7 @@ macro_rules! impl_pair_search_tuple_input {
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
             ) -> Result<bool, Error> {
-                <$view<$( $left_ty ),+> as PairSearchInput<$view<$( $right_ty ),+>, Op>>::lexicographical_compare_input(
+                <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::lexicographical_compare_input(
                     $view { $( $field: self.$left_index ),+ },
                     policy,
                     $view { $( $field: other.$right_index ),+ },
@@ -1390,7 +1277,7 @@ macro_rules! impl_tuple_search {
         $minmax_element_kernel:ident,
         $minmax_index_kernel:ident
     ) => {
-        impl<$first, $( $rest ),+, Less> MinMaxInput<Less> for $name<$first, $( $rest ),+>
+        impl<$first, $( $rest ),+, Less> crate::detail::read::KernelMinMaxInput<Less> for $name<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
@@ -1417,7 +1304,12 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 less: GpuOp<Less>,
             ) -> Result<Option<usize>, Error> {
-                Ok(self.minmax_element_input(policy, less)?.map(|(min, _)| min))
+                Ok(
+                    <Self as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
+                        self, policy, less,
+                    )?
+                    .map(|(min, _)| min),
+                )
             }
 
             fn max_element_input(
@@ -1425,7 +1317,12 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 less: GpuOp<Less>,
             ) -> Result<Option<usize>, Error> {
-                Ok(self.minmax_element_input(policy, less)?.map(|(_, max)| max))
+                Ok(
+                    <Self as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
+                        self, policy, less,
+                    )?
+                    .map(|(_, max)| max),
+                )
             }
 
             fn minmax_element_input(
@@ -1533,7 +1430,7 @@ macro_rules! impl_tuple_search {
             }
         }
 
-        impl<$first, $( $rest ),+, Pred> AdjacentFindInput<Pred> for $name<$first, $( $rest ),+>
+        impl<$first, $( $rest ),+, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for $name<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
@@ -1603,7 +1500,7 @@ macro_rules! impl_tuple_search {
             }
         }
 
-        impl<$first, $( $rest ),+, Less> SortedSearchInput<Less> for $name<$first, $( $rest ),+>
+        impl<$first, $( $rest ),+, Less> crate::detail::read::KernelSortedSearchInput<Less> for $name<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
@@ -1908,7 +1805,12 @@ macro_rules! impl_tuple_search {
                 less: GpuOp<Less>,
             ) -> Result<bool, Error> {
                 let len = ReadOnlySoA::len(&self);
-                Ok(self.is_sorted_until_input(policy, less)? == len)
+                Ok(
+                    <Self as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
+                        self, policy, less,
+                    )?
+                    == len,
+                )
             }
         }
 
@@ -1930,7 +1832,7 @@ macro_rules! impl_tuple_pair_search {
         $lexicographical_compare_at_kernel:ident
     ) => {
         impl<$first, $( $rest ),+, $right_first, $( $right_rest ),+, Op>
-            PairSearchInput<$name<$right_first, $( $right_rest ),+>, Op>
+            crate::detail::read::KernelPairSearchInput<$name<$right_first, $( $right_rest ),+>, Op>
             for $name<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
@@ -1972,7 +1874,13 @@ macro_rules! impl_tuple_pair_search {
                 if ReadOnlySoA::len(&self) != ReadOnlySoA::len(&other) {
                     return Ok(false);
                 }
-                Ok(self.mismatch_input(policy, other, op)?.is_none())
+                Ok(
+                    <Self as crate::detail::read::KernelPairSearchInput<
+                        $name<$right_first, $( $right_rest ),+>,
+                        Op,
+                    >>::mismatch_input(self, policy, other, op)?
+                    .is_none(),
+                )
             }
 
             fn mismatch_input(
@@ -2274,163 +2182,165 @@ impl_tuple_pair_search!(SoA3<A, B, C; RA, RB, RC> { first: left_a / right_a, sec
 
 /// Finds the minimum element index according to `Less`.
 pub fn min_element<Input, Less>(
-    policy: &CubePolicy<<Input as MinMaxInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelMinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
 ) -> Result<Option<usize>, Error>
 where
-    Input: MinMaxInput<Less>,
+    Input: crate::detail::read::KernelMinMaxInput<Less>,
 {
     input.min_element_input(policy, GpuOp::<Less>::new())
 }
 
 /// Finds the maximum element index according to `Less`.
 pub fn max_element<Input, Less>(
-    policy: &CubePolicy<<Input as MinMaxInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelMinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
 ) -> Result<Option<usize>, Error>
 where
-    Input: MinMaxInput<Less>,
+    Input: crate::detail::read::KernelMinMaxInput<Less>,
 {
     input.max_element_input(policy, GpuOp::<Less>::new())
 }
 
 /// Finds both minimum and maximum element indices according to `Less`.
 pub fn minmax_element<Input, Less>(
-    policy: &CubePolicy<<Input as MinMaxInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelMinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
 ) -> Result<Option<(usize, usize)>, Error>
 where
-    Input: MinMaxInput<Less>,
+    Input: crate::detail::read::KernelMinMaxInput<Less>,
 {
     input.minmax_element_input(policy, GpuOp::<Less>::new())
 }
 
 /// Finds the first adjacent pair that satisfies `Pred`.
 pub fn adjacent_find<Input, Pred>(
-    policy: &CubePolicy<<Input as AdjacentFindInput<Pred>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelAdjacentFindInput<Pred>>::Runtime>,
     input: Input,
     _pred: Pred,
 ) -> Result<Option<usize>, Error>
 where
-    Input: AdjacentFindInput<Pred>,
+    Input: crate::detail::read::KernelAdjacentFindInput<Pred>,
 {
     input.adjacent_find_input(policy, GpuOp::<Pred>::new())
 }
 
 /// Returns whether two inputs are equal under `Eq`.
 pub fn equal<Left, Right, Eq>(
-    policy: &CubePolicy<<Left as PairSearchInput<Right, Eq>>::Runtime>,
+    policy: &CubePolicy<<Left as crate::detail::read::KernelPairSearchInput<Right, Eq>>::Runtime>,
     left: Left,
     right: Right,
     _eq: Eq,
 ) -> Result<bool, Error>
 where
-    Left: PairSearchInput<Right, Eq>,
+    Left: crate::detail::read::KernelPairSearchInput<Right, Eq>,
 {
     left.equal_input(policy, right, GpuOp::<Eq>::new())
 }
 
 /// Finds the first mismatch between two inputs.
 pub fn mismatch<Left, Right, Eq>(
-    policy: &CubePolicy<<Left as PairSearchInput<Right, Eq>>::Runtime>,
+    policy: &CubePolicy<<Left as crate::detail::read::KernelPairSearchInput<Right, Eq>>::Runtime>,
     left: Left,
     right: Right,
     _eq: Eq,
 ) -> Result<Option<usize>, Error>
 where
-    Left: PairSearchInput<Right, Eq>,
+    Left: crate::detail::read::KernelPairSearchInput<Right, Eq>,
 {
     left.mismatch_input(policy, right, GpuOp::<Eq>::new())
 }
 
 /// Finds the first input element equal to any value in `needles`.
 pub fn find_first_of<Input, Needles, Eq>(
-    policy: &CubePolicy<<Input as PairSearchInput<Needles, Eq>>::Runtime>,
+    policy: &CubePolicy<
+        <Input as crate::detail::read::KernelPairSearchInput<Needles, Eq>>::Runtime,
+    >,
     input: Input,
     needles: Needles,
     _eq: Eq,
 ) -> Result<Option<usize>, Error>
 where
-    Input: PairSearchInput<Needles, Eq>,
+    Input: crate::detail::read::KernelPairSearchInput<Needles, Eq>,
 {
     input.find_first_of_input(policy, needles, GpuOp::<Eq>::new())
 }
 
 /// Returns the equal range for `value` in a sorted input.
 pub fn equal_range<Input, Less>(
-    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
     input: Input,
-    value: <Input as SortedSearchInput<Less>>::Item,
+    value: <Input as crate::detail::read::KernelSortedSearchInput<Less>>::Item,
     _less: Less,
 ) -> Result<(usize, usize), Error>
 where
-    Input: SortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchInput<Less>,
 {
     input.equal_range_input(policy, value, GpuOp::<Less>::new())
 }
 
 /// Finds the first sorted insertion point for `value`.
 pub fn lower_bound<Input, Less>(
-    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
     input: Input,
-    value: <Input as SortedSearchInput<Less>>::Item,
+    value: <Input as crate::detail::read::KernelSortedSearchInput<Less>>::Item,
     _less: Less,
 ) -> Result<usize, Error>
 where
-    Input: SortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchInput<Less>,
 {
     input.lower_bound_input(policy, value, GpuOp::<Less>::new())
 }
 
 /// Finds the last sorted insertion point for `value`.
 pub fn upper_bound<Input, Less>(
-    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
     input: Input,
-    value: <Input as SortedSearchInput<Less>>::Item,
+    value: <Input as crate::detail::read::KernelSortedSearchInput<Less>>::Item,
     _less: Less,
 ) -> Result<usize, Error>
 where
-    Input: SortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchInput<Less>,
 {
     input.upper_bound_input(policy, value, GpuOp::<Less>::new())
 }
 
 /// Returns the first position where the sorted order is broken.
 pub fn is_sorted_until<Input, Less>(
-    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
 ) -> Result<usize, Error>
 where
-    Input: SortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchInput<Less>,
 {
     input.is_sorted_until_input(policy, GpuOp::<Less>::new())
 }
 
 /// Returns whether an input is sorted.
 pub fn is_sorted<Input, Less>(
-    policy: &CubePolicy<<Input as SortedSearchInput<Less>>::Runtime>,
+    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
 ) -> Result<bool, Error>
 where
-    Input: SortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchInput<Less>,
 {
     input.is_sorted_input(policy, GpuOp::<Less>::new())
 }
 
 /// Lexicographically compares two inputs.
 pub fn lexicographical_compare<Left, Right, Less>(
-    policy: &CubePolicy<<Left as PairSearchInput<Right, Less>>::Runtime>,
+    policy: &CubePolicy<<Left as crate::detail::read::KernelPairSearchInput<Right, Less>>::Runtime>,
     left: Left,
     right: Right,
     _less: Less,
 ) -> Result<bool, Error>
 where
-    Left: PairSearchInput<Right, Less>,
+    Left: crate::detail::read::KernelPairSearchInput<Right, Less>,
 {
     left.lexicographical_compare_input(policy, right, GpuOp::<Less>::new())
 }
