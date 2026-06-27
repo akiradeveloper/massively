@@ -1,56 +1,4 @@
-use super::{Error, Executor, MIter, MIterMut, MVec, op};
-
-use cubecl::prelude::Runtime;
-
-pub trait ToHostDispatch<B: Runtime> {
-    type Output;
-
-    fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error>;
-}
-
-pub trait MIterMutDispatch<B: Runtime>: Sized {
-    fn validate_executor(&self, _exec: &Executor<B>) -> Result<(), Error> {
-        Ok(())
-    }
-
-    fn column_mut_view_inner<T: 'static>(
-        &self,
-    ) -> Result<Option<crate::detail::device::DeviceColumnMutView<B, T>>, Error>
-    where
-        T: super::Scalar,
-    {
-        Ok(None)
-    }
-
-    fn column_mut_view_by_index_inner<T: 'static>(
-        &self,
-        index: usize,
-    ) -> Result<Option<crate::detail::device::DeviceColumnMutView<B, T>>, Error>
-    where
-        T: super::Scalar,
-    {
-        if index == 0 {
-            self.column_mut_view_inner::<T>()
-        } else {
-            Ok(None)
-        }
-    }
-
-    fn replace_where_dispatch<Stencil>(
-        self,
-        _policy: &crate::detail::CubePolicy<B>,
-        _replacement: <Self as MIterMut<B>>::Item,
-        _stencil: Stencil,
-    ) -> Result<(), Error>
-    where
-        Self: MIterMut<B>,
-        Stencil: MIter<B, Item = (u32,)>,
-    {
-        Err(Error::Launch {
-            message: "replace_where is not supported for this output shape".to_string(),
-        })
-    }
-}
+use super::*;
 
 pub trait MIterDispatch<B: Runtime>: Sized {
     fn validate_executor(&self, _exec: &Executor<B>) -> Result<(), Error> {
@@ -69,7 +17,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         &self,
     ) -> Result<Option<crate::detail::device::DeviceColumnView<B, T>>, Error>
     where
-        T: super::Scalar,
+        T: Scalar,
     {
         Ok(self
             .column_inner::<T>()
@@ -81,7 +29,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         index: usize,
     ) -> Result<Option<crate::detail::device::DeviceColumnView<B, T>>, Error>
     where
-        T: super::Scalar,
+        T: Scalar,
     {
         if index == 0 {
             self.column_view_inner::<T>()
@@ -101,16 +49,15 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Output: MIterMut<B>,
         Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Output::Item>;
 
-    fn transform_where_dispatch<Op, Stencil, Output>(
+    fn transform_where_dispatch<Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<B>,
         op: Op,
-        stencil: Stencil,
+        stencil: crate::detail::api::PrecomputedSelection<B>,
         output: Output,
     ) -> Result<(), Error>
     where
         Self: MIter<B>,
-        Stencil: MIter<B, Item = (u32,)>,
         Output: MIterMut<B>,
         Op: op::UnaryOp<B, <Self as MIter<B>>::Item, Output = Output::Item>;
 
@@ -140,7 +87,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<B>,
-        K: super::Scalar + 'static,
+        K: Scalar + 'static,
         Less: op::BinaryPredicateOp<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -172,7 +119,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<B>,
-        K: super::Scalar + 'static,
+        K: Scalar + 'static,
         Eq: op::BinaryPredicateOp<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -205,7 +152,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        K: super::Scalar + 'static,
+        K: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<B, (K,)>,
         Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -241,7 +188,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        K: super::Scalar + 'static,
+        K: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<B, (K,)>,
         Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
@@ -278,7 +225,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<B>,
-        K: super::Scalar + 'static,
+        K: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<B, (K,)>,
         Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         KeyOutput: MVec<B, Item = (K,)>,
@@ -317,7 +264,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     where
         Self: MIter<B>,
         RightValues: MIter<B, Item = <Self as MIter<B>>::Item>,
-        K: super::Scalar + 'static,
+        K: Scalar + 'static,
         Less: op::BinaryPredicateOp<B, (K,)>,
         KeyOutput: MVec<B, Item = (K,)>,
         ValueOutput: MVec<B, Item = <Self as MIter<B>>::Item>,
@@ -328,28 +275,25 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         })
     }
 
-    fn gather_dispatch<Indices, Output>(
+    fn gather_dispatch<Output>(
         self,
         policy: &crate::detail::CubePolicy<B>,
-        indices: Indices,
+        indices: crate::detail::device::DeviceColumnView<B, u32>,
         output: Output,
     ) -> Result<(), Error>
     where
         Self: MIter<B>,
-        Indices: MIter<B, Item = (u32,)>,
         Output: MIterMut<B, Item = <Self as MIter<B>>::Item>;
 
-    fn gather_where_dispatch<Indices, Stencil, Output>(
+    fn gather_where_dispatch<Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
-        _indices: Indices,
-        _stencil: Stencil,
+        _indices: crate::detail::device::DeviceColumnView<B, u32>,
+        _stencil: crate::detail::api::PrecomputedSelection<B>,
         _output: Output,
     ) -> Result<(), Error>
     where
         Self: MIter<B>,
-        Indices: MIter<B, Item = (u32,)>,
-        Stencil: MIter<B, Item = (u32,)>,
         Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
@@ -357,15 +301,14 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         })
     }
 
-    fn scatter_dispatch<Indices, Output>(
+    fn scatter_dispatch<Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
-        _indices: Indices,
+        _indices: crate::detail::device::DeviceColumnView<B, u32>,
         _output: Output,
     ) -> Result<(), Error>
     where
         Self: MIter<B>,
-        Indices: MIter<B, Item = (u32,)>,
         Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
@@ -373,17 +316,15 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         })
     }
 
-    fn scatter_where_dispatch<Indices, Stencil, Output>(
+    fn scatter_where_dispatch<Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
-        _indices: Indices,
-        _stencil: Stencil,
+        _indices: crate::detail::device::DeviceColumnView<B, u32>,
+        _stencil: crate::detail::api::PrecomputedSelection<B>,
         _output: Output,
     ) -> Result<(), Error>
     where
         Self: MIter<B>,
-        Indices: MIter<B, Item = (u32,)>,
-        Stencil: MIter<B, Item = (u32,)>,
         Output: MIterMut<B, Item = <Self as MIter<B>>::Item>,
     {
         Err(Error::Launch {
@@ -432,14 +373,13 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Op: op::ReductionOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
-    fn copy_where_dispatch<Stencil, Output>(
+    fn copy_where_dispatch<Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
-        _stencil: Stencil,
+        _stencil: crate::detail::api::PrecomputedSelection<B>,
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn remove_if_dispatch<Pred, Output>(
@@ -452,14 +392,13 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
-    fn remove_where_dispatch<Stencil, Output>(
+    fn remove_where_dispatch<Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
-        _stencil: Stencil,
+        _stencil: crate::detail::api::PrecomputedSelection<B>,
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     fn count_if_dispatch<Pred>(
@@ -526,15 +465,14 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Self: MIter<B>,
         Pred: op::PredicateOp<B, <Self as MIter<B>>::Item>;
 
-    fn replace_where_dispatch<Stencil, Output>(
+    fn replace_where_dispatch<Output>(
         self,
         _policy: &crate::detail::CubePolicy<B>,
         replacement: <Self as MIter<B>>::Item,
-        _stencil: Stencil,
+        _stencil: crate::detail::api::PrecomputedSelection<B>,
     ) -> Result<Output, Error>
     where
         Self: MIter<B>,
-        Stencil: MIter<B, Item = (u32,)>,
         Output: MVec<B, Item = <Self as MIter<B>>::Item>;
 
     #[doc(hidden)]
@@ -791,7 +729,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Right: MIter<B>,
         TransformOp:
             op::BinaryOp<B, <Self as MIter<B>>::Item, <Right as MIter<B>>::Item, Output = Output>,
-        Output: super::MItem<B>,
+        Output: MItem<B>,
         ReduceOp: op::ReductionOp<B, Output>,
     {
         Err(Error::Launch {
@@ -935,7 +873,7 @@ pub trait MIterDispatch<B: Runtime>: Sized {
         Self: MIter<B>,
         TransformOp:
             op::BinaryOp<B, <Self as MIter<B>>::Item, <Self as MIter<B>>::Item, Output = Output>,
-        Output: super::MItem<B>,
+        Output: MItem<B>,
         ReduceOp: op::ReductionOp<B, Output>,
     {
         Err(Error::Launch {
@@ -963,130 +901,6 @@ pub trait MIterDispatch<B: Runtime>: Sized {
     {
         Err(Error::Launch {
             message: "merge_by_key is not supported for this key iterator shape".to_string(),
-        })
-    }
-}
-
-pub trait MItemDispatch<B: Runtime>: Sized {
-    fn transform_unary<Input, Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        input: crate::detail::device::DeviceColumnView<B, Input>,
-        op: Op,
-    ) -> Result<<Self as super::MItem<B>>::Inner, Error>
-    where
-        Self: super::MItem<B>,
-        Input: super::Scalar,
-        Op: op::UnaryOp<B, (Input,), Output = Self>,
-    {
-        let _ = (policy, input, op);
-        Err(Error::Launch {
-            message: "transform is not supported for this output item shape".to_string(),
-        })
-    }
-
-    fn transform_binary<Left, Right, Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        left: crate::detail::device::DeviceColumnView<B, Left>,
-        right: crate::detail::device::DeviceColumnView<B, Right>,
-        op: Op,
-    ) -> Result<<Self as super::MItem<B>>::Inner, Error>
-    where
-        Self: super::MItem<B>,
-        Left: super::Scalar,
-        Right: super::Scalar,
-        Op: op::UnaryOp<B, (Left, Right), Output = Self>,
-    {
-        let _ = (policy, left, right, op);
-        Err(Error::Launch {
-            message: "transform is not supported for this output item shape".to_string(),
-        })
-    }
-
-    fn transform_ternary<First, Second, Third, Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        first: crate::detail::device::DeviceColumnView<B, First>,
-        second: crate::detail::device::DeviceColumnView<B, Second>,
-        third: crate::detail::device::DeviceColumnView<B, Third>,
-        op: Op,
-    ) -> Result<<Self as super::MItem<B>>::Inner, Error>
-    where
-        Self: super::MItem<B>,
-        First: super::Scalar,
-        Second: super::Scalar,
-        Third: super::Scalar,
-        Op: op::UnaryOp<B, (First, Second, Third), Output = Self>,
-    {
-        let _ = (policy, first, second, third, op);
-        Err(Error::Launch {
-            message: "transform is not supported for this output item shape".to_string(),
-        })
-    }
-
-    fn reduce_inner<Op>(
-        policy: &crate::detail::CubePolicy<B>,
-        input: <Self as super::MItem<B>>::Inner,
-        init: Self,
-        op: Op,
-    ) -> Result<Self, Error>
-    where
-        Self: super::MItem<B>,
-        Op: op::ReductionOp<B, Self>,
-    {
-        let _ = (policy, input, init, op);
-        Err(Error::Launch {
-            message: "reduce is not supported for this item shape".to_string(),
-        })
-    }
-
-    fn inner_product_with_right_item<LeftIter, RightIter, TransformOp, ReduceOp, Output>(
-        policy: &crate::detail::CubePolicy<B>,
-        left: LeftIter,
-        right: RightIter,
-        transform_op: TransformOp,
-        init: Output,
-        reduce_op: ReduceOp,
-    ) -> Result<Output, Error>
-    where
-        Self: super::MItem<B>,
-        LeftIter: MIter<B, Item = Self>,
-        RightIter: MIter<B>,
-        TransformOp: op::BinaryOp<B, Self, <RightIter as MIter<B>>::Item, Output = Output>,
-        Output: super::MItem<B>,
-        ReduceOp: op::ReductionOp<B, Output>,
-    {
-        let _ = (policy, left, right, transform_op, init, reduce_op);
-        Err(Error::Launch {
-            message: "inner_product is not supported for this iterator shape".to_string(),
-        })
-    }
-
-    fn inner_product_with_left_scalar<
-        LeftIter,
-        RightIter,
-        LeftScalar,
-        TransformOp,
-        ReduceOp,
-        Output,
-    >(
-        policy: &crate::detail::CubePolicy<B>,
-        left: LeftIter,
-        right: RightIter,
-        transform_op: TransformOp,
-        init: Output,
-        reduce_op: ReduceOp,
-    ) -> Result<Output, Error>
-    where
-        Self: super::MItem<B>,
-        LeftScalar: super::Scalar + 'static,
-        LeftIter: MIter<B, Item = (LeftScalar,)>,
-        RightIter: MIter<B, Item = Self>,
-        TransformOp: op::BinaryOp<B, (LeftScalar,), Self, Output = Output>,
-        Output: super::MItem<B>,
-        ReduceOp: op::ReductionOp<B, Output>,
-    {
-        let _ = (policy, left, right, transform_op, init, reduce_op);
-        Err(Error::Launch {
-            message: "inner_product is not supported for this iterator shape".to_string(),
         })
     }
 }

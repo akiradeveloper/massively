@@ -54,10 +54,12 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (urgency,) = transform(
+    let mut urgency = exec.filled(stock.len(), 0_u32)?;
+    transform(
         exec,
         SoA2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
+        SoA1(urgency.slice_mut(..)),
     )?;
     let (sku, urgency) = copy_where(
         exec,

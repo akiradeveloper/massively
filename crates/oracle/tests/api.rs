@@ -40,7 +40,7 @@ struct TupleMaxOp;
 #[cubecl::cube]
 impl ReductionOp<ApiRuntime, (u32,)> for TupleMaxOp {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
-        if lhs.0 > rhs.0 { lhs } else { rhs }
+        (lhs.0.max(rhs.0),)
     }
 }
 

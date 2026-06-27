@@ -31,14 +31,18 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (item_id, score) = scatter(
+    let mut ranked_item_id = exec.filled(len, 0_u32)?;
+    let mut ranked_score = exec.filled(len, 0.0_f32)?;
+    scatter(
         exec,
         SoA2(item_id.slice(..), score.slice(..)),
         rank_index.slice(..),
-        len,
-        (0_u32, 0.0_f32),
+        SoA2(ranked_item_id.slice_mut(..), ranked_score.slice_mut(..)),
     )?;
-    Ok(Output { item_id, score })
+    Ok(Output {
+        item_id: ranked_item_id,
+        score: ranked_score,
+    })
 }
 
 fn main() -> common::Result {

@@ -30,7 +30,7 @@ impl<B, Op, Output> KernelTabulateOp<B, Op, Output> {
 }
 
 #[cubecl::cube]
-impl<B, Op, Output> crate::algorithm::op::kernel::UnaryOp<u32> for KernelTabulateOp<B, Op, Output>
+impl<B, Op, Output> crate::op::kernel::UnaryOp<u32> for KernelTabulateOp<B, Op, Output>
 where
     B: cubecl::prelude::Runtime,
     Output: crate::Scalar,

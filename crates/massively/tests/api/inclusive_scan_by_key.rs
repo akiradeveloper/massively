@@ -55,3 +55,39 @@ fn inclusive_scan_by_key_accepts_tuple_values() {
         vec![100.0, 300.0, 300.0, 700.0, 1200.0, 600.0]
     );
 }
+
+#[test]
+fn inclusive_scan_by_key_accepts_single_column_max_with_offset_slices() {
+    let exec = exec();
+    let keys = exec.to_device(&[99_u32, 0, 0, 0, 1, 1, 1, 88]).unwrap();
+    let values = exec.to_device(&[99_u32, 1, 3, 2, 0, 5, 4, 88]).unwrap();
+
+    let (output,) = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(1..7)),
+        massively::SoA1(values.slice(1..7)),
+        SameLowNibbleU32,
+        MaxU32,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 3, 0, 5, 5]);
+}
+
+#[test]
+fn inclusive_scan_by_key_accepts_single_column_sum_with_same_low_nibble() {
+    let exec = exec();
+    let keys = exec.to_device(&[99_u32, 0, 0, 0, 1, 1, 1, 88]).unwrap();
+    let values = exec.to_device(&[99_u32, 1, 3, 2, 0, 5, 4, 88]).unwrap();
+
+    let (output,) = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(1..7)),
+        massively::SoA1(values.slice(1..7)),
+        SameLowNibbleU32,
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 4, 6, 0, 5, 9]);
+}

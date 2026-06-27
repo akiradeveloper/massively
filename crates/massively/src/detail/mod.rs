@@ -2,13 +2,16 @@
 
 pub(crate) mod api;
 pub(crate) mod device;
+pub(crate) mod dispatch;
 pub(crate) mod expr;
+mod impls;
 pub(crate) mod kernels;
+pub(crate) mod op_adapter;
 pub(crate) mod policy;
 pub(crate) mod primitives;
 pub(crate) mod read;
 
-pub(crate) use crate::algorithm::op;
+pub(crate) use crate::op;
 pub(crate) use api::{
     MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output,
     TransformUnaryOutput, adjacent_difference, adjacent_find, all_of, any_of, copy_where, count_if,

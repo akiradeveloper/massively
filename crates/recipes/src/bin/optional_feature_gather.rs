@@ -24,12 +24,13 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = gather_where(
+    let mut out = exec.filled(index.len(), -1.0_f32)?;
+    gather_where(
         exec,
         SoA1(value.slice(..)),
         index.slice(..),
-        (-1.0_f32,),
         available.slice(..),
+        SoA1(out.slice_mut(..)),
     )?;
     Ok(out)
 }

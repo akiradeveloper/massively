@@ -69,10 +69,12 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (flag,) = transform(
+    let mut flag = exec.filled(account_id.len(), 0_u32)?;
+    transform(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         SuspiciousTransaction,
+        massively::SoA1(flag.slice_mut(..)),
     )?;
     let (account_id, amount, risk_score) = copy_where(
         exec,
