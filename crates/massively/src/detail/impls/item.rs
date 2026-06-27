@@ -392,19 +392,13 @@ macro_rules! impl_miter_mut_tuple {
                 Ok(())
             }
 
-            fn write_where_from_inner<Stencil>(
+            fn write_where_from_inner(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 inner: <Self::Item as MItem<B>>::Inner,
-                stencil: Stencil,
+                stencil: crate::detail::api::PrecomputedSelection<B>,
             ) -> Result<(), Error>
-            where
-                Stencil: MIter<B, Item = (u32,)>,
             {
-                let stencil =
-                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
-                        &stencil, policy, false,
-                    )?;
                 let output = self.into_inner();
                 $(
                     {
@@ -422,19 +416,13 @@ macro_rules! impl_miter_mut_tuple {
                 Ok(())
             }
 
-            fn replace_where_inner<Stencil>(
+            fn replace_where_inner(
                 self,
                 policy: &crate::detail::CubePolicy<B>,
                 replacement: Self::Item,
-                stencil: Stencil,
+                stencil: crate::detail::api::PrecomputedSelection<B>,
             ) -> Result<(), Error>
-            where
-                Stencil: MIter<B, Item = (u32,)>,
             {
-                let stencil =
-                    <Stencil as sealed::MIterDispatch<B>>::selection_stencil_dispatch::<StencilFlag>(
-                        &stencil, policy, false,
-                    )?;
                 let output = self.into_inner();
                 $(
                     crate::detail::api::replace_where_into_with_policy(

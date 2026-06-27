@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use cubecl::prelude::{CubeElement, CubePrimitive, Runtime};
 
 use crate::Error;
-use crate::algorithm::api::sealed;
+use crate::detail::dispatch;
 use crate::runtime::op::KernelTabulateOp;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 
@@ -15,7 +15,7 @@ impl<T> Scalar for T where T: CubePrimitive + CubeElement {}
 
 /// Device-resident data that can be copied back to host memory by an executor.
 pub trait ToHost<B: Runtime>:
-    sealed::ToHostDispatch<B, Output = <Self as ToHost<B>>::Output>
+    dispatch::ToHostDispatch<B, Output = <Self as ToHost<B>>::Output>
 {
     type Output;
 }
@@ -23,9 +23,9 @@ pub trait ToHost<B: Runtime>:
 impl<B, T> ToHost<B> for T
 where
     B: Runtime,
-    T: sealed::ToHostDispatch<B>,
+    T: dispatch::ToHostDispatch<B>,
 {
-    type Output = <T as sealed::ToHostDispatch<B>>::Output;
+    type Output = <T as dispatch::ToHostDispatch<B>>::Output;
 }
 
 /// Execution context for a CubeCL runtime.

@@ -3,7 +3,9 @@ use std::marker::PhantomData;
 use cubecl::frontend::PartialOrdExpand;
 use cubecl::prelude::Runtime;
 
-use super::{MItem, Scalar, op};
+use crate::op;
+use crate::runtime::Scalar;
+use crate::value::MItem;
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default)]

@@ -31,7 +31,7 @@ GPU上のデータ領域を表す。
 GPUで計算を行うに当たって、AoSよりSoAの方が性能上有利。
 DeviceSliceをTupleでまとめ、MIterにした上で計算に使う。
 
-MIter<n> = SoAn(DeviceSlice, DeviceSlice, ...)
+MIter<n> = SoAn(MSlice, MSlice, ...)
 MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 
 ## アルゴリズム
@@ -41,11 +41,10 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 ### 記法
 
 - &[]nはMIter<n>を表す。
-- &[T]1はMIter<1>を表す。 
 - &mut[T]はMIterMut<n>を表す。
 - T?は、Option<T>を表す。
 - []nはOwnedなDeviceVecのTupleを表す。MVec<n>と呼ぶ。
-- &[T]はDeviceSlice<Item=T>を表す。
+- &[T]はMSlice<Item=T>を表す。
 
 ### リスト
 

@@ -1,10 +1,10 @@
-//! Parallel algorithm types, operators, and free-function APIs.
+//! Parallel algorithm free-function APIs.
 
 pub(crate) mod api;
-pub mod op;
-mod soa;
-mod traits;
 
+pub use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3};
+pub use crate::op;
+pub use crate::value::{MItem, MVec};
 pub use api::{
     adjacent_difference, adjacent_find, all_of, any_of, copy_where, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_where,
@@ -15,5 +15,3 @@ pub use api::{
     sort, sort_by_key, stable_sort, stable_sort_by_key, transform, transform_where, unique,
     unique_by_key, upper_bound,
 };
-pub use soa::{SoA1, SoA2, SoA3};
-pub use traits::{MItem, MIter, MIterMut, MVec};

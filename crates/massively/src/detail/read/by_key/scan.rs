@@ -139,7 +139,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: Scalar + 'static,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<Source::Item>,
+    Op: BinaryOp<(Source::Item,)>,
 {
     <Source as KernelColumn>::validate(source)?;
     ensure_same_len(<Source as KernelColumn>::len(source), control.len)?;
@@ -196,7 +196,7 @@ where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: Scalar + 'static,
     Source::Expr: DeviceGpuExpr<Source::Item>,
-    Op: BinaryOp<Source::Item>,
+    Op: BinaryOp<(Source::Item,)>,
 {
     <Source as KernelColumn>::validate(source)?;
     ensure_same_len(<Source as KernelColumn>::len(source), control.len)?;
@@ -718,7 +718,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             S: KernelColumn + KernelColumnAt<S0>,
             S::Item: Scalar + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
-            Op: BinaryOp<S::Item>,
+            Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
             type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
@@ -740,7 +740,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             S: KernelColumn + KernelColumnAt<S0>,
             S::Item: Scalar + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
-            Op: BinaryOp<S::Item>,
+            Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
             type Init = S::Item;

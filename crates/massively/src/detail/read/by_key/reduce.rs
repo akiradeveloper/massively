@@ -187,10 +187,7 @@ where
         }
 
         let client = policy.client();
-        let inclusive = super::scan::inclusive_scan_by_flags_one::<
-            ValueSource,
-            crate::detail::api::Tuple1BinaryOp<Op>,
-        >(
+        let inclusive = super::scan::inclusive_scan_by_flags_one::<ValueSource, Op>(
             policy,
             &self.0,
             &ScanByKeyControl {
@@ -214,7 +211,7 @@ where
         unsafe {
             reduce_by_key_apply_init_kernel::launch_unchecked::<
                 ValueSource::Item,
-                crate::detail::api::Tuple1BinaryOp<Op>,
+                Op,
                 ValueSource::Runtime,
             >(
                 client,

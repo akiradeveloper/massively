@@ -25,13 +25,13 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = scatter_where(
+    let mut out = exec.filled(len, 0_u32)?;
+    scatter_where(
         exec,
         SoA1(item_id.slice(..)),
         slot.slice(..),
-        len,
-        (0_u32,),
         approved.slice(..),
+        SoA1(out.slice_mut(..)),
     )?;
     Ok(out)
 }

@@ -13,6 +13,16 @@ fn inclusive_scan_accepts_tuple_columns() {
 }
 
 #[test]
+fn inclusive_scan_accepts_tuple_max_u32() {
+    let exec = exec();
+    let values = exec.to_device(&[1_u32, 3, 2, 0, 5, 4]).unwrap();
+
+    let (output,) = inclusive_scan(&exec, massively::SoA1(values.slice(..)), MaxU32).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 3, 3, 5, 5]);
+}
+
+#[test]
 fn inclusive_scan_accepts_single_column_as_tuple_item() {
     let exec = exec();
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();

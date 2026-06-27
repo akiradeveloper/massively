@@ -36,6 +36,15 @@ impl ReductionOp<WgpuRuntime, (u32,)> for Sum {
     }
 }
 
+pub(crate) struct MaxU32;
+
+#[cubecl::cube]
+impl ReductionOp<WgpuRuntime, (u32,)> for MaxU32 {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
+        (lhs.0.max(rhs.0),)
+    }
+}
+
 pub(crate) struct SquareIndex;
 
 #[cubecl::cube]
@@ -114,6 +123,15 @@ pub(crate) struct LessU32;
 impl BinaryPredicateOp<WgpuRuntime, (u32,)> for LessU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
+    }
+}
+
+pub(crate) struct SameLowNibbleU32;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (u32,)> for SameLowNibbleU32 {
+    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
+        (lhs.0 & 0x0f) == (rhs.0 & 0x0f)
     }
 }
 
