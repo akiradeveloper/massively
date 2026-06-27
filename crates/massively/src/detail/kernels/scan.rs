@@ -1,8 +1,425 @@
+#![allow(dead_code)]
+
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp},
     expr::DeviceGpuExpr,
 };
 use cubecl::prelude::*;
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn scan_by_key_head_flags_device_expr_kernel<
+    K: CubePrimitive,
+    KeyExpr: DeviceGpuExpr<K>,
+    KeyEq: BinaryPredicateOp<K>,
+>(
+    key_slot0: &[K],
+    key_slot1: &[K],
+    key_slot2: &[K],
+    key_slot3: &[K],
+    key_slot_offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    if global < logical_len {
+        if global == 0usize {
+            flags[global] = 1u32;
+        } else {
+            let previous_key = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                global - 1usize,
+            );
+            let current_key = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                global,
+            );
+            flags[global] = if KeyEq::apply(previous_key, current_key) {
+                0u32
+            } else {
+                1u32
+            };
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn inclusive_scan_by_flags_device_expr_kernel<
+    T: CubePrimitive,
+    ValueExpr: DeviceGpuExpr<T>,
+    Op: BinaryOp<T>,
+>(
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_slot_offsets: &[u32],
+    head_flags: &[u32],
+    len: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc = RuntimeCell::<T>::new(ValueExpr::eval(
+            value_slot0,
+            value_slot1,
+            value_slot2,
+            value_slot3,
+            value_slot_offsets,
+            start.read(),
+        ));
+        let index = RuntimeCell::<usize>::new(start.read() + 1usize);
+        while index.read() <= global {
+            acc.store(Op::apply(
+                acc.read(),
+                ValueExpr::eval(
+                    value_slot0,
+                    value_slot1,
+                    value_slot2,
+                    value_slot3,
+                    value_slot_offsets,
+                    index.read(),
+                ),
+            ));
+            index.store(index.read() + 1usize);
+        }
+        output[global] = acc.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn exclusive_scan_by_flags_device_expr_kernel<
+    T: CubePrimitive,
+    ValueExpr: DeviceGpuExpr<T>,
+    Op: BinaryOp<T>,
+>(
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_slot_offsets: &[u32],
+    head_flags: &[u32],
+    init: &[T],
+    len: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc = RuntimeCell::<T>::new(init[0]);
+        let index = RuntimeCell::<usize>::new(start.read());
+        while index.read() < global {
+            acc.store(Op::apply(
+                acc.read(),
+                ValueExpr::eval(
+                    value_slot0,
+                    value_slot1,
+                    value_slot2,
+                    value_slot3,
+                    value_slot_offsets,
+                    index.read(),
+                ),
+            ));
+            index.store(index.read() + 1usize);
+        }
+        output[global] = acc.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn inclusive_scan_tuple2_by_flags_device_expr_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    Op: BinaryOp<(A, B)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_offsets: &[u32],
+    head_flags: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc_a = RuntimeCell::<A>::new(ExprA::eval(
+            a_slot0,
+            a_slot1,
+            a_slot2,
+            a_slot3,
+            a_offsets,
+            start.read(),
+        ));
+        let acc_b = RuntimeCell::<B>::new(ExprB::eval(
+            b_slot0,
+            b_slot1,
+            b_slot2,
+            b_slot3,
+            b_offsets,
+            start.read(),
+        ));
+        let index = RuntimeCell::<usize>::new(start.read() + 1usize);
+        while index.read() <= global {
+            let value = Op::apply(
+                (acc_a.read(), acc_b.read()),
+                (
+                    ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_offsets, index.read()),
+                    ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_offsets, index.read()),
+                ),
+            );
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            index.store(index.read() + 1usize);
+        }
+        output_a[global] = acc_a.read();
+        output_b[global] = acc_b.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn exclusive_scan_tuple2_by_flags_device_expr_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    Op: BinaryOp<(A, B)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_offsets: &[u32],
+    head_flags: &[u32],
+    init_a: &[A],
+    init_b: &[B],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc_a = RuntimeCell::<A>::new(init_a[0]);
+        let acc_b = RuntimeCell::<B>::new(init_b[0]);
+        let index = RuntimeCell::<usize>::new(start.read());
+        while index.read() < global {
+            let value = Op::apply(
+                (acc_a.read(), acc_b.read()),
+                (
+                    ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_offsets, index.read()),
+                    ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_offsets, index.read()),
+                ),
+            );
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            index.store(index.read() + 1usize);
+        }
+        output_a[global] = acc_a.read();
+        output_b[global] = acc_b.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn inclusive_scan_tuple3_by_flags_device_expr_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    Op: BinaryOp<(A, B, C)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_offsets: &[u32],
+    head_flags: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc_a = RuntimeCell::<A>::new(ExprA::eval(
+            a_slot0,
+            a_slot1,
+            a_slot2,
+            a_slot3,
+            a_offsets,
+            start.read(),
+        ));
+        let acc_b = RuntimeCell::<B>::new(ExprB::eval(
+            b_slot0,
+            b_slot1,
+            b_slot2,
+            b_slot3,
+            b_offsets,
+            start.read(),
+        ));
+        let acc_c = RuntimeCell::<C>::new(ExprC::eval(
+            c_slot0,
+            c_slot1,
+            c_slot2,
+            c_slot3,
+            c_offsets,
+            start.read(),
+        ));
+        let index = RuntimeCell::<usize>::new(start.read() + 1usize);
+        while index.read() <= global {
+            let value = Op::apply(
+                (acc_a.read(), acc_b.read(), acc_c.read()),
+                (
+                    ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_offsets, index.read()),
+                    ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_offsets, index.read()),
+                    ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_offsets, index.read()),
+                ),
+            );
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            acc_c.store(value.2);
+            index.store(index.read() + 1usize);
+        }
+        output_a[global] = acc_a.read();
+        output_b[global] = acc_b.read();
+        output_c[global] = acc_c.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn exclusive_scan_tuple3_by_flags_device_expr_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    Op: BinaryOp<(A, B, C)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_offsets: &[u32],
+    head_flags: &[u32],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc_a = RuntimeCell::<A>::new(init_a[0]);
+        let acc_b = RuntimeCell::<B>::new(init_b[0]);
+        let acc_c = RuntimeCell::<C>::new(init_c[0]);
+        let index = RuntimeCell::<usize>::new(start.read());
+        while index.read() < global {
+            let value = Op::apply(
+                (acc_a.read(), acc_b.read(), acc_c.read()),
+                (
+                    ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_offsets, index.read()),
+                    ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_offsets, index.read()),
+                    ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_offsets, index.read()),
+                ),
+            );
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            acc_c.store(value.2);
+            index.store(index.read() + 1usize);
+        }
+        output_a[global] = acc_a.read();
+        output_b[global] = acc_b.read();
+        output_c[global] = acc_c.read();
+    }
+}
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn scan_by_key_pass_kernel<
@@ -1372,6 +1789,132 @@ pub(crate) fn reduce_by_key_end_flags_kernel<
             flags[global] = 0u32;
             values[global] = inclusive[global];
         }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn reduce_by_key_device_expr_key_end_flags_kernel<
+    K: CubePrimitive,
+    KeyExpr: DeviceGpuExpr<K>,
+    KeyEq: BinaryPredicateOp<K>,
+>(
+    key_slot0: &[K],
+    key_slot1: &[K],
+    key_slot2: &[K],
+    key_slot3: &[K],
+    key_slot_offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    if global < logical_len {
+        let is_end = RuntimeCell::<bool>::new(false);
+        if global + 1usize == logical_len {
+            is_end.store(true);
+        } else {
+            let current_key = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                global,
+            );
+            let next_key = KeyExpr::eval(
+                key_slot0,
+                key_slot1,
+                key_slot2,
+                key_slot3,
+                key_slot_offsets,
+                global + 1usize,
+            );
+            if !KeyEq::apply(current_key, next_key) {
+                is_end.store(true);
+            }
+        }
+
+        flags[global] = if is_end.read() { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn reduce_by_key_apply_init_kernel<T: CubePrimitive, Op: BinaryOp<T>>(
+    inclusive: &[T],
+    init: &[T],
+    len: &[u32],
+    values: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        values[global] = Op::apply(init[0], inclusive[global]);
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn reduce_by_key_tuple2_apply_init_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    Op: BinaryOp<(A, B)>,
+>(
+    inclusive_a: &[A],
+    inclusive_b: &[B],
+    init_a: &[A],
+    init_b: &[B],
+    len: &[u32],
+    values_a: &mut [A],
+    values_b: &mut [B],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let value = Op::apply(
+            (init_a[0], init_b[0]),
+            (inclusive_a[global], inclusive_b[global]),
+        );
+        values_a[global] = value.0;
+        values_b[global] = value.1;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn reduce_by_key_tuple3_apply_init_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    Op: BinaryOp<(A, B, C)>,
+>(
+    inclusive_a: &[A],
+    inclusive_b: &[B],
+    inclusive_c: &[C],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
+    len: &[u32],
+    values_a: &mut [A],
+    values_b: &mut [B],
+    values_c: &mut [C],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let value = Op::apply(
+            (init_a[0], init_b[0], init_c[0]),
+            (
+                inclusive_a[global],
+                inclusive_b[global],
+                inclusive_c[global],
+            ),
+        );
+        values_a[global] = value.0;
+        values_b[global] = value.1;
+        values_c[global] = value.2;
     }
 }
 

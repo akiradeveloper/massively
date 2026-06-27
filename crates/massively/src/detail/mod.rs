@@ -6,6 +6,7 @@ pub(crate) mod expr;
 pub(crate) mod kernels;
 pub(crate) mod policy;
 pub(crate) mod primitives;
+pub(crate) mod read;
 
 pub(crate) use crate::algorithm::op;
 pub(crate) use api::{

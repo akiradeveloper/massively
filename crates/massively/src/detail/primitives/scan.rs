@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp},
     device::{DeviceVec, KernelColumnBindings, SoA1, SoA2, SoA3},

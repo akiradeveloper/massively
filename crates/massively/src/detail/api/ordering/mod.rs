@@ -2,15 +2,15 @@ use super::memory::{MaterializeOutput, materialize};
 use crate::{
     detail::op::kernel::BinaryPredicateOp,
     device::{
-        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, ReadOnlySoA, S0, SoA, SoA1,
-        SoA2, SoA3, SoAView1, SoAView2, SoAView3,
+        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA1, SoA2, SoA3, SoAView1,
+        SoAView2, SoAView3,
     },
     error::Error,
-    expr::{DeviceGpuExpr, GpuExpr},
+    expr::DeviceGpuExpr,
     kernels::*,
     op::GpuOp,
     policy::CubePolicy,
-    primitives::{ordering, range as primitive_range, select},
+    primitives::{ordering, select},
 };
 use cubecl::prelude::*;
 
@@ -498,7 +498,7 @@ where
     )
 }
 
-fn device_expr_merge_by_key_control_with_policy<LeftKey, RightKey, Less>(
+pub(crate) fn device_expr_merge_by_key_control_with_policy<LeftKey, RightKey, Less>(
     policy: &CubePolicy<LeftKey::Runtime>,
     left_keys: &LeftKey,
     right_keys: &RightKey,
@@ -909,7 +909,7 @@ where
     ))
 }
 
-fn device_expr_merge_by_key_values_with_control_with_policy<LeftValue, RightValue>(
+pub(crate) fn device_expr_merge_by_key_values_with_control_with_policy<LeftValue, RightValue>(
     policy: &CubePolicy<LeftValue::Runtime>,
     left_values: &LeftValue,
     right_values: &RightValue,
@@ -979,45 +979,8 @@ where
     Ok(DeviceVec::from_handle(policy.id(), out_value_handle, len))
 }
 
-/// Pair input accepted by sorted binary ordering algorithms.
-#[doc(hidden)]
-pub trait PairOrderingInput<Other, Less> {
-    /// Runtime used by this input.
-    type Runtime: Runtime;
-    /// Output produced by this algorithm.
-    type Output;
-
-    /// Merges two sorted inputs.
-    fn merge_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        less: GpuOp<Less>,
-    ) -> Result<Self::Output, Error>;
-    /// Computes the sorted set union.
-    fn set_union_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        less: GpuOp<Less>,
-    ) -> Result<Self::Output, Error>;
-    /// Computes the sorted set intersection.
-    fn set_intersection_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        less: GpuOp<Less>,
-    ) -> Result<Self::Output, Error>;
-    /// Computes the sorted set difference.
-    fn set_difference_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        other: Other,
-        less: GpuOp<Less>,
-    ) -> Result<Self::Output, Error>;
-}
-
-impl<Left, Right, Less> PairOrderingInput<SoAView1<Right>, Less> for SoAView1<Left>
+impl<Left, Right, Less> crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>
+    for SoAView1<Left>
 where
     Self: ReadOnlySoA<Item = (Left::Item,), Scalar = Left::Item>,
     SoAView1<Right>: ReadOnlySoA<Item = (Right::Item,), Scalar = Right::Item>,
@@ -1100,7 +1063,7 @@ where
     }
 }
 
-impl<Left, Right, Less> PairOrderingInput<Right, Less> for Left
+impl<Left, Right, Less> crate::detail::read::KernelPairOrderingInput<Right, Less> for Left
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -1118,7 +1081,7 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::merge_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::merge_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1132,7 +1095,7 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::set_union_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::set_union_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1146,7 +1109,7 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::set_intersection_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::set_intersection_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1160,7 +1123,7 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as PairOrderingInput<SoAView1<Right>, Less>>::set_difference_input(
+        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::set_difference_input(
             SoAView1 { source: self },
             policy,
             SoAView1 { source: other },
@@ -1169,7 +1132,7 @@ where
     }
 }
 
-impl<Left, Right, Less> PairOrderingInput<(Right,), Less> for (Left,)
+impl<Left, Right, Less> crate::detail::read::KernelPairOrderingInput<(Right,), Less> for (Left,)
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -1187,7 +1150,7 @@ where
         other: (Right,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::merge_input(
+        <Left as crate::detail::read::KernelPairOrderingInput<Right, super::Tuple1Less<Less>>>::merge_input(
             self.0,
             policy,
             other.0,
@@ -1201,7 +1164,7 @@ where
         other: (Right,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::set_union_input(
+        <Left as crate::detail::read::KernelPairOrderingInput<Right, super::Tuple1Less<Less>>>::set_union_input(
             self.0,
             policy,
             other.0,
@@ -1215,7 +1178,7 @@ where
         other: (Right,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::set_intersection_input(
+        <Left as crate::detail::read::KernelPairOrderingInput<Right, super::Tuple1Less<Less>>>::set_intersection_input(
             self.0,
             policy,
             other.0,
@@ -1229,7 +1192,7 @@ where
         other: (Right,),
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <Left as PairOrderingInput<Right, super::Tuple1Less<Less>>>::set_difference_input(
+        <Left as crate::detail::read::KernelPairOrderingInput<Right, super::Tuple1Less<Less>>>::set_difference_input(
             self.0,
             policy,
             other.0,
@@ -1250,7 +1213,7 @@ macro_rules! impl_tuple_pair_ordering {
         $membership_expr_fn:ident
     ) => {
         impl<$first, $( $rest ),+, $right_first_ty, $( $right_rest_ty ),+, Less>
-            PairOrderingInput<$input<$right_first_ty, $( $right_rest_ty ),+>, Less>
+            crate::detail::read::KernelPairOrderingInput<$input<$right_first_ty, $( $right_rest_ty ),+>, Less>
             for $input<$first, $( $rest ),+>
         where
             Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
@@ -1440,11 +1403,11 @@ pub fn merge<R, Left, Right, Less>(
     left: Left,
     right: Right,
     _less: Less,
-) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
+) -> Result<<<Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
     R: Runtime,
-    Left: PairOrderingInput<Right, Less, Runtime = R>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
+    Left: crate::detail::read::KernelPairOrderingInput<Right, Less, Runtime = R>,
+    <Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
     materialize(
         policy,
@@ -1458,11 +1421,11 @@ pub fn set_union<R, Left, Right, Less>(
     left: Left,
     right: Right,
     _less: Less,
-) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
+) -> Result<<<Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
     R: Runtime,
-    Left: PairOrderingInput<Right, Less, Runtime = R>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
+    Left: crate::detail::read::KernelPairOrderingInput<Right, Less, Runtime = R>,
+    <Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
     materialize(
         policy,
@@ -1476,11 +1439,11 @@ pub fn set_intersection<R, Left, Right, Less>(
     left: Left,
     right: Right,
     _less: Less,
-) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
+) -> Result<<<Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
     R: Runtime,
-    Left: PairOrderingInput<Right, Less, Runtime = R>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
+    Left: crate::detail::read::KernelPairOrderingInput<Right, Less, Runtime = R>,
+    <Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
     materialize(
         policy,
@@ -1494,11 +1457,11 @@ pub fn set_difference<R, Left, Right, Less>(
     left: Left,
     right: Right,
     _less: Less,
-) -> Result<<<Left as PairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
+) -> Result<<<Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output as MaterializeOutput>::Output, Error>
 where
     R: Runtime,
-    Left: PairOrderingInput<Right, Less, Runtime = R>,
-    <Left as PairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
+    Left: crate::detail::read::KernelPairOrderingInput<Right, Less, Runtime = R>,
+    <Left as crate::detail::read::KernelPairOrderingInput<Right, Less>>::Output: MaterializeOutput<Runtime = R>,
 {
     materialize(
         policy,
