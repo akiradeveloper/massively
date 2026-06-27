@@ -1871,6 +1871,32 @@ pub(crate) fn copy_if_expr_flag_only_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn copy_if_device_expr_flag_only_kernel<
+    T: CubePrimitive,
+    Expr: DeviceGpuExpr<T>,
+    Pred: PredicateOp<T>,
+>(
+    slot0: &[T],
+    slot1: &[T],
+    slot2: &[T],
+    slot3: &[T],
+    slot_offsets: &[u32],
+    len: &[u32],
+    invert: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    if unit < (len[0] as usize) {
+        let selected = Pred::apply(Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, unit));
+        if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
+            flags[unit] = 1u32;
+        } else {
+            flags[unit] = 0u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn copy_if_stencil_expr_flags_kernel<
     T: CubePrimitive,
     S: CubePrimitive,

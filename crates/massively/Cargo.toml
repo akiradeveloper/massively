@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.16.0"
+version = "0.17.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -257,9 +257,13 @@ name = "util-random"
 path = "examples/util/random.rs"
 
 [[example]]
-name = "runtime-tabulate"
-path = "examples/runtime/tabulate.rs"
-
-[[example]]
 name = "runtime-to-device"
 path = "examples/runtime/to_device.rs"
+
+[[example]]
+name = "slice-constant"
+path = "examples/slice/constant.rs"
+
+[[example]]
+name = "slice-transform"
+path = "examples/slice/transform.rs"

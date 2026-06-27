@@ -4,29 +4,29 @@ use crate::Error;
 use crate::runtime::{DeviceSlice, Executor, Scalar};
 use crate::slice::MSlice;
 
-impl<'a, B, T> MSlice<B> for DeviceSlice<'a, B, T>
+impl<'a, R, T> MSlice<R> for DeviceSlice<'a, R, T>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar + 'static,
 {
     type Item = T;
-    type Read = crate::detail::device::DeviceColumnView<B, T>;
+    type Read = crate::detail::device::DeviceColumnView<R, T>;
 
     fn len(&self) -> usize {
         DeviceSlice::len(self)
     }
 
-    fn validate_executor(&self, exec: &Executor<B>) -> Result<(), Error> {
+    fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
         exec.ensure_policy_id(self.policy_id())
     }
 
-    fn into_read(self) -> Self::Read {
-        self.column_view()
+    fn into_read(self, _policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+        Ok(self.column_view())
     }
 
     fn column_view<U: Scalar + 'static>(
         &self,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<B, U>>, Error> {
+    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, U>>, Error> {
         Ok(self.column_view_as::<U>())
     }
 }

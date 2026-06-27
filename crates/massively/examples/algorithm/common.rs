@@ -8,9 +8,9 @@ pub type Result = std::result::Result<(), massively::Error>;
 pub struct AddOne;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (f32,)> for AddOne
+impl<R> UnaryOp<R, (f32,)> for AddOne
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     type Output = (f32,);
 
@@ -22,9 +22,9 @@ where
 pub struct Square;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (f32,)> for Square
+impl<R> UnaryOp<R, (f32,)> for Square
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     type Output = (f32,);
 
@@ -36,9 +36,9 @@ where
 pub struct PairProduct;
 
 #[cubecl::cube]
-impl<B> BinaryOp<B, (f32,), (f32,)> for PairProduct
+impl<R> BinaryOp<R, (f32,), (f32,)> for PairProduct
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     type Output = (f32,);
 
@@ -50,9 +50,9 @@ where
 pub struct SumF32;
 
 #[cubecl::cube]
-impl<B> ReductionOp<B, (f32,)> for SumF32
+impl<R> ReductionOp<R, (f32,)> for SumF32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
@@ -62,9 +62,9 @@ where
 pub struct TupleSumF32;
 
 #[cubecl::cube]
-impl<B> ReductionOp<B, (f32,)> for TupleSumF32
+impl<R> ReductionOp<R, (f32,)> for TupleSumF32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
@@ -74,9 +74,9 @@ where
 pub struct SumU32;
 
 #[cubecl::cube]
-impl<B> ReductionOp<B, (u32,)> for SumU32
+impl<R> ReductionOp<R, (u32,)> for SumU32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         (lhs.0 + rhs.0,)
@@ -86,9 +86,9 @@ where
 pub struct MulF32;
 
 #[cubecl::cube]
-impl<B> ReductionOp<B, (f32,)> for MulF32
+impl<R> ReductionOp<R, (f32,)> for MulF32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 * rhs.0,)
@@ -98,9 +98,9 @@ where
 pub struct LessF32;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (f32,)> for LessF32
+impl<R> BinaryPredicateOp<R, (f32,)> for LessF32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
         lhs.0 < rhs.0
@@ -110,9 +110,9 @@ where
 pub struct LessU32;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32,)> for LessU32
+impl<R> BinaryPredicateOp<R, (u32,)> for LessU32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
@@ -122,9 +122,9 @@ where
 pub struct EqualF32;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (f32,)> for EqualF32
+impl<R> BinaryPredicateOp<R, (f32,)> for EqualF32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
         lhs.0 == rhs.0
@@ -134,9 +134,9 @@ where
 pub struct EqualU32;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32,)> for EqualU32
+impl<R> BinaryPredicateOp<R, (u32,)> for EqualU32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 == rhs.0
@@ -146,9 +146,9 @@ where
 pub struct Positive;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (f32,)> for Positive
+impl<R> PredicateOp<R, (f32,)> for Positive
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(input: (f32,)) -> bool {
         input.0 > 0.0
@@ -158,9 +158,9 @@ where
 pub struct GreaterThanTwo;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (f32,)> for GreaterThanTwo
+impl<R> PredicateOp<R, (f32,)> for GreaterThanTwo
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(input: (f32,)) -> bool {
         input.0 > 2.0
@@ -170,9 +170,9 @@ where
 pub struct EvenU32;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (u32,)> for EvenU32
+impl<R> PredicateOp<R, (u32,)> for EvenU32
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
 {
     fn apply(input: (u32,)) -> bool {
         input.0 % 2 == 0

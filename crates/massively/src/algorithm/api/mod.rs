@@ -11,26 +11,26 @@ use crate::value::MVec;
 
 pub use crate::Error;
 
-fn validate_input<B, Input>(exec: &Executor<B>, input: &Input) -> Result<(), Error>
+fn validate_input<R, Input>(exec: &Executor<R>, input: &Input) -> Result<(), Error>
 where
-    B: Runtime,
-    Input: MIter<B>,
+    R: Runtime,
+    Input: MIter<R>,
 {
-    <Input as sealed::MIterDispatch<B>>::validate_executor(input, exec)
+    <Input as sealed::MIterDispatch<R>>::validate_executor(input, exec)
 }
 
-fn validate_output<B, Output>(exec: &Executor<B>, output: &Output) -> Result<(), Error>
+fn validate_output<R, Output>(exec: &Executor<R>, output: &Output) -> Result<(), Error>
 where
-    B: Runtime,
-    Output: MIterMut<B>,
+    R: Runtime,
+    Output: MIterMut<R>,
 {
-    <Output as sealed::MIterMutDispatch<B>>::validate_executor(output, exec)
+    <Output as sealed::MIterMutDispatch<R>>::validate_executor(output, exec)
 }
 
-fn validate_mslice<B, Slice>(exec: &Executor<B>, slice: &Slice) -> Result<(), Error>
+fn validate_mslice<R, Slice>(exec: &Executor<R>, slice: &Slice) -> Result<(), Error>
 where
-    B: Runtime,
-    Slice: MSlice<B>,
+    R: Runtime,
+    Slice: MSlice<R>,
 {
     slice.validate_executor(exec)
 }

@@ -1,8 +1,8 @@
 use super::*;
 
 /// Applies a binary transform over two inputs and reduces the result.
-pub fn inner_product<B, Left, Right, ZipperOp, ReduceOp>(
-    exec: &Executor<B>,
+pub fn inner_product<R, Left, Right, ZipperOp, ReduceOp>(
+    exec: &Executor<R>,
     left: Left,
     right: Right,
     transform_op: ZipperOp,
@@ -10,15 +10,15 @@ pub fn inner_product<B, Left, Right, ZipperOp, ReduceOp>(
     reduce_op: ReduceOp,
 ) -> Result<ZipperOp::Output, Error>
 where
-    B: Runtime,
-    Left: MIter<B>,
-    Right: MIter<B>,
-    ZipperOp: op::BinaryOp<B, Left::Item, Right::Item>,
-    ReduceOp: op::ReductionOp<B, ZipperOp::Output>,
+    R: Runtime,
+    Left: MIter<R>,
+    Right: MIter<R>,
+    ZipperOp: op::BinaryOp<R, Left::Item, Right::Item>,
+    ReduceOp: op::ReductionOp<R, ZipperOp::Output>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left::Item as sealed::MItemDispatch<B>>::inner_product_with_right_item::<
+    <Left::Item as sealed::MItemDispatch<R>>::inner_product_with_right_item::<
         Left,
         Right,
         ZipperOp,
@@ -28,24 +28,24 @@ where
 }
 
 /// Reduces a massively iterator to one host item.
-pub fn reduce<B, Input, Op>(
-    exec: &Executor<B>,
+pub fn reduce<R, Input, Op>(
+    exec: &Executor<R>,
     source: Input,
     init: Input::Item,
     op: Op,
 ) -> Result<Input::Item, Error>
 where
-    B: Runtime,
-    Input: MIter<B>,
-    Op: op::ReductionOp<B, Input::Item>,
+    R: Runtime,
+    Input: MIter<R>,
+    Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<B>>::reduce_dispatch(source, exec.policy(), init, op)
+    <Input as sealed::MIterDispatch<R>>::reduce_dispatch(source, exec.policy(), init, op)
 }
 
 /// Reduces consecutive values with equal keys.
-pub fn reduce_by_key<B, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
-    exec: &Executor<B>,
+pub fn reduce_by_key<R, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
+    exec: &Executor<R>,
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
@@ -53,17 +53,17 @@ pub fn reduce_by_key<B, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
     op: Op,
 ) -> Result<(KeyOutput, ValueOutput), Error>
 where
-    B: Runtime,
-    Keys: MIter<B>,
-    Values: MIter<B>,
-    KeyEq: op::BinaryPredicateOp<B, Keys::Item>,
-    Op: op::ReductionOp<B, Values::Item>,
-    KeyOutput: MVec<B, Item = Keys::Item>,
-    ValueOutput: MVec<B, Item = Values::Item>,
+    R: Runtime,
+    Keys: MIter<R>,
+    Values: MIter<R>,
+    KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
+    Op: op::ReductionOp<R, Values::Item>,
+    KeyOutput: MVec<R, Item = Keys::Item>,
+    ValueOutput: MVec<R, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
-    <Keys as sealed::MIterDispatch<B>>::reduce_by_key_dispatch(
+    <Keys as sealed::MIterDispatch<R>>::reduce_by_key_dispatch(
         keys,
         exec.policy(),
         values,

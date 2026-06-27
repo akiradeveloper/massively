@@ -151,7 +151,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let mut output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
         api_transform(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TransformMap, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), transform_map(&input));
     }
@@ -277,7 +277,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let stencil = stencil_flags(&input);
-        let mut output_g = padded_device(&exec, &input);
+        let output_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
         api_replace_where(&exec, (replacement,), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(slice_range(&input)))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(slice_range(&input))).unwrap(), oracle::replace_where(&input, replacement, &stencil));
@@ -308,7 +308,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let indices_g = padded_device(&exec, &indices);
-        let mut output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
         api_gather(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::gather(&input, &indices));
     }
@@ -324,7 +324,7 @@ proptest! {
         let stencil_g = padded_device(&exec, &stencil);
         prop_assert_eq!(
             {
-                let mut output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
+                let output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
                 gather_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..)))
                     .unwrap();
                 exec.to_host(&output_g).unwrap()
@@ -341,7 +341,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let indices_g = padded_device(&exec, &indices);
-        let mut output_g = exec.to_device(&vec![default; input.len()]).unwrap();
+        let output_g = exec.to_device(&vec![default; input.len()]).unwrap();
         scatter(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle::scatter(&input, &indices, input.len(), default));
     }
@@ -358,7 +358,7 @@ proptest! {
         let stencil_g = padded_device(&exec, &stencil);
         prop_assert_eq!(
             {
-                let mut output_g = exec.to_device(&vec![default; input.len()]).unwrap();
+                let output_g = exec.to_device(&vec![default; input.len()]).unwrap();
                 scatter_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
                 exec.to_host(&output_g).unwrap()
             },

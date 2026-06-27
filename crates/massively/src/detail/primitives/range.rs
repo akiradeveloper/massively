@@ -55,42 +55,6 @@ where
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
-pub(crate) fn tabulate<R, T, Op>(
-    policy: &CubePolicy<R>,
-    len: usize,
-    _op: Op,
-) -> Result<DeviceVec<R, T>, Error>
-where
-    R: Runtime,
-    T: CubePrimitive + CubeElement,
-    Op: crate::op::kernel::UnaryOp<u32, Output = T>,
-{
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    if len == 0 {
-        return Ok(policy.empty_device_vec());
-    }
-
-    let client = policy.client();
-    let output_handle = client.empty(len * std::mem::size_of::<T>());
-
-    let block_count = len.div_ceil(BLOCK_RANGE_SIZE as usize);
-    let block_count_u32 =
-        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
-    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-
-    unsafe {
-        tabulate_kernel::launch_unchecked::<T, Op, R>(
-            client,
-            CubeCount::Static(block_count_u32, 1, 1),
-            CubeDim::new_1d(BLOCK_RANGE_SIZE),
-            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
-        );
-    }
-
-    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
-}
-
 #[allow(dead_code)]
 pub(crate) fn concat_device_with_policy<R, T>(
     policy: &CubePolicy<R>,

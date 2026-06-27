@@ -9,16 +9,16 @@ use crate::runtime::{Executor, Scalar};
 
 /// Owned device column.
 #[derive(Debug)]
-pub struct DeviceVec<B: Runtime, T> {
-    pub(crate) inner: crate::detail::DeviceVec<B, T>,
-    pub(crate) _backend: PhantomData<fn() -> B>,
+pub struct DeviceVec<R: Runtime, T> {
+    pub(crate) inner: crate::detail::DeviceVec<R, T>,
+    pub(crate) _backend: PhantomData<fn() -> R>,
 }
 
-impl<B, T> DeviceVec<B, T>
+impl<R, T> DeviceVec<R, T>
 where
-    B: Runtime,
+    R: Runtime,
 {
-    pub(crate) fn from_inner(inner: crate::detail::DeviceVec<B, T>) -> Self {
+    pub(crate) fn from_inner(inner: crate::detail::DeviceVec<R, T>) -> Self {
         Self {
             inner,
             _backend: PhantomData,
@@ -39,9 +39,9 @@ where
     ///
     /// The range is checked like a Rust slice range and panics if it is out of
     /// bounds or if the start is greater than the end.
-    pub fn slice<R>(&self, range: R) -> DeviceSlice<'_, B, T>
+    pub fn slice<Range>(&self, range: Range) -> DeviceSlice<'_, R, T>
     where
-        R: RangeBounds<usize>,
+        Range: RangeBounds<usize>,
     {
         let (offset, len) = resolve_slice_range(self.len(), range);
         DeviceSlice {
@@ -55,9 +55,9 @@ where
     ///
     /// The range is checked like a Rust slice range and panics if it is out of
     /// bounds or if the start is greater than the end.
-    pub fn slice_mut<R>(&mut self, range: R) -> DeviceSliceMut<'_, B, T>
+    pub fn slice_mut<Range>(&self, range: Range) -> DeviceSliceMut<'_, R, T>
     where
-        R: RangeBounds<usize>,
+        Range: RangeBounds<usize>,
     {
         let (offset, len) = resolve_slice_range(self.len(), range);
         DeviceSliceMut {
@@ -68,14 +68,14 @@ where
     }
 }
 
-impl<B, T> dispatch::ToHostDispatch<B> for DeviceVec<B, T>
+impl<R, T> dispatch::ToHostDispatch<R> for DeviceVec<R, T>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
 {
     type Output = Vec<T>;
 
-    fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error> {
+    fn to_host_with(&self, exec: &Executor<R>) -> Result<Self::Output, Error> {
         exec.ensure_policy_id(self.inner.policy_id())?;
         self.inner.read_to_host(exec.policy())
     }
@@ -83,26 +83,26 @@ where
 
 /// Read-only view into a contiguous range of a [`DeviceVec`].
 #[derive(Debug)]
-pub struct DeviceSlice<'a, B: Runtime, T> {
-    pub(crate) source: &'a DeviceVec<B, T>,
+pub struct DeviceSlice<'a, R: Runtime, T> {
+    pub(crate) source: &'a DeviceVec<R, T>,
     pub(crate) offset: usize,
     pub(crate) len: usize,
 }
 
-impl<'a, B, T> Copy for DeviceSlice<'a, B, T> where B: Runtime {}
+impl<'a, R, T> Copy for DeviceSlice<'a, R, T> where R: Runtime {}
 
-impl<'a, B, T> Clone for DeviceSlice<'a, B, T>
+impl<'a, R, T> Clone for DeviceSlice<'a, R, T>
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, B, T> DeviceSlice<'a, B, T>
+impl<'a, R, T> DeviceSlice<'a, R, T>
 where
-    B: Runtime,
+    R: Runtime,
 {
     /// Returns the number of elements in this slice.
     pub fn len(&self) -> usize {
@@ -118,9 +118,9 @@ where
     ///
     /// The range is checked against this slice, not against the original
     /// `DeviceVec`.
-    pub fn slice<R>(&self, range: R) -> DeviceSlice<'_, B, T>
+    pub fn slice<Range>(&self, range: Range) -> DeviceSlice<'_, R, T>
     where
-        R: RangeBounds<usize>,
+        Range: RangeBounds<usize>,
     {
         let (relative_offset, len) = resolve_slice_range(self.len, range);
         DeviceSlice {
@@ -134,7 +134,7 @@ where
         self.source.inner.policy_id()
     }
 
-    pub(crate) fn column_view(&self) -> crate::detail::device::DeviceColumnView<B, T>
+    pub(crate) fn column_view(&self) -> crate::detail::device::DeviceColumnView<R, T>
     where
         T: Scalar,
     {
@@ -145,13 +145,13 @@ where
         )
     }
 
-    pub(crate) fn column_view_as<U>(&self) -> Option<crate::detail::device::DeviceColumnView<B, U>>
+    pub(crate) fn column_view_as<U>(&self) -> Option<crate::detail::device::DeviceColumnView<R, U>>
     where
         U: Scalar + 'static,
         T: 'static,
     {
         let source = self.source as &dyn std::any::Any;
-        let source = source.downcast_ref::<DeviceVec<B, U>>()?;
+        let source = source.downcast_ref::<DeviceVec<R, U>>()?;
         Some(crate::detail::device::DeviceColumnView::from_slice(
             &source.inner,
             self.offset,
@@ -160,14 +160,14 @@ where
     }
 }
 
-impl<'a, B, T> dispatch::ToHostDispatch<B> for DeviceSlice<'a, B, T>
+impl<'a, R, T> dispatch::ToHostDispatch<R> for DeviceSlice<'a, R, T>
 where
-    B: Runtime,
+    R: Runtime,
     T: Scalar,
 {
     type Output = Vec<T>;
 
-    fn to_host_with(&self, exec: &Executor<B>) -> Result<Self::Output, Error> {
+    fn to_host_with(&self, exec: &Executor<R>) -> Result<Self::Output, Error> {
         exec.ensure_policy_id(self.source.inner.policy_id())?;
         let mut values = self.source.inner.read_to_host(exec.policy())?;
         let end = self
@@ -182,15 +182,15 @@ where
 
 /// Mutable view into a contiguous range of a [`DeviceVec`].
 #[derive(Debug)]
-pub struct DeviceSliceMut<'a, B: Runtime, T> {
-    pub(crate) source: &'a mut DeviceVec<B, T>,
+pub struct DeviceSliceMut<'a, R: Runtime, T> {
+    pub(crate) source: &'a DeviceVec<R, T>,
     pub(crate) offset: usize,
     pub(crate) len: usize,
 }
 
-impl<'a, B, T> DeviceSliceMut<'a, B, T>
+impl<'a, R, T> DeviceSliceMut<'a, R, T>
 where
-    B: Runtime,
+    R: Runtime,
 {
     /// Returns the number of elements in this slice.
     pub fn len(&self) -> usize {
@@ -206,9 +206,9 @@ where
     ///
     /// The range is checked against this slice, not against the original
     /// `DeviceVec`.
-    pub fn slice<R>(&self, range: R) -> DeviceSlice<'_, B, T>
+    pub fn slice<Range>(&self, range: Range) -> DeviceSlice<'_, R, T>
     where
-        R: RangeBounds<usize>,
+        Range: RangeBounds<usize>,
     {
         let (relative_offset, len) = resolve_slice_range(self.len, range);
         DeviceSlice {
@@ -222,9 +222,9 @@ where
     ///
     /// The range is checked against this slice, not against the original
     /// `DeviceVec`.
-    pub fn slice_mut<R>(&mut self, range: R) -> DeviceSliceMut<'_, B, T>
+    pub fn slice_mut<Range>(&self, range: Range) -> DeviceSliceMut<'_, R, T>
     where
-        R: RangeBounds<usize>,
+        Range: RangeBounds<usize>,
     {
         let (relative_offset, len) = resolve_slice_range(self.len, range);
         DeviceSliceMut {
@@ -235,9 +235,9 @@ where
     }
 }
 
-fn resolve_slice_range<R>(len: usize, range: R) -> (usize, usize)
+fn resolve_slice_range<Range>(len: usize, range: Range) -> (usize, usize)
 where
-    R: RangeBounds<usize>,
+    Range: RangeBounds<usize>,
 {
     let start = match range.start_bound() {
         Bound::Included(&start) => start,

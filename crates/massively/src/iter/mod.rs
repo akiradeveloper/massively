@@ -37,8 +37,8 @@ impl<A, B, C> From<(A, B, C)> for SoA3<A, B, C> {
 }
 
 /// Massively iterator.
-pub trait MIter<B: Runtime>: dispatch::MIterDispatch<B> + Sized {
-    type Item: MItem<B>;
+pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
+    type Item: MItem<R>;
 
     #[doc(hidden)]
     type Inner;
@@ -56,8 +56,8 @@ pub trait MIter<B: Runtime>: dispatch::MIterDispatch<B> + Sized {
 }
 
 /// Mutable massively iterator used as an explicit algorithm output.
-pub trait MIterMut<B: Runtime>: dispatch::MIterMutDispatch<B> + Sized {
-    type Item: MItem<B>;
+pub trait MIterMut<R: Runtime>: dispatch::MIterMutDispatch<R> + Sized {
+    type Item: MItem<R>;
 
     #[doc(hidden)]
     type Inner;
@@ -68,24 +68,24 @@ pub trait MIterMut<B: Runtime>: dispatch::MIterMutDispatch<B> + Sized {
     #[doc(hidden)]
     fn write_from_inner(
         self,
-        policy: &crate::detail::CubePolicy<B>,
-        inner: <Self::Item as MItem<B>>::Inner,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: <Self::Item as MItem<R>>::Inner,
     ) -> Result<(), Error>;
 
     #[doc(hidden)]
     fn write_where_from_inner(
         self,
-        policy: &crate::detail::CubePolicy<B>,
-        inner: <Self::Item as MItem<B>>::Inner,
-        stencil: crate::detail::api::PrecomputedSelection<B>,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: <Self::Item as MItem<R>>::Inner,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
     ) -> Result<(), Error>;
 
     #[doc(hidden)]
     fn replace_where_inner(
         self,
-        policy: &crate::detail::CubePolicy<B>,
+        policy: &crate::detail::CubePolicy<R>,
         replacement: Self::Item,
-        stencil: crate::detail::api::PrecomputedSelection<B>,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
     ) -> Result<(), Error>;
 
     /// Returns the logical length.

@@ -6,7 +6,6 @@ use cubecl::prelude::{CubeElement, CubePrimitive, Runtime};
 
 use crate::Error;
 use crate::detail::dispatch;
-use crate::runtime::op::KernelTabulateOp;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 
 /// Scalar value that can be stored in one device column.
@@ -14,28 +13,28 @@ pub trait Scalar: CubePrimitive + CubeElement {}
 impl<T> Scalar for T where T: CubePrimitive + CubeElement {}
 
 /// Device-resident data that can be copied back to host memory by an executor.
-pub trait ToHost<B: Runtime>:
-    dispatch::ToHostDispatch<B, Output = <Self as ToHost<B>>::Output>
+pub trait ToHost<R: Runtime>:
+    dispatch::ToHostDispatch<R, Output = <Self as ToHost<R>>::Output>
 {
     type Output;
 }
 
-impl<B, T> ToHost<B> for T
+impl<R, T> ToHost<R> for T
 where
-    B: Runtime,
-    T: dispatch::ToHostDispatch<B>,
+    R: Runtime,
+    T: dispatch::ToHostDispatch<R>,
 {
-    type Output = <T as dispatch::ToHostDispatch<B>>::Output;
+    type Output = <T as dispatch::ToHostDispatch<R>>::Output;
 }
 
 /// Execution context for a CubeCL runtime.
 #[derive(Debug)]
-pub struct Executor<B: Runtime> {
-    pub(crate) inner: crate::detail::CubePolicy<B>,
-    pub(crate) _backend: PhantomData<fn() -> B>,
+pub struct Executor<R: Runtime> {
+    pub(crate) inner: crate::detail::CubePolicy<R>,
+    pub(crate) _backend: PhantomData<fn() -> R>,
 }
 
-impl<B: Runtime> Clone for Executor<B> {
+impl<R: Runtime> Clone for Executor<R> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -44,14 +43,14 @@ impl<B: Runtime> Clone for Executor<B> {
     }
 }
 
-impl<B: Runtime> Executor<B> {
+impl<R: Runtime> Executor<R> {
     /// Creates an executor for the given CubeCL device.
-    pub fn new(device: B::Device) -> Self {
+    pub fn new(device: R::Device) -> Self {
         Self::from_device(&device)
     }
 
     /// Creates an executor for the given CubeCL device reference.
-    pub fn from_device(device: &B::Device) -> Self {
+    pub fn from_device(device: &R::Device) -> Self {
         Self {
             inner: crate::detail::CubePolicy::from_device(device),
             _backend: PhantomData,
@@ -71,12 +70,12 @@ impl<B: Runtime> Executor<B> {
         }
     }
 
-    pub(crate) fn policy(&self) -> &crate::detail::CubePolicy<B> {
+    pub(crate) fn policy(&self) -> &crate::detail::CubePolicy<R> {
         &self.inner
     }
 
     /// Copies host data to device-resident storage.
-    pub fn to_device<T>(&self, input: &[T]) -> Result<DeviceVec<B, T>, Error>
+    pub fn to_device<T>(&self, input: &[T]) -> Result<DeviceVec<R, T>, Error>
     where
         T: Scalar,
     {
@@ -84,33 +83,17 @@ impl<B: Runtime> Executor<B> {
     }
 
     /// Allocates device-resident storage and fills it with `value`.
-    pub fn filled<T>(&self, len: usize, value: T) -> Result<DeviceVec<B, T>, Error>
+    pub fn filled<T>(&self, len: usize, value: T) -> Result<DeviceVec<R, T>, Error>
     where
         T: Scalar,
     {
         Ok(DeviceVec::from_inner(self.inner.device_filled(len, value)?))
     }
 
-    /// Allocates device-resident storage and initializes each element from its
-    /// logical `u32` index.
-    pub fn tabulate<T, Op>(&self, len: usize, _op: Op) -> Result<DeviceVec<B, T>, Error>
-    where
-        T: Scalar,
-        Op: crate::runtime::op::TabulateOp<B, T>,
-    {
-        Ok(DeviceVec::from_inner(
-            crate::detail::primitives::range::tabulate(
-                self.policy(),
-                len,
-                KernelTabulateOp::<B, Op, T>::new(),
-            )?,
-        ))
-    }
-
     /// Copies device-resident storage back to host memory.
-    pub fn to_host<Input>(&self, input: &Input) -> Result<<Input as ToHost<B>>::Output, Error>
+    pub fn to_host<Input>(&self, input: &Input) -> Result<<Input as ToHost<R>>::Output, Error>
     where
-        Input: ToHost<B>,
+        Input: ToHost<R>,
     {
         input.to_host_with(self)
     }
@@ -120,8 +103,8 @@ impl<B: Runtime> Executor<B> {
     /// The slices must have the same length and belong to this executor.
     pub fn copy<T>(
         &self,
-        from: DeviceSlice<'_, B, T>,
-        to: DeviceSliceMut<'_, B, T>,
+        from: DeviceSlice<'_, R, T>,
+        to: DeviceSliceMut<'_, R, T>,
     ) -> Result<(), Error>
     where
         T: Scalar,

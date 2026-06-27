@@ -5,7 +5,6 @@ pub(crate) use cubecl::prelude::*;
 pub(crate) use massively::algorithm::op::{
     BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp,
 };
-pub(crate) use massively::runtime::op::TabulateOp;
 pub(crate) use massively::{
     Executor, adjacent_difference, adjacent_find, copy_where, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_where,
@@ -42,24 +41,6 @@ pub(crate) struct MaxU32;
 impl ReductionOp<WgpuRuntime, (u32,)> for MaxU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         (lhs.0.max(rhs.0),)
-    }
-}
-
-pub(crate) struct SquareIndex;
-
-#[cubecl::cube]
-impl TabulateOp<WgpuRuntime, u32> for SquareIndex {
-    fn apply(input: u32) -> u32 {
-        input * input
-    }
-}
-
-pub(crate) struct HalfIndex;
-
-#[cubecl::cube]
-impl TabulateOp<WgpuRuntime, f32> for HalfIndex {
-    fn apply(input: u32) -> f32 {
-        input as f32 * 0.5
     }
 }
 

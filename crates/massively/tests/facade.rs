@@ -6,9 +6,9 @@ use massively::prelude::*;
 struct AddOne;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32,)> for AddOne
+impl<R> UnaryOp<R, (u32,)> for AddOne
 where
-    B: Runtime,
+    R: Runtime,
 {
     type Output = (u32,);
 
@@ -20,9 +20,9 @@ where
 struct Split;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32,)> for Split
+impl<R> UnaryOp<R, (u32,)> for Split
 where
-    B: Runtime,
+    R: Runtime,
 {
     type Output = (u32, u32);
 
@@ -34,9 +34,9 @@ where
 struct PairShift;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32, u32)> for PairShift
+impl<R> UnaryOp<R, (u32, u32)> for PairShift
 where
-    B: Runtime,
+    R: Runtime,
 {
     type Output = (u32, u32);
 
@@ -48,9 +48,9 @@ where
 struct TripleShift;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32, u32, u32)> for TripleShift
+impl<R> UnaryOp<R, (u32, u32, u32)> for TripleShift
 where
-    B: Runtime,
+    R: Runtime,
 {
     type Output = (u32, u32, u32);
 
@@ -62,9 +62,9 @@ where
 struct TupleU32Less;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32,)> for TupleU32Less
+impl<R> BinaryPredicateOp<R, (u32,)> for TupleU32Less
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
@@ -74,9 +74,9 @@ where
 struct PairU32Less;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32, u32)> for PairU32Less
+impl<R> BinaryPredicateOp<R, (u32, u32)> for PairU32Less
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 < rhs.0
@@ -86,9 +86,9 @@ where
 struct PairEqual;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32, u32)> for PairEqual
+impl<R> BinaryPredicateOp<R, (u32, u32)> for PairEqual
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1
@@ -98,9 +98,9 @@ where
 struct PairDifference;
 
 #[cubecl::cube]
-impl<B> ReductionOp<B, (u32, u32)> for PairDifference
+impl<R> ReductionOp<R, (u32, u32)> for PairDifference
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> (u32, u32) {
         (lhs.0 - rhs.0, lhs.1 - rhs.1)
@@ -110,9 +110,9 @@ where
 struct TripleU32Less;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32, u32, u32)> for TripleU32Less
+impl<R> BinaryPredicateOp<R, (u32, u32, u32)> for TripleU32Less
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(lhs: (u32, u32, u32), rhs: (u32, u32, u32)) -> bool {
         lhs.0 < rhs.0
@@ -122,294 +122,294 @@ where
 struct PairFirstOdd;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (u32, u32)> for PairFirstOdd
+impl<R> PredicateOp<R, (u32, u32)> for PairFirstOdd
 where
-    B: Runtime,
+    R: Runtime,
 {
     fn apply(input: (u32, u32)) -> bool {
         input.0 % 2 == 1
     }
 }
 
-fn transform2<B, S1, S2, Op>(
-    exec: &Executor<B>,
+fn transform2<R, S1, S2, Op>(
+    exec: &Executor<R>,
     source: S1,
     op: Op,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MIterMut<B>,
-    Op: UnaryOp<B, S1::Item, Output = S2::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MIterMut<R>,
+    Op: UnaryOp<R, S1::Item, Output = S2::Item>,
 {
     massively::transform(exec, source, op, out)
 }
 
-fn transform3<B, S1, S2, Op>(
-    exec: &Executor<B>,
+fn transform3<R, S1, S2, Op>(
+    exec: &Executor<R>,
     source: S1,
     op: Op,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B, Item = (u32,)>,
-    S2: MIterMut<B, Item = (u32,)>,
-    Op: UnaryOp<B, (u32,), Output = (u32,)>,
+    R: Runtime,
+    S1: MIter<R, Item = (u32,)>,
+    S2: MIterMut<R, Item = (u32,)>,
+    Op: UnaryOp<R, (u32,), Output = (u32,)>,
 {
     massively::transform(exec, source, op, out)
 }
 
-fn transform4<B, S1, S2, Op>(
-    exec: &Executor<B>,
+fn transform4<R, S1, S2, Op>(
+    exec: &Executor<R>,
     source: S1,
     op: Op,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B, Item = (u32, u32)>,
-    S2: MIterMut<B, Item = (u32, u32)>,
-    Op: UnaryOp<B, (u32, u32), Output = (u32, u32)>,
+    R: Runtime,
+    S1: MIter<R, Item = (u32, u32)>,
+    S2: MIterMut<R, Item = (u32, u32)>,
+    Op: UnaryOp<R, (u32, u32), Output = (u32, u32)>,
 {
     massively::transform(exec, source, op, out)
 }
 
-fn transform5<B, S1, S2, Op>(
-    exec: &Executor<B>,
+fn transform5<R, S1, S2, Op>(
+    exec: &Executor<R>,
     source: S1,
     op: Op,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B, Item = (u32, u32, u32)>,
-    S2: MIterMut<B, Item = (u32, u32, u32)>,
-    Op: UnaryOp<B, (u32, u32, u32), Output = (u32, u32, u32)>,
+    R: Runtime,
+    S1: MIter<R, Item = (u32, u32, u32)>,
+    S2: MIterMut<R, Item = (u32, u32, u32)>,
+    Op: UnaryOp<R, (u32, u32, u32), Output = (u32, u32, u32)>,
 {
     massively::transform(exec, source, op, out)
 }
 
-fn transform_without_op<B, S1, S2>(
-    exec: &Executor<B>,
+fn transform_without_op<R, S1, S2>(
+    exec: &Executor<R>,
     source: S1,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B, Item = (u32,)>,
-    S2: MIterMut<B, Item = (u32,)>,
+    R: Runtime,
+    S1: MIter<R, Item = (u32,)>,
+    S2: MIterMut<R, Item = (u32,)>,
 {
     massively::transform(exec, source, AddOne, out)
 }
 
-fn reverse2<B, S1, S2>(exec: &Executor<B>, source: S1) -> Result<S2, massively::Error>
+fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1) -> Result<S2, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
 {
     massively::reverse(exec, source)
 }
 
-fn sort2<B, S1, S2, Less>(
-    exec: &Executor<B>,
+fn sort2<R, S1, S2, Less>(
+    exec: &Executor<R>,
     source: S1,
     less: Less,
 ) -> Result<S2, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
-    Less: BinaryPredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
+    Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::sort(exec, source, less)
 }
 
-fn minmax_element2<B, S1, Less>(
-    exec: &Executor<B>,
+fn minmax_element2<R, S1, Less>(
+    exec: &Executor<R>,
     source: S1,
     less: Less,
 ) -> Result<Option<(usize, usize)>, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Less: BinaryPredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::minmax_element(exec, source, less)
 }
 
-fn adjacent_find2<B, S1, Pred>(
-    exec: &Executor<B>,
+fn adjacent_find2<R, S1, Pred>(
+    exec: &Executor<R>,
     source: S1,
     pred: Pred,
 ) -> Result<Option<usize>, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Pred: BinaryPredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Pred: BinaryPredicateOp<R, S1::Item>,
 {
     massively::adjacent_find(exec, source, pred)
 }
 
-fn lower_bound2<B, S1, Less>(
-    exec: &Executor<B>,
+fn lower_bound2<R, S1, Less>(
+    exec: &Executor<R>,
     source: S1,
     value: S1::Item,
     less: Less,
 ) -> Result<usize, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Less: BinaryPredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::lower_bound(exec, source, value, less)
 }
 
-fn is_sorted2<B, S1, Less>(
-    exec: &Executor<B>,
+fn is_sorted2<R, S1, Less>(
+    exec: &Executor<R>,
     source: S1,
     less: Less,
 ) -> Result<bool, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Less: BinaryPredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::is_sorted(exec, source, less)
 }
 
-fn gather2<B, S1, S2>(
-    exec: &Executor<B>,
+fn gather2<R, S1, S2>(
+    exec: &Executor<R>,
     source: S1,
-    indices: DeviceSlice<'_, B, u32>,
+    indices: DeviceSlice<'_, R, u32>,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MIterMut<B, Item = S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
 {
     massively::gather(exec, source, indices, out)
 }
 
-fn copy_where2<B, S1, S2>(
-    exec: &Executor<B>,
+fn copy_where2<R, S1, S2>(
+    exec: &Executor<R>,
     source: S1,
-    stencil: DeviceSlice<'_, B, u32>,
+    stencil: DeviceSlice<'_, R, u32>,
 ) -> Result<S2, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
 {
     massively::copy_where(exec, source, stencil)
 }
 
-fn replace_where2<B, S2>(
-    exec: &Executor<B>,
+fn replace_where2<R, S2>(
+    exec: &Executor<R>,
     replacement: S2::Item,
-    stencil: DeviceSlice<'_, B, u32>,
+    stencil: DeviceSlice<'_, R, u32>,
     out: S2,
 ) -> Result<(), massively::Error>
 where
-    B: Runtime,
-    S2: MIterMut<B>,
+    R: Runtime,
+    S2: MIterMut<R>,
 {
     massively::replace_where(exec, replacement, stencil, out)
 }
 
-fn count_if2<B, S1, Pred>(
-    exec: &Executor<B>,
+fn count_if2<R, S1, Pred>(
+    exec: &Executor<R>,
     source: S1,
     pred: Pred,
 ) -> Result<usize, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Pred: PredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Pred: PredicateOp<R, S1::Item>,
 {
     massively::count_if(exec, source, pred)
 }
 
-fn find_if2<B, S1, Pred>(
-    exec: &Executor<B>,
+fn find_if2<R, S1, Pred>(
+    exec: &Executor<R>,
     source: S1,
     pred: Pred,
 ) -> Result<Option<usize>, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Pred: PredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Pred: PredicateOp<R, S1::Item>,
 {
     massively::find_if(exec, source, pred)
 }
 
-fn remove_where2<'a, B, S1, S2>(
-    exec: &Executor<B>,
+fn remove_where2<'a, R, S1, S2>(
+    exec: &Executor<R>,
     source: S1,
-    stencil: DeviceSlice<'a, B, u32>,
+    stencil: DeviceSlice<'a, R, u32>,
 ) -> Result<S2, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
 {
     massively::remove_where(exec, source, stencil)
 }
 
-fn partition2<B, S1, S2, Pred>(
-    exec: &Executor<B>,
+fn partition2<R, S1, S2, Pred>(
+    exec: &Executor<R>,
     source: S1,
     pred: Pred,
 ) -> Result<(S2, S2), massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
-    Pred: PredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
+    Pred: PredicateOp<R, S1::Item>,
 {
     massively::partition(exec, source, pred)
 }
 
-fn is_partitioned2<B, S1, Pred>(
-    exec: &Executor<B>,
+fn is_partitioned2<R, S1, Pred>(
+    exec: &Executor<R>,
     source: S1,
     pred: Pred,
 ) -> Result<bool, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    Pred: PredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    Pred: PredicateOp<R, S1::Item>,
 {
     massively::is_partitioned(exec, source, pred)
 }
 
-fn unique2<B, S1, S2, Pred>(
-    exec: &Executor<B>,
+fn unique2<R, S1, S2, Pred>(
+    exec: &Executor<R>,
     source: S1,
     pred: Pred,
 ) -> Result<S2, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
-    Pred: BinaryPredicateOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
+    Pred: BinaryPredicateOp<R, S1::Item>,
 {
     massively::unique(exec, source, pred)
 }
 
-fn adjacent_difference2<B, S1, S2, Op>(
-    exec: &Executor<B>,
+fn adjacent_difference2<R, S1, S2, Op>(
+    exec: &Executor<R>,
     source: S1,
     op: Op,
 ) -> Result<S2, massively::Error>
 where
-    B: Runtime,
-    S1: MIter<B>,
-    S2: MVec<B, Item = S1::Item>,
-    Op: ReductionOp<B, S1::Item>,
+    R: Runtime,
+    S1: MIter<R>,
+    S2: MVec<R, Item = S1::Item>,
+    Op: ReductionOp<R, S1::Item>,
 {
     massively::adjacent_difference(exec, source, op)
 }
@@ -419,7 +419,7 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform2(
         &exec,
         SoA1(input.slice(..)),
@@ -457,7 +457,7 @@ fn gather2_wraps_gather_with_slice_array_signature() {
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
     gather2(
         &exec,
         SoA1(input.slice(..)),
@@ -474,7 +474,7 @@ fn transform3_can_fix_concrete_input_and_output_types() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform3(
         &exec,
         SoA1(input.slice(..)),
@@ -491,7 +491,7 @@ fn transform_can_hide_op_inside_wrapper() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let mut output = exec.to_device(&[0_u32; 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform_without_op(&exec, SoA1(input.slice(..)), SoA1(output.slice_mut(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
@@ -503,8 +503,8 @@ fn transform4_can_fix_concrete_two_column_input_and_output_types() {
     let left = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let mut out_left = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut out_right = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 3]).unwrap();
     transform4(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
@@ -537,9 +537,9 @@ fn transform5_can_fix_concrete_three_column_input_and_output_types() {
     let second = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let third = exec.to_device(&[100_u32, 200, 300]).unwrap();
 
-    let mut out_first = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut out_second = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut out_third = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_first = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_second = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_third = exec.to_device(&[0_u32; 3]).unwrap();
     transform5(
         &exec,
         SoA3(first.slice(..), second.slice(..), third.slice(..)),
@@ -633,9 +633,9 @@ fn gather2_wraps_three_column_gather_with_slice_array_signature() {
     let third = exec.to_device(&[1000_u32, 2000, 3000]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
 
-    let mut out_first = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut out_second = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut out_third = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_first = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_second = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_third = exec.to_device(&[0_u32; 3]).unwrap();
     gather2(
         &exec,
         SoA3(first.slice(..), second.slice(..), third.slice(..)),
@@ -658,8 +658,8 @@ fn transform2_wraps_tuple_output() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let mut left = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut right = exec.to_device(&[0_u32; 3]).unwrap();
+    let left = exec.to_device(&[0_u32; 3]).unwrap();
+    let right = exec.to_device(&[0_u32; 3]).unwrap();
     transform2(
         &exec,
         SoA1(input.slice(..)),
@@ -693,8 +693,8 @@ fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
 #[test]
 fn replace_where2_wraps_two_column_replace_where_with_tuple_replacement() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
-    let mut left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
-    let mut right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
+    let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
 
     replace_where2(

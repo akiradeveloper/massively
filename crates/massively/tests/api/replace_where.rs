@@ -3,9 +3,9 @@ use crate::common::*;
 #[test]
 fn replace_where_accepts_three_tuple_columns() {
     let exec = exec();
-    let mut a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
-    let mut b = exec.to_device(&[10_u32, 20, 20, 30]).unwrap();
-    let mut c = exec.to_device(&[1.0_f32, -1.0, 2.0, 3.0]).unwrap();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 20, 30]).unwrap();
+    let c = exec.to_device(&[1.0_f32, -1.0, 2.0, 3.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 1, 0]).unwrap();
 
     replace_where(
@@ -24,8 +24,8 @@ fn replace_where_accepts_three_tuple_columns() {
 #[test]
 fn replace_where_accepts_u32_stencil() {
     let exec = exec();
-    let mut a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
-    let mut b = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let stencil = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
 
     replace_where(

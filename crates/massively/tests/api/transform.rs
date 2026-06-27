@@ -6,8 +6,8 @@ fn transform_zip_output_returns_storage() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let mut out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut out_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA2(values.slice(..), tags.slice(..)),
@@ -25,8 +25,8 @@ fn transform_returns_device_storage() {
     let exec = exec();
     let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let mut values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
@@ -46,9 +46,9 @@ fn transform_tuple_output_maps_to_mitem_storage() {
     let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let mut values_out = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut flags = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut bias_out = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let values_out = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let flags = exec.to_device(&[0_u32; 3]).unwrap();
+    let bias_out = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
@@ -73,7 +73,7 @@ fn tuple1_transform_returns_soa1_storage() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let mut output = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let output = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA1(input.slice(..)),
@@ -136,9 +136,9 @@ fn tuple_transform_uses_flat_soa_input() {
     let rhs = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let mut values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut tags = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut adjusted_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let adjusted_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA3(lhs.slice(..), rhs.slice(..), bias.slice(..)),
@@ -165,8 +165,8 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
-    let mut pair_values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut pair_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let pair_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let pair_tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA2(values.slice(..), tags.slice(..)),
@@ -177,9 +177,9 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
     assert_eq!(exec.to_host(&pair_values).unwrap(), vec![11.0, 12.0, 13.0]);
     assert_eq!(exec.to_host(&pair_tags).unwrap(), vec![11, 21, 31]);
 
-    let mut tuple_values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut tuple_tags = exec.to_device(&[0_u32; 3]).unwrap();
-    let mut tuple_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tuple_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tuple_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let tuple_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
@@ -613,8 +613,8 @@ fn transform_zip_flattens_soa1_columns() {
     let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
-    let mut values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    let mut tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),

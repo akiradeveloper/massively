@@ -11,9 +11,9 @@ use cubecl::prelude::*;
 /// struct AddOne;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::UnaryOp<B, (f32,)> for AddOne
+/// impl<R> massively::op::UnaryOp<R, (f32,)> for AddOne
 /// where
-///     B: cubecl::prelude::Runtime,
+///     R: cubecl::prelude::Runtime,
 /// {
 ///     type Output = (f32,);
 ///
@@ -23,13 +23,13 @@ use cubecl::prelude::*;
 /// }
 /// ```
 #[cube]
-pub trait UnaryOp<B, Input>: 'static + Send + Sync
+pub trait UnaryOp<R, Input>: 'static + Send + Sync
 where
-    B: cubecl::prelude::Runtime,
-    Input: crate::MItem<B>,
+    R: cubecl::prelude::Runtime,
+    Input: crate::MItem<R>,
 {
     /// Output value produced for one logical input element.
-    type Output: crate::MItem<B>;
+    type Output: crate::MItem<R>;
 
     /// Maps one logical input element.
     fn apply(input: Input) -> Self::Output;
@@ -38,13 +38,13 @@ where
 /// Compile-time binary transform used by algorithms such as
 /// [`inner_product`](crate::inner_product).
 #[cube]
-pub trait BinaryOp<B, X, Y>: 'static + Send + Sync
+pub trait BinaryOp<R, X, Y>: 'static + Send + Sync
 where
-    B: cubecl::prelude::Runtime,
-    X: crate::MItem<B>,
-    Y: crate::MItem<B>,
+    R: cubecl::prelude::Runtime,
+    X: crate::MItem<R>,
+    Y: crate::MItem<R>,
 {
-    type Output: crate::MItem<B>;
+    type Output: crate::MItem<R>;
 
     /// Combines two values.
     fn apply(lhs: X, rhs: Y) -> Self::Output;
@@ -58,9 +58,9 @@ where
 /// struct Sum;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::ReductionOp<B, (f32,)> for Sum
+/// impl<R> massively::op::ReductionOp<R, (f32,)> for Sum
 /// where
-///     B: cubecl::prelude::Runtime,
+///     R: cubecl::prelude::Runtime,
 /// {
 ///     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
 ///         (lhs.0 + rhs.0,)
@@ -68,10 +68,10 @@ where
 /// }
 /// ```
 #[cube]
-pub trait ReductionOp<B, X>: 'static + Send + Sync
+pub trait ReductionOp<R, X>: 'static + Send + Sync
 where
-    B: cubecl::prelude::Runtime,
-    X: crate::MItem<B>,
+    R: cubecl::prelude::Runtime,
+    X: crate::MItem<R>,
 {
     /// Combines two values.
     fn apply(lhs: X, rhs: X) -> X;
@@ -90,9 +90,9 @@ where
 /// struct Positive;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::PredicateOp<B, (f32,)> for Positive
+/// impl<R> massively::op::PredicateOp<R, (f32,)> for Positive
 /// where
-///     B: cubecl::prelude::Runtime,
+///     R: cubecl::prelude::Runtime,
 /// {
 ///     fn apply(input: (f32,)) -> bool {
 ///         input.0 > 0.0
@@ -100,10 +100,10 @@ where
 /// }
 /// ```
 #[cube]
-pub trait PredicateOp<B, T>: 'static + Send + Sync
+pub trait PredicateOp<R, T>: 'static + Send + Sync
 where
-    B: cubecl::prelude::Runtime,
-    T: crate::MItem<B>,
+    R: cubecl::prelude::Runtime,
+    T: crate::MItem<R>,
 {
     /// Returns whether the element should be processed.
     fn apply(input: T) -> bool;
@@ -117,9 +117,9 @@ where
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl<B> massively::op::BinaryPredicateOp<B, (f32,)> for Less
+/// impl<R> massively::op::BinaryPredicateOp<R, (f32,)> for Less
 /// where
-///     B: cubecl::prelude::Runtime,
+///     R: cubecl::prelude::Runtime,
 /// {
 ///     fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
 ///         lhs.0 < rhs.0
@@ -127,10 +127,10 @@ where
 /// }
 /// ```
 #[cube]
-pub trait BinaryPredicateOp<B, T>: 'static + Send + Sync
+pub trait BinaryPredicateOp<R, T>: 'static + Send + Sync
 where
-    B: cubecl::prelude::Runtime,
-    T: crate::MItem<B>,
+    R: cubecl::prelude::Runtime,
+    T: crate::MItem<R>,
 {
     /// Returns whether the pair matches.
     fn apply(lhs: T, rhs: T) -> bool;
@@ -141,9 +141,9 @@ where
 pub struct Equal;
 
 #[cube]
-impl<B, T> BinaryPredicateOp<B, (T,)> for Equal
+impl<R, T> BinaryPredicateOp<R, (T,)> for Equal
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
     T: CubePrimitive + CubeElement + PartialEq,
 {
     fn apply(lhs: (T,), rhs: (T,)) -> bool {
@@ -152,9 +152,9 @@ where
 }
 
 #[cube]
-impl<B, A, C> BinaryPredicateOp<B, (A, C)> for Equal
+impl<R, A, C> BinaryPredicateOp<R, (A, C)> for Equal
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
     A: CubePrimitive + CubeElement + PartialEq,
     C: CubePrimitive + CubeElement + PartialEq,
 {
@@ -164,9 +164,9 @@ where
 }
 
 #[cube]
-impl<B, A, C, D> BinaryPredicateOp<B, (A, C, D)> for Equal
+impl<R, A, C, D> BinaryPredicateOp<R, (A, C, D)> for Equal
 where
-    B: cubecl::prelude::Runtime,
+    R: cubecl::prelude::Runtime,
     A: CubePrimitive + CubeElement + PartialEq,
     C: CubePrimitive + CubeElement + PartialEq,
     D: CubePrimitive + CubeElement + PartialEq,

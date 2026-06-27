@@ -1,25 +1,25 @@
 use super::*;
 
-pub(crate) trait KernelScalarRead<B: Runtime>: Sized {
+pub(crate) trait KernelScalarRead<R: Runtime>: Sized {
     type Item: Scalar + 'static;
     type Args;
     type Expr;
 
     fn len(&self) -> usize;
 
-    fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error>;
+    fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error>;
 }
 
 /// Host-side lowering for one logical algorithm item.
 #[allow(dead_code)]
-pub(crate) trait KernelItemRead<B: Runtime>: Sized {
-    type Item: MItem<B>;
+pub(crate) trait KernelItemRead<R: Runtime>: Sized {
+    type Item: MItem<R>;
     type Args;
     type Expr;
 
     fn len(&self) -> usize;
 
-    fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error>;
+    fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error>;
 }
 
 #[allow(dead_code)]
@@ -30,10 +30,10 @@ pub(crate) trait KernelIndexRead: Sized {
     fn index_source(self) -> Result<Self::Source, Error>;
 }
 
-impl<B, S> KernelScalarRead<B> for S
+impl<R, S> KernelScalarRead<R> for S
 where
-    B: Runtime,
-    S: KernelColumn<Runtime = B> + KernelColumnAt<S0>,
+    R: Runtime,
+    S: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
     S::Item: Scalar + 'static,
 {
     type Item = S::Item;
@@ -44,65 +44,65 @@ where
         <S as KernelColumn>::len(self)
     }
 
-    fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error> {
+    fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error> {
         <S as KernelColumn>::stage(self, policy)
     }
 }
 
-impl<B, S> KernelItemRead<B> for (S,)
+impl<R, S> KernelItemRead<R> for (S,)
 where
-    B: Runtime,
-    S: KernelScalarRead<B>,
-    (S::Item,): MItem<B>,
+    R: Runtime,
+    S: KernelScalarRead<R>,
+    (S::Item,): MItem<R>,
 {
     type Item = (S::Item,);
     type Args = S::Args;
     type Expr = (S::Expr,);
 
     fn len(&self) -> usize {
-        <S as KernelScalarRead<B>>::len(&self.0)
+        <S as KernelScalarRead<R>>::len(&self.0)
     }
 
-    fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error> {
-        <S as KernelScalarRead<B>>::stage(&self.0, policy)
+    fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error> {
+        <S as KernelScalarRead<R>>::stage(&self.0, policy)
     }
 }
 
-impl<B, S> KernelItemRead<B> for SoAView1<S>
+impl<R, S> KernelItemRead<R> for SoAView1<S>
 where
-    B: Runtime,
-    S: KernelScalarRead<B>,
-    (S::Item,): MItem<B>,
+    R: Runtime,
+    S: KernelScalarRead<R>,
+    (S::Item,): MItem<R>,
 {
     type Item = (S::Item,);
     type Args = S::Args;
     type Expr = (S::Expr,);
 
     fn len(&self) -> usize {
-        <S as KernelScalarRead<B>>::len(&self.source)
+        <S as KernelScalarRead<R>>::len(&self.source)
     }
 
-    fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error> {
-        <S as KernelScalarRead<B>>::stage(&self.source, policy)
+    fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error> {
+        <S as KernelScalarRead<R>>::stage(&self.source, policy)
     }
 }
 
-impl<B, S> KernelItemRead<B> for DeviceSoA1<S>
+impl<R, S> KernelItemRead<R> for DeviceSoA1<S>
 where
-    B: Runtime,
-    S: KernelScalarRead<B>,
-    (S::Item,): MItem<B>,
+    R: Runtime,
+    S: KernelScalarRead<R>,
+    (S::Item,): MItem<R>,
 {
     type Item = (S::Item,);
     type Args = S::Args;
     type Expr = (S::Expr,);
 
     fn len(&self) -> usize {
-        <S as KernelScalarRead<B>>::len(&self.source)
+        <S as KernelScalarRead<R>>::len(&self.source)
     }
 
-    fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error> {
-        <S as KernelScalarRead<B>>::stage(&self.source, policy)
+    fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error> {
+        <S as KernelScalarRead<R>>::stage(&self.source, policy)
     }
 }
 
@@ -112,25 +112,25 @@ macro_rules! impl_kernel_item_read {
         $first_field:tt : $first_source:ident
         $(, $field:tt : $source:ident )+
     ) => {
-        impl<B, $first_source, $( $source ),+> KernelItemRead<B> for $target
+        impl<R, $first_source, $( $source ),+> KernelItemRead<R> for $target
         where
-            B: Runtime,
-            $first_source: KernelScalarRead<B>,
-            $( $source: KernelScalarRead<B>, )+
-            ($first_source::Item, $( $source::Item, )+): MItem<B>,
+            R: Runtime,
+            $first_source: KernelScalarRead<R>,
+            $( $source: KernelScalarRead<R>, )+
+            ($first_source::Item, $( $source::Item, )+): MItem<R>,
         {
             type Item = ($first_source::Item, $( $source::Item, )+);
             type Args = ($first_source::Args, $( $source::Args, )+);
             type Expr = ($first_source::Expr, $( $source::Expr, )+);
 
             fn len(&self) -> usize {
-                <_ as KernelScalarRead<B>>::len(&self.$first_field)
+                <_ as KernelScalarRead<R>>::len(&self.$first_field)
             }
 
-            fn stage(&self, policy: &CubePolicy<B>) -> Result<Self::Args, Error> {
+            fn stage(&self, policy: &CubePolicy<R>) -> Result<Self::Args, Error> {
                 Ok((
-                    <_ as KernelScalarRead<B>>::stage(&self.$first_field, policy)?,
-                    $( <_ as KernelScalarRead<B>>::stage(&self.$field, policy)?, )+
+                    <_ as KernelScalarRead<R>>::stage(&self.$first_field, policy)?,
+                    $( <_ as KernelScalarRead<R>>::stage(&self.$field, policy)?, )+
                 ))
             }
         }
