@@ -58,6 +58,71 @@ fn copy_where_accepts_constant_slice_stencil() {
 }
 
 #[test]
+fn soa1_accepts_tabulate_slice_as_miter() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+
+    let sum = massively::reduce(
+        &exec,
+        SoA1(massively::slice::tabulate_slice(5)),
+        (0_u32,),
+        crate::common::Sum,
+    )
+    .unwrap();
+
+    assert_eq!(sum, (10,));
+}
+
+#[test]
+fn gather_accepts_tabulate_slice_indices() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+
+    massively::gather(
+        &exec,
+        SoA1(input.slice(..)),
+        massively::slice::tabulate_slice(4),
+        SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![10, 20, 30, 40]);
+}
+
+#[test]
+fn copy_where_accepts_tabulate_slice_stencil() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+
+    let (output,) = massively::copy_where(
+        &exec,
+        SoA1(input.slice(..)),
+        massively::slice::tabulate_slice(4),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![20, 30, 40]);
+}
+
+#[test]
+fn transform_where_accepts_tabulate_slice_stencil() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+
+    massively::transform_where(
+        &exec,
+        SoA1(input.slice(..)),
+        AddOne,
+        massively::slice::tabulate_slice(4),
+        SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 21, 31, 41]);
+}
+
+#[test]
 fn transform_where_accepts_constant_slice_stencil() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
