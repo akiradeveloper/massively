@@ -46,6 +46,14 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
     #[doc(hidden)]
     fn into_inner(self) -> Self::Inner;
 
+    #[doc(hidden)]
+    fn into_inner_with_policy(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<Self::Inner, Error> {
+        Ok(self.into_inner())
+    }
+
     /// Returns the logical length.
     fn len(&self) -> usize;
 

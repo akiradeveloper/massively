@@ -19,45 +19,46 @@ macro_rules! impl_miter_view {
 
 macro_rules! impl_miter_soa {
     ($name:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+ => $transform:ident) => {
-        impl<'a, R, $( $ty ),+> MIter<R> for $name<$( DeviceSlice<'a, R, $ty> ),+>
+        impl<R, $( $ty ),+> MIter<R> for $name<$( $ty ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
+            $( $ty: MSlice<R>, )+
+            ($( <$ty as MSlice<R>>::Item, )+): MItem<
                 R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+                Inner = ($( crate::detail::DeviceVec<R, <$ty as MSlice<R>>::Item>, )+),
             >,
         {
-            type Item = ($( $ty, )+);
-            type Inner = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
+            type Item = ($( <$ty as MSlice<R>>::Item, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnView<R, <$ty as MSlice<R>>::Item>, )+);
 
             fn len(&self) -> usize {
                 self.0.len()
             }
 
             fn into_inner(self) -> Self::Inner {
-                ($(
-                    crate::detail::device::DeviceColumnView::from_slice(
-                        &self.$idx.source.inner,
-                        self.$idx.offset,
-                        self.$idx.len,
-                    ),
-                )+)
+                unreachable!("read-only MIter lowering requires a CubePolicy")
+            }
+
+            fn into_inner_with_policy(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<Self::Inner, Error> {
+                Ok(($( lower_mslice_column(self.$idx, policy)?, )+))
             }
         }
 
-        impl<'a, R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( DeviceSlice<'a, R, $ty> ),+>
+        impl<R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( $ty ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
+            $( $ty: MSlice<R>, )+
+            ($( <$ty as MSlice<R>>::Item, )+): MItem<
                 R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+                Inner = ($( crate::detail::DeviceVec<R, <$ty as MSlice<R>>::Item>, )+),
             >,
         {
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
                 $(
-                    exec.ensure_policy_id(self.$idx.source.inner.policy_id())?;
+                    self.$idx.validate_executor(exec)?;
                 )+
                 Ok(())
             }
@@ -74,39 +75,30 @@ macro_rules! impl_miter_soa {
             {
                 $(
                     if index == $idx {
-                        let source = self.$idx.source as &dyn Any;
-                        let source = match source.downcast_ref::<DeviceVec<R, T>>() {
-                            Some(source) => source,
-                            None => return Ok(None),
-                        };
-                        return Ok(Some(crate::detail::device::DeviceColumnView::from_slice(
-                            &source.inner,
-                            self.$idx.offset,
-                            self.$idx.len,
-                        )));
+                        return self.$idx.column_view::<T>();
                     }
                 )+
                 Ok(None)
             }
 
-            fn selection_stencil_dispatch<Pred>(
-                &self,
+            fn column_view_by_index_with_policy<T: 'static>(
+                self,
                 policy: &crate::detail::CubePolicy<R>,
-                invert: bool,
-            ) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
+                index: usize,
+            ) -> Result<
+                Option<crate::detail::device::DeviceColumnView<R, T>>,
+                Error,
+            >
             where
-                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+                Self: MIter<R>,
+                T: Scalar,
             {
-                let stencil = self.into_inner();
-                let stencil = impl_miter_view!(stencil; $( $idx ),+);
-                crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<
-                    _,
-                    KernelOp<R, Pred>,
-                >(
-                    policy,
-                    &stencil,
-                    invert,
-                )
+                $(
+                    if index == $idx {
+                        return lower_mslice_column_as(self.$idx, policy);
+                    }
+                )+
+                Ok(None)
             }
 
             fn transform_dispatch<Op, Output>(
@@ -119,7 +111,7 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R>,
                 Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = <Output::Item as sealed::MItemDispatch<R>>::$transform(
                     policy,
                     $( input.$idx, )+
@@ -139,7 +131,7 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R>,
                 Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = <Output::Item as sealed::MItemDispatch<R>>::$transform(
                     policy,
                     $( input.$idx, )+
@@ -155,9 +147,9 @@ macro_rules! impl_miter_soa {
             where
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::reverse(policy, impl_miter_view!(input; $( $idx ),+))?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn sort_dispatch<Less, Output>(
@@ -169,9 +161,9 @@ macro_rules! impl_miter_soa {
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::sort(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn sort_by_single_key_dispatch<K, Less, KeyOutput, ValueOutput>(
@@ -186,13 +178,13 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MVec<R, Item = (K,)>,
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let values = self.into_inner();
+                let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
                 let (key_inner, value_inner) =
                     crate::detail::sort_by_key(policy, (keys,), (values,), KernelOp::<R, Less>::new())?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>(key_inner),
-                    array_from_inner::<R, ($( $ty, )+), ValueOutput>(value_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
 
@@ -208,13 +200,13 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MVec<R, Item = (K,)>,
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let values = self.into_inner();
+                let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
                 let (key_inner, value_inner) =
                     crate::detail::unique_by_key(policy, (keys,), (values,), KernelOp::<R, Eq>::new())?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>(key_inner),
-                    array_from_inner::<R, ($( $ty, )+), ValueOutput>(value_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
 
@@ -231,7 +223,7 @@ macro_rules! impl_miter_soa {
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let values = self.into_inner();
+                let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
                 let inner = crate::detail::inclusive_scan_by_key(
                     policy,
@@ -240,7 +232,7 @@ macro_rules! impl_miter_soa {
                     KernelTuple1Op::<R, KeyEq>::new(),
                     KernelOp::<R, Op>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
@@ -257,7 +249,7 @@ macro_rules! impl_miter_soa {
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let values = self.into_inner();
+                let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
                 let inner = crate::detail::exclusive_scan_by_key(
                     policy,
@@ -267,7 +259,7 @@ macro_rules! impl_miter_soa {
                     init,
                     KernelOp::<R, Op>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
@@ -285,7 +277,7 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MVec<R, Item = (K,)>,
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let values = self.into_inner();
+                let values = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::reduce_by_key(
                     policy,
                     (keys,),
@@ -296,7 +288,7 @@ macro_rules! impl_miter_soa {
                 )?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>(key_inner),
-                    array_from_inner::<R, ($( $ty, )+), ValueOutput>(value_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
 
@@ -315,9 +307,9 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MVec<R, Item = (K,)>,
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_inner();
+                let left_values = self.into_inner_with_policy(policy)?;
                 let right_values = ($(
-                    <RightValues as sealed::MIterDispatch<R>>::column_view_by_index_inner::<$ty>(
+                    <RightValues as sealed::MIterDispatch<R>>::column_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
                         &right_values,
                         $idx,
                     )?
@@ -335,7 +327,7 @@ macro_rules! impl_miter_soa {
                 )?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>(key_inner),
-                    array_from_inner::<R, ($( $ty, )+), ValueOutput>(value_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
 
@@ -351,9 +343,9 @@ macro_rules! impl_miter_soa {
                 <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
                         &output,
                         $idx,
                     )?
@@ -379,7 +371,7 @@ macro_rules! impl_miter_soa {
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::reduce(policy, impl_miter_view!(input; $( $idx ),+), init, KernelOp::<R, Op>::new())
             }
 
@@ -392,13 +384,13 @@ macro_rules! impl_miter_soa {
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::inclusive_scan(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Op>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn exclusive_scan_dispatch<Op, Output>(
@@ -411,14 +403,14 @@ macro_rules! impl_miter_soa {
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::exclusive_scan(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     init,
                     KernelOp::<R, Op>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn adjacent_difference_dispatch<Op, Output>(
@@ -430,13 +422,13 @@ macro_rules! impl_miter_soa {
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::adjacent_difference(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Op>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn copy_where_dispatch<Output>(
@@ -447,14 +439,14 @@ macro_rules! impl_miter_soa {
             where
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::copy_where(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     stencil,
                     KernelOp::<R, StencilFlag>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn remove_if_dispatch<Pred, Output>(
@@ -466,13 +458,13 @@ macro_rules! impl_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::remove_if(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Pred>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn remove_where_dispatch<Output>(
@@ -483,14 +475,14 @@ macro_rules! impl_miter_soa {
             where
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::copy_where(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     stencil,
                     KernelOp::<R, StencilFlag>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn count_if_dispatch<Pred>(
@@ -501,7 +493,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::count_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -513,7 +505,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::all_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -525,7 +517,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::any_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -537,7 +529,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::none_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -549,7 +541,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::find_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -562,15 +554,15 @@ macro_rules! impl_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let (matching, failing) = crate::detail::partition(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Pred>::new(),
                 )?;
                 Ok((
-                    array_from_inner::<R, ($( $ty, )+), Output>(matching),
-                    array_from_inner::<R, ($( $ty, )+), Output>(failing),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, Output>(matching),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, Output>(failing),
                 ))
             }
 
@@ -582,7 +574,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::is_partitioned(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -595,7 +587,7 @@ macro_rules! impl_miter_soa {
             where
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::replace_where(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -603,7 +595,7 @@ macro_rules! impl_miter_soa {
                     stencil,
                     KernelOp::<R, StencilFlag>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn unique_dispatch<Pred, Output>(
@@ -615,13 +607,13 @@ macro_rules! impl_miter_soa {
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::unique(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Pred>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn min_element_dispatch<Less>(
@@ -632,7 +624,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::min_element(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())
             }
 
@@ -644,7 +636,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::max_element(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())
             }
 
@@ -656,7 +648,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::minmax_element(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())
             }
 
@@ -668,7 +660,7 @@ macro_rules! impl_miter_soa {
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::adjacent_find(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
             }
 
@@ -681,7 +673,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::lower_bound(policy, impl_miter_view!(input; $( $idx ),+), value, KernelOp::<R, Less>::new())
             }
 
@@ -694,7 +686,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::upper_bound(policy, impl_miter_view!(input; $( $idx ),+), value, KernelOp::<R, Less>::new())
             }
 
@@ -707,7 +699,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::equal_range(policy, impl_miter_view!(input; $( $idx ),+), value, KernelOp::<R, Less>::new())
             }
 
@@ -719,7 +711,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::is_sorted_until(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())
             }
 
@@ -731,7 +723,7 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 crate::detail::is_sorted(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())
             }
 
@@ -749,9 +741,9 @@ macro_rules! impl_miter_soa {
                     crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
                         &output,
                         $idx,
                     )?
@@ -782,9 +774,9 @@ macro_rules! impl_miter_soa {
                 <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
                         &output,
                         $idx,
                     )?
@@ -815,9 +807,9 @@ macro_rules! impl_miter_soa {
                     crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
                         &output,
                         $idx,
                     )?
@@ -846,8 +838,8 @@ macro_rules! impl_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "equal")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "equal")?, )+);
                 crate::detail::equal(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -866,8 +858,8 @@ macro_rules! impl_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "mismatch")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "mismatch")?, )+);
                 crate::detail::mismatch(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -886,8 +878,8 @@ macro_rules! impl_miter_soa {
                 Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
-                let needles = ($( column_view_at::<R, Needles, $ty>(&needles, $idx, "find_first_of")?, )+);
+                let input = self.into_inner_with_policy(policy)?;
+                let needles = ($( column_view_at::<R, Needles, <$ty as MSlice<R>>::Item>(&needles, $idx, "find_first_of")?, )+);
                 crate::detail::find_first_of(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -906,8 +898,8 @@ macro_rules! impl_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "lexicographical_compare")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "lexicographical_compare")?, )+);
                 crate::detail::lexicographical_compare(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -927,15 +919,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "merge")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "merge")?, )+);
                 let inner = crate::detail::merge(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_union_dispatch<Right, Output, Less>(
@@ -949,15 +941,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "set_union")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "set_union")?, )+);
                 let inner = crate::detail::set_union(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_intersection_dispatch<Right, Output, Less>(
@@ -971,15 +963,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "set_intersection")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "set_intersection")?, )+);
                 let inner = crate::detail::set_intersection(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_difference_dispatch<Right, Output, Less>(
@@ -993,15 +985,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = ($( column_view_at::<R, Right, $ty>(&right, $idx, "set_difference")?, )+);
+                let left = self.into_inner_with_policy(policy)?;
+                let right = ($( column_view_at::<R, Right, <$ty as MSlice<R>>::Item>(&right, $idx, "set_difference")?, )+);
                 let inner = crate::detail::set_difference(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn equal_same_dispatch<Eq>(
@@ -1013,8 +1005,8 @@ macro_rules! impl_miter_soa {
             where
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 crate::detail::equal(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -1032,8 +1024,8 @@ macro_rules! impl_miter_soa {
             where
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 crate::detail::mismatch(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -1051,8 +1043,8 @@ macro_rules! impl_miter_soa {
             where
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner();
-                let needles = needles.into_inner();
+                let input = self.into_inner_with_policy(policy)?;
+                let needles = needles.into_inner_with_policy(policy)?;
                 crate::detail::find_first_of(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -1070,8 +1062,8 @@ macro_rules! impl_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 crate::detail::lexicographical_compare(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -1090,15 +1082,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 let inner = crate::detail::merge(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_union_same_dispatch<Output, Less>(
@@ -1111,15 +1103,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 let inner = crate::detail::set_union(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_intersection_same_dispatch<Output, Less>(
@@ -1132,15 +1124,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 let inner = crate::detail::set_intersection(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_difference_same_dispatch<Output, Less>(
@@ -1153,15 +1145,15 @@ macro_rules! impl_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_inner();
-                let right = right.into_inner();
+                let left = self.into_inner_with_policy(policy)?;
+                let right = right.into_inner_with_policy(policy)?;
                 let inner = crate::detail::set_difference(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
                     impl_miter_view!(right; $( $idx ),+),
                     KernelOp::<R, Less>::new(),
                 )?;
-                Ok(array_from_inner::<R, ($( $ty, )+), Output>(inner))
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
         }
