@@ -85,6 +85,191 @@ fn tuple1_transform_returns_soa1_storage() {
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
 }
 
+#[test]
+fn unary_transform_accepts_seven_tuple_output() {
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let a = exec.to_device(&[0_u32; 3]).unwrap();
+    let b = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let c = exec.to_device(&[0_u32; 3]).unwrap();
+    let d = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let e = exec.to_device(&[0_u32; 3]).unwrap();
+    let f = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let g = exec.to_device(&[0_u32; 3]).unwrap();
+
+    transform(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        ScalarToTuple7Mixed,
+        massively::SoA7(
+            a.slice_mut(..),
+            b.slice_mut(..),
+            c.slice_mut(..),
+            d.slice_mut(..),
+            e.slice_mut(..),
+            f.slice_mut(..),
+            g.slice_mut(..),
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&a).unwrap(), vec![11, 21, 31]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![12.0, 22.0, 32.0]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![13, 23, 33]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![14.0, 24.0, 34.0]);
+    assert_eq!(exec.to_host(&e).unwrap(), vec![15, 25, 35]);
+    assert_eq!(exec.to_host(&f).unwrap(), vec![16.0, 26.0, 36.0]);
+    assert_eq!(exec.to_host(&g).unwrap(), vec![17, 27, 37]);
+}
+
+#[test]
+fn transform_where_accepts_seven_tuple_output() {
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let a = exec.to_device(&[100_u32; 3]).unwrap();
+    let b = exec.to_device(&[100.0_f32; 3]).unwrap();
+    let c = exec.to_device(&[100_u32; 3]).unwrap();
+    let d = exec.to_device(&[100.0_f32; 3]).unwrap();
+    let e = exec.to_device(&[100_u32; 3]).unwrap();
+    let f = exec.to_device(&[100.0_f32; 3]).unwrap();
+    let g = exec.to_device(&[100_u32; 3]).unwrap();
+
+    massively::transform_where(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        ScalarToTuple7Mixed,
+        stencil.slice(..),
+        massively::SoA7(
+            a.slice_mut(..),
+            b.slice_mut(..),
+            c.slice_mut(..),
+            d.slice_mut(..),
+            e.slice_mut(..),
+            f.slice_mut(..),
+            g.slice_mut(..),
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&a).unwrap(), vec![11, 100, 31]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![12.0, 100.0, 32.0]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![13, 100, 33]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![14.0, 100.0, 34.0]);
+    assert_eq!(exec.to_host(&e).unwrap(), vec![15, 100, 35]);
+    assert_eq!(exec.to_host(&f).unwrap(), vec![16.0, 100.0, 36.0]);
+    assert_eq!(exec.to_host(&g).unwrap(), vec![17, 100, 37]);
+}
+
+#[test]
+fn transform_accepts_seven_tuple_input_and_output() {
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000]).unwrap();
+    let e = exec.to_device(&[10000.0_f32, 20000.0]).unwrap();
+    let f = exec.to_device(&[100000_u32, 200000]).unwrap();
+    let g = exec.to_device(&[1000000.0_f32, 2000000.0]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 2]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 2]).unwrap();
+    let out_c = exec.to_device(&[0.0_f32; 2]).unwrap();
+    let out_d = exec.to_device(&[0_u32; 2]).unwrap();
+    let out_e = exec.to_device(&[0.0_f32; 2]).unwrap();
+    let out_f = exec.to_device(&[0_u32; 2]).unwrap();
+    let out_g = exec.to_device(&[0.0_f32; 2]).unwrap();
+
+    transform(
+        &exec,
+        massively::SoA7(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+        ),
+        TupleWideMixedSplit,
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_a).unwrap(), vec![2.0, 3.0]);
+    assert_eq!(exec.to_host(&out_b).unwrap(), vec![12, 22]);
+    assert_eq!(exec.to_host(&out_c).unwrap(), vec![103.0, 203.0]);
+    assert_eq!(exec.to_host(&out_d).unwrap(), vec![1004, 2004]);
+    assert_eq!(exec.to_host(&out_e).unwrap(), vec![10005.0, 20005.0]);
+    assert_eq!(exec.to_host(&out_f).unwrap(), vec![100006, 200006]);
+    assert_eq!(exec.to_host(&out_g).unwrap(), vec![1000007.0, 2000007.0]);
+}
+
+#[test]
+fn transform_where_accepts_seven_tuple_input_and_output() {
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let d = exec.to_device(&[1000_u32, 2000, 3000]).unwrap();
+    let e = exec.to_device(&[10000.0_f32, 20000.0, 30000.0]).unwrap();
+    let f = exec.to_device(&[100000_u32, 200000, 300000]).unwrap();
+    let g = exec
+        .to_device(&[1000000.0_f32, 2000000.0, 3000000.0])
+        .unwrap();
+    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_c = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_d = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_e = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_f = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_g = exec.to_device(&[0.0_f32; 3]).unwrap();
+
+    massively::transform_where(
+        &exec,
+        massively::SoA7(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+        ),
+        TupleWideMixedSplit,
+        stencil.slice(..),
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_a).unwrap(), vec![2.0, 0.0, 4.0]);
+    assert_eq!(exec.to_host(&out_b).unwrap(), vec![12, 0, 32]);
+    assert_eq!(exec.to_host(&out_c).unwrap(), vec![103.0, 0.0, 303.0]);
+    assert_eq!(exec.to_host(&out_d).unwrap(), vec![1004, 0, 3004]);
+    assert_eq!(exec.to_host(&out_e).unwrap(), vec![10005.0, 0.0, 30005.0]);
+    assert_eq!(exec.to_host(&out_f).unwrap(), vec![100006, 0, 300006]);
+    assert_eq!(
+        exec.to_host(&out_g).unwrap(),
+        vec![1000007.0, 0.0, 3000007.0]
+    );
+}
+
 #[cfg(any())]
 #[test]
 fn unary_transform_accepts_wide_tuple_outputs() {

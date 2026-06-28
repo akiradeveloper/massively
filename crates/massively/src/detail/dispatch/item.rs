@@ -55,6 +55,37 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn transform_septenary<First, Second, Third, Fourth, Fifth, Sixth, Seventh, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        first: crate::detail::device::DeviceColumnView<R, First>,
+        second: crate::detail::device::DeviceColumnView<R, Second>,
+        third: crate::detail::device::DeviceColumnView<R, Third>,
+        fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+        fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+        sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
+        seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
+        op: Op,
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    where
+        Self: MItem<R>,
+        First: Scalar,
+        Second: Scalar,
+        Third: Scalar,
+        Fourth: Scalar,
+        Fifth: Scalar,
+        Sixth: Scalar,
+        Seventh: Scalar,
+        Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth, Seventh), Output = Self>,
+    {
+        let _ = (
+            policy, first, second, third, fourth, fifth, sixth, seventh, op,
+        );
+        Err(Error::Launch {
+            message: "transform is not supported for this output item shape".to_string(),
+        })
+    }
+
     fn reduce_inner<Op>(
         policy: &crate::detail::CubePolicy<R>,
         input: <Self as MItem<R>>::Inner,

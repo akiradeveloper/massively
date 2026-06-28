@@ -592,7 +592,13 @@ where
     ))
 }
 
-fn device_expr_merge_tuple2_by_key_control_with_policy<LeftA, LeftB, RightA, RightB, Less>(
+pub(crate) fn device_expr_merge_tuple2_by_key_control_with_policy<
+    LeftA,
+    LeftB,
+    RightA,
+    RightB,
+    Less,
+>(
     policy: &CubePolicy<LeftA::Runtime>,
     left_a: &LeftA,
     left_b: &LeftB,
@@ -725,7 +731,7 @@ where
     ))
 }
 
-fn device_expr_merge_tuple3_by_key_control_with_policy<
+pub(crate) fn device_expr_merge_tuple3_by_key_control_with_policy<
     LeftA,
     LeftB,
     LeftC,

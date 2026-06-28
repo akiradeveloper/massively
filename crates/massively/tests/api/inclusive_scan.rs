@@ -50,3 +50,38 @@ fn inclusive_scan_accepts_three_column_tuple_item_op() {
     assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30, 60]);
     assert_eq!(exec.to_host(&c).unwrap(), vec![100.0, 300.0, 600.0]);
 }
+
+#[test]
+fn inclusive_scan_accepts_seven_tuple_columns() {
+    let exec = exec();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let d = exec.to_device(&[1_u32, 2, 3]).unwrap();
+    let e = exec.to_device(&[7.0_f32, 8.0, 9.0]).unwrap();
+    let f = exec.to_device(&[4_u32, 5, 6]).unwrap();
+    let g = exec.to_device(&[0.5_f32, 1.5, 2.5]).unwrap();
+
+    let (a, b, c, d, e, f, g) = inclusive_scan(
+        &exec,
+        massively::SoA7(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+        ),
+        TupleSum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0, 6.0]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30, 60]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![100.0, 300.0, 600.0]);
+    assert_eq!(exec.to_host(&d).unwrap(), vec![1, 3, 6]);
+    assert_eq!(exec.to_host(&e).unwrap(), vec![7.0, 15.0, 24.0]);
+    assert_eq!(exec.to_host(&f).unwrap(), vec![4, 9, 15]);
+    assert_eq!(exec.to_host(&g).unwrap(), vec![0.5, 2.0, 4.5]);
+}

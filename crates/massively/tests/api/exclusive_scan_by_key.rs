@@ -119,3 +119,114 @@ fn exclusive_scan_by_key_accepts_tuple_values() {
         vec![0.0, 100.0, 0.0, 300.0, 700.0, 0.0]
     );
 }
+
+#[test]
+fn exclusive_scan_by_key_accepts_three_column_keys() {
+    let exec = exec();
+    let key_a = exec.to_device(&[1.0_f32, 1.0, 1.0, 1.0, 2.0, 2.0]).unwrap();
+    let key_b = exec.to_device(&[0_u32, 0, 1, 1, 0, 0]).unwrap();
+    let key_c = exec.to_device(&[5.0_f32, 5.0, 5.0, 6.0, 7.0, 7.0]).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 3, 4, 5, 6]).unwrap();
+
+    let (output,) = exclusive_scan_by_key(
+        &exec,
+        massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
+        massively::SoA1(values.slice(..)),
+        MixedTuple3Equal,
+        (0_u32,),
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 0, 0, 0, 5]);
+}
+
+#[test]
+fn exclusive_scan_by_key_accepts_three_column_keys_and_tuple_values() {
+    let exec = exec();
+    let key_a = exec.to_device(&[1.0_f32, 1.0, 1.0, 1.0, 2.0, 2.0]).unwrap();
+    let key_b = exec.to_device(&[0_u32, 0, 1, 1, 0, 0]).unwrap();
+    let key_c = exec.to_device(&[5.0_f32, 5.0, 5.0, 6.0, 7.0, 7.0]).unwrap();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
+    let c = exec
+        .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
+        .unwrap();
+
+    let (a, b, c) = exclusive_scan_by_key(
+        &exec,
+        massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        MixedTuple3Equal,
+        (0.0_f32, 0_u32, 0.0_f32),
+        TupleSum,
+    )
+    .unwrap();
+
+    assert_eq!(
+        exec.to_host(&a).unwrap(),
+        vec![0.0, 1.0, 0.0, 0.0, 0.0, 5.0]
+    );
+    assert_eq!(exec.to_host(&b).unwrap(), vec![0, 10, 0, 0, 0, 50]);
+    assert_eq!(
+        exec.to_host(&c).unwrap(),
+        vec![0.0, 100.0, 0.0, 0.0, 0.0, 500.0]
+    );
+}
+
+#[test]
+fn exclusive_scan_by_key_accepts_three_column_keys_and_seven_column_values() {
+    let exec = exec();
+    let key_a = exec.to_device(&[1.0_f32, 1.0, 1.0, 1.0, 2.0, 2.0]).unwrap();
+    let key_b = exec.to_device(&[0_u32, 0, 1, 1, 0, 0]).unwrap();
+    let key_c = exec.to_device(&[5.0_f32, 5.0, 5.0, 6.0, 7.0, 7.0]).unwrap();
+    let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+    let b = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
+    let c = exec
+        .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
+        .unwrap();
+    let d = exec.to_device(&[1_u32, 2, 3, 4, 5, 6]).unwrap();
+    let e = exec
+        .to_device(&[7.0_f32, 8.0, 9.0, 10.0, 11.0, 12.0])
+        .unwrap();
+    let f = exec.to_device(&[4_u32, 5, 6, 7, 8, 9]).unwrap();
+    let g = exec.to_device(&[0.5_f32, 1.5, 2.5, 3.5, 4.5, 5.5]).unwrap();
+
+    let (a, b, c, d, e, f, g) = exclusive_scan_by_key(
+        &exec,
+        massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
+        massively::SoA7(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+        ),
+        MixedTuple3Equal,
+        (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32),
+        TupleSum,
+    )
+    .unwrap();
+
+    assert_eq!(
+        exec.to_host(&a).unwrap(),
+        vec![0.0, 1.0, 0.0, 0.0, 0.0, 5.0]
+    );
+    assert_eq!(exec.to_host(&b).unwrap(), vec![0, 10, 0, 0, 0, 50]);
+    assert_eq!(
+        exec.to_host(&c).unwrap(),
+        vec![0.0, 100.0, 0.0, 0.0, 0.0, 500.0]
+    );
+    assert_eq!(exec.to_host(&d).unwrap(), vec![0, 1, 0, 0, 0, 5]);
+    assert_eq!(
+        exec.to_host(&e).unwrap(),
+        vec![0.0, 7.0, 0.0, 0.0, 0.0, 11.0]
+    );
+    assert_eq!(exec.to_host(&f).unwrap(), vec![0, 4, 0, 0, 0, 8]);
+    assert_eq!(
+        exec.to_host(&g).unwrap(),
+        vec![0.0, 0.5, 0.0, 0.0, 0.0, 4.5]
+    );
+}

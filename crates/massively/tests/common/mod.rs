@@ -67,6 +67,24 @@ impl ReductionOp<WgpuRuntime, (f32, u32, f32)> for TupleSum {
     }
 }
 
+#[cubecl::cube]
+impl ReductionOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32)> for TupleSum {
+    fn apply(
+        lhs: (f32, u32, f32, u32, f32, u32, f32),
+        rhs: (f32, u32, f32, u32, f32, u32, f32),
+    ) -> (f32, u32, f32, u32, f32, u32, f32) {
+        (
+            lhs.0 + rhs.0,
+            lhs.1 + rhs.1,
+            lhs.2 + rhs.2,
+            lhs.3 + rhs.3,
+            lhs.4 + rhs.4,
+            lhs.5 + rhs.5,
+            lhs.6 + rhs.6,
+        )
+    }
+}
+
 pub(crate) struct TupleProduct;
 
 #[cubecl::cube]
@@ -158,6 +176,15 @@ pub(crate) struct MixedTuple3Less;
 impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32)> for MixedTuple3Less {
     fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> bool {
         lhs.1 < rhs.1 || (lhs.1 == rhs.1 && lhs.0 < rhs.0)
+    }
+}
+
+pub(crate) struct MixedTuple3LexLess;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32)> for MixedTuple3LexLess {
+    fn apply(lhs: (f32, u32, f32), rhs: (f32, u32, f32)) -> bool {
+        lhs.0 < rhs.0 || (lhs.0 == rhs.0 && (lhs.1 < rhs.1 || (lhs.1 == rhs.1 && lhs.2 < rhs.2)))
     }
 }
 
@@ -280,6 +307,36 @@ impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32, u32, f32
     }
 }
 
+pub(crate) struct Tuple7MixedEqual;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32)> for Tuple7MixedEqual {
+    fn apply(
+        lhs: (f32, u32, f32, u32, f32, u32, f32),
+        rhs: (f32, u32, f32, u32, f32, u32, f32),
+    ) -> bool {
+        lhs.0 == rhs.0
+            && lhs.1 == rhs.1
+            && lhs.2 == rhs.2
+            && lhs.3 == rhs.3
+            && lhs.4 == rhs.4
+            && lhs.5 == rhs.5
+            && lhs.6 == rhs.6
+    }
+}
+
+pub(crate) struct Tuple7MixedLess;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32)> for Tuple7MixedLess {
+    fn apply(
+        lhs: (f32, u32, f32, u32, f32, u32, f32),
+        rhs: (f32, u32, f32, u32, f32, u32, f32),
+    ) -> bool {
+        lhs.1 < rhs.1 || (lhs.1 == rhs.1 && lhs.0 < rhs.0)
+    }
+}
+
 pub(crate) struct Double;
 
 #[cubecl::cube]
@@ -304,6 +361,25 @@ impl UnaryOp<WgpuRuntime, (f32,)> for ScalarToTuple5Mixed {
             input.0 + 3.0,
             input.0 as u32 + 4,
             input.0 + 5.0,
+        )
+    }
+}
+
+pub(crate) struct ScalarToTuple7Mixed;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32,)> for ScalarToTuple7Mixed {
+    type Output = (u32, f32, u32, f32, u32, f32, u32);
+
+    fn apply(input: (u32,)) -> (u32, f32, u32, f32, u32, f32, u32) {
+        (
+            input.0 + 1,
+            input.0 as f32 + 2.0,
+            input.0 + 3,
+            input.0 as f32 + 4.0,
+            input.0 + 5,
+            input.0 as f32 + 6.0,
+            input.0 + 7,
         )
     }
 }

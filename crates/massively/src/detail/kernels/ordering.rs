@@ -1262,6 +1262,552 @@ pub(crate) fn merge_sort_tuple3_pass_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple3_by_key_expr_first_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    V: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    ExprV: DeviceGpuExpr<V>,
+    Less: BinaryPredicateOp<(A, B, C)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_slot_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_slot_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_slot_offsets: &[u32],
+    v_slot0: &[V],
+    v_slot1: &[V],
+    v_slot2: &[V],
+    v_slot3: &[V],
+    v_slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_v: &mut [V],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output_a[out] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, out);
+            output_b[out] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, out);
+            output_c[out] = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, out);
+            output_v[out] = ExprV::eval(v_slot0, v_slot1, v_slot2, v_slot3, v_slot_offsets, out);
+        } else {
+            let left_a = ExprA::eval(
+                a_slot0,
+                a_slot1,
+                a_slot2,
+                a_slot3,
+                a_slot_offsets,
+                pair_start,
+            );
+            let left_b = ExprB::eval(
+                b_slot0,
+                b_slot1,
+                b_slot2,
+                b_slot3,
+                b_slot_offsets,
+                pair_start,
+            );
+            let left_c = ExprC::eval(
+                c_slot0,
+                c_slot1,
+                c_slot2,
+                c_slot3,
+                c_slot_offsets,
+                pair_start,
+            );
+            let left_v = ExprV::eval(
+                v_slot0,
+                v_slot1,
+                v_slot2,
+                v_slot3,
+                v_slot_offsets,
+                pair_start,
+            );
+            let right_a = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, right);
+            let right_b = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, right);
+            let right_c = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, right);
+            let right_v = ExprV::eval(v_slot0, v_slot1, v_slot2, v_slot3, v_slot_offsets, right);
+            let take_right_first =
+                Less::apply((right_a, right_b, right_c), (left_a, left_b, left_c));
+            if out == pair_start {
+                if take_right_first {
+                    output_a[out] = right_a;
+                    output_b[out] = right_b;
+                    output_c[out] = right_c;
+                    output_v[out] = right_v;
+                } else {
+                    output_a[out] = left_a;
+                    output_b[out] = left_b;
+                    output_c[out] = left_c;
+                    output_v[out] = left_v;
+                }
+            } else if take_right_first {
+                output_a[out] = left_a;
+                output_b[out] = left_b;
+                output_c[out] = left_c;
+                output_v[out] = left_v;
+            } else {
+                output_a[out] = right_a;
+                output_b[out] = right_b;
+                output_c[out] = right_c;
+                output_v[out] = right_v;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple3_by_key_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    V: CubePrimitive,
+    Less: BinaryPredicateOp<(A, B, C)>,
+>(
+    input_a: &[A],
+    input_b: &[B],
+    input_c: &[C],
+    input_v: &[V],
+    width: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_v: &mut [V],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    if out < input_a.len() {
+        let run = width[0] as usize;
+        let pair_width = run * 2usize;
+        let pair_start = (out / pair_width) * pair_width;
+        let left_start = pair_start;
+        let left_len = RuntimeCell::<usize>::new(run);
+        if left_start + left_len.read() > input_a.len() {
+            left_len.store(input_a.len() - left_start);
+        }
+
+        let right_start = left_start + left_len.read();
+        let right_len = RuntimeCell::<usize>::new(0usize);
+        if right_start < input_a.len() {
+            right_len.store(run);
+            if right_start + right_len.read() > input_a.len() {
+                right_len.store(input_a.len() - right_start);
+            }
+        }
+
+        if right_len.read() == 0usize {
+            output_a[out] = input_a[out];
+            output_b[out] = input_b[out];
+            output_c[out] = input_c[out];
+            output_v[out] = input_v[out];
+        } else {
+            let local_out = out - pair_start;
+            let low_init = RuntimeCell::<usize>::new(0usize);
+            if local_out > right_len.read() {
+                low_init.store(local_out - right_len.read());
+            }
+
+            let high_init = RuntimeCell::<usize>::new(local_out);
+            if high_init.read() > left_len.read() {
+                high_init.store(left_len.read());
+            }
+
+            let low = RuntimeCell::<usize>::new(low_init.read());
+            let high = RuntimeCell::<usize>::new(high_init.read());
+            while low.read() < high.read() {
+                let mid = (low.read() + high.read()) / 2usize;
+                let rhs_index = local_out - mid;
+                if mid < left_len.read()
+                    && rhs_index > 0usize
+                    && !Less::apply(
+                        (
+                            input_a[right_start + rhs_index - 1usize],
+                            input_b[right_start + rhs_index - 1usize],
+                            input_c[right_start + rhs_index - 1usize],
+                        ),
+                        (
+                            input_a[left_start + mid],
+                            input_b[left_start + mid],
+                            input_c[left_start + mid],
+                        ),
+                    )
+                {
+                    low.store(mid + 1usize);
+                } else {
+                    high.store(mid);
+                }
+            }
+
+            let lhs_index = low.read();
+            let rhs_index = local_out - lhs_index;
+            let take_left = RuntimeCell::<bool>::new(false);
+            if lhs_index < left_len.read()
+                && (rhs_index >= right_len.read()
+                    || !Less::apply(
+                        (
+                            input_a[right_start + rhs_index],
+                            input_b[right_start + rhs_index],
+                            input_c[right_start + rhs_index],
+                        ),
+                        (
+                            input_a[left_start + lhs_index],
+                            input_b[left_start + lhs_index],
+                            input_c[left_start + lhs_index],
+                        ),
+                    ))
+            {
+                take_left.store(true);
+            }
+
+            if take_left.read() {
+                output_a[out] = input_a[left_start + lhs_index];
+                output_b[out] = input_b[left_start + lhs_index];
+                output_c[out] = input_c[left_start + lhs_index];
+                output_v[out] = input_v[left_start + lhs_index];
+            } else {
+                output_a[out] = input_a[right_start + rhs_index];
+                output_b[out] = input_b[right_start + rhs_index];
+                output_c[out] = input_c[right_start + rhs_index];
+                output_v[out] = input_v[right_start + rhs_index];
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple7_indices_expr_first_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    ExprD: DeviceGpuExpr<D>,
+    ExprE: DeviceGpuExpr<E>,
+    ExprF: DeviceGpuExpr<F>,
+    ExprG: DeviceGpuExpr<G>,
+    Less: BinaryPredicateOp<(A, B, C, D, E, F, G)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_slot_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_slot_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_slot_offsets: &[u32],
+    d_slot0: &[D],
+    d_slot1: &[D],
+    d_slot2: &[D],
+    d_slot3: &[D],
+    d_slot_offsets: &[u32],
+    e_slot0: &[E],
+    e_slot1: &[E],
+    e_slot2: &[E],
+    e_slot3: &[E],
+    e_slot_offsets: &[u32],
+    f_slot0: &[F],
+    f_slot1: &[F],
+    f_slot2: &[F],
+    f_slot3: &[F],
+    f_slot_offsets: &[u32],
+    g_slot0: &[G],
+    g_slot1: &[G],
+    g_slot2: &[G],
+    g_slot3: &[G],
+    g_slot_offsets: &[u32],
+    len: &[u32],
+    output_indices: &mut [u32],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let logical_len = len[0] as usize;
+    if out < logical_len {
+        let pair_start = (out / 2usize) * 2usize;
+        let right = pair_start + 1usize;
+        if right >= logical_len {
+            output_indices[out] = out as u32;
+        } else {
+            let left = (
+                ExprA::eval(
+                    a_slot0,
+                    a_slot1,
+                    a_slot2,
+                    a_slot3,
+                    a_slot_offsets,
+                    pair_start,
+                ),
+                ExprB::eval(
+                    b_slot0,
+                    b_slot1,
+                    b_slot2,
+                    b_slot3,
+                    b_slot_offsets,
+                    pair_start,
+                ),
+                ExprC::eval(
+                    c_slot0,
+                    c_slot1,
+                    c_slot2,
+                    c_slot3,
+                    c_slot_offsets,
+                    pair_start,
+                ),
+                ExprD::eval(
+                    d_slot0,
+                    d_slot1,
+                    d_slot2,
+                    d_slot3,
+                    d_slot_offsets,
+                    pair_start,
+                ),
+                ExprE::eval(
+                    e_slot0,
+                    e_slot1,
+                    e_slot2,
+                    e_slot3,
+                    e_slot_offsets,
+                    pair_start,
+                ),
+                ExprF::eval(
+                    f_slot0,
+                    f_slot1,
+                    f_slot2,
+                    f_slot3,
+                    f_slot_offsets,
+                    pair_start,
+                ),
+                ExprG::eval(
+                    g_slot0,
+                    g_slot1,
+                    g_slot2,
+                    g_slot3,
+                    g_slot_offsets,
+                    pair_start,
+                ),
+            );
+            let right_value = (
+                ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, right),
+                ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, right),
+                ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, right),
+                ExprD::eval(d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets, right),
+                ExprE::eval(e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets, right),
+                ExprF::eval(f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets, right),
+                ExprG::eval(g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets, right),
+            );
+            let take_right_first = Less::apply(right_value, left);
+            if out == pair_start {
+                output_indices[out] = if take_right_first {
+                    right as u32
+                } else {
+                    pair_start as u32
+                };
+            } else if take_right_first {
+                output_indices[out] = pair_start as u32;
+            } else {
+                output_indices[out] = right as u32;
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_sort_tuple7_indices_pass_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    ExprD: DeviceGpuExpr<D>,
+    ExprE: DeviceGpuExpr<E>,
+    ExprF: DeviceGpuExpr<F>,
+    ExprG: DeviceGpuExpr<G>,
+    Less: BinaryPredicateOp<(A, B, C, D, E, F, G)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_slot_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_slot_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_slot_offsets: &[u32],
+    d_slot0: &[D],
+    d_slot1: &[D],
+    d_slot2: &[D],
+    d_slot3: &[D],
+    d_slot_offsets: &[u32],
+    e_slot0: &[E],
+    e_slot1: &[E],
+    e_slot2: &[E],
+    e_slot3: &[E],
+    e_slot_offsets: &[u32],
+    f_slot0: &[F],
+    f_slot1: &[F],
+    f_slot2: &[F],
+    f_slot3: &[F],
+    f_slot_offsets: &[u32],
+    g_slot0: &[G],
+    g_slot1: &[G],
+    g_slot2: &[G],
+    g_slot3: &[G],
+    g_slot_offsets: &[u32],
+    input_indices: &[u32],
+    width: &[u32],
+    output_indices: &mut [u32],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    if out < input_indices.len() {
+        let run = width[0] as usize;
+        let pair_width = run * 2usize;
+        let pair_start = (out / pair_width) * pair_width;
+        let left_start = pair_start;
+        let left_len = RuntimeCell::<usize>::new(run);
+        if left_start + left_len.read() > input_indices.len() {
+            left_len.store(input_indices.len() - left_start);
+        }
+
+        let right_start = left_start + left_len.read();
+        let right_len = RuntimeCell::<usize>::new(0usize);
+        if right_start < input_indices.len() {
+            right_len.store(run);
+            if right_start + right_len.read() > input_indices.len() {
+                right_len.store(input_indices.len() - right_start);
+            }
+        }
+
+        if right_len.read() == 0usize {
+            output_indices[out] = input_indices[out];
+        } else {
+            let local_out = out - pair_start;
+            let low_init = RuntimeCell::<usize>::new(0usize);
+            if local_out > right_len.read() {
+                low_init.store(local_out - right_len.read());
+            }
+            let high_init = RuntimeCell::<usize>::new(local_out);
+            if high_init.read() > left_len.read() {
+                high_init.store(left_len.read());
+            }
+
+            let low = RuntimeCell::<usize>::new(low_init.read());
+            let high = RuntimeCell::<usize>::new(high_init.read());
+            while low.read() < high.read() {
+                let mid = (low.read() + high.read()) / 2usize;
+                let rhs_index = local_out - mid;
+                if mid < left_len.read() && rhs_index > 0usize {
+                    let r = input_indices[right_start + rhs_index - 1usize] as usize;
+                    let l = input_indices[left_start + mid] as usize;
+                    let right_value = (
+                        ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, r),
+                        ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, r),
+                        ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, r),
+                        ExprD::eval(d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets, r),
+                        ExprE::eval(e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets, r),
+                        ExprF::eval(f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets, r),
+                        ExprG::eval(g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets, r),
+                    );
+                    let left_value = (
+                        ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, l),
+                        ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, l),
+                        ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, l),
+                        ExprD::eval(d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets, l),
+                        ExprE::eval(e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets, l),
+                        ExprF::eval(f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets, l),
+                        ExprG::eval(g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets, l),
+                    );
+                    if !Less::apply(right_value, left_value) {
+                        low.store(mid + 1usize);
+                    } else {
+                        high.store(mid);
+                    }
+                } else {
+                    high.store(mid);
+                }
+            }
+
+            let lhs_index = low.read();
+            let rhs_index = local_out - lhs_index;
+            let take_left = RuntimeCell::<bool>::new(false);
+            if lhs_index < left_len.read() {
+                if rhs_index >= right_len.read() {
+                    take_left.store(true);
+                } else {
+                    let l = input_indices[left_start + lhs_index] as usize;
+                    let r = input_indices[right_start + rhs_index] as usize;
+                    let left_value = (
+                        ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, l),
+                        ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, l),
+                        ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, l),
+                        ExprD::eval(d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets, l),
+                        ExprE::eval(e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets, l),
+                        ExprF::eval(f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets, l),
+                        ExprG::eval(g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets, l),
+                    );
+                    let right_value = (
+                        ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets, r),
+                        ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets, r),
+                        ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets, r),
+                        ExprD::eval(d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets, r),
+                        ExprE::eval(e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets, r),
+                        ExprF::eval(f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets, r),
+                        ExprG::eval(g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets, r),
+                    );
+                    if !Less::apply(right_value, left_value) {
+                        take_left.store(true);
+                    }
+                }
+            }
+
+            if take_left.read() {
+                output_indices[out] = input_indices[left_start + lhs_index];
+            } else {
+                output_indices[out] = input_indices[right_start + rhs_index];
+            }
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn merge_sort_by_key_pass_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
