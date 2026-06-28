@@ -506,6 +506,10 @@ impl KernelColumnBindings {
     }
 
     fn finish(&mut self) {
+        if self.slots.is_empty() {
+            self.slots.push((self.input.clone(), self.input_len));
+            self.slot_offsets.push(self.input_offset);
+        }
         if let Some((handle, len)) = self.slots.first() {
             self.input = handle.clone();
             self.input_len = *len;

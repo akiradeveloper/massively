@@ -58,6 +58,24 @@ where
     }
 }
 
+impl<R> IntoMaterializedColumn<R, u32> for crate::slice::TabulateRead<R>
+where
+    R: Runtime,
+{
+    fn into_materialized_column(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<crate::detail::device::DeviceColumnView<R, u32>, Error> {
+        let column = crate::detail::primitives::range::indices_u32(
+            policy,
+            crate::detail::device::KernelColumn::len(&self),
+        )?;
+        Ok(crate::detail::device::DeviceColumnView::from_column(
+            &column,
+        ))
+    }
+}
+
 impl<R, Source, Op, T> IntoMaterializedColumn<R, T>
     for crate::slice::TransformRead<R, Source, Op, T>
 where
