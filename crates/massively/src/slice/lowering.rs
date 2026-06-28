@@ -1,18 +1,19 @@
 use cubecl::prelude::Runtime;
 
 use crate::Error;
+use crate::detail::impls::lower_mslice_column;
 use crate::detail::op_adapter::{KernelOp, StencilFlag};
 use crate::slice::MSlice;
 
 pub(crate) fn u32_read<R, Slice>(
     policy: &crate::detail::CubePolicy<R>,
     slice: Slice,
-) -> Result<Slice::Read, Error>
+) -> Result<crate::detail::device::DeviceColumnView<R, u32>, Error>
 where
     R: Runtime,
     Slice: MSlice<R, Item = u32>,
 {
-    slice.into_read(policy)
+    lower_mslice_column(slice, policy)
 }
 
 pub(crate) fn u32_stencil<R, Slice>(
@@ -25,7 +26,7 @@ where
     R: Runtime,
     Slice: MSlice<R, Item = u32>,
 {
-    let stencil = slice.into_read(policy)?;
+    let stencil = lower_mslice_column(slice, policy)?;
     crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, KernelOp<R, StencilFlag>>(
         policy,
         &(stencil,),
@@ -43,7 +44,7 @@ where
     R: Runtime,
     Slice: MSlice<R, Item = u32>,
 {
-    let stencil = slice.into_read(policy)?;
+    let stencil = lower_mslice_column(slice, policy)?;
     crate::detail::api::PrecomputedSelection::from_stencil_flags_with_policy::<
         _,
         KernelOp<R, StencilFlag>,

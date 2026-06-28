@@ -5,7 +5,7 @@ pub(crate) mod control;
 pub(crate) mod device;
 pub(crate) mod dispatch;
 pub(crate) mod expr;
-mod impls;
+pub(crate) mod impls;
 pub(crate) mod kernels;
 pub(crate) mod op_adapter;
 pub(crate) mod policy;

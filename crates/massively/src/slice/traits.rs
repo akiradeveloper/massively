@@ -2,7 +2,6 @@ use cubecl::prelude::Runtime;
 
 use crate::Error;
 use crate::detail::CubePolicy;
-use crate::detail::device::{KernelColumn, KernelColumnAt, S0};
 use crate::runtime::{Executor, Scalar};
 
 /// Read-only logical slice that maps an index `i` to an item `T`.
@@ -10,11 +9,12 @@ use crate::runtime::{Executor, Scalar};
 /// `MSlice` is the public abstraction that lets algorithms accept storage
 /// backed slices today and lazy slices in later versions without changing the
 /// algorithm surface for every slice kind.
+#[allow(private_bounds)]
 pub trait MSlice<R: Runtime>: Sized {
     type Item: Scalar + 'static;
 
     #[doc(hidden)]
-    type Read: KernelColumn<Runtime = R, Item = Self::Item> + KernelColumnAt<S0>;
+    type Read: crate::detail::impls::IntoMaterializedColumn<R, Self::Item>;
 
     /// Returns the logical length.
     fn len(&self) -> usize;

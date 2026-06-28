@@ -18,7 +18,7 @@ use crate::value::{MItem, MVec};
 mod item;
 mod iter;
 
-trait IntoMaterializedColumn<R, T>: Sized
+pub(crate) trait IntoMaterializedColumn<R, T>: Sized
 where
     R: Runtime,
     T: Scalar + 'static,
@@ -77,13 +77,13 @@ where
 }
 
 impl<R, Source, Op, T> IntoMaterializedColumn<R, T>
-    for crate::slice::TransformRead<R, Source, Op, T>
+    for crate::slice::TransformRead<R, (Source,), Op, T>
 where
     R: Runtime,
     T: Scalar + cubecl::prelude::CubePrimitive + cubecl::prelude::CubeElement + 'static,
-    crate::slice::TransformRead<R, Source, Op, T>: crate::detail::device::KernelColumn<Runtime = R, Item = T>
+    crate::slice::TransformRead<R, (Source,), Op, T>: crate::detail::device::KernelColumn<Runtime = R, Item = T>
         + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-    <crate::slice::TransformRead<R, Source, Op, T> as crate::detail::device::KernelColumn>::Expr:
+    <crate::slice::TransformRead<R, (Source,), Op, T> as crate::detail::device::KernelColumn>::Expr:
         DeviceGpuExpr<T>,
 {
     fn into_materialized_column(
@@ -97,7 +97,87 @@ where
     }
 }
 
-fn lower_mslice_column<R, S, T>(
+impl<R, Left, Right, Op, T> IntoMaterializedColumn<R, T>
+    for crate::slice::TransformRead<
+        R,
+        (
+            crate::detail::device::DeviceColumnView<R, Left>,
+            crate::detail::device::DeviceColumnView<R, Right>,
+        ),
+        Op,
+        T,
+    >
+where
+    R: Runtime,
+    Left: Scalar + cubecl::prelude::CubeElement + 'static,
+    Right: Scalar + cubecl::prelude::CubeElement + 'static,
+    T: Scalar + cubecl::prelude::CubePrimitive + cubecl::prelude::CubeElement + 'static,
+    Op: op::UnaryOp<R, (Left, Right), Output = (T,)>,
+    (T,): crate::detail::TransformSoA2Output<R, Left, Right, KernelOp<R, Op>>,
+    <(T,) as crate::detail::MItemStorage<R>>::Storage:
+        crate::detail::MaterializeOutput<Runtime = R, Output = (crate::detail::DeviceVec<R, T>,)>,
+{
+    fn into_materialized_column(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<crate::detail::device::DeviceColumnView<R, T>, Error> {
+        ensure_same_len(self.source.0.len, self.source.1.len)?;
+        let storage = <(T,) as crate::detail::TransformSoA2Output<
+            R,
+            Left,
+            Right,
+            KernelOp<R, Op>,
+        >>::run(policy, self.source.0, self.source.1)?;
+        let (column,) = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
+        Ok(crate::detail::device::DeviceColumnView::from_column(
+            &column,
+        ))
+    }
+}
+
+impl<R, First, Second, Third, Op, T> IntoMaterializedColumn<R, T>
+    for crate::slice::TransformRead<
+        R,
+        (
+            crate::detail::device::DeviceColumnView<R, First>,
+            crate::detail::device::DeviceColumnView<R, Second>,
+            crate::detail::device::DeviceColumnView<R, Third>,
+        ),
+        Op,
+        T,
+    >
+where
+    R: Runtime,
+    First: Scalar + cubecl::prelude::CubeElement + 'static,
+    Second: Scalar + cubecl::prelude::CubeElement + 'static,
+    Third: Scalar + cubecl::prelude::CubeElement + 'static,
+    T: Scalar + cubecl::prelude::CubePrimitive + cubecl::prelude::CubeElement + 'static,
+    Op: op::UnaryOp<R, (First, Second, Third), Output = (T,)>,
+    (T,): crate::detail::TransformSoA3Output<R, First, Second, Third, KernelOp<R, Op>>,
+    <(T,) as crate::detail::MItemStorage<R>>::Storage:
+        crate::detail::MaterializeOutput<Runtime = R, Output = (crate::detail::DeviceVec<R, T>,)>,
+{
+    fn into_materialized_column(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<crate::detail::device::DeviceColumnView<R, T>, Error> {
+        ensure_same_len(self.source.0.len, self.source.1.len)?;
+        ensure_same_len(self.source.0.len, self.source.2.len)?;
+        let storage = <(T,) as crate::detail::TransformSoA3Output<
+            R,
+            First,
+            Second,
+            Third,
+            KernelOp<R, Op>,
+        >>::run(policy, self.source.0, self.source.1, self.source.2)?;
+        let (column,) = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
+        Ok(crate::detail::device::DeviceColumnView::from_column(
+            &column,
+        ))
+    }
+}
+
+pub(crate) fn lower_mslice_column<R, S, T>(
     slice: S,
     policy: &crate::detail::CubePolicy<R>,
 ) -> Result<crate::detail::device::DeviceColumnView<R, T>, Error>
