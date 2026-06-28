@@ -12,7 +12,7 @@ mod item;
 mod iter;
 mod iter_mut;
 
-pub(crate) use helpers::{array_from_inner, column_view_at};
+pub(crate) use helpers::array_from_inner;
 pub use host::ToHostDispatch;
 pub use item::MItemDispatch;
 pub use iter::MIterDispatch;

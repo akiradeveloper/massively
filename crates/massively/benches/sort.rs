@@ -1,8 +1,8 @@
 use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SORT_SIZES, descending_f32, shuffled_u32, sync};
-use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use common::{Runtime, SORT_SIZES, descending_f32, iter_gpu, shuffled_u32, sync};
+use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
 use massively::{Executor, sort_by_key};
@@ -37,36 +37,30 @@ fn bench_sort(c: &mut Criterion) {
         check_sort_by_key(&exec);
 
         for &len in SORT_SIZES {
-            let host_keys = shuffled_u32(len);
-            let host_values = descending_f32(len);
+            let keys = exec.to_device(&shuffled_u32(len)).unwrap();
+            let values = exec.to_device(&descending_f32(len)).unwrap();
+            sync(&exec);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter_batched(
-                    || {
-                        let input = (
-                            exec.to_device(&host_keys).unwrap(),
-                            exec.to_device(&host_values).unwrap(),
-                        );
-                        sync(&exec);
-                        input
-                    },
-                    |(keys, values)| {
-                        let output = sort_by_key(
-                            &exec,
-                            massively::SoA1(keys.slice(..)),
-                            massively::SoA1(values.slice(..)),
-                            Less,
-                        )
-                        .unwrap();
-                        sync(&exec);
-                        black_box(output)
-                    },
-                    BatchSize::SmallInput,
-                )
+                iter_gpu(b, || {
+                    let output = sort_by_key(
+                        &exec,
+                        massively::SoA1(black_box(keys.slice(..))),
+                        massively::SoA1(black_box(values.slice(..))),
+                        Less,
+                    )
+                    .unwrap();
+                    sync(&exec);
+                    black_box(output)
+                })
             });
         }
     }
     group.finish();
 }
 
-criterion_group!(benches, bench_sort);
+criterion_group! {
+    name = benches;
+    config = common::criterion();
+    targets = bench_sort
+}
 criterion_main!(benches);

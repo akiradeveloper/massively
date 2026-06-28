@@ -1,7 +1,7 @@
 use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SIZES, dense_f32, sync};
+use common::{Runtime, SIZES, dense_f32, iter_gpu, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
@@ -70,7 +70,7 @@ fn bench_scan(c: &mut Criterion) {
             let values = exec.to_device(&dense_f32(len)).unwrap();
             sync(&exec);
             scan_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter(|| {
+                iter_gpu(b, || {
                     let output =
                         inclusive_scan(&exec, massively::SoA1(black_box(values.slice(..))), Sum)
                             .unwrap();
@@ -92,7 +92,7 @@ fn bench_scan(c: &mut Criterion) {
             let values = exec.to_device(&dense_f32(len)).unwrap();
             sync(&exec);
             by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter(|| {
+                iter_gpu(b, || {
                     let output = inclusive_scan_by_key(
                         &exec,
                         massively::SoA1(black_box(keys.slice(..))),
@@ -119,7 +119,7 @@ fn bench_scan(c: &mut Criterion) {
             let values = exec.to_device(&dense_f32(len)).unwrap();
             sync(&exec);
             exclusive_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter(|| {
+                iter_gpu(b, || {
                     let output = exclusive_scan_by_key(
                         &exec,
                         massively::SoA1(black_box(keys.slice(..))),
@@ -138,5 +138,9 @@ fn bench_scan(c: &mut Criterion) {
     exclusive_by_key_group.finish();
 }
 
-criterion_group!(benches, bench_scan);
+criterion_group! {
+    name = benches;
+    config = common::criterion();
+    targets = bench_scan
+}
 criterion_main!(benches);

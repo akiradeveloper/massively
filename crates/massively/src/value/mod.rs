@@ -14,6 +14,9 @@ pub trait MItem<R: Runtime>: dispatch::MItemDispatch<R> + CubeType + Sized + 'st
     type Inner;
 
     #[doc(hidden)]
+    type View;
+
+    #[doc(hidden)]
     type Vec: MVec<R, Item = Self>;
 
     #[doc(hidden)]

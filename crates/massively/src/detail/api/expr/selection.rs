@@ -1,20 +1,17 @@
 use super::*;
 
-pub fn replace_where_into_with_policy<R, T, Stencil, Pred>(
+pub(crate) fn replace_where_into_with_control<R, T>(
     policy: &crate::policy::CubePolicy<R>,
     replacement: T,
-    stencil: &Stencil,
+    control: &select::SelectionControl,
     output: &DeviceColumnMutView<R, T>,
-    _pred: Pred,
 ) -> Result<(), Error>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
-    Stencil: SelectionStencil<Pred, Runtime = R>,
 {
-    ensure_same_len(stencil.len(), output.len)?;
-    let flags = stencil.selection_handles_with_policy(policy, false)?;
-    let len = stencil.len();
+    ensure_same_len(control.len, output.len)?;
+    let len = control.len;
     if len == 0 {
         return Ok(());
     }
@@ -31,12 +28,29 @@ where
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(replacement_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
         );
     }
     Ok(())
+}
+
+#[allow(dead_code)]
+pub fn replace_where_into_with_policy<R, T, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<R>,
+    replacement: T,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<R, T>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+    Stencil: SelectionStencil<Pred, Runtime = R>,
+{
+    let control = stencil.selection_flags_with_policy(policy, false)?;
+    replace_where_into_with_control(policy, replacement, &control, output)
 }
 
 pub fn device_expr_copy_where_into_with_policy<ExprSource, Stencil, Pred>(
@@ -371,4 +385,65 @@ where
     }
 
     select::handles_from_flags(policy, len, len_u32, flag_handle, policy.empty_handle())
+}
+
+pub(in crate::detail) fn device_expr_selection_flags_with_policy<ExprSource, Pred>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
+    expr: &ExprSource,
+    invert: bool,
+) -> Result<select::SelectionHandles, Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    Pred: PredicateOp<ExprSource::Item>,
+{
+    expr.validate()?;
+    let len = expr.len();
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let client = policy.client();
+    if len == 0 {
+        return Ok(select::SelectionControl::empty(client));
+    }
+
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let invert_handle =
+        client.create_from_slice(u32::as_bytes(&[if invert { 1_u32 } else { 0_u32 }]));
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+    let bindings = expr.stage(policy)?;
+    let slot0 = bindings.slot_or_first(0);
+    let slot1 = bindings.slot_or_first(1);
+    let slot2 = bindings.slot_or_first(2);
+    let slot3 = bindings.slot_or_first(3);
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let block_count_u32 = api_expr_block_count(len)?;
+
+    unsafe {
+        copy_if_device_expr_flag_only_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            Pred,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(select::SelectionControl::flags_only(
+        client,
+        flag_handle,
+        len,
+        len_u32,
+    ))
 }

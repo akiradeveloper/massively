@@ -5,6 +5,7 @@ where
     R: Runtime,
     S: MSlice<R, Item = T>,
     T: Scalar + 'static,
+    S::Read: IntoMaterializedColumn<R, T>,
     (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     type Item = (T,);
@@ -31,35 +32,11 @@ where
     R: Runtime,
     S: MSlice<R, Item = T>,
     T: Scalar + 'static,
+    S::Read: IntoMaterializedColumn<R, T>,
     (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
         self.0.validate_executor(exec)
-    }
-
-    fn column_view_inner<U: 'static>(
-        &self,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, U>>, Error>
-    where
-        U: Scalar,
-    {
-        self.0.column_view::<U>()
-    }
-
-    fn column_view_by_index_with_policy<U: 'static>(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-        index: usize,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, U>>, Error>
-    where
-        Self: MIter<R>,
-        U: Scalar,
-    {
-        if index == 0 {
-            lower_mslice_column_as(self.0, policy)
-        } else {
-            Ok(None)
-        }
     }
 
     fn transform_dispatch<Op, Output>(
@@ -358,18 +335,14 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         K: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: MVec<R, Item = (K,)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let left_value = self.into_inner_with_policy(policy)?.0;
-        let right_value = right_values
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "merge_by_key right values must match left value shape".to_string(),
-            })?;
+        let right_value = right_values.into_inner_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             crate::detail::device::SoAView1 { source: left_keys },
@@ -395,20 +368,16 @@ where
         less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item>,
+        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         LeftValues: MIter<R>,
-        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item>,
+        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item, Inner = <LeftValues as MIter<R>>::Inner>,
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MVec<R, Item = <LeftValues as MIter<R>>::Item>,
     {
         let (left_keys,) = self.into_inner_with_policy(policy)?;
-        let right_keys = right_keys
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "merge_by_key right keys must match left key shape".to_string(),
-            })?;
+        let (right_keys,) = right_keys.into_inner_with_policy(policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_single_key_same_dispatch(
             left_values,
             policy,
@@ -866,13 +835,12 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "gather_where output must match input shape".to_string(),
             })?;
-        crate::detail::api::device_expr_gather_where_into_with_policy(
+        crate::detail::api::device_expr_gather_where_into_with_control(
             policy,
             &input,
             &indices,
-            &stencil,
+            stencil.control(),
             &output,
-            KernelOp::<R, StencilFlag>::new(),
         )
     }
 
@@ -915,13 +883,12 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "scatter_where output must match input shape".to_string(),
             })?;
-        crate::detail::api::device_expr_scatter_where_into_with_policy(
+        crate::detail::api::device_expr_scatter_where_into_with_control(
             policy,
             &input,
             &indices,
-            &stencil,
+            stencil.control(),
             &output,
-            KernelOp::<R, StencilFlag>::new(),
         )
     }
 
@@ -932,16 +899,15 @@ where
         _eq: Eq,
     ) -> Result<bool, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "equal right input must match left input shape".to_string(),
-            })?;
-        crate::detail::equal(policy, (left,), (right,), KernelOp::<R, Eq>::new())
+        crate::detail::equal(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
+            KernelOp::<R, Eq>::new(),
+        )
     }
 
     fn mismatch_dispatch<Right, Eq>(
@@ -951,16 +917,15 @@ where
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "mismatch right input must match left input shape".to_string(),
-            })?;
-        crate::detail::mismatch(policy, (left,), (right,), KernelOp::<R, Eq>::new())
+        crate::detail::mismatch(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
+            KernelOp::<R, Eq>::new(),
+        )
     }
 
     fn find_first_of_dispatch<Needles, Eq>(
@@ -970,16 +935,15 @@ where
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
     where
-        Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Needles: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (input,) = self.into_inner_with_policy(policy)?;
-        let needles = needles
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "find_first_of needles must match input shape".to_string(),
-            })?;
-        crate::detail::find_first_of(policy, (input,), (needles,), KernelOp::<R, Eq>::new())
+        crate::detail::find_first_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            needles.into_inner_with_policy(policy)?,
+            KernelOp::<R, Eq>::new(),
+        )
     }
 
     fn lexicographical_compare_dispatch<Right, Less>(
@@ -989,20 +953,13 @@ where
         _less: Less,
     ) -> Result<bool, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "lexicographical_compare right input must match left input shape"
-                    .to_string(),
-            })?;
         crate::detail::lexicographical_compare(
             policy,
-            (left,),
-            (right,),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )
     }
@@ -1014,17 +971,16 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "merge right input must match left input shape".to_string(),
-            })?;
-        let inner = crate::detail::merge(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
+        let inner = crate::detail::merge(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -1035,18 +991,16 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "set_union right input must match left input shape".to_string(),
-            })?;
-        let inner =
-            crate::detail::set_union(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
+        let inner = crate::detail::set_union(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -1057,18 +1011,16 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "set_intersection right input must match left input shape".to_string(),
-            })?;
-        let inner =
-            crate::detail::set_intersection(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
+        let inner = crate::detail::set_intersection(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -1079,18 +1031,16 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner_with_policy(policy)?;
-        let right = right
-            .column_view_by_index_with_policy::<T>(policy, 0)?
-            .ok_or_else(|| Error::Launch {
-                message: "set_difference right input must match left input shape".to_string(),
-            })?;
-        let inner =
-            crate::detail::set_difference(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
+        let inner = crate::detail::set_difference(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -1294,12 +1244,11 @@ where
         stencil: crate::detail::api::PrecomputedSelection<R>,
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
-        crate::detail::api::replace_where_into_with_policy(
+        crate::detail::api::replace_where_into_with_control(
             policy,
             replacement.0,
-            &stencil,
+            stencil.control(),
             &output,
-            KernelOp::<R, StencilFlag>::new(),
         )
     }
 }

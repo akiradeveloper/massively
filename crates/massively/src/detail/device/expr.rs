@@ -239,6 +239,7 @@ where
 }
 
 #[doc(hidden)]
+#[derive(Clone)]
 pub struct KernelColumnBindings {
     pub(crate) input: cubecl::server::Handle,
     pub(crate) input_len: usize,
@@ -477,7 +478,7 @@ where
 }
 
 impl KernelColumnBindings {
-    fn empty<R: Runtime>(client: &ComputeClient<R>) -> Self {
+    pub(crate) fn empty<R: Runtime>(client: &ComputeClient<R>) -> Self {
         Self {
             input: crate::policy::empty_handle(client),
             input_len: 0,

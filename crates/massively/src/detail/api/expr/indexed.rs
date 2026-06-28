@@ -201,28 +201,25 @@ where
     Ok(())
 }
 
-pub fn device_expr_gather_where_into_with_policy<InputSource, IndexSource, Stencil, Pred>(
+pub(crate) fn device_expr_gather_where_into_with_control<InputSource, IndexSource>(
     policy: &crate::policy::CubePolicy<InputSource::Runtime>,
     input: &InputSource,
     indices: &IndexSource,
-    stencil: &Stencil,
+    control: &select::SelectionControl,
     output: &DeviceColumnMutView<InputSource::Runtime, InputSource::Item>,
-    _pred: Pred,
 ) -> Result<(), Error>
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
     InputSource::Runtime: Runtime,
     IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: SelectionStencil<Pred, Runtime = InputSource::Runtime>,
     InputSource::Item: CubePrimitive + CubeElement,
     InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
 {
     input.validate()?;
     indices.validate()?;
-    ensure_same_len(indices.len(), stencil.len())?;
+    ensure_same_len(indices.len(), control.len)?;
     ensure_same_len(indices.len(), output.len)?;
-    let flags = stencil.selection_handles_with_policy(policy, false)?;
     let len = indices.len();
     if len == 0 {
         return Ok(());
@@ -264,7 +261,7 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1) },
             unsafe { BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1) },
             unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
         );
@@ -272,19 +269,39 @@ where
     Ok(())
 }
 
-pub fn device_expr_scatter_where_into_with_policy<ValueSource, IndexSource, Stencil, Pred>(
+#[allow(dead_code)]
+pub fn device_expr_gather_where_into_with_policy<InputSource, IndexSource, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<InputSource::Runtime>,
+    input: &InputSource,
+    indices: &IndexSource,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<InputSource::Runtime, InputSource::Item>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    InputSource: KernelColumn + KernelColumnAt<S0>,
+    InputSource::Runtime: Runtime,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    Stencil: SelectionStencil<Pred, Runtime = InputSource::Runtime>,
+    InputSource::Item: CubePrimitive + CubeElement,
+    InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
+    IndexSource::Expr: DeviceGpuExpr<u32>,
+{
+    let control = stencil.selection_flags_with_policy(policy, false)?;
+    device_expr_gather_where_into_with_control(policy, input, indices, &control, output)
+}
+
+pub(crate) fn device_expr_scatter_where_into_with_control<ValueSource, IndexSource>(
     policy: &crate::policy::CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
-    stencil: &Stencil,
+    control: &select::SelectionControl,
     output: &DeviceColumnMutView<ValueSource::Runtime, ValueSource::Item>,
-    _pred: Pred,
 ) -> Result<(), Error>
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     ValueSource::Runtime: Runtime,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
-    Stencil: SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
     ValueSource::Item: CubePrimitive + CubeElement,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<u32>,
@@ -292,8 +309,7 @@ where
     values.validate()?;
     indices.validate()?;
     ensure_same_len(values.len(), indices.len())?;
-    ensure_same_len(values.len(), stencil.len())?;
-    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    ensure_same_len(values.len(), control.len)?;
     let len = values.len();
     if len == 0 {
         return Ok(());
@@ -335,10 +351,32 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1) },
             unsafe { BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1) },
             unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(flags.flag.clone(), flags.len) },
+            unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
         );
     }
     Ok(())
+}
+
+#[allow(dead_code)]
+pub fn device_expr_scatter_where_into_with_policy<ValueSource, IndexSource, Stencil, Pred>(
+    policy: &crate::policy::CubePolicy<ValueSource::Runtime>,
+    values: &ValueSource,
+    indices: &IndexSource,
+    stencil: &Stencil,
+    output: &DeviceColumnMutView<ValueSource::Runtime, ValueSource::Item>,
+    _pred: Pred,
+) -> Result<(), Error>
+where
+    ValueSource: KernelColumn + KernelColumnAt<S0>,
+    ValueSource::Runtime: Runtime,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    Stencil: SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
+    ValueSource::Item: CubePrimitive + CubeElement,
+    ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
+    IndexSource::Expr: DeviceGpuExpr<u32>,
+{
+    let control = stencil.selection_flags_with_policy(policy, false)?;
+    device_expr_scatter_where_into_with_control(policy, values, indices, &control, output)
 }

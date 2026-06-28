@@ -40,7 +40,8 @@ where
     validate_mslice(exec, &stencil)?;
     validate_output(exec, &out)?;
     let indices = lowering::u32_read::<R, Indices>(exec.policy(), indices)?;
-    let stencil = lowering::u32_stencil(exec.policy(), stencil, "gather_where stencil", false)?;
+    let stencil =
+        lowering::u32_stencil_flags(exec.policy(), stencil, "gather_where stencil", false)?;
     <Input as sealed::MIterDispatch<R>>::gather_where_dispatch(
         source,
         exec.policy(),
@@ -90,7 +91,8 @@ where
     validate_mslice(exec, &stencil)?;
     validate_output(exec, &out)?;
     let indices = lowering::u32_read::<R, Indices>(exec.policy(), indices)?;
-    let stencil = lowering::u32_stencil(exec.policy(), stencil, "scatter_where stencil", false)?;
+    let stencil =
+        lowering::u32_stencil_flags(exec.policy(), stencil, "scatter_where stencil", false)?;
     <Input as sealed::MIterDispatch<R>>::scatter_where_dispatch(
         source,
         exec.policy(),

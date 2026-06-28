@@ -1,5 +1,25 @@
 use crate::common::*;
 
+#[test]
+fn unique_keeps_one_value_when_all_values_are_equal() {
+    let exec = exec();
+    let values = exec.to_device(&[7.0_f32, 7.0, 7.0, 7.0]).unwrap();
+
+    let (output,) = unique(&exec, massively::SoA1(values.slice(..)), EqualF32).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![7.0]);
+}
+
+#[test]
+fn unique_keeps_all_values_when_no_adjacent_values_are_equal() {
+    let exec = exec();
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
+
+    let (output,) = unique(&exec, massively::SoA1(values.slice(..)), EqualF32).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
+}
+
 #[cfg(any())]
 #[test]
 fn unique_accepts_borrowed_heterogeneous_soa12() {
