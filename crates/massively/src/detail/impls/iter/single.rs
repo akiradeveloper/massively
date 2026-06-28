@@ -1,8 +1,9 @@
 use super::*;
 
-impl<'a, R, T> MIter<R> for SoA1<DeviceSlice<'a, R, T>>
+impl<R, S, T> MIter<R> for SoA1<S>
 where
     R: Runtime,
+    S: MSlice<R, Item = T>,
     T: Scalar + 'static,
     (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
@@ -14,22 +15,26 @@ where
     }
 
     fn into_inner(self) -> Self::Inner {
-        (crate::detail::device::DeviceColumnView::from_slice(
-            &self.0.source.inner,
-            self.0.offset,
-            self.0.len,
-        ),)
+        unreachable!("read-only MIter lowering requires a CubePolicy")
+    }
+
+    fn into_inner_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<Self::Inner, Error> {
+        Ok((lower_mslice_column(self.0, policy)?,))
     }
 }
 
-impl<'a, R, T> sealed::MIterDispatch<R> for SoA1<DeviceSlice<'a, R, T>>
+impl<R, S, T> sealed::MIterDispatch<R> for SoA1<S>
 where
     R: Runtime,
+    S: MSlice<R, Item = T>,
     T: Scalar + 'static,
     (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
-        exec.ensure_policy_id(self.0.source.inner.policy_id())
+        self.0.validate_executor(exec)
     }
 
     fn column_view_inner<U: 'static>(
@@ -38,30 +43,23 @@ where
     where
         U: Scalar,
     {
-        let source = self.0.source as &dyn Any;
-        let source = match source.downcast_ref::<DeviceVec<R, U>>() {
-            Some(source) => source,
-            None => return Ok(None),
-        };
-        Ok(Some(crate::detail::device::DeviceColumnView::from_slice(
-            &source.inner,
-            self.0.offset,
-            self.0.len,
-        )))
+        self.0.column_view::<U>()
     }
 
-    fn selection_stencil_dispatch<Pred>(
-        &self,
+    fn column_view_by_index_with_policy<U: 'static>(
+        self,
         policy: &crate::detail::CubePolicy<R>,
-        invert: bool,
-    ) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
+        index: usize,
+    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, U>>, Error>
     where
-        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+        Self: MIter<R>,
+        U: Scalar,
     {
-        let stencil = self.into_inner();
-        crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, KernelOp<R, Pred>>(
-            policy, &stencil, invert,
-        )
+        if index == 0 {
+            lower_mslice_column_as(self.0, policy)
+        } else {
+            Ok(None)
+        }
     }
 
     fn transform_dispatch<Op, Output>(
@@ -74,7 +72,7 @@ where
         Output: MIterMut<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
-        let input = self.into_inner().0;
+        let input = self.into_inner_with_policy(policy)?.0;
         let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
         output.write_from_inner(policy, inner)
     }
@@ -90,7 +88,7 @@ where
         Output: MIterMut<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
-        let input = self.into_inner().0;
+        let input = self.into_inner_with_policy(policy)?.0;
         let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
         output.write_where_from_inner(policy, inner, stencil)
     }
@@ -102,7 +100,7 @@ where
     where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner = crate::detail::reverse(policy, self.into_inner())?;
+        let inner = crate::detail::reverse(policy, self.into_inner_with_policy(policy)?)?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -115,7 +113,7 @@ where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner = crate::detail::sort(policy, self.into_inner(), KernelOp::<R, Less>::new())?;
+        let inner = crate::detail::sort(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -134,7 +132,7 @@ where
         let (key_inner, value_inner) = crate::detail::sort_by_key(
             policy,
             (keys,),
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok((
@@ -156,11 +154,7 @@ where
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
     {
-        let keys = self
-            .column_view_inner::<T>()?
-            .ok_or_else(|| Error::Launch {
-                message: "sort_by_key keys must be backed by one DeviceSlice".to_string(),
-            })?;
+        let (keys,) = self.into_inner_with_policy(policy)?;
         <Values as sealed::MIterDispatch<R>>::sort_by_single_key_dispatch(
             values, policy, keys, less,
         )
@@ -181,7 +175,7 @@ where
         let (key_inner, value_inner) = crate::detail::unique_by_key(
             policy,
             (keys,),
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )?;
         Ok((
@@ -203,11 +197,7 @@ where
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
     {
-        let keys = self
-            .column_view_inner::<T>()?
-            .ok_or_else(|| Error::Launch {
-                message: "unique_by_key keys must be backed by one DeviceSlice".to_string(),
-            })?;
+        let (keys,) = self.into_inner_with_policy(policy)?;
         <Values as sealed::MIterDispatch<R>>::unique_by_single_key_dispatch(
             values, policy, keys, eq,
         )
@@ -226,7 +216,7 @@ where
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let values = self.into_inner().0;
+        let values = self.into_inner_with_policy(policy)?.0;
         let inner = crate::detail::inclusive_scan_by_key(
             policy,
             keys,
@@ -251,11 +241,7 @@ where
         Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
         Output: MVec<R, Item = <Values as MIter<R>>::Item>,
     {
-        let keys = self
-            .column_view_inner::<T>()?
-            .ok_or_else(|| Error::Launch {
-                message: "inclusive_scan_by_key keys must be backed by one DeviceSlice".to_string(),
-            })?;
+        let (keys,) = self.into_inner_with_policy(policy)?;
         <Values as sealed::MIterDispatch<R>>::inclusive_scan_by_single_key_dispatch(
             values, policy, keys, key_eq, op,
         )
@@ -275,7 +261,7 @@ where
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let values = self.into_inner().0;
+        let values = self.into_inner_with_policy(policy)?.0;
         let inner = crate::detail::exclusive_scan_by_key(
             policy,
             keys,
@@ -302,11 +288,7 @@ where
         Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
         Output: MVec<R, Item = <Values as MIter<R>>::Item>,
     {
-        let keys = self
-            .column_view_inner::<T>()?
-            .ok_or_else(|| Error::Launch {
-                message: "exclusive_scan_by_key keys must be backed by one DeviceSlice".to_string(),
-            })?;
+        let (keys,) = self.into_inner_with_policy(policy)?;
         <Values as sealed::MIterDispatch<R>>::exclusive_scan_by_single_key_dispatch(
             values, policy, keys, key_eq, init, op,
         )
@@ -330,7 +312,7 @@ where
         let (key_inner, value_inner) = crate::detail::reduce_by_key(
             policy,
             (keys,),
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             KernelOp::<R, KeyEq>::new(),
             init,
             KernelOp::<R, Op>::new(),
@@ -357,11 +339,7 @@ where
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
     {
-        let keys = self
-            .column_view_inner::<T>()?
-            .ok_or_else(|| Error::Launch {
-                message: "reduce_by_key keys must be backed by one DeviceSlice".to_string(),
-            })?;
+        let (keys,) = self.into_inner_with_policy(policy)?;
         <Values as sealed::MIterDispatch<R>>::reduce_by_single_key_dispatch(
             values, policy, keys, key_eq, init, op,
         )
@@ -382,12 +360,9 @@ where
         KeyOutput: MVec<R, Item = (K,)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_inner().0;
-        let right_value =
-            <RightValues as sealed::MIterDispatch<R>>::column_view_by_index_inner::<T>(
-                &right_values,
-                0,
-            )?
+        let left_value = self.into_inner_with_policy(policy)?.0;
+        let right_value = right_values
+            .column_view_by_index_with_policy::<T>(policy, 0)?
             .ok_or_else(|| Error::Launch {
                 message: "merge_by_key right values must match left value shape".to_string(),
             })?;
@@ -424,17 +399,12 @@ where
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MVec<R, Item = <LeftValues as MIter<R>>::Item>,
     {
-        let left_keys = self
-            .column_view_inner::<T>()?
+        let (left_keys,) = self.into_inner_with_policy(policy)?;
+        let right_keys = right_keys
+            .column_view_by_index_with_policy::<T>(policy, 0)?
             .ok_or_else(|| Error::Launch {
-                message: "merge_by_key left keys must be backed by one DeviceSlice".to_string(),
+                message: "merge_by_key right keys must match left key shape".to_string(),
             })?;
-        let right_keys =
-            <RightKeys as sealed::MIterDispatch<R>>::column_view_inner::<T>(&right_keys)?
-                .ok_or_else(|| Error::Launch {
-                    message: "merge_by_key right keys must be backed by one DeviceSlice"
-                        .to_string(),
-                })?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_single_key_same_dispatch(
             left_values,
             policy,
@@ -457,7 +427,7 @@ where
         <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let input = self.into_inner().0;
+        let input = self.into_inner_with_policy(policy)?.0;
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "gather output must match input shape".to_string(),
@@ -474,7 +444,7 @@ where
     where
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::reduce(policy, self.into_inner(), init, KernelOp::<R, Op>::new())
+        crate::detail::reduce(policy, self.into_inner_with_policy(policy)?, init, KernelOp::<R, Op>::new())
     }
 
     fn inclusive_scan_dispatch<Op, Output>(
@@ -487,7 +457,7 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let inner =
-            crate::detail::inclusive_scan(policy, self.into_inner(), KernelOp::<R, Op>::new())?;
+            crate::detail::inclusive_scan(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Op>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -503,7 +473,7 @@ where
     {
         let inner = crate::detail::exclusive_scan(
             policy,
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             init,
             KernelOp::<R, Op>::new(),
         )?;
@@ -521,7 +491,7 @@ where
     {
         let inner = crate::detail::adjacent_difference(
             policy,
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             KernelOp::<R, Op>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -537,7 +507,7 @@ where
     {
         let inner = crate::detail::copy_where(
             policy,
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             stencil,
             KernelOp::<R, StencilFlag>::new(),
         )?;
@@ -554,7 +524,7 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let inner =
-            crate::detail::remove_if(policy, self.into_inner(), KernelOp::<R, Pred>::new())?;
+            crate::detail::remove_if(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -568,7 +538,7 @@ where
     {
         let inner = crate::detail::copy_where(
             policy,
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             stencil,
             KernelOp::<R, StencilFlag>::new(),
         )?;
@@ -583,7 +553,7 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::count_if(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::count_if(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn all_of_dispatch<Pred>(
@@ -594,7 +564,7 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::all_of(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::all_of(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn any_of_dispatch<Pred>(
@@ -605,7 +575,7 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::any_of(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::any_of(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn none_of_dispatch<Pred>(
@@ -616,7 +586,7 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::none_of(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::none_of(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn find_if_dispatch<Pred>(
@@ -627,7 +597,7 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::find_if(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::find_if(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn partition_dispatch<Pred, Output>(
@@ -640,7 +610,7 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let (matching, failing) =
-            crate::detail::partition(policy, self.into_inner(), KernelOp::<R, Pred>::new())?;
+            crate::detail::partition(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())?;
         Ok((
             array_from_inner::<R, (T,), Output>(matching),
             array_from_inner::<R, (T,), Output>(failing),
@@ -655,7 +625,7 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::is_partitioned(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::is_partitioned(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn replace_where_dispatch<Output>(
@@ -669,7 +639,7 @@ where
     {
         let inner = crate::detail::replace_where(
             policy,
-            self.into_inner(),
+            self.into_inner_with_policy(policy)?,
             replacement,
             stencil,
             KernelOp::<R, StencilFlag>::new(),
@@ -686,7 +656,7 @@ where
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner = crate::detail::unique(policy, self.into_inner(), KernelOp::<R, Pred>::new())?;
+        let inner = crate::detail::unique(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -698,7 +668,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::min_element(policy, self.into_inner(), KernelOp::<R, Less>::new())
+        crate::detail::min_element(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
     }
 
     fn max_element_dispatch<Less>(
@@ -709,7 +679,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::max_element(policy, self.into_inner(), KernelOp::<R, Less>::new())
+        crate::detail::max_element(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
     }
 
     fn minmax_element_dispatch<Less>(
@@ -720,7 +690,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::minmax_element(policy, self.into_inner(), KernelOp::<R, Less>::new())
+        crate::detail::minmax_element(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
     }
 
     fn adjacent_find_dispatch<Pred>(
@@ -731,7 +701,7 @@ where
     where
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::adjacent_find(policy, self.into_inner(), KernelOp::<R, Pred>::new())
+        crate::detail::adjacent_find(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
     }
 
     fn lower_bound_dispatch<Less>(
@@ -743,7 +713,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::lower_bound(policy, self.into_inner(), value, KernelOp::<R, Less>::new())
+        crate::detail::lower_bound(policy, self.into_inner_with_policy(policy)?, value, KernelOp::<R, Less>::new())
     }
 
     fn upper_bound_dispatch<Less>(
@@ -755,7 +725,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::upper_bound(policy, self.into_inner(), value, KernelOp::<R, Less>::new())
+        crate::detail::upper_bound(policy, self.into_inner_with_policy(policy)?, value, KernelOp::<R, Less>::new())
     }
 
     fn equal_range_dispatch<Less>(
@@ -767,7 +737,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::equal_range(policy, self.into_inner(), value, KernelOp::<R, Less>::new())
+        crate::detail::equal_range(policy, self.into_inner_with_policy(policy)?, value, KernelOp::<R, Less>::new())
     }
 
     fn is_sorted_until_dispatch<Less>(
@@ -778,7 +748,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::is_sorted_until(policy, self.into_inner(), KernelOp::<R, Less>::new())
+        crate::detail::is_sorted_until(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
     }
 
     fn is_sorted_dispatch<Less>(
@@ -789,7 +759,7 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::is_sorted(policy, self.into_inner(), KernelOp::<R, Less>::new())
+        crate::detail::is_sorted(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
     }
 
     fn gather_where_dispatch<Indices, Output>(
@@ -806,7 +776,7 @@ where
             crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let input = self.into_inner().0;
+        let input = self.into_inner_with_policy(policy)?.0;
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "gather_where output must match input shape".to_string(),
@@ -833,7 +803,7 @@ where
         <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let input = self.into_inner().0;
+        let input = self.into_inner_with_policy(policy)?.0;
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "scatter output must match input shape".to_string(),
@@ -855,7 +825,7 @@ where
             crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let input = self.into_inner().0;
+        let input = self.into_inner_with_policy(policy)?.0;
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "scatter_where output must match input shape".to_string(),
@@ -880,8 +850,12 @@ where
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "equal")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "equal right input must match left input shape".to_string(),
+            })?;
         crate::detail::equal(policy, (left,), (right,), KernelOp::<R, Eq>::new())
     }
 
@@ -895,8 +869,12 @@ where
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "mismatch")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "mismatch right input must match left input shape".to_string(),
+            })?;
         crate::detail::mismatch(policy, (left,), (right,), KernelOp::<R, Eq>::new())
     }
 
@@ -910,8 +888,12 @@ where
         Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (input,) = self.into_inner();
-        let needles = column_view_at::<R, Needles, T>(&needles, 0, "find_first_of")?;
+        let (input,) = self.into_inner_with_policy(policy)?;
+        let needles = needles
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "find_first_of needles must match input shape".to_string(),
+            })?;
         crate::detail::find_first_of(policy, (input,), (needles,), KernelOp::<R, Eq>::new())
     }
 
@@ -925,8 +907,13 @@ where
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "lexicographical_compare")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "lexicographical_compare right input must match left input shape"
+                    .to_string(),
+            })?;
         crate::detail::lexicographical_compare(
             policy,
             (left,),
@@ -946,8 +933,12 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "merge")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "merge right input must match left input shape".to_string(),
+            })?;
         let inner = crate::detail::merge(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
@@ -963,8 +954,12 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "set_union")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "set_union right input must match left input shape".to_string(),
+            })?;
         let inner =
             crate::detail::set_union(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -981,8 +976,12 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "set_intersection")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "set_intersection right input must match left input shape".to_string(),
+            })?;
         let inner =
             crate::detail::set_intersection(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -999,8 +998,12 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let (left,) = self.into_inner();
-        let right = column_view_at::<R, Right, T>(&right, 0, "set_difference")?;
+        let (left,) = self.into_inner_with_policy(policy)?;
+        let right = right
+            .column_view_by_index_with_policy::<T>(policy, 0)?
+            .ok_or_else(|| Error::Launch {
+                message: "set_difference right input must match left input shape".to_string(),
+            })?;
         let inner =
             crate::detail::set_difference(policy, (left,), (right,), KernelOp::<R, Less>::new())?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1017,8 +1020,8 @@ where
     {
         crate::detail::equal(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -1034,8 +1037,8 @@ where
     {
         crate::detail::mismatch(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -1051,8 +1054,8 @@ where
     {
         crate::detail::find_first_of(
             policy,
-            self.into_inner(),
-            needles.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            needles.into_inner_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -1068,8 +1071,8 @@ where
     {
         crate::detail::lexicographical_compare(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )
     }
@@ -1086,8 +1089,8 @@ where
     {
         let inner = crate::detail::merge(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1105,8 +1108,8 @@ where
     {
         let inner = crate::detail::set_union(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1124,8 +1127,8 @@ where
     {
         let inner = crate::detail::set_intersection(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1143,8 +1146,8 @@ where
     {
         let inner = crate::detail::set_difference(
             policy,
-            self.into_inner(),
-            right.into_inner(),
+            self.into_inner_with_policy(policy)?,
+            right.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))

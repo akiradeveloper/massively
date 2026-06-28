@@ -53,6 +53,8 @@ mod merge_by_key;
 mod minmax_element;
 #[path = "api/mismatch.rs"]
 mod mismatch;
+#[path = "api/mslice_soa.rs"]
+mod mslice_soa;
 #[path = "api/partition.rs"]
 mod partition;
 #[path = "api/random.rs"]

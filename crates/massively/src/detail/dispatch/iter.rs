@@ -38,6 +38,19 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         }
     }
 
+    fn column_view_by_index_with_policy<T: 'static>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        index: usize,
+    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, T>>, Error>
+    where
+        Self: MIter<R>,
+        T: Scalar,
+    {
+        let _ = policy;
+        self.column_view_by_index_inner::<T>(index)
+    }
+
     fn transform_dispatch<Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
