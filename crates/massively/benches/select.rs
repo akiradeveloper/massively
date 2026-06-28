@@ -3,7 +3,7 @@ mod common;
 
 use common::{Runtime, SIZES, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use massively::{DeviceVec, Executor, copy_where};
+use massively::{Executor, copy_where};
 
 fn alternating_signed(len: usize) -> Vec<f32> {
     (0..len)
@@ -40,7 +40,7 @@ fn bench_select(c: &mut Criterion) {
             sync(&exec);
             copy_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 b.iter(|| {
-                    let output: (DeviceVec<WgpuRuntime, f32>,) = copy_where(
+                    let output = copy_where(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         black_box(stencil.slice(..)),

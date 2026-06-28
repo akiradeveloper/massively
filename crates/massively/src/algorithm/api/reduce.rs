@@ -44,22 +44,26 @@ where
 }
 
 /// Reduces consecutive values with equal keys.
-pub fn reduce_by_key<R, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
+pub fn reduce_by_key<R, Keys, Values, KeyEq, Op>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
     init: Values::Item,
     op: Op,
-) -> Result<(KeyOutput, ValueOutput), Error>
+) -> Result<
+    (
+        <Keys::Item as MItem<R>>::Vec,
+        <Values::Item as MItem<R>>::Vec,
+    ),
+    Error,
+>
 where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
     Op: op::ReductionOp<R, Values::Item>,
-    KeyOutput: MVec<R, Item = Keys::Item>,
-    ValueOutput: MVec<R, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;

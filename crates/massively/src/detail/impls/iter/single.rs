@@ -113,7 +113,11 @@ where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner = crate::detail::sort(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())?;
+        let inner = crate::detail::sort(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -444,7 +448,12 @@ where
     where
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::reduce(policy, self.into_inner_with_policy(policy)?, init, KernelOp::<R, Op>::new())
+        crate::detail::reduce(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            init,
+            KernelOp::<R, Op>::new(),
+        )
     }
 
     fn inclusive_scan_dispatch<Op, Output>(
@@ -456,8 +465,11 @@ where
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner =
-            crate::detail::inclusive_scan(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Op>::new())?;
+        let inner = crate::detail::inclusive_scan(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Op>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -523,8 +535,11 @@ where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner =
-            crate::detail::remove_if(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())?;
+        let inner = crate::detail::remove_if(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -553,7 +568,11 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::count_if(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::count_if(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn all_of_dispatch<Pred>(
@@ -564,7 +583,11 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::all_of(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::all_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn any_of_dispatch<Pred>(
@@ -575,7 +598,11 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::any_of(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::any_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn none_of_dispatch<Pred>(
@@ -586,7 +613,11 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::none_of(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::none_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn find_if_dispatch<Pred>(
@@ -597,7 +628,11 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::find_if(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::find_if(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn partition_dispatch<Pred, Output>(
@@ -609,8 +644,11 @@ where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (matching, failing) =
-            crate::detail::partition(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())?;
+        let (matching, failing) = crate::detail::partition(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )?;
         Ok((
             array_from_inner::<R, (T,), Output>(matching),
             array_from_inner::<R, (T,), Output>(failing),
@@ -625,7 +663,11 @@ where
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::is_partitioned(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::is_partitioned(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn replace_where_dispatch<Output>(
@@ -656,7 +698,11 @@ where
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let inner = crate::detail::unique(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())?;
+        let inner = crate::detail::unique(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
@@ -668,7 +714,11 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::min_element(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
+        crate::detail::min_element(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn max_element_dispatch<Less>(
@@ -679,7 +729,11 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::max_element(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
+        crate::detail::max_element(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn minmax_element_dispatch<Less>(
@@ -690,7 +744,11 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::minmax_element(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
+        crate::detail::minmax_element(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn adjacent_find_dispatch<Pred>(
@@ -701,7 +759,11 @@ where
     where
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::adjacent_find(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Pred>::new())
+        crate::detail::adjacent_find(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
     }
 
     fn lower_bound_dispatch<Less>(
@@ -713,7 +775,12 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::lower_bound(policy, self.into_inner_with_policy(policy)?, value, KernelOp::<R, Less>::new())
+        crate::detail::lower_bound(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            value,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn upper_bound_dispatch<Less>(
@@ -725,7 +792,12 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::upper_bound(policy, self.into_inner_with_policy(policy)?, value, KernelOp::<R, Less>::new())
+        crate::detail::upper_bound(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            value,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn equal_range_dispatch<Less>(
@@ -737,7 +809,12 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::equal_range(policy, self.into_inner_with_policy(policy)?, value, KernelOp::<R, Less>::new())
+        crate::detail::equal_range(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            value,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn is_sorted_until_dispatch<Less>(
@@ -748,7 +825,11 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::is_sorted_until(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
+        crate::detail::is_sorted_until(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn is_sorted_dispatch<Less>(
@@ -759,7 +840,11 @@ where
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::is_sorted(policy, self.into_inner_with_policy(policy)?, KernelOp::<R, Less>::new())
+        crate::detail::is_sorted(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
     }
 
     fn gather_where_dispatch<Indices, Output>(

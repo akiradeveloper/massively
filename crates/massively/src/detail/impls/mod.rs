@@ -31,7 +31,9 @@ where
     }
     let read = slice.into_read(policy)?;
     let column = crate::detail::api::device_expr_collect_with_policy(policy, &read)?;
-    Ok(crate::detail::device::DeviceColumnView::from_column(&column))
+    Ok(crate::detail::device::DeviceColumnView::from_column(
+        &column,
+    ))
 }
 
 fn lower_mslice_column_as<R, S, T, U>(

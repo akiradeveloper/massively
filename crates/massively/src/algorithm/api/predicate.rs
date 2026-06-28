@@ -79,15 +79,20 @@ where
 }
 
 /// Partitions elements by `pred`.
-pub fn partition<R, Input, Output, Pred>(
+pub fn partition<R, Input, Pred>(
     exec: &Executor<R>,
     source: Input,
     pred: Pred,
-) -> Result<(Output, Output), Error>
+) -> Result<
+    (
+        <Input::Item as MItem<R>>::Vec,
+        <Input::Item as MItem<R>>::Vec,
+    ),
+    Error,
+>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;

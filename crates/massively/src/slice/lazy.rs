@@ -7,8 +7,8 @@ use crate::detail::device::{
 };
 use crate::expr::{DeviceGpuExpr, GpuExpr};
 use crate::iter::MIter;
-use crate::runtime::{Executor, Scalar};
 use crate::op;
+use crate::runtime::{Executor, Scalar};
 use crate::{Error, MItem};
 
 /// Lazy slice that returns the same value for every logical index.

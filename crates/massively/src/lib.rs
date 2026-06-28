@@ -10,7 +10,7 @@
 //!   [`DeviceSlice`], and [`DeviceSliceMut`].
 //! - [`iter`] provides Structure-of-Arrays inputs and massively iterator
 //!   traits.
-//! - [`value`] provides massively item/vector traits.
+//! - [`value`] provides massively item traits.
 //! - [`op`] provides CubeCL-backed operation traits.
 //! - [`algorithm`] provides parallel algorithms such as [`transform`],
 //!   [`reduce`], and [`sort`].
@@ -43,7 +43,7 @@ pub use error::Error;
 pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 pub use slice::MSlice;
-pub use value::{MItem, MVec};
+pub use value::MItem;
 
 /// Common facade traits and types.
 ///
@@ -51,7 +51,7 @@ pub use value::{MItem, MVec};
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIter, MIterMut, MSlice, MVec, SoA1,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MSlice, SoA1,
         SoA2, SoA3,
     };
 }

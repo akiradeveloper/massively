@@ -1,16 +1,15 @@
 use super::*;
 
 /// Copies elements whose `u32` stencil flag is non-zero.
-pub fn copy_where<R, Input, Stencil, Output>(
+pub fn copy_where<R, Input, Stencil>(
     exec: &Executor<R>,
     source: Input,
     stencil: Stencil,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
     Stencil: MSlice<R, Item = u32>,
-    Output: MVec<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_mslice(exec, &stencil)?;
@@ -19,16 +18,15 @@ where
 }
 
 /// Removes elements whose `u32` stencil flag is non-zero.
-pub fn remove_where<R, Input, Stencil, Output>(
+pub fn remove_where<R, Input, Stencil>(
     exec: &Executor<R>,
     source: Input,
     stencil: Stencil,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
     Stencil: MSlice<R, Item = u32>,
-    Output: MVec<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_mslice(exec, &stencil)?;

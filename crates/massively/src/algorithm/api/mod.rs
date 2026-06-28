@@ -7,7 +7,7 @@ use crate::iter::{MIter, MIterMut};
 use crate::op;
 use crate::runtime::Executor;
 use crate::slice::{MSlice, lowering};
-use crate::value::MVec;
+use crate::value::MItem;
 
 pub use crate::Error;
 

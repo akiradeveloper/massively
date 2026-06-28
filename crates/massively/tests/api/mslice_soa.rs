@@ -100,7 +100,7 @@ fn by_key_accepts_lazy_single_column_keys() {
     let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let keys = massively::slice::transform_slice(massively::SoA1(raw_keys.slice(..)), AddOneU32);
 
-    let out: massively::SoA1<massively::DeviceVec<WgpuRuntime, u32>> = inclusive_scan_by_key(
+    let out = inclusive_scan_by_key(
         &exec,
         massively::SoA1(keys),
         massively::SoA1(values.slice(..)),
@@ -137,7 +137,7 @@ fn merge_accepts_lazy_right_single_column() {
     let right_base = exec.to_device(&[1_u32, 3]).unwrap();
     let right = massively::slice::transform_slice(massively::SoA1(right_base.slice(..)), AddOneU32);
 
-    let out: massively::SoA1<massively::DeviceVec<WgpuRuntime, u32>> = merge(
+    let out = merge(
         &exec,
         massively::SoA1(left.slice(..)),
         massively::SoA1(right),
@@ -160,10 +160,7 @@ fn merge_by_key_accepts_lazy_right_single_key_and_value() {
     let right_values =
         massively::slice::transform_slice(massively::SoA1(right_value_base.slice(..)), AddOneU32);
 
-    let out: (
-        massively::SoA1<massively::DeviceVec<WgpuRuntime, u32>>,
-        massively::SoA1<massively::DeviceVec<WgpuRuntime, u32>>,
-    ) = merge_by_key(
+    let ((out_keys,), (out_values,)) = merge_by_key(
         &exec,
         massively::SoA1(left_keys.slice(..)),
         massively::SoA1(left_values.slice(..)),
@@ -173,6 +170,6 @@ fn merge_by_key_accepts_lazy_right_single_key_and_value() {
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&out.0.0).unwrap(), vec![1, 2, 3, 4]);
-    assert_eq!(exec.to_host(&out.1.0).unwrap(), vec![10, 21, 30, 41]);
+    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 3, 4]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![10, 21, 30, 41]);
 }
