@@ -21,9 +21,9 @@ The library is organized around three public layers.
 - `runtime` prepares a CubeCL `Runtime` from a `Runtime::Device`, transfers
   data, allocates device memory, and exposes `Executor`, `DeviceVec`,
   `DeviceSlice`, and `DeviceSliceMut`.
-- `algorithm` provides Structure-of-Arrays inputs, massively item/vector
-  traits, CubeCL-backed operation traits, and algorithms such as `transform`,
-  `reduce`, `scan`, `sort`, and `gather`.
+- `algorithm` provides Structure-of-Arrays inputs, massively item traits,
+  CubeCL-backed operation traits, and algorithms such as `transform`, `reduce`,
+  `scan`, `sort`, and `gather`.
 - `util::random` generates GPU-side pseudo-random columns for uniform integer,
   uniform floating-point, and approximate normal floating-point distributions.
 
@@ -43,7 +43,7 @@ Conceptually:
 Scalar  = CubePrimitive + CubeElement
 MItem   = tuple of Scalar values
 MIter   = SoA view over DeviceSlice columns
-MVec    = owned SoA device output
+Output  = owned DeviceVec tuple
 ```
 
 ## Operations

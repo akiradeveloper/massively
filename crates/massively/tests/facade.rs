@@ -204,24 +204,25 @@ where
     massively::transform(exec, source, AddOne, out)
 }
 
-fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1) -> Result<S2, massively::Error>
+fn reverse2<R, S1>(
+    exec: &Executor<R>,
+    source: S1,
+) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
 {
     massively::reverse(exec, source)
 }
 
-fn sort2<R, S1, S2, Less>(
+fn sort2<R, S1, Less>(
     exec: &Executor<R>,
     source: S1,
     less: Less,
-) -> Result<S2, massively::Error>
+) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::sort(exec, source, less)
@@ -294,15 +295,14 @@ where
     massively::gather(exec, source, indices, out)
 }
 
-fn copy_where2<R, S1, S2>(
+fn copy_where2<R, S1>(
     exec: &Executor<R>,
     source: S1,
     stencil: DeviceSlice<'_, R, u32>,
-) -> Result<S2, massively::Error>
+) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
 {
     massively::copy_where(exec, source, stencil)
 }
@@ -346,28 +346,26 @@ where
     massively::find_if(exec, source, pred)
 }
 
-fn remove_where2<'a, R, S1, S2>(
+fn remove_where2<'a, R, S1>(
     exec: &Executor<R>,
     source: S1,
     stencil: DeviceSlice<'a, R, u32>,
-) -> Result<S2, massively::Error>
+) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
 {
     massively::remove_where(exec, source, stencil)
 }
 
-fn partition2<R, S1, S2, Pred>(
+fn partition2<R, S1, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<(S2, S2), massively::Error>
+) -> Result<(<S1::Item as MItem<R>>::Vec, <S1::Item as MItem<R>>::Vec), massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
     Pred: PredicateOp<R, S1::Item>,
 {
     massively::partition(exec, source, pred)
@@ -386,29 +384,27 @@ where
     massively::is_partitioned(exec, source, pred)
 }
 
-fn unique2<R, S1, S2, Pred>(
+fn unique2<R, S1, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<S2, massively::Error>
+) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
     Pred: BinaryPredicateOp<R, S1::Item>,
 {
     massively::unique(exec, source, pred)
 }
 
-fn adjacent_difference2<R, S1, S2, Op>(
+fn adjacent_difference2<R, S1, Op>(
     exec: &Executor<R>,
     source: S1,
     op: Op,
-) -> Result<S2, massively::Error>
+) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
-    S2: MVec<R, Item = S1::Item>,
     Op: ReductionOp<R, S1::Item>,
 {
     massively::adjacent_difference(exec, source, op)

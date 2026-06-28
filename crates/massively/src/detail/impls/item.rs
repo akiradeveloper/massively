@@ -48,6 +48,12 @@ macro_rules! impl_mitem_tuple {
             $( $ty: Scalar, )+
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
+            type Vec = ($( DeviceVec<R, $ty>, )+);
+
+            fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
+                let ($( $var, )+) = inner;
+                ($( DeviceVec::from_inner($var), )+)
+            }
         }
 
         impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
@@ -58,12 +64,7 @@ macro_rules! impl_mitem_tuple {
             type Item = ($( $ty, )+);
 
             fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-                let ($( $var, )+) = inner;
-                ($( DeviceVec::from_inner($var), )+)
-            }
-
-            fn len(&self) -> usize {
-                self.0.len()
+                <Self::Item as MItem<R>>::vec_from_inner(inner)
             }
         }
 
@@ -300,13 +301,12 @@ macro_rules! impl_wide_mitem_tuple {
             $( $ty: Scalar, )+
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
-        }
+            type Vec = ($( DeviceVec<R, $ty>, )+);
 
-        impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
-        where
-            R: Runtime,
-            $( $ty: Scalar, )+
-        {
+            fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
+                let ($( $var, )+) = inner;
+                ($( DeviceVec::from_inner($var), )+)
+            }
         }
 
         impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
@@ -317,13 +317,15 @@ macro_rules! impl_wide_mitem_tuple {
             type Item = ($( $ty, )+);
 
             fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-                let ($( $var, )+) = inner;
-                ($( DeviceVec::from_inner($var), )+)
+                <Self::Item as MItem<R>>::vec_from_inner(inner)
             }
+        }
 
-            fn len(&self) -> usize {
-                self.0.len()
-            }
+        impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: Scalar, )+
+        {
         }
     };
 }
@@ -494,61 +496,3 @@ impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: 
 impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9);
 impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10);
 impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10, L: l: 11);
-
-impl<R, T> MVec<R> for SoA1<DeviceVec<R, T>>
-where
-    R: Runtime,
-    T: Scalar,
-{
-    type Item = (T,);
-
-    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-        Self(DeviceVec::from_inner(inner.0))
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-
-impl<R, A, C> MVec<R> for SoA2<DeviceVec<R, A>, DeviceVec<R, C>>
-where
-    R: Runtime,
-    A: Scalar,
-    C: Scalar,
-{
-    type Item = (A, C);
-
-    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-        Self(
-            DeviceVec::from_inner(inner.0),
-            DeviceVec::from_inner(inner.1),
-        )
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-
-impl<R, A, C, D> MVec<R> for SoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>
-where
-    R: Runtime,
-    A: Scalar,
-    C: Scalar,
-    D: Scalar,
-{
-    type Item = (A, C, D);
-
-    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-        Self(
-            DeviceVec::from_inner(inner.0),
-            DeviceVec::from_inner(inner.1),
-            DeviceVec::from_inner(inner.2),
-        )
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}

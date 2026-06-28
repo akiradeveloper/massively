@@ -4,7 +4,7 @@ pub(crate) mod api;
 
 pub use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3};
 pub use crate::op;
-pub use crate::value::{MItem, MVec};
+pub use crate::value::MItem;
 pub use api::{
     adjacent_difference, adjacent_find, all_of, any_of, copy_where, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_where,

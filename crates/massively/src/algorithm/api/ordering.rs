@@ -1,17 +1,16 @@
 use super::*;
 
 /// Merges two sorted inputs.
-pub fn merge<R, Left, Right, Output, Less>(
+pub fn merge<R, Left, Right, Less>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     less: Less,
-) -> Result<Output, Error>
+) -> Result<<Left::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Left: MIter<R>,
     Right: MIter<R, Item = Left::Item>,
-    Output: MVec<R, Item = Left::Item>,
     Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -20,14 +19,20 @@ where
 }
 
 /// Merges two sorted key-value ranges by key.
-pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less, KeyOutput, ValueOutput>(
+pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less>(
     exec: &Executor<R>,
     left_keys: LeftKeys,
     left_values: LeftValues,
     right_keys: RightKeys,
     right_values: RightValues,
     less: Less,
-) -> Result<(KeyOutput, ValueOutput), Error>
+) -> Result<
+    (
+        <LeftKeys::Item as MItem<R>>::Vec,
+        <LeftValues::Item as MItem<R>>::Vec,
+    ),
+    Error,
+>
 where
     R: Runtime,
     LeftKeys: MIter<R>,
@@ -35,8 +40,6 @@ where
     LeftValues: MIter<R>,
     RightValues: MIter<R, Item = LeftValues::Item>,
     Less: op::BinaryPredicateOp<R, LeftKeys::Item>,
-    KeyOutput: MVec<R, Item = LeftKeys::Item>,
-    ValueOutput: MVec<R, Item = LeftValues::Item>,
 {
     validate_input(exec, &left_keys)?;
     validate_input(exec, &left_values)?;
@@ -53,26 +56,27 @@ where
 }
 
 /// Reverses a massively iterator into an owned vector.
-pub fn reverse<R, Input, Output>(exec: &Executor<R>, source: Input) -> Result<Output, Error>
+pub fn reverse<R, Input>(
+    exec: &Executor<R>,
+    source: Input,
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
     <Input as sealed::MIterDispatch<R>>::reverse_dispatch(source, exec.policy())
 }
 
 /// Sorts a massively iterator into an owned vector.
-pub fn sort<R, Input, Output, Less>(
+pub fn sort<R, Input, Less>(
     exec: &Executor<R>,
     source: Input,
     less: Less,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
@@ -80,19 +84,23 @@ where
 }
 
 /// Sorts key-value pairs by key.
-pub fn sort_by_key<R, Keys, Values, Less, KeyOutput, ValueOutput>(
+pub fn sort_by_key<R, Keys, Values, Less>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     less: Less,
-) -> Result<(KeyOutput, ValueOutput), Error>
+) -> Result<
+    (
+        <Keys::Item as MItem<R>>::Vec,
+        <Values::Item as MItem<R>>::Vec,
+    ),
+    Error,
+>
 where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
     Less: op::BinaryPredicateOp<R, Keys::Item>,
-    KeyOutput: MVec<R, Item = Keys::Item>,
-    ValueOutput: MVec<R, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
@@ -100,34 +108,37 @@ where
 }
 
 /// Stable sort. The current lower implementation is stable.
-pub fn stable_sort<R, Input, Output, Less>(
+pub fn stable_sort<R, Input, Less>(
     exec: &Executor<R>,
     source: Input,
     less: Less,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     sort(exec, source, less)
 }
 
 /// Stable key-value sort. The current lower implementation is stable.
-pub fn stable_sort_by_key<R, Keys, Values, Less, KeyOutput, ValueOutput>(
+pub fn stable_sort_by_key<R, Keys, Values, Less>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     less: Less,
-) -> Result<(KeyOutput, ValueOutput), Error>
+) -> Result<
+    (
+        <Keys::Item as MItem<R>>::Vec,
+        <Values::Item as MItem<R>>::Vec,
+    ),
+    Error,
+>
 where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
     Less: op::BinaryPredicateOp<R, Keys::Item>,
-    KeyOutput: MVec<R, Item = Keys::Item>,
-    ValueOutput: MVec<R, Item = Values::Item>,
 {
     sort_by_key(exec, keys, values, less)
 }

@@ -1,15 +1,14 @@
 use super::*;
 
 /// Computes adjacent differences.
-pub fn adjacent_difference<R, Input, Output, Op>(
+pub fn adjacent_difference<R, Input, Op>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
     Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
@@ -17,16 +16,15 @@ where
 }
 
 /// Computes an exclusive scan.
-pub fn exclusive_scan<R, Input, Output, Op>(
+pub fn exclusive_scan<R, Input, Op>(
     exec: &Executor<R>,
     source: Input,
     init: Input::Item,
     op: Op,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
     Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
@@ -34,21 +32,20 @@ where
 }
 
 /// Exclusive scan by key.
-pub fn exclusive_scan_by_key<R, Keys, Values, KeyEq, Op, Output>(
+pub fn exclusive_scan_by_key<R, Keys, Values, KeyEq, Op>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
     init: Values::Item,
     op: Op,
-) -> Result<Output, Error>
+) -> Result<<Values::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
     Op: op::ReductionOp<R, Values::Item>,
-    Output: MVec<R, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
@@ -63,15 +60,14 @@ where
 }
 
 /// Computes an inclusive scan.
-pub fn inclusive_scan<R, Input, Output, Op>(
+pub fn inclusive_scan<R, Input, Op>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
-) -> Result<Output, Error>
+) -> Result<<Input::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Output: MVec<R, Item = Input::Item>,
     Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
@@ -79,20 +75,19 @@ where
 }
 
 /// Inclusive scan by key.
-pub fn inclusive_scan_by_key<R, Keys, Values, KeyEq, Op, Output>(
+pub fn inclusive_scan_by_key<R, Keys, Values, KeyEq, Op>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
     op: Op,
-) -> Result<Output, Error>
+) -> Result<<Values::Item as MItem<R>>::Vec, Error>
 where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
     Op: op::ReductionOp<R, Values::Item>,
-    Output: MVec<R, Item = Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;

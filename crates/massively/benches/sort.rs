@@ -5,7 +5,7 @@ use common::{Runtime, SORT_SIZES, descending_f32, shuffled_u32, sync};
 use criterion::{BatchSize, BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, sort_by_key};
+use massively::{Executor, sort_by_key};
 
 struct Less;
 
@@ -50,10 +50,7 @@ fn bench_sort(c: &mut Criterion) {
                         input
                     },
                     |(keys, values)| {
-                        let output: (
-                            (DeviceVec<WgpuRuntime, u32>,),
-                            (DeviceVec<WgpuRuntime, f32>,),
-                        ) = sort_by_key(
+                        let output = sort_by_key(
                             &exec,
                             massively::SoA1(keys.slice(..)),
                             massively::SoA1(values.slice(..)),
