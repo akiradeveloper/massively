@@ -2,7 +2,7 @@
 
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp},
-    device::{DeviceVec, KernelColumnBindings, SoA1, SoA2, SoA3},
+    device::{DeviceColumnView, DeviceVec, KernelColumnBindings, SoA1, SoA2, SoA3},
     error::Error,
     expr::DeviceGpuExpr,
     kernels::*,
@@ -1608,6 +1608,826 @@ where
     }
 
     Ok((output_a, output_b, output_c))
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn inclusive_scan_tuple7_device_expr<
+    R,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    ExprA,
+    ExprB,
+    ExprC,
+    ExprD,
+    ExprE,
+    ExprF,
+    ExprG,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    a: &KernelColumnBindings,
+    b: &KernelColumnBindings,
+    c: &KernelColumnBindings,
+    d: &KernelColumnBindings,
+    e: &KernelColumnBindings,
+    f: &KernelColumnBindings,
+    g: &KernelColumnBindings,
+    len: usize,
+) -> Result<
+    (
+        DeviceVec<R, A>,
+        DeviceVec<R, B>,
+        DeviceVec<R, C>,
+        DeviceVec<R, D>,
+        DeviceVec<R, E>,
+        DeviceVec<R, F>,
+        DeviceVec<R, G>,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    ExprD: DeviceGpuExpr<D>,
+    ExprE: DeviceGpuExpr<E>,
+    ExprF: DeviceGpuExpr<F>,
+    ExprG: DeviceGpuExpr<G>,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let client = policy.client();
+    if len == 0 {
+        return Ok((
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+        ));
+    }
+
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let output_c = client.empty(len * std::mem::size_of::<C>());
+    let output_d = client.empty(len * std::mem::size_of::<D>());
+    let output_e = client.empty(len * std::mem::size_of::<E>());
+    let output_f = client.empty(len * std::mem::size_of::<F>());
+    let output_g = client.empty(len * std::mem::size_of::<G>());
+    let workspace = Workspace::new(policy);
+    let a0 = binding_slot_or_first(a, 0);
+    let a1 = binding_slot_or_first(a, 1);
+    let a2 = binding_slot_or_first(a, 2);
+    let a3 = binding_slot_or_first(a, 3);
+    let b0 = binding_slot_or_first(b, 0);
+    let b1 = binding_slot_or_first(b, 1);
+    let b2 = binding_slot_or_first(b, 2);
+    let b3 = binding_slot_or_first(b, 3);
+    let c0 = binding_slot_or_first(c, 0);
+    let c1 = binding_slot_or_first(c, 1);
+    let c2 = binding_slot_or_first(c, 2);
+    let c3 = binding_slot_or_first(c, 3);
+    let d0 = binding_slot_or_first(d, 0);
+    let d1 = binding_slot_or_first(d, 1);
+    let d2 = binding_slot_or_first(d, 2);
+    let d3 = binding_slot_or_first(d, 3);
+    let e0 = binding_slot_or_first(e, 0);
+    let e1 = binding_slot_or_first(e, 1);
+    let e2 = binding_slot_or_first(e, 2);
+    let e3 = binding_slot_or_first(e, 3);
+    let f0 = binding_slot_or_first(f, 0);
+    let f1 = binding_slot_or_first(f, 1);
+    let f2 = binding_slot_or_first(f, 2);
+    let f3 = binding_slot_or_first(f, 3);
+    let g0 = binding_slot_or_first(g, 0);
+    let g1 = binding_slot_or_first(g, 1);
+    let g2 = binding_slot_or_first(g, 2);
+    let g3 = binding_slot_or_first(g, 3);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
+    let c_offsets = c.slot_offsets_handle(client)?;
+    let d_offsets = d.slot_offsets_handle(client)?;
+    let e_offsets = e.slot_offsets_handle(client)?;
+    let f_offsets = f.slot_offsets_handle(client)?;
+    let g_offsets = g.slot_offsets_handle(client)?;
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let block_sums_a = workspace.alloc::<A>(num_blocks);
+    let block_sums_b = workspace.alloc::<B>(num_blocks);
+    let block_sums_c = workspace.alloc::<C>(num_blocks);
+    let block_sums_d = workspace.alloc::<D>(num_blocks);
+    let block_sums_e = workspace.alloc::<E>(num_blocks);
+    let block_sums_f = workspace.alloc::<F>(num_blocks);
+    let block_sums_g = workspace.alloc::<G>(num_blocks);
+
+    unsafe {
+        tuple7_device_inclusive_scan_expr_block_kernel::launch_unchecked::<
+            A,
+            B,
+            C,
+            D,
+            E,
+            F,
+            G,
+            ExprA,
+            ExprB,
+            ExprC,
+            ExprD,
+            ExprE,
+            ExprF,
+            ExprG,
+            Op,
+            R,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a0.0.clone(), a0.1),
+            BufferArg::from_raw_parts(a1.0.clone(), a1.1),
+            BufferArg::from_raw_parts(a2.0.clone(), a2.1),
+            BufferArg::from_raw_parts(a3.0.clone(), a3.1),
+            BufferArg::from_raw_parts(a_offsets.clone(), 4),
+            BufferArg::from_raw_parts(b0.0.clone(), b0.1),
+            BufferArg::from_raw_parts(b1.0.clone(), b1.1),
+            BufferArg::from_raw_parts(b2.0.clone(), b2.1),
+            BufferArg::from_raw_parts(b3.0.clone(), b3.1),
+            BufferArg::from_raw_parts(b_offsets.clone(), 4),
+            BufferArg::from_raw_parts(c0.0.clone(), c0.1),
+            BufferArg::from_raw_parts(c1.0.clone(), c1.1),
+            BufferArg::from_raw_parts(c2.0.clone(), c2.1),
+            BufferArg::from_raw_parts(c3.0.clone(), c3.1),
+            BufferArg::from_raw_parts(c_offsets.clone(), 4),
+            BufferArg::from_raw_parts(d0.0.clone(), d0.1),
+            BufferArg::from_raw_parts(d1.0.clone(), d1.1),
+            BufferArg::from_raw_parts(d2.0.clone(), d2.1),
+            BufferArg::from_raw_parts(d3.0.clone(), d3.1),
+            BufferArg::from_raw_parts(d_offsets.clone(), 4),
+            BufferArg::from_raw_parts(e0.0.clone(), e0.1),
+            BufferArg::from_raw_parts(e1.0.clone(), e1.1),
+            BufferArg::from_raw_parts(e2.0.clone(), e2.1),
+            BufferArg::from_raw_parts(e3.0.clone(), e3.1),
+            BufferArg::from_raw_parts(e_offsets.clone(), 4),
+            BufferArg::from_raw_parts(f0.0.clone(), f0.1),
+            BufferArg::from_raw_parts(f1.0.clone(), f1.1),
+            BufferArg::from_raw_parts(f2.0.clone(), f2.1),
+            BufferArg::from_raw_parts(f3.0.clone(), f3.1),
+            BufferArg::from_raw_parts(f_offsets.clone(), 4),
+            BufferArg::from_raw_parts(g0.0.clone(), g0.1),
+            BufferArg::from_raw_parts(g1.0.clone(), g1.1),
+            BufferArg::from_raw_parts(g2.0.clone(), g2.1),
+            BufferArg::from_raw_parts(g3.0.clone(), g3.1),
+            BufferArg::from_raw_parts(g_offsets.clone(), 4),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_a.clone(), len),
+            BufferArg::from_raw_parts(output_b.clone(), len),
+            BufferArg::from_raw_parts(output_c.clone(), len),
+            BufferArg::from_raw_parts(output_d.clone(), len),
+            BufferArg::from_raw_parts(output_e.clone(), len),
+            BufferArg::from_raw_parts(output_f.clone(), len),
+            BufferArg::from_raw_parts(output_g.clone(), len),
+            BufferArg::from_raw_parts(block_sums_a.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_b.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_c.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_d.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_e.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_f.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_g.clone(), num_blocks),
+        );
+    }
+
+    if num_blocks > 1 {
+        let block_prefixes = inclusive_scan_tuple7_handles::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            &block_sums_a,
+            &block_sums_b,
+            &block_sums_c,
+            &block_sums_d,
+            &block_sums_e,
+            &block_sums_f,
+            &block_sums_g,
+            num_blocks,
+        )?;
+        add_tuple7_block_prefixes::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            &block_prefixes,
+            num_blocks,
+            len,
+            &len_handle,
+            &output_a,
+            &output_b,
+            &output_c,
+            &output_d,
+            &output_e,
+            &output_f,
+            &output_g,
+        )?;
+    }
+
+    Ok((
+        DeviceVec::from_handle(policy.id(), output_a, len),
+        DeviceVec::from_handle(policy.id(), output_b, len),
+        DeviceVec::from_handle(policy.id(), output_c, len),
+        DeviceVec::from_handle(policy.id(), output_d, len),
+        DeviceVec::from_handle(policy.id(), output_e, len),
+        DeviceVec::from_handle(policy.id(), output_f, len),
+        DeviceVec::from_handle(policy.id(), output_g, len),
+    ))
+}
+
+#[allow(clippy::type_complexity)]
+pub(crate) fn exclusive_scan_tuple7_device_expr<
+    R,
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    ExprA,
+    ExprB,
+    ExprC,
+    ExprD,
+    ExprE,
+    ExprF,
+    ExprG,
+    Op,
+>(
+    policy: &CubePolicy<R>,
+    a: &KernelColumnBindings,
+    b: &KernelColumnBindings,
+    c: &KernelColumnBindings,
+    d: &KernelColumnBindings,
+    e: &KernelColumnBindings,
+    f: &KernelColumnBindings,
+    g: &KernelColumnBindings,
+    len: usize,
+    init: (A, B, C, D, E, F, G),
+) -> Result<
+    (
+        DeviceVec<R, A>,
+        DeviceVec<R, B>,
+        DeviceVec<R, C>,
+        DeviceVec<R, D>,
+        DeviceVec<R, E>,
+        DeviceVec<R, F>,
+        DeviceVec<R, G>,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    ExprD: DeviceGpuExpr<D>,
+    ExprE: DeviceGpuExpr<E>,
+    ExprF: DeviceGpuExpr<F>,
+    ExprG: DeviceGpuExpr<G>,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let inclusive = inclusive_scan_tuple7_device_expr::<
+        R,
+        A,
+        B,
+        C,
+        D,
+        E,
+        F,
+        G,
+        ExprA,
+        ExprB,
+        ExprC,
+        ExprD,
+        ExprE,
+        ExprF,
+        ExprG,
+        Op,
+    >(policy, a, b, c, d, e, f, g, len)?;
+    let output = make_tuple7_exclusive::<R, A, B, C, D, E, F, G, Op>(
+        policy,
+        &inclusive.0.handle,
+        &inclusive.1.handle,
+        &inclusive.2.handle,
+        &inclusive.3.handle,
+        &inclusive.4.handle,
+        &inclusive.5.handle,
+        &inclusive.6.handle,
+        len,
+        init,
+    )?;
+    Ok((
+        DeviceVec::from_handle(policy.id(), output.0, len),
+        DeviceVec::from_handle(policy.id(), output.1, len),
+        DeviceVec::from_handle(policy.id(), output.2, len),
+        DeviceVec::from_handle(policy.id(), output.3, len),
+        DeviceVec::from_handle(policy.id(), output.4, len),
+        DeviceVec::from_handle(policy.id(), output.5, len),
+        DeviceVec::from_handle(policy.id(), output.6, len),
+    ))
+}
+
+type Tuple7Handles = (
+    cubecl::server::Handle,
+    cubecl::server::Handle,
+    cubecl::server::Handle,
+    cubecl::server::Handle,
+    cubecl::server::Handle,
+    cubecl::server::Handle,
+    cubecl::server::Handle,
+);
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn inclusive_scan_tuple7_device_views<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    a: &DeviceColumnView<R, A>,
+    b: &DeviceColumnView<R, B>,
+    c: &DeviceColumnView<R, C>,
+    d: &DeviceColumnView<R, D>,
+    e: &DeviceColumnView<R, E>,
+    f: &DeviceColumnView<R, F>,
+    g: &DeviceColumnView<R, G>,
+) -> Result<
+    (
+        DeviceVec<R, A>,
+        DeviceVec<R, B>,
+        DeviceVec<R, C>,
+        DeviceVec<R, D>,
+        DeviceVec<R, E>,
+        DeviceVec<R, F>,
+        DeviceVec<R, G>,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let len = a.len;
+    let client = policy.client();
+    if len == 0 {
+        return Ok((
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+        ));
+    }
+
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let output_c = client.empty(len * std::mem::size_of::<C>());
+    let output_d = client.empty(len * std::mem::size_of::<D>());
+    let output_e = client.empty(len * std::mem::size_of::<E>());
+    let output_f = client.empty(len * std::mem::size_of::<F>());
+    let output_g = client.empty(len * std::mem::size_of::<G>());
+    let workspace = Workspace::new(policy);
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let offsets = [
+        u32::try_from(a.offset).map_err(|_| Error::LengthTooLarge { len: a.offset })?,
+        u32::try_from(b.offset).map_err(|_| Error::LengthTooLarge { len: b.offset })?,
+        u32::try_from(c.offset).map_err(|_| Error::LengthTooLarge { len: c.offset })?,
+        u32::try_from(d.offset).map_err(|_| Error::LengthTooLarge { len: d.offset })?,
+        u32::try_from(e.offset).map_err(|_| Error::LengthTooLarge { len: e.offset })?,
+        u32::try_from(f.offset).map_err(|_| Error::LengthTooLarge { len: f.offset })?,
+        u32::try_from(g.offset).map_err(|_| Error::LengthTooLarge { len: g.offset })?,
+    ];
+    let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
+    let block_sums_a = workspace.alloc::<A>(num_blocks);
+    let block_sums_b = workspace.alloc::<B>(num_blocks);
+    let block_sums_c = workspace.alloc::<C>(num_blocks);
+    let block_sums_d = workspace.alloc::<D>(num_blocks);
+    let block_sums_e = workspace.alloc::<E>(num_blocks);
+    let block_sums_f = workspace.alloc::<F>(num_blocks);
+    let block_sums_g = workspace.alloc::<G>(num_blocks);
+
+    unsafe {
+        tuple7_view_inclusive_scan_block_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
+            BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
+            BufferArg::from_raw_parts(c.source.handle.clone(), c.source.len()),
+            BufferArg::from_raw_parts(d.source.handle.clone(), d.source.len()),
+            BufferArg::from_raw_parts(e.source.handle.clone(), e.source.len()),
+            BufferArg::from_raw_parts(f.source.handle.clone(), f.source.len()),
+            BufferArg::from_raw_parts(g.source.handle.clone(), g.source.len()),
+            BufferArg::from_raw_parts(offsets_handle.clone(), 7),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_a.clone(), len),
+            BufferArg::from_raw_parts(output_b.clone(), len),
+            BufferArg::from_raw_parts(output_c.clone(), len),
+            BufferArg::from_raw_parts(output_d.clone(), len),
+            BufferArg::from_raw_parts(output_e.clone(), len),
+            BufferArg::from_raw_parts(output_f.clone(), len),
+            BufferArg::from_raw_parts(output_g.clone(), len),
+            BufferArg::from_raw_parts(block_sums_a.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_b.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_c.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_d.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_e.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_f.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_g.clone(), num_blocks),
+        );
+    }
+
+    if num_blocks > 1 {
+        let block_prefixes = inclusive_scan_tuple7_handles::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            &block_sums_a,
+            &block_sums_b,
+            &block_sums_c,
+            &block_sums_d,
+            &block_sums_e,
+            &block_sums_f,
+            &block_sums_g,
+            num_blocks,
+        )?;
+        add_tuple7_block_prefixes::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            &block_prefixes,
+            num_blocks,
+            len,
+            &len_handle,
+            &output_a,
+            &output_b,
+            &output_c,
+            &output_d,
+            &output_e,
+            &output_f,
+            &output_g,
+        )?;
+    }
+
+    Ok((
+        DeviceVec::from_handle(policy.id(), output_a, len),
+        DeviceVec::from_handle(policy.id(), output_b, len),
+        DeviceVec::from_handle(policy.id(), output_c, len),
+        DeviceVec::from_handle(policy.id(), output_d, len),
+        DeviceVec::from_handle(policy.id(), output_e, len),
+        DeviceVec::from_handle(policy.id(), output_f, len),
+        DeviceVec::from_handle(policy.id(), output_g, len),
+    ))
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn exclusive_scan_tuple7_device_views<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    a: &DeviceColumnView<R, A>,
+    b: &DeviceColumnView<R, B>,
+    c: &DeviceColumnView<R, C>,
+    d: &DeviceColumnView<R, D>,
+    e: &DeviceColumnView<R, E>,
+    f: &DeviceColumnView<R, F>,
+    g: &DeviceColumnView<R, G>,
+    init: (A, B, C, D, E, F, G),
+) -> Result<
+    (
+        DeviceVec<R, A>,
+        DeviceVec<R, B>,
+        DeviceVec<R, C>,
+        DeviceVec<R, D>,
+        DeviceVec<R, E>,
+        DeviceVec<R, F>,
+        DeviceVec<R, G>,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let inclusive = inclusive_scan_tuple7_device_views::<R, A, B, C, D, E, F, G, Op>(
+        policy, a, b, c, d, e, f, g,
+    )?;
+    let output = make_tuple7_exclusive::<R, A, B, C, D, E, F, G, Op>(
+        policy,
+        &inclusive.0.handle,
+        &inclusive.1.handle,
+        &inclusive.2.handle,
+        &inclusive.3.handle,
+        &inclusive.4.handle,
+        &inclusive.5.handle,
+        &inclusive.6.handle,
+        a.len,
+        init,
+    )?;
+    Ok((
+        DeviceVec::from_handle(policy.id(), output.0, a.len),
+        DeviceVec::from_handle(policy.id(), output.1, a.len),
+        DeviceVec::from_handle(policy.id(), output.2, a.len),
+        DeviceVec::from_handle(policy.id(), output.3, a.len),
+        DeviceVec::from_handle(policy.id(), output.4, a.len),
+        DeviceVec::from_handle(policy.id(), output.5, a.len),
+        DeviceVec::from_handle(policy.id(), output.6, a.len),
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn inclusive_scan_tuple7_handles<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    input_a: &cubecl::server::Handle,
+    input_b: &cubecl::server::Handle,
+    input_c: &cubecl::server::Handle,
+    input_d: &cubecl::server::Handle,
+    input_e: &cubecl::server::Handle,
+    input_f: &cubecl::server::Handle,
+    input_g: &cubecl::server::Handle,
+    len: usize,
+) -> Result<Tuple7Handles, Error>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let client = policy.client();
+    if len == 0 {
+        return Ok((
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+        ));
+    }
+
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let output_c = client.empty(len * std::mem::size_of::<C>());
+    let output_d = client.empty(len * std::mem::size_of::<D>());
+    let output_e = client.empty(len * std::mem::size_of::<E>());
+    let output_f = client.empty(len * std::mem::size_of::<F>());
+    let output_g = client.empty(len * std::mem::size_of::<G>());
+    let workspace = Workspace::new(policy);
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let block_sums_a = workspace.alloc::<A>(num_blocks);
+    let block_sums_b = workspace.alloc::<B>(num_blocks);
+    let block_sums_c = workspace.alloc::<C>(num_blocks);
+    let block_sums_d = workspace.alloc::<D>(num_blocks);
+    let block_sums_e = workspace.alloc::<E>(num_blocks);
+    let block_sums_f = workspace.alloc::<F>(num_blocks);
+    let block_sums_g = workspace.alloc::<G>(num_blocks);
+
+    unsafe {
+        tuple7_inclusive_scan_block_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(input_a.clone(), len),
+            BufferArg::from_raw_parts(input_b.clone(), len),
+            BufferArg::from_raw_parts(input_c.clone(), len),
+            BufferArg::from_raw_parts(input_d.clone(), len),
+            BufferArg::from_raw_parts(input_e.clone(), len),
+            BufferArg::from_raw_parts(input_f.clone(), len),
+            BufferArg::from_raw_parts(input_g.clone(), len),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_a.clone(), len),
+            BufferArg::from_raw_parts(output_b.clone(), len),
+            BufferArg::from_raw_parts(output_c.clone(), len),
+            BufferArg::from_raw_parts(output_d.clone(), len),
+            BufferArg::from_raw_parts(output_e.clone(), len),
+            BufferArg::from_raw_parts(output_f.clone(), len),
+            BufferArg::from_raw_parts(output_g.clone(), len),
+            BufferArg::from_raw_parts(block_sums_a.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_b.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_c.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_d.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_e.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_f.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_sums_g.clone(), num_blocks),
+        );
+    }
+
+    if num_blocks > 1 {
+        let block_prefixes = inclusive_scan_tuple7_handles::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            &block_sums_a,
+            &block_sums_b,
+            &block_sums_c,
+            &block_sums_d,
+            &block_sums_e,
+            &block_sums_f,
+            &block_sums_g,
+            num_blocks,
+        )?;
+        add_tuple7_block_prefixes::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            &block_prefixes,
+            num_blocks,
+            len,
+            &len_handle,
+            &output_a,
+            &output_b,
+            &output_c,
+            &output_d,
+            &output_e,
+            &output_f,
+            &output_g,
+        )?;
+    }
+
+    Ok((
+        output_a, output_b, output_c, output_d, output_e, output_f, output_g,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn add_tuple7_block_prefixes<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    block_prefixes: &Tuple7Handles,
+    num_blocks: usize,
+    len: usize,
+    len_handle: &cubecl::server::Handle,
+    output_a: &cubecl::server::Handle,
+    output_b: &cubecl::server::Handle,
+    output_c: &cubecl::server::Handle,
+    output_d: &cubecl::server::Handle,
+    output_e: &cubecl::server::Handle,
+    output_f: &cubecl::server::Handle,
+    output_g: &cubecl::server::Handle,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    unsafe {
+        tuple7_scan_add_block_prefix_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            policy.client(),
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(block_prefixes.0.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_prefixes.1.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_prefixes.2.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_prefixes.3.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_prefixes.4.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_prefixes.5.clone(), num_blocks),
+            BufferArg::from_raw_parts(block_prefixes.6.clone(), num_blocks),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_a.clone(), len),
+            BufferArg::from_raw_parts(output_b.clone(), len),
+            BufferArg::from_raw_parts(output_c.clone(), len),
+            BufferArg::from_raw_parts(output_d.clone(), len),
+            BufferArg::from_raw_parts(output_e.clone(), len),
+            BufferArg::from_raw_parts(output_f.clone(), len),
+            BufferArg::from_raw_parts(output_g.clone(), len),
+        );
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn make_tuple7_exclusive<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    inclusive_a: &cubecl::server::Handle,
+    inclusive_b: &cubecl::server::Handle,
+    inclusive_c: &cubecl::server::Handle,
+    inclusive_d: &cubecl::server::Handle,
+    inclusive_e: &cubecl::server::Handle,
+    inclusive_f: &cubecl::server::Handle,
+    inclusive_g: &cubecl::server::Handle,
+    len: usize,
+    init: (A, B, C, D, E, F, G),
+) -> Result<Tuple7Handles, Error>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let client = policy.client();
+    if len == 0 {
+        return Ok((
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+            policy.empty_handle(),
+        ));
+    }
+
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let output_c = client.empty(len * std::mem::size_of::<C>());
+    let output_d = client.empty(len * std::mem::size_of::<D>());
+    let output_e = client.empty(len * std::mem::size_of::<E>());
+    let output_f = client.empty(len * std::mem::size_of::<F>());
+    let output_g = client.empty(len * std::mem::size_of::<G>());
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
+    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
+    let init_d = client.create_from_slice(D::as_bytes(&[init.3]));
+    let init_e = client.create_from_slice(E::as_bytes(&[init.4]));
+    let init_f = client.create_from_slice(F::as_bytes(&[init.5]));
+    let init_g = client.create_from_slice(G::as_bytes(&[init.6]));
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    unsafe {
+        tuple7_scan_make_exclusive_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(inclusive_a.clone(), len),
+            BufferArg::from_raw_parts(inclusive_b.clone(), len),
+            BufferArg::from_raw_parts(inclusive_c.clone(), len),
+            BufferArg::from_raw_parts(inclusive_d.clone(), len),
+            BufferArg::from_raw_parts(inclusive_e.clone(), len),
+            BufferArg::from_raw_parts(inclusive_f.clone(), len),
+            BufferArg::from_raw_parts(inclusive_g.clone(), len),
+            BufferArg::from_raw_parts(init_a.clone(), 1),
+            BufferArg::from_raw_parts(init_b.clone(), 1),
+            BufferArg::from_raw_parts(init_c.clone(), 1),
+            BufferArg::from_raw_parts(init_d.clone(), 1),
+            BufferArg::from_raw_parts(init_e.clone(), 1),
+            BufferArg::from_raw_parts(init_f.clone(), 1),
+            BufferArg::from_raw_parts(init_g.clone(), 1),
+            BufferArg::from_raw_parts(output_a.clone(), len),
+            BufferArg::from_raw_parts(output_b.clone(), len),
+            BufferArg::from_raw_parts(output_c.clone(), len),
+            BufferArg::from_raw_parts(output_d.clone(), len),
+            BufferArg::from_raw_parts(output_e.clone(), len),
+            BufferArg::from_raw_parts(output_f.clone(), len),
+            BufferArg::from_raw_parts(output_g.clone(), len),
+        );
+    }
+
+    Ok((
+        output_a, output_b, output_c, output_d, output_e, output_f, output_g,
+    ))
 }
 
 pub(crate) fn inclusive_scan_by_key_handle<R, K, T, KeyEq, Op>(

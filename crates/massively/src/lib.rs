@@ -43,7 +43,7 @@ pub use algorithm::{
     unique_by_key, upper_bound,
 };
 pub use error::Error;
-pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3};
+pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 pub use slice::MSlice;
 pub use value::MItem;
@@ -55,7 +55,7 @@ pub use value::MItem;
 pub mod prelude {
     pub use crate::{
         DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MSlice, SoA1,
-        SoA2, SoA3,
+        SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
     };
 }
 

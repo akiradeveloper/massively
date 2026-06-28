@@ -119,6 +119,172 @@ where
     }
 }
 
+macro_rules! impl_kernel_unique_by_key_keys_tuple2 {
+    ($target:ty, $out:ident, $left:tt, $right:tt) => {
+        impl<Left, Right, Eq> KernelUniqueByKeyKeys<Eq> for $target
+        where
+            Left: KernelColumn + KernelColumnAt<S0>,
+            Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
+            Left::Item: Scalar + 'static,
+            Right::Item: Scalar + 'static,
+            Left::Expr: DeviceGpuExpr<Left::Item>,
+            Right::Expr: DeviceGpuExpr<Right::Item>,
+            Eq: BinaryPredicateOp<(Left::Item, Right::Item)>,
+        {
+            type Runtime = Left::Runtime;
+            type OutputKeys =
+                $out<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
+
+            fn unique_by_key_control(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+            ) -> Result<(Self::OutputKeys, UniqueByKeyControl), Error> {
+                validate_columns2(&self.$left, &self.$right)?;
+                let len = <Left as KernelColumn>::len(&self.$left);
+                let flags = super::super::selection::unique_tuple2_flags_read::<Left, Right, Eq>(
+                    policy,
+                    &self.$left,
+                    &self.$right,
+                )?;
+                let left = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    policy,
+                    &self.$left,
+                    flags.clone(),
+                )?;
+                let right = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    policy,
+                    &self.$right,
+                    flags.clone(),
+                )?;
+                Ok(($out { left, right }, UniqueByKeyControl { flags, len }))
+            }
+        }
+    };
+}
+
+impl_kernel_unique_by_key_keys_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_unique_by_key_keys_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+
+impl<Left, Right, Eq> KernelUniqueByKeyKeys<Eq> for (Left, Right)
+where
+    SoAView2<Left, Right>: KernelUniqueByKeyKeys<Eq>,
+{
+    type Runtime = <SoAView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::Runtime;
+    type OutputKeys = <SoAView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::OutputKeys;
+
+    fn unique_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<(Self::OutputKeys, UniqueByKeyControl), Error> {
+        <SoAView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::unique_by_key_control(
+            SoAView2 {
+                left: self.0,
+                right: self.1,
+            },
+            policy,
+        )
+    }
+}
+
+macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
+    ($target:ty, $out:ident, $first:tt, $second:tt, $third:tt) => {
+        impl<First, Second, Third, Eq> KernelUniqueByKeyKeys<Eq> for $target
+        where
+            First: KernelColumn + KernelColumnAt<S0>,
+            Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+            Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+            First::Item: Scalar + 'static,
+            Second::Item: Scalar + 'static,
+            Third::Item: Scalar + 'static,
+            First::Expr: DeviceGpuExpr<First::Item>,
+            Second::Expr: DeviceGpuExpr<Second::Item>,
+            Third::Expr: DeviceGpuExpr<Third::Item>,
+            Eq: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+        {
+            type Runtime = First::Runtime;
+            type OutputKeys = $out<
+                DeviceVec<First::Runtime, First::Item>,
+                DeviceVec<First::Runtime, Second::Item>,
+                DeviceVec<First::Runtime, Third::Item>,
+            >;
+
+            fn unique_by_key_control(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+            ) -> Result<(Self::OutputKeys, UniqueByKeyControl), Error> {
+                validate_columns3(&self.$first, &self.$second, &self.$third)?;
+                let len = <First as KernelColumn>::len(&self.$first);
+                let flags = super::super::selection::unique_tuple3_flags_read::<
+                    First,
+                    Second,
+                    Third,
+                    Eq,
+                >(policy, &self.$first, &self.$second, &self.$third)?;
+                let first = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    policy,
+                    &self.$first,
+                    flags.clone(),
+                )?;
+                let second = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    policy,
+                    &self.$second,
+                    flags.clone(),
+                )?;
+                let third = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    policy,
+                    &self.$third,
+                    flags.clone(),
+                )?;
+                Ok((
+                    $out {
+                        first,
+                        second,
+                        third,
+                    },
+                    UniqueByKeyControl { flags, len },
+                ))
+            }
+        }
+    };
+}
+
+impl_kernel_unique_by_key_keys_tuple3!(
+    SoAView3<First, Second, Third>,
+    DeviceSoA3,
+    first,
+    second,
+    third
+);
+impl_kernel_unique_by_key_keys_tuple3!(
+    DeviceSoA3<First, Second, Third>,
+    DeviceSoA3,
+    first,
+    second,
+    third
+);
+
+impl<First, Second, Third, Eq> KernelUniqueByKeyKeys<Eq> for (First, Second, Third)
+where
+    SoAView3<First, Second, Third>: KernelUniqueByKeyKeys<Eq>,
+{
+    type Runtime = <SoAView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::Runtime;
+    type OutputKeys = <SoAView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::OutputKeys;
+
+    fn unique_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<(Self::OutputKeys, UniqueByKeyControl), Error> {
+        <SoAView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::unique_by_key_control(
+            SoAView3 {
+                first: self.0,
+                second: self.1,
+                third: self.2,
+            },
+            policy,
+        )
+    }
+}
+
 impl<ValueSource> KernelUniqueByKeyValues for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,

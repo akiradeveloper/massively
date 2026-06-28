@@ -3,6 +3,26 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::algorithm::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::prelude::*;
 
+#[test]
+fn wide_soa_types_are_exported() {
+    let _ = massively::SoA4(1_u32, 2_u32, 3_u32, 4_u32);
+    let _ = massively::SoA5(1_u32, 2_u32, 3_u32, 4_u32, 5_u32);
+    let _ = massively::SoA6(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32);
+    let _ = massively::SoA7(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32);
+
+    let _: massively::algorithm::SoA4<_, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32).into();
+    let _: massively::algorithm::SoA5<_, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32).into();
+    let _: massively::algorithm::SoA6<_, _, _, _, _, _> =
+        (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32).into();
+    let _: massively::algorithm::SoA7<_, _, _, _, _, _, _> =
+        (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32).into();
+
+    let _: SoA4<_, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32).into();
+    let _: SoA5<_, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32).into();
+    let _: SoA6<_, _, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32).into();
+    let _: SoA7<_, _, _, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32).into();
+}
+
 struct AddOne;
 
 #[cubecl::cube]

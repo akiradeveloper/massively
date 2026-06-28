@@ -424,6 +424,185 @@ pub(crate) fn exclusive_scan_tuple3_by_flags_device_expr_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn inclusive_scan_tuple7_by_flags_view_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    input_a: &[A],
+    input_b: &[B],
+    input_c: &[C],
+    input_d: &[D],
+    input_e: &[E],
+    input_f: &[F],
+    input_g: &[G],
+    offsets: &[u32],
+    head_flags: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc_a = RuntimeCell::<A>::new(input_a[offsets[0] as usize + start.read()]);
+        let acc_b = RuntimeCell::<B>::new(input_b[offsets[1] as usize + start.read()]);
+        let acc_c = RuntimeCell::<C>::new(input_c[offsets[2] as usize + start.read()]);
+        let acc_d = RuntimeCell::<D>::new(input_d[offsets[3] as usize + start.read()]);
+        let acc_e = RuntimeCell::<E>::new(input_e[offsets[4] as usize + start.read()]);
+        let acc_f = RuntimeCell::<F>::new(input_f[offsets[5] as usize + start.read()]);
+        let acc_g = RuntimeCell::<G>::new(input_g[offsets[6] as usize + start.read()]);
+        let index = RuntimeCell::<usize>::new(start.read() + 1usize);
+        while index.read() <= global {
+            let value = Op::apply(
+                (
+                    acc_a.read(),
+                    acc_b.read(),
+                    acc_c.read(),
+                    acc_d.read(),
+                    acc_e.read(),
+                    acc_f.read(),
+                    acc_g.read(),
+                ),
+                (
+                    input_a[offsets[0] as usize + index.read()],
+                    input_b[offsets[1] as usize + index.read()],
+                    input_c[offsets[2] as usize + index.read()],
+                    input_d[offsets[3] as usize + index.read()],
+                    input_e[offsets[4] as usize + index.read()],
+                    input_f[offsets[5] as usize + index.read()],
+                    input_g[offsets[6] as usize + index.read()],
+                ),
+            );
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            acc_c.store(value.2);
+            acc_d.store(value.3);
+            acc_e.store(value.4);
+            acc_f.store(value.5);
+            acc_g.store(value.6);
+            index.store(index.read() + 1usize);
+        }
+        output_a[global] = acc_a.read();
+        output_b[global] = acc_b.read();
+        output_c[global] = acc_c.read();
+        output_d[global] = acc_d.read();
+        output_e[global] = acc_e.read();
+        output_f[global] = acc_f.read();
+        output_g[global] = acc_g.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn exclusive_scan_tuple7_by_flags_view_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    input_a: &[A],
+    input_b: &[B],
+    input_c: &[C],
+    input_d: &[D],
+    input_e: &[E],
+    input_f: &[F],
+    input_g: &[G],
+    offsets: &[u32],
+    head_flags: &[u32],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
+    init_d: &[D],
+    init_e: &[E],
+    init_f: &[F],
+    init_g: &[G],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && head_flags[start.read()] == 0u32 {
+            start.store(start.read() - 1usize);
+        }
+
+        let acc_a = RuntimeCell::<A>::new(init_a[0]);
+        let acc_b = RuntimeCell::<B>::new(init_b[0]);
+        let acc_c = RuntimeCell::<C>::new(init_c[0]);
+        let acc_d = RuntimeCell::<D>::new(init_d[0]);
+        let acc_e = RuntimeCell::<E>::new(init_e[0]);
+        let acc_f = RuntimeCell::<F>::new(init_f[0]);
+        let acc_g = RuntimeCell::<G>::new(init_g[0]);
+        let index = RuntimeCell::<usize>::new(start.read());
+        while index.read() < global {
+            let value = Op::apply(
+                (
+                    acc_a.read(),
+                    acc_b.read(),
+                    acc_c.read(),
+                    acc_d.read(),
+                    acc_e.read(),
+                    acc_f.read(),
+                    acc_g.read(),
+                ),
+                (
+                    input_a[offsets[0] as usize + index.read()],
+                    input_b[offsets[1] as usize + index.read()],
+                    input_c[offsets[2] as usize + index.read()],
+                    input_d[offsets[3] as usize + index.read()],
+                    input_e[offsets[4] as usize + index.read()],
+                    input_f[offsets[5] as usize + index.read()],
+                    input_g[offsets[6] as usize + index.read()],
+                ),
+            );
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            acc_c.store(value.2);
+            acc_d.store(value.3);
+            acc_e.store(value.4);
+            acc_f.store(value.5);
+            acc_g.store(value.6);
+            index.store(index.read() + 1usize);
+        }
+        output_a[global] = acc_a.read();
+        output_b[global] = acc_b.read();
+        output_c[global] = acc_c.read();
+        output_d[global] = acc_d.read();
+        output_e[global] = acc_e.read();
+        output_f[global] = acc_f.read();
+        output_g[global] = acc_g.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn scan_by_key_pass_kernel<
     K: CubePrimitive,
     T: CubePrimitive,
@@ -1843,6 +2022,21 @@ pub(crate) fn reduce_by_key_device_expr_key_end_flags_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn head_flags_to_end_flags_kernel(head_flags: &[u32], len: &[u32], flags: &mut [u32]) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    if global < logical_len {
+        flags[global] = if global + 1usize == logical_len || head_flags[global + 1usize] != 0u32 {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn reduce_by_key_apply_init_kernel<T: CubePrimitive, Op: BinaryOp<(T,)>>(
     inclusive: &[T],
     init: &[T],
@@ -1917,6 +2111,68 @@ pub(crate) fn reduce_by_key_tuple3_apply_init_kernel<
         values_a[global] = value.0;
         values_b[global] = value.1;
         values_c[global] = value.2;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn reduce_by_key_tuple7_apply_init_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    inclusive_a: &[A],
+    inclusive_b: &[B],
+    inclusive_c: &[C],
+    inclusive_d: &[D],
+    inclusive_e: &[E],
+    inclusive_f: &[F],
+    inclusive_g: &[G],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
+    init_d: &[D],
+    init_e: &[E],
+    init_f: &[F],
+    init_g: &[G],
+    len: &[u32],
+    values_a: &mut [A],
+    values_b: &mut [B],
+    values_c: &mut [C],
+    values_d: &mut [D],
+    values_e: &mut [E],
+    values_f: &mut [F],
+    values_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let value = Op::apply(
+            (
+                init_a[0], init_b[0], init_c[0], init_d[0], init_e[0], init_f[0], init_g[0],
+            ),
+            (
+                inclusive_a[global],
+                inclusive_b[global],
+                inclusive_c[global],
+                inclusive_d[global],
+                inclusive_e[global],
+                inclusive_f[global],
+                inclusive_g[global],
+            ),
+        );
+        values_a[global] = value.0;
+        values_b[global] = value.1;
+        values_c[global] = value.2;
+        values_d[global] = value.3;
+        values_e[global] = value.4;
+        values_f[global] = value.5;
+        values_g[global] = value.6;
     }
 }
 

@@ -186,6 +186,26 @@ define_transform_tuple_to_tuple_kernel!(
     (OutA: output_a: 0)
 );
 define_transform_tuple_to_tuple_kernel!(
+    transform_tuple1_to_tuple4_kernel,
+    (TyA: input_a: input_a_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple1_to_tuple5_kernel,
+    (TyA: input_a: input_a_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple1_to_tuple6_kernel,
+    (TyA: input_a: input_a_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple1_to_tuple7_kernel,
+    (TyA: input_a: input_a_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+define_transform_tuple_to_tuple_kernel!(
     transform_tuple2_to_tuple2_kernel,
     (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
     (OutA: output_a: 0, OutB: output_b: 1)
@@ -209,6 +229,95 @@ define_transform_tuple_to_tuple_kernel!(
     transform_tuple3_to_tuple3_kernel,
     (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple1_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple1_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple1_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple1_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple2_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple3_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple4_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple5_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple6_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple7_to_tuple7_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset,
+        TyD: input_d: input_d_offset, TyE: input_e: input_e_offset, TyF: input_f: input_f_offset,
+        TyG: input_g: input_g_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
 
 #[cube(launch_unchecked, explicit_define)]
@@ -426,6 +535,23 @@ define_tuple_unique_device_expr_flags_kernel!(
         input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
      TyC: ExprC:
         input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets)
+);
+define_tuple_unique_device_expr_flags_kernel!(
+    tuple7_unique_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets,
+     TyF: ExprF:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets,
+     TyG: ExprG:
+        input_g_slot0, input_g_slot1, input_g_slot2, input_g_slot3, input_g_offsets)
 );
 
 macro_rules! define_tuple_mismatch_device_expr_flags_kernel {
@@ -2975,6 +3101,617 @@ pub(crate) fn tuple3_scan_make_exclusive_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_device_inclusive_scan_expr_block_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    ExprA: DeviceGpuExpr<A>,
+    ExprB: DeviceGpuExpr<B>,
+    ExprC: DeviceGpuExpr<C>,
+    ExprD: DeviceGpuExpr<D>,
+    ExprE: DeviceGpuExpr<E>,
+    ExprF: DeviceGpuExpr<F>,
+    ExprG: DeviceGpuExpr<G>,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    a_slot0: &[A],
+    a_slot1: &[A],
+    a_slot2: &[A],
+    a_slot3: &[A],
+    a_offsets: &[u32],
+    b_slot0: &[B],
+    b_slot1: &[B],
+    b_slot2: &[B],
+    b_slot3: &[B],
+    b_offsets: &[u32],
+    c_slot0: &[C],
+    c_slot1: &[C],
+    c_slot2: &[C],
+    c_slot3: &[C],
+    c_offsets: &[u32],
+    d_slot0: &[D],
+    d_slot1: &[D],
+    d_slot2: &[D],
+    d_slot3: &[D],
+    d_offsets: &[u32],
+    e_slot0: &[E],
+    e_slot1: &[E],
+    e_slot2: &[E],
+    e_slot3: &[E],
+    e_offsets: &[u32],
+    f_slot0: &[F],
+    f_slot1: &[F],
+    f_slot2: &[F],
+    f_slot3: &[F],
+    f_offsets: &[u32],
+    g_slot0: &[G],
+    g_slot1: &[G],
+    g_slot2: &[G],
+    g_slot3: &[G],
+    g_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+    block_sums_a: &mut [A],
+    block_sums_b: &mut [B],
+    block_sums_c: &mut [C],
+    block_sums_d: &mut [D],
+    block_sums_e: &mut [E],
+    block_sums_f: &mut [F],
+    block_sums_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let block = CUBE_POS as usize;
+    let global = block * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    let mut values_a = Shared::<[A]>::new_slice(cube_dim);
+    let mut values_b = Shared::<[B]>::new_slice(cube_dim);
+    let mut values_c = Shared::<[C]>::new_slice(cube_dim);
+    let mut values_d = Shared::<[D]>::new_slice(cube_dim);
+    let mut values_e = Shared::<[E]>::new_slice(cube_dim);
+    let mut values_f = Shared::<[F]>::new_slice(cube_dim);
+    let mut values_g = Shared::<[G]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    if global < logical_len {
+        values_a[unit] = ExprA::eval(a_slot0, a_slot1, a_slot2, a_slot3, a_offsets, global);
+        values_b[unit] = ExprB::eval(b_slot0, b_slot1, b_slot2, b_slot3, b_offsets, global);
+        values_c[unit] = ExprC::eval(c_slot0, c_slot1, c_slot2, c_slot3, c_offsets, global);
+        values_d[unit] = ExprD::eval(d_slot0, d_slot1, d_slot2, d_slot3, d_offsets, global);
+        values_e[unit] = ExprE::eval(e_slot0, e_slot1, e_slot2, e_slot3, e_offsets, global);
+        values_f[unit] = ExprF::eval(f_slot0, f_slot1, f_slot2, f_slot3, f_offsets, global);
+        values_g[unit] = ExprG::eval(g_slot0, g_slot1, g_slot2, g_slot3, g_offsets, global);
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
+    }
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(1usize);
+    while stride.read() < cube_dim {
+        let addend_a = RuntimeCell::<A>::new(values_a[unit]);
+        let addend_b = RuntimeCell::<B>::new(values_b[unit]);
+        let addend_c = RuntimeCell::<C>::new(values_c[unit]);
+        let addend_d = RuntimeCell::<D>::new(values_d[unit]);
+        let addend_e = RuntimeCell::<E>::new(values_e[unit]);
+        let addend_f = RuntimeCell::<F>::new(values_f[unit]);
+        let addend_g = RuntimeCell::<G>::new(values_g[unit]);
+        let addend_valid = RuntimeCell::<u32>::new(0u32);
+        if unit >= stride.read() && valid[unit - stride.read()] != 0u32 {
+            addend_a.store(values_a[unit - stride.read()]);
+            addend_b.store(values_b[unit - stride.read()]);
+            addend_c.store(values_c[unit - stride.read()]);
+            addend_d.store(values_d[unit - stride.read()]);
+            addend_e.store(values_e[unit - stride.read()]);
+            addend_f.store(values_f[unit - stride.read()]);
+            addend_g.store(values_g[unit - stride.read()]);
+            addend_valid.store(1u32);
+        }
+        sync_cube();
+        if addend_valid.read() != 0u32 {
+            if valid[unit] != 0u32 {
+                let value = Op::apply(
+                    (
+                        addend_a.read(),
+                        addend_b.read(),
+                        addend_c.read(),
+                        addend_d.read(),
+                        addend_e.read(),
+                        addend_f.read(),
+                        addend_g.read(),
+                    ),
+                    (
+                        values_a[unit],
+                        values_b[unit],
+                        values_c[unit],
+                        values_d[unit],
+                        values_e[unit],
+                        values_f[unit],
+                        values_g[unit],
+                    ),
+                );
+                values_a[unit] = value.0;
+                values_b[unit] = value.1;
+                values_c[unit] = value.2;
+                values_d[unit] = value.3;
+                values_e[unit] = value.4;
+                values_f[unit] = value.5;
+                values_g[unit] = value.6;
+            } else {
+                values_a[unit] = addend_a.read();
+                values_b[unit] = addend_b.read();
+                values_c[unit] = addend_c.read();
+                values_d[unit] = addend_d.read();
+                values_e[unit] = addend_e.read();
+                values_f[unit] = addend_f.read();
+                values_g[unit] = addend_g.read();
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() * 2usize);
+    }
+
+    if global < logical_len {
+        output_a[global] = values_a[unit];
+        output_b[global] = values_b[unit];
+        output_c[global] = values_c[unit];
+        output_d[global] = values_d[unit];
+        output_e[global] = values_e[unit];
+        output_f[global] = values_f[unit];
+        output_g[global] = values_g[unit];
+        if unit == cube_dim - 1usize || global == logical_len - 1usize {
+            block_sums_a[block] = values_a[unit];
+            block_sums_b[block] = values_b[unit];
+            block_sums_c[block] = values_c[unit];
+            block_sums_d[block] = values_d[unit];
+            block_sums_e[block] = values_e[unit];
+            block_sums_f[block] = values_f[unit];
+            block_sums_g[block] = values_g[unit];
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_inclusive_scan_block_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    input_a: &[A],
+    input_b: &[B],
+    input_c: &[C],
+    input_d: &[D],
+    input_e: &[E],
+    input_f: &[F],
+    input_g: &[G],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+    block_sums_a: &mut [A],
+    block_sums_b: &mut [B],
+    block_sums_c: &mut [C],
+    block_sums_d: &mut [D],
+    block_sums_e: &mut [E],
+    block_sums_f: &mut [F],
+    block_sums_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let block = CUBE_POS as usize;
+    let global = block * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    let mut values_a = Shared::<[A]>::new_slice(cube_dim);
+    let mut values_b = Shared::<[B]>::new_slice(cube_dim);
+    let mut values_c = Shared::<[C]>::new_slice(cube_dim);
+    let mut values_d = Shared::<[D]>::new_slice(cube_dim);
+    let mut values_e = Shared::<[E]>::new_slice(cube_dim);
+    let mut values_f = Shared::<[F]>::new_slice(cube_dim);
+    let mut values_g = Shared::<[G]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    if global < logical_len {
+        values_a[unit] = input_a[global];
+        values_b[unit] = input_b[global];
+        values_c[unit] = input_c[global];
+        values_d[unit] = input_d[global];
+        values_e[unit] = input_e[global];
+        values_f[unit] = input_f[global];
+        values_g[unit] = input_g[global];
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
+    }
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(1usize);
+    while stride.read() < cube_dim {
+        let addend_a = RuntimeCell::<A>::new(values_a[unit]);
+        let addend_b = RuntimeCell::<B>::new(values_b[unit]);
+        let addend_c = RuntimeCell::<C>::new(values_c[unit]);
+        let addend_d = RuntimeCell::<D>::new(values_d[unit]);
+        let addend_e = RuntimeCell::<E>::new(values_e[unit]);
+        let addend_f = RuntimeCell::<F>::new(values_f[unit]);
+        let addend_g = RuntimeCell::<G>::new(values_g[unit]);
+        let addend_valid = RuntimeCell::<u32>::new(0u32);
+        if unit >= stride.read() && valid[unit - stride.read()] != 0u32 {
+            addend_a.store(values_a[unit - stride.read()]);
+            addend_b.store(values_b[unit - stride.read()]);
+            addend_c.store(values_c[unit - stride.read()]);
+            addend_d.store(values_d[unit - stride.read()]);
+            addend_e.store(values_e[unit - stride.read()]);
+            addend_f.store(values_f[unit - stride.read()]);
+            addend_g.store(values_g[unit - stride.read()]);
+            addend_valid.store(1u32);
+        }
+        sync_cube();
+        if addend_valid.read() != 0u32 {
+            if valid[unit] != 0u32 {
+                let value = Op::apply(
+                    (
+                        addend_a.read(),
+                        addend_b.read(),
+                        addend_c.read(),
+                        addend_d.read(),
+                        addend_e.read(),
+                        addend_f.read(),
+                        addend_g.read(),
+                    ),
+                    (
+                        values_a[unit],
+                        values_b[unit],
+                        values_c[unit],
+                        values_d[unit],
+                        values_e[unit],
+                        values_f[unit],
+                        values_g[unit],
+                    ),
+                );
+                values_a[unit] = value.0;
+                values_b[unit] = value.1;
+                values_c[unit] = value.2;
+                values_d[unit] = value.3;
+                values_e[unit] = value.4;
+                values_f[unit] = value.5;
+                values_g[unit] = value.6;
+            } else {
+                values_a[unit] = addend_a.read();
+                values_b[unit] = addend_b.read();
+                values_c[unit] = addend_c.read();
+                values_d[unit] = addend_d.read();
+                values_e[unit] = addend_e.read();
+                values_f[unit] = addend_f.read();
+                values_g[unit] = addend_g.read();
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() * 2usize);
+    }
+
+    if global < logical_len {
+        output_a[global] = values_a[unit];
+        output_b[global] = values_b[unit];
+        output_c[global] = values_c[unit];
+        output_d[global] = values_d[unit];
+        output_e[global] = values_e[unit];
+        output_f[global] = values_f[unit];
+        output_g[global] = values_g[unit];
+        if unit == cube_dim - 1usize || global == logical_len - 1usize {
+            block_sums_a[block] = values_a[unit];
+            block_sums_b[block] = values_b[unit];
+            block_sums_c[block] = values_c[unit];
+            block_sums_d[block] = values_d[unit];
+            block_sums_e[block] = values_e[unit];
+            block_sums_f[block] = values_f[unit];
+            block_sums_g[block] = values_g[unit];
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_inclusive_scan_block_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    input_a: &[A],
+    input_b: &[B],
+    input_c: &[C],
+    input_d: &[D],
+    input_e: &[E],
+    input_f: &[F],
+    input_g: &[G],
+    offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+    block_sums_a: &mut [A],
+    block_sums_b: &mut [B],
+    block_sums_c: &mut [C],
+    block_sums_d: &mut [D],
+    block_sums_e: &mut [E],
+    block_sums_f: &mut [F],
+    block_sums_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let block = CUBE_POS as usize;
+    let global = block * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    let mut values_a = Shared::<[A]>::new_slice(cube_dim);
+    let mut values_b = Shared::<[B]>::new_slice(cube_dim);
+    let mut values_c = Shared::<[C]>::new_slice(cube_dim);
+    let mut values_d = Shared::<[D]>::new_slice(cube_dim);
+    let mut values_e = Shared::<[E]>::new_slice(cube_dim);
+    let mut values_f = Shared::<[F]>::new_slice(cube_dim);
+    let mut values_g = Shared::<[G]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    if global < logical_len {
+        values_a[unit] = input_a[offsets[0] as usize + global];
+        values_b[unit] = input_b[offsets[1] as usize + global];
+        values_c[unit] = input_c[offsets[2] as usize + global];
+        values_d[unit] = input_d[offsets[3] as usize + global];
+        values_e[unit] = input_e[offsets[4] as usize + global];
+        values_f[unit] = input_f[offsets[5] as usize + global];
+        values_g[unit] = input_g[offsets[6] as usize + global];
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
+    }
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(1usize);
+    while stride.read() < cube_dim {
+        let addend_a = RuntimeCell::<A>::new(values_a[unit]);
+        let addend_b = RuntimeCell::<B>::new(values_b[unit]);
+        let addend_c = RuntimeCell::<C>::new(values_c[unit]);
+        let addend_d = RuntimeCell::<D>::new(values_d[unit]);
+        let addend_e = RuntimeCell::<E>::new(values_e[unit]);
+        let addend_f = RuntimeCell::<F>::new(values_f[unit]);
+        let addend_g = RuntimeCell::<G>::new(values_g[unit]);
+        let addend_valid = RuntimeCell::<u32>::new(0u32);
+        if unit >= stride.read() && valid[unit - stride.read()] != 0u32 {
+            addend_a.store(values_a[unit - stride.read()]);
+            addend_b.store(values_b[unit - stride.read()]);
+            addend_c.store(values_c[unit - stride.read()]);
+            addend_d.store(values_d[unit - stride.read()]);
+            addend_e.store(values_e[unit - stride.read()]);
+            addend_f.store(values_f[unit - stride.read()]);
+            addend_g.store(values_g[unit - stride.read()]);
+            addend_valid.store(1u32);
+        }
+        sync_cube();
+        if addend_valid.read() != 0u32 {
+            if valid[unit] != 0u32 {
+                let value = Op::apply(
+                    (
+                        addend_a.read(),
+                        addend_b.read(),
+                        addend_c.read(),
+                        addend_d.read(),
+                        addend_e.read(),
+                        addend_f.read(),
+                        addend_g.read(),
+                    ),
+                    (
+                        values_a[unit],
+                        values_b[unit],
+                        values_c[unit],
+                        values_d[unit],
+                        values_e[unit],
+                        values_f[unit],
+                        values_g[unit],
+                    ),
+                );
+                values_a[unit] = value.0;
+                values_b[unit] = value.1;
+                values_c[unit] = value.2;
+                values_d[unit] = value.3;
+                values_e[unit] = value.4;
+                values_f[unit] = value.5;
+                values_g[unit] = value.6;
+            } else {
+                values_a[unit] = addend_a.read();
+                values_b[unit] = addend_b.read();
+                values_c[unit] = addend_c.read();
+                values_d[unit] = addend_d.read();
+                values_e[unit] = addend_e.read();
+                values_f[unit] = addend_f.read();
+                values_g[unit] = addend_g.read();
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() * 2usize);
+    }
+
+    if global < logical_len {
+        output_a[global] = values_a[unit];
+        output_b[global] = values_b[unit];
+        output_c[global] = values_c[unit];
+        output_d[global] = values_d[unit];
+        output_e[global] = values_e[unit];
+        output_f[global] = values_f[unit];
+        output_g[global] = values_g[unit];
+        if unit == cube_dim - 1usize || global == logical_len - 1usize {
+            block_sums_a[block] = values_a[unit];
+            block_sums_b[block] = values_b[unit];
+            block_sums_c[block] = values_c[unit];
+            block_sums_d[block] = values_d[unit];
+            block_sums_e[block] = values_e[unit];
+            block_sums_f[block] = values_f[unit];
+            block_sums_g[block] = values_g[unit];
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_scan_add_block_prefix_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    block_prefixes_a: &[A],
+    block_prefixes_b: &[B],
+    block_prefixes_c: &[C],
+    block_prefixes_d: &[D],
+    block_prefixes_e: &[E],
+    block_prefixes_f: &[F],
+    block_prefixes_g: &[G],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let block = CUBE_POS as usize;
+    let global = block * cube_dim + unit;
+
+    if block > 0usize && global < (len[0] as usize) {
+        let value = Op::apply(
+            (
+                block_prefixes_a[block - 1usize],
+                block_prefixes_b[block - 1usize],
+                block_prefixes_c[block - 1usize],
+                block_prefixes_d[block - 1usize],
+                block_prefixes_e[block - 1usize],
+                block_prefixes_f[block - 1usize],
+                block_prefixes_g[block - 1usize],
+            ),
+            (
+                output_a[global],
+                output_b[global],
+                output_c[global],
+                output_d[global],
+                output_e[global],
+                output_f[global],
+                output_g[global],
+            ),
+        );
+        output_a[global] = value.0;
+        output_b[global] = value.1;
+        output_c[global] = value.2;
+        output_d[global] = value.3;
+        output_e[global] = value.4;
+        output_f[global] = value.5;
+        output_g[global] = value.6;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_scan_make_exclusive_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    inclusive_a: &[A],
+    inclusive_b: &[B],
+    inclusive_c: &[C],
+    inclusive_d: &[D],
+    inclusive_e: &[E],
+    inclusive_f: &[F],
+    inclusive_g: &[G],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
+    init_d: &[D],
+    init_e: &[E],
+    init_f: &[F],
+    init_g: &[G],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < output_a.len() {
+        if global == 0usize {
+            output_a[global] = init_a[0];
+            output_b[global] = init_b[0];
+            output_c[global] = init_c[0];
+            output_d[global] = init_d[0];
+            output_e[global] = init_e[0];
+            output_f[global] = init_f[0];
+            output_g[global] = init_g[0];
+        } else {
+            let value = Op::apply(
+                (
+                    init_a[0], init_b[0], init_c[0], init_d[0], init_e[0], init_f[0], init_g[0],
+                ),
+                (
+                    inclusive_a[global - 1usize],
+                    inclusive_b[global - 1usize],
+                    inclusive_c[global - 1usize],
+                    inclusive_d[global - 1usize],
+                    inclusive_e[global - 1usize],
+                    inclusive_f[global - 1usize],
+                    inclusive_g[global - 1usize],
+                ),
+            );
+            output_a[global] = value.0;
+            output_b[global] = value.1;
+            output_c[global] = value.2;
+            output_d[global] = value.3;
+            output_e[global] = value.4;
+            output_f[global] = value.5;
+            output_g[global] = value.6;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn compact_scatter_kernel<T: CubePrimitive>(
     flags: &[u32],
     positions: &[u32],
@@ -3981,6 +4718,263 @@ pub(crate) fn tuple3_reduce_finalize_kernel<
         output_c[0] = output.2;
     }
 }
+
+macro_rules! define_tuple_reduce_device_expr_partials_kernel {
+    (
+        $fn_name:ident,
+        $first_partial:ident,
+        ($( $ty:ident : $expr:ident : $slot0:ident : $slot1:ident : $slot2:ident : $slot3:ident : $offsets:ident : $partial:ident : $value:ident : $acc:ident : $field:tt ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $fn_name<
+            $( $ty: CubePrimitive, )+
+            $( $expr: DeviceGpuExpr<$ty>, )+
+            Op: BinaryOp<($( $ty, )+)>,
+        >(
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )+
+            len: &[u32],
+            $( $partial: &mut [$ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let logical_len = len[0] as usize;
+            $(
+                let mut $value = Shared::<[$ty]>::new_slice(cube_dim);
+            )+
+            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+            let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+            let step = (CUBE_DIM as usize) * $first_partial.len();
+            let has_value = RuntimeCell::<u32>::new(0u32);
+            $(
+                let $acc = RuntimeCell::<$ty>::new($expr::eval(
+                    $slot0,
+                    $slot1,
+                    $slot2,
+                    $slot3,
+                    $offsets,
+                    0,
+                ));
+            )+
+
+            while i.read() < logical_len {
+                let item = (
+                    $(
+                        $expr::eval($slot0, $slot1, $slot2, $slot3, $offsets, i.read()),
+                    )+
+                );
+                if has_value.read() != 0 {
+                    let next = Op::apply(($( $acc.read(), )+), item);
+                    $(
+                        $acc.store(next.$field);
+                    )+
+                } else {
+                    $(
+                        $acc.store(item.$field);
+                    )+
+                    has_value.store(1u32);
+                }
+                i.store(i.read() + step);
+            }
+
+            $(
+                $value[unit] = $acc.read();
+            )+
+            if has_value.read() != 0 {
+                valid[unit] = 1u32;
+            } else {
+                valid[unit] = 0u32;
+            }
+            sync_cube();
+
+            let stride = RuntimeCell::<usize>::new(cube_dim / 2);
+            while stride.read() > 0 {
+                if unit < stride.read() && valid[unit + stride.read()] != 0 {
+                    if valid[unit] != 0 {
+                        let next = Op::apply(
+                            ($( $value[unit], )+),
+                            ($( $value[unit + stride.read()], )+),
+                        );
+                        $(
+                            $value[unit] = next.$field;
+                        )+
+                    } else {
+                        $(
+                            $value[unit] = $value[unit + stride.read()];
+                        )+
+                        valid[unit] = 1u32;
+                    }
+                }
+                sync_cube();
+                stride.store(stride.read() / 2);
+            }
+
+            if unit == 0 && valid[0] != 0 {
+                $(
+                    $partial[CUBE_POS as usize] = $value[0];
+                )+
+            }
+        }
+    };
+}
+
+macro_rules! define_tuple_reduce_partials_kernel {
+    (
+        $fn_name:ident,
+        $first_partial:ident,
+        ($( $ty:ident : $input:ident : $partial:ident : $value:ident : $acc:ident : $field:tt ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $fn_name<
+            $( $ty: CubePrimitive, )+
+            Op: BinaryOp<($( $ty, )+)>,
+        >(
+            $( $input: &[$ty], )+
+            len: &[u32],
+            $( $partial: &mut [$ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let logical_len = len[0] as usize;
+            $(
+                let mut $value = Shared::<[$ty]>::new_slice(cube_dim);
+            )+
+            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+            let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+            let step = (CUBE_DIM as usize) * $first_partial.len();
+            let has_value = RuntimeCell::<u32>::new(0u32);
+            $(
+                let $acc = RuntimeCell::<$ty>::new($input[0]);
+            )+
+
+            while i.read() < logical_len {
+                let item = ($( $input[i.read()], )+);
+                if has_value.read() != 0 {
+                    let next = Op::apply(($( $acc.read(), )+), item);
+                    $(
+                        $acc.store(next.$field);
+                    )+
+                } else {
+                    $(
+                        $acc.store(item.$field);
+                    )+
+                    has_value.store(1u32);
+                }
+                i.store(i.read() + step);
+            }
+
+            $(
+                $value[unit] = $acc.read();
+            )+
+            if has_value.read() != 0 {
+                valid[unit] = 1u32;
+            } else {
+                valid[unit] = 0u32;
+            }
+            sync_cube();
+
+            let stride = RuntimeCell::<usize>::new(cube_dim / 2);
+            while stride.read() > 0 {
+                if unit < stride.read() && valid[unit + stride.read()] != 0 {
+                    if valid[unit] != 0 {
+                        let next = Op::apply(
+                            ($( $value[unit], )+),
+                            ($( $value[unit + stride.read()], )+),
+                        );
+                        $(
+                            $value[unit] = next.$field;
+                        )+
+                    } else {
+                        $(
+                            $value[unit] = $value[unit + stride.read()];
+                        )+
+                        valid[unit] = 1u32;
+                    }
+                }
+                sync_cube();
+                stride.store(stride.read() / 2);
+            }
+
+            if unit == 0 && valid[0] != 0 {
+                $(
+                    $partial[CUBE_POS as usize] = $value[0];
+                )+
+            }
+        }
+    };
+}
+
+macro_rules! define_tuple_reduce_finalize_kernel {
+    (
+        $fn_name:ident,
+        ($( $ty:ident : $partial:ident : $init:ident : $output:ident : $field:tt ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $fn_name<
+            $( $ty: CubePrimitive, )+
+            Op: BinaryOp<($( $ty, )+)>,
+        >(
+            $( $partial: &[$ty], )+
+            $( $init: &[$ty], )+
+            $( $output: &mut [$ty], )+
+        ) {
+            if UNIT_POS == 0 {
+                let item = Op::apply(($( $init[0], )+), ($( $partial[0], )+));
+                $(
+                    $output[0] = item.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_tuple_reduce_device_expr_partials_kernel!(
+    tuple7_device_reduce_expr_partials_kernel,
+    partial_a,
+    (
+        A: ExprA: a_slot0: a_slot1: a_slot2: a_slot3: a_offsets: partial_a: values_a: acc_a: 0,
+        B: ExprB: b_slot0: b_slot1: b_slot2: b_slot3: b_offsets: partial_b: values_b: acc_b: 1,
+        C: ExprC: c_slot0: c_slot1: c_slot2: c_slot3: c_offsets: partial_c: values_c: acc_c: 2,
+        D: ExprD: d_slot0: d_slot1: d_slot2: d_slot3: d_offsets: partial_d: values_d: acc_d: 3,
+        E: ExprE: e_slot0: e_slot1: e_slot2: e_slot3: e_offsets: partial_e: values_e: acc_e: 4,
+        F: ExprF: f_slot0: f_slot1: f_slot2: f_slot3: f_offsets: partial_f: values_f: acc_f: 5,
+        G: ExprG: g_slot0: g_slot1: g_slot2: g_slot3: g_offsets: partial_g: values_g: acc_g: 6
+    )
+);
+
+define_tuple_reduce_partials_kernel!(
+    tuple7_reduce_partials_kernel,
+    partial_a,
+    (
+        A: input_a: partial_a: values_a: acc_a: 0,
+        B: input_b: partial_b: values_b: acc_b: 1,
+        C: input_c: partial_c: values_c: acc_c: 2,
+        D: input_d: partial_d: values_d: acc_d: 3,
+        E: input_e: partial_e: values_e: acc_e: 4,
+        F: input_f: partial_f: values_f: acc_f: 5,
+        G: input_g: partial_g: values_g: acc_g: 6
+    )
+);
+
+define_tuple_reduce_finalize_kernel!(
+    tuple7_reduce_finalize_kernel,
+    (
+        A: partial_a: init_a: output_a: 0,
+        B: partial_b: init_b: output_b: 1,
+        C: partial_c: init_c: output_c: 2,
+        D: partial_d: init_d: output_d: 3,
+        E: partial_e: init_e: output_e: 4,
+        F: partial_f: init_f: output_f: 5,
+        G: partial_g: init_g: output_g: 6
+    )
+);
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn count_if_expr_partials_kernel<

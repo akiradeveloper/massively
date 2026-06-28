@@ -58,8 +58,8 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 ### リスト
 
 以下の場合を実装すればOK
-- k <= 1
-- a,b,c <= 3
+- k <= 3
+- a,b,c <= 7
 
 - adjacent_difference(xs: &[]a, sum: a->a->a) -> []a
 - adjacent_find(xs: &[]a, eq: a->a->bool) -> int?

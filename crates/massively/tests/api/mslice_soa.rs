@@ -33,6 +33,61 @@ impl UnaryOp<WgpuRuntime, (f32, f32)> for PairInsideTen {
     }
 }
 
+struct Tuple7ChecksumU32;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32, u32, u32, u32, u32, u32, u32)> for Tuple7ChecksumU32 {
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32, u32, u32, u32, u32, u32)) -> (u32,) {
+        (input.0
+            + input.1 * 10
+            + input.2 * 100
+            + input.3 * 1000
+            + input.4 * 10_000
+            + input.5 * 100_000
+            + input.6 * 1_000_000,)
+    }
+}
+
+struct Tuple4ChecksumU32;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32, u32, u32, u32)> for Tuple4ChecksumU32 {
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32, u32, u32)) -> (u32,) {
+        (input.0 + input.1 * 10 + input.2 * 100 + input.3 * 1000,)
+    }
+}
+
+struct Tuple5ChecksumU32;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32, u32, u32, u32, u32)> for Tuple5ChecksumU32 {
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32, u32, u32, u32)) -> (u32,) {
+        (input.0 + input.1 * 10 + input.2 * 100 + input.3 * 1000 + input.4 * 10_000,)
+    }
+}
+
+struct Tuple6ChecksumU32;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32, u32, u32, u32, u32, u32)> for Tuple6ChecksumU32 {
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32, u32, u32, u32, u32)) -> (u32,) {
+        (input.0
+            + input.1 * 10
+            + input.2 * 100
+            + input.3 * 1000
+            + input.4 * 10_000
+            + input.5 * 100_000,)
+    }
+}
+
 struct PairSumU32;
 
 #[cubecl::cube]
@@ -132,6 +187,79 @@ fn transform_slice_accepts_binary_transform_slice_columns() {
     let sum = reduce(&exec, massively::SoA1(hits), (0_u32,), Sum).unwrap();
 
     assert_eq!(sum, (4,));
+}
+
+#[test]
+fn transform_slice_accepts_seven_column_input() {
+    let exec = exec();
+    let a = exec.to_device(&[1_u32, 2, 3]).unwrap();
+    let b = exec.to_device(&[4_u32, 5, 6]).unwrap();
+    let c = exec.to_device(&[7_u32, 8, 9]).unwrap();
+    let d = exec.to_device(&[10_u32, 11, 12]).unwrap();
+    let e = exec.to_device(&[13_u32, 14, 15]).unwrap();
+    let f = exec.to_device(&[16_u32, 17, 18]).unwrap();
+    let g = exec.to_device(&[19_u32, 20, 21]).unwrap();
+
+    let checksums = massively::slice::transform_slice(
+        massively::SoA7(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+        ),
+        Tuple7ChecksumU32,
+    );
+    let sum = reduce(&exec, massively::SoA1(checksums), (0_u32,), Sum).unwrap();
+
+    assert_eq!(sum, (65_555_556,));
+}
+
+#[test]
+fn transform_slice_accepts_four_to_six_column_inputs() {
+    let exec = exec();
+    let a = exec.to_device(&[1_u32, 2, 3]).unwrap();
+    let b = exec.to_device(&[4_u32, 5, 6]).unwrap();
+    let c = exec.to_device(&[7_u32, 8, 9]).unwrap();
+    let d = exec.to_device(&[10_u32, 11, 12]).unwrap();
+    let e = exec.to_device(&[13_u32, 14, 15]).unwrap();
+    let f = exec.to_device(&[16_u32, 17, 18]).unwrap();
+
+    let checksums4 = massively::slice::transform_slice(
+        massively::SoA4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
+        Tuple4ChecksumU32,
+    );
+    let checksums5 = massively::slice::transform_slice(
+        massively::SoA5(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+        ),
+        Tuple5ChecksumU32,
+    );
+    let checksums6 = massively::slice::transform_slice(
+        massively::SoA6(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+        ),
+        Tuple6ChecksumU32,
+    );
+
+    let sum4 = reduce(&exec, massively::SoA1(checksums4), (0_u32,), Sum).unwrap();
+    let sum5 = reduce(&exec, massively::SoA1(checksums5), (0_u32,), Sum).unwrap();
+    let sum6 = reduce(&exec, massively::SoA1(checksums6), (0_u32,), Sum).unwrap();
+
+    assert_eq!(sum4, (35_556,));
+    assert_eq!(sum5, (455_556,));
+    assert_eq!(sum6, (5_555_556,));
 }
 
 #[test]

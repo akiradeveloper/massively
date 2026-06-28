@@ -1836,6 +1836,258 @@ where
     Ok(flag_handle)
 }
 
+pub(crate) fn unique_tuple2_flags_read<Left, Right, Pred>(
+    policy: &CubePolicy<Left::Runtime>,
+    left: &Left,
+    right: &Right,
+) -> Result<cubecl::server::Handle, Error>
+where
+    Left: KernelColumn + KernelColumnAt<S0>,
+    Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
+    Left::Item: Scalar + 'static,
+    Right::Item: Scalar + 'static,
+    Left::Expr: DeviceGpuExpr<Left::Item>,
+    Right::Expr: DeviceGpuExpr<Right::Item>,
+    Pred: BinaryPredicateOp<(Left::Item, Right::Item)>,
+{
+    validate_columns2(left, right)?;
+    let len = <Left as KernelColumn>::len(left);
+    let client = policy.client();
+    if len == 0 {
+        return Ok(policy.empty_handle());
+    }
+
+    let staged_left = stage_unique_column(policy, left)?;
+    let staged_right = stage_unique_column(policy, right)?;
+    let flag = client.empty(len * std::mem::size_of::<u32>());
+    let block_count_u32 = unique_block_count_read(len)?;
+    unsafe {
+        tuple2_unique_device_expr_flags_kernel::launch_unchecked::<
+            Left::Item,
+            Right::Item,
+            Left::Expr,
+            Right::Expr,
+            Pred,
+            Left::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
+            BufferArg::from_raw_parts(staged_left.slot0.0.clone(), staged_left.slot0.1),
+            BufferArg::from_raw_parts(staged_left.slot1.0.clone(), staged_left.slot1.1),
+            BufferArg::from_raw_parts(staged_left.slot2.0.clone(), staged_left.slot2.1),
+            BufferArg::from_raw_parts(staged_left.slot3.0.clone(), staged_left.slot3.1),
+            BufferArg::from_raw_parts(staged_left.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_right.slot0.0.clone(), staged_right.slot0.1),
+            BufferArg::from_raw_parts(staged_right.slot1.0.clone(), staged_right.slot1.1),
+            BufferArg::from_raw_parts(staged_right.slot2.0.clone(), staged_right.slot2.1),
+            BufferArg::from_raw_parts(staged_right.slot3.0.clone(), staged_right.slot3.1),
+            BufferArg::from_raw_parts(staged_right.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(flag.clone(), len),
+        );
+    }
+    Ok(flag)
+}
+
+pub(crate) fn unique_tuple3_flags_read<First, Second, Third, Pred>(
+    policy: &CubePolicy<First::Runtime>,
+    first: &First,
+    second: &Second,
+    third: &Third,
+) -> Result<cubecl::server::Handle, Error>
+where
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Item: Scalar + 'static,
+    Second::Item: Scalar + 'static,
+    Third::Item: Scalar + 'static,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Third::Expr: DeviceGpuExpr<Third::Item>,
+    Pred: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+{
+    validate_columns3(first, second, third)?;
+    let len = <First as KernelColumn>::len(first);
+    let client = policy.client();
+    if len == 0 {
+        return Ok(policy.empty_handle());
+    }
+
+    let staged_first = stage_unique_column(policy, first)?;
+    let staged_second = stage_unique_column(policy, second)?;
+    let staged_third = stage_unique_column(policy, third)?;
+    let flag = client.empty(len * std::mem::size_of::<u32>());
+    let block_count_u32 = unique_block_count_read(len)?;
+    unsafe {
+        tuple3_unique_device_expr_flags_kernel::launch_unchecked::<
+            First::Item,
+            Second::Item,
+            Third::Item,
+            First::Expr,
+            Second::Expr,
+            Third::Expr,
+            Pred,
+            First::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
+            BufferArg::from_raw_parts(staged_first.slot0.0.clone(), staged_first.slot0.1),
+            BufferArg::from_raw_parts(staged_first.slot1.0.clone(), staged_first.slot1.1),
+            BufferArg::from_raw_parts(staged_first.slot2.0.clone(), staged_first.slot2.1),
+            BufferArg::from_raw_parts(staged_first.slot3.0.clone(), staged_first.slot3.1),
+            BufferArg::from_raw_parts(staged_first.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_second.slot0.0.clone(), staged_second.slot0.1),
+            BufferArg::from_raw_parts(staged_second.slot1.0.clone(), staged_second.slot1.1),
+            BufferArg::from_raw_parts(staged_second.slot2.0.clone(), staged_second.slot2.1),
+            BufferArg::from_raw_parts(staged_second.slot3.0.clone(), staged_second.slot3.1),
+            BufferArg::from_raw_parts(staged_second.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_third.slot0.0.clone(), staged_third.slot0.1),
+            BufferArg::from_raw_parts(staged_third.slot1.0.clone(), staged_third.slot1.1),
+            BufferArg::from_raw_parts(staged_third.slot2.0.clone(), staged_third.slot2.1),
+            BufferArg::from_raw_parts(staged_third.slot3.0.clone(), staged_third.slot3.1),
+            BufferArg::from_raw_parts(staged_third.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(flag.clone(), len),
+        );
+    }
+    Ok(flag)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn unique_tuple7_flags_read<A, B, C, D, E, F, G, Pred>(
+    policy: &CubePolicy<A::Runtime>,
+    a: &A,
+    b: &B,
+    c: &C,
+    d: &D,
+    e: &E,
+    f: &F,
+    g: &G,
+) -> Result<cubecl::server::Handle, Error>
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: Scalar + 'static,
+    B::Item: Scalar + 'static,
+    C::Item: Scalar + 'static,
+    D::Item: Scalar + 'static,
+    E::Item: Scalar + 'static,
+    F::Item: Scalar + 'static,
+    G::Item: Scalar + 'static,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    B::Expr: DeviceGpuExpr<B::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    E::Expr: DeviceGpuExpr<E::Item>,
+    F::Expr: DeviceGpuExpr<F::Item>,
+    G::Expr: DeviceGpuExpr<G::Item>,
+    Pred: BinaryPredicateOp<(
+        A::Item,
+        B::Item,
+        C::Item,
+        D::Item,
+        E::Item,
+        F::Item,
+        G::Item,
+    )>,
+{
+    A::validate(a)?;
+    B::validate(b)?;
+    C::validate(c)?;
+    D::validate(d)?;
+    E::validate(e)?;
+    F::validate(f)?;
+    G::validate(g)?;
+    let len = A::len(a);
+    ensure_same_len(B::len(b), len)?;
+    ensure_same_len(C::len(c), len)?;
+    ensure_same_len(D::len(d), len)?;
+    ensure_same_len(E::len(e), len)?;
+    ensure_same_len(F::len(f), len)?;
+    ensure_same_len(G::len(g), len)?;
+    let client = policy.client();
+    if len == 0 {
+        return Ok(policy.empty_handle());
+    }
+
+    let staged_a = stage_unique_column(policy, a)?;
+    let staged_b = stage_unique_column(policy, b)?;
+    let staged_c = stage_unique_column(policy, c)?;
+    let staged_d = stage_unique_column(policy, d)?;
+    let staged_e = stage_unique_column(policy, e)?;
+    let staged_f = stage_unique_column(policy, f)?;
+    let staged_g = stage_unique_column(policy, g)?;
+    let flag = client.empty(len * std::mem::size_of::<u32>());
+    let block_count_u32 = unique_block_count_read(len)?;
+    unsafe {
+        tuple7_unique_device_expr_flags_kernel::launch_unchecked::<
+            A::Item,
+            B::Item,
+            C::Item,
+            D::Item,
+            E::Item,
+            F::Item,
+            G::Item,
+            A::Expr,
+            B::Expr,
+            C::Expr,
+            D::Expr,
+            E::Expr,
+            F::Expr,
+            G::Expr,
+            Pred,
+            A::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
+            BufferArg::from_raw_parts(staged_a.slot0.0.clone(), staged_a.slot0.1),
+            BufferArg::from_raw_parts(staged_a.slot1.0.clone(), staged_a.slot1.1),
+            BufferArg::from_raw_parts(staged_a.slot2.0.clone(), staged_a.slot2.1),
+            BufferArg::from_raw_parts(staged_a.slot3.0.clone(), staged_a.slot3.1),
+            BufferArg::from_raw_parts(staged_a.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_b.slot0.0.clone(), staged_b.slot0.1),
+            BufferArg::from_raw_parts(staged_b.slot1.0.clone(), staged_b.slot1.1),
+            BufferArg::from_raw_parts(staged_b.slot2.0.clone(), staged_b.slot2.1),
+            BufferArg::from_raw_parts(staged_b.slot3.0.clone(), staged_b.slot3.1),
+            BufferArg::from_raw_parts(staged_b.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_c.slot0.0.clone(), staged_c.slot0.1),
+            BufferArg::from_raw_parts(staged_c.slot1.0.clone(), staged_c.slot1.1),
+            BufferArg::from_raw_parts(staged_c.slot2.0.clone(), staged_c.slot2.1),
+            BufferArg::from_raw_parts(staged_c.slot3.0.clone(), staged_c.slot3.1),
+            BufferArg::from_raw_parts(staged_c.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_d.slot0.0.clone(), staged_d.slot0.1),
+            BufferArg::from_raw_parts(staged_d.slot1.0.clone(), staged_d.slot1.1),
+            BufferArg::from_raw_parts(staged_d.slot2.0.clone(), staged_d.slot2.1),
+            BufferArg::from_raw_parts(staged_d.slot3.0.clone(), staged_d.slot3.1),
+            BufferArg::from_raw_parts(staged_d.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_e.slot0.0.clone(), staged_e.slot0.1),
+            BufferArg::from_raw_parts(staged_e.slot1.0.clone(), staged_e.slot1.1),
+            BufferArg::from_raw_parts(staged_e.slot2.0.clone(), staged_e.slot2.1),
+            BufferArg::from_raw_parts(staged_e.slot3.0.clone(), staged_e.slot3.1),
+            BufferArg::from_raw_parts(staged_e.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_f.slot0.0.clone(), staged_f.slot0.1),
+            BufferArg::from_raw_parts(staged_f.slot1.0.clone(), staged_f.slot1.1),
+            BufferArg::from_raw_parts(staged_f.slot2.0.clone(), staged_f.slot2.1),
+            BufferArg::from_raw_parts(staged_f.slot3.0.clone(), staged_f.slot3.1),
+            BufferArg::from_raw_parts(staged_f.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(staged_g.slot0.0.clone(), staged_g.slot0.1),
+            BufferArg::from_raw_parts(staged_g.slot1.0.clone(), staged_g.slot1.1),
+            BufferArg::from_raw_parts(staged_g.slot2.0.clone(), staged_g.slot2.1),
+            BufferArg::from_raw_parts(staged_g.slot3.0.clone(), staged_g.slot3.1),
+            BufferArg::from_raw_parts(staged_g.slot_offsets.clone(), 4),
+            BufferArg::from_raw_parts(flag.clone(), len),
+        );
+    }
+    Ok(flag)
+}
+
 impl<Source, Pred> KernelUniqueInput<Pred> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,

@@ -25,11 +25,14 @@ pub use expr::{
     device_expr_gather_into_with_policy, device_expr_scatter_into_with_policy,
 };
 pub use memory::{
-    MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformUnaryOutput,
+    MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformSoA4Output,
+    TransformSoA5Output, TransformSoA6Output, TransformSoA7Output, TransformUnaryOutput,
 };
 pub(super) use ordering::{
     device_expr_merge_by_key_control_with_policy,
     device_expr_merge_by_key_values_with_control_with_policy,
+    device_expr_merge_tuple2_by_key_control_with_policy,
+    device_expr_merge_tuple3_by_key_control_with_policy,
 };
 pub use ordering::{
     merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,

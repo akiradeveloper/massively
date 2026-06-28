@@ -18,6 +18,22 @@ pub struct SoA2<A, B>(pub A, pub B);
 #[derive(Clone, Copy, Debug)]
 pub struct SoA3<A, B, C>(pub A, pub B, pub C);
 
+/// Four-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA4<A, B, C, D>(pub A, pub B, pub C, pub D);
+
+/// Five-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA5<A, B, C, D, E>(pub A, pub B, pub C, pub D, pub E);
+
+/// Six-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA6<A, B, C, D, E, F>(pub A, pub B, pub C, pub D, pub E, pub F);
+
+/// Seven-column structure-of-arrays container.
+#[derive(Clone, Copy, Debug)]
+pub struct SoA7<A, B, C, D, E, F, G>(pub A, pub B, pub C, pub D, pub E, pub F, pub G);
+
 impl<A> From<(A,)> for SoA1<A> {
     fn from(value: (A,)) -> Self {
         Self(value.0)
@@ -33,6 +49,32 @@ impl<A, B> From<(A, B)> for SoA2<A, B> {
 impl<A, B, C> From<(A, B, C)> for SoA3<A, B, C> {
     fn from(value: (A, B, C)) -> Self {
         Self(value.0, value.1, value.2)
+    }
+}
+
+impl<A, B, C, D> From<(A, B, C, D)> for SoA4<A, B, C, D> {
+    fn from(value: (A, B, C, D)) -> Self {
+        Self(value.0, value.1, value.2, value.3)
+    }
+}
+
+impl<A, B, C, D, E> From<(A, B, C, D, E)> for SoA5<A, B, C, D, E> {
+    fn from(value: (A, B, C, D, E)) -> Self {
+        Self(value.0, value.1, value.2, value.3, value.4)
+    }
+}
+
+impl<A, B, C, D, E, F> From<(A, B, C, D, E, F)> for SoA6<A, B, C, D, E, F> {
+    fn from(value: (A, B, C, D, E, F)) -> Self {
+        Self(value.0, value.1, value.2, value.3, value.4, value.5)
+    }
+}
+
+impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for SoA7<A, B, C, D, E, F, G> {
+    fn from(value: (A, B, C, D, E, F, G)) -> Self {
+        Self(
+            value.0, value.1, value.2, value.3, value.4, value.5, value.6,
+        )
     }
 }
 

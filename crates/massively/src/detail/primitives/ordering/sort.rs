@@ -643,3 +643,489 @@ where
         DeviceVec::from_handle(policy.id(), input_third_handle, len),
     ))
 }
+
+pub(crate) fn sort_tuple3_by_key_input_with_policy<First, Second, Third, Value, Less>(
+    policy: &CubePolicy<First::Runtime>,
+    first: &First,
+    second: &Second,
+    third: &Third,
+    values: &Value,
+    _less: GpuOp<Less>,
+) -> Result<
+    (
+        DeviceVec<First::Runtime, First::Item>,
+        DeviceVec<First::Runtime, Second::Item>,
+        DeviceVec<First::Runtime, Third::Item>,
+        DeviceVec<First::Runtime, Value::Item>,
+    ),
+    Error,
+>
+where
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    Value: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Item: CubePrimitive + CubeElement,
+    Second::Item: CubePrimitive + CubeElement,
+    Third::Item: CubePrimitive + CubeElement,
+    Value::Item: CubePrimitive + CubeElement,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Third::Expr: DeviceGpuExpr<Third::Item>,
+    Value::Expr: DeviceGpuExpr<Value::Item>,
+    Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+{
+    first.validate()?;
+    second.validate()?;
+    third.validate()?;
+    values.validate()?;
+    ensure_same_len(second.len(), first.len())?;
+    ensure_same_len(third.len(), first.len())?;
+    ensure_same_len(values.len(), first.len())?;
+
+    let len = first.len();
+    if len == 0 {
+        return Ok((
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+        ));
+    }
+
+    let client = policy.client();
+    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let workspace = Workspace::new(policy);
+    let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<First::Item>(len);
+    let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<Second::Item>(len);
+    let (scratch_third_a, scratch_third_b) = workspace.alloc_pair::<Third::Item>(len);
+    let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<Value::Item>(len);
+    let first_bindings = first.stage(policy)?;
+    let second_bindings = second.stage(policy)?;
+    let third_bindings = third.stage(policy)?;
+    let value_bindings = values.stage(policy)?;
+    let first_offsets = first_bindings.slot_offsets_handle(client)?;
+    let second_offsets = second_bindings.slot_offsets_handle(client)?;
+    let third_offsets = third_bindings.slot_offsets_handle(client)?;
+    let value_offsets = value_bindings.slot_offsets_handle(client)?;
+    let (first_slot2, first_slot2_len) = first_bindings
+        .slots
+        .get(2)
+        .unwrap_or(&first_bindings.slots[0]);
+    let (first_slot3, first_slot3_len) = first_bindings
+        .slots
+        .get(3)
+        .unwrap_or(&first_bindings.slots[0]);
+    let (second_slot2, second_slot2_len) = second_bindings
+        .slots
+        .get(2)
+        .unwrap_or(&second_bindings.slots[0]);
+    let (second_slot3, second_slot3_len) = second_bindings
+        .slots
+        .get(3)
+        .unwrap_or(&second_bindings.slots[0]);
+    let (third_slot2, third_slot2_len) = third_bindings
+        .slots
+        .get(2)
+        .unwrap_or(&third_bindings.slots[0]);
+    let (third_slot3, third_slot3_len) = third_bindings
+        .slots
+        .get(3)
+        .unwrap_or(&third_bindings.slots[0]);
+    let (value_slot2, value_slot2_len) = value_bindings
+        .slots
+        .get(2)
+        .unwrap_or(&value_bindings.slots[0]);
+    let (value_slot3, value_slot3_len) = value_bindings
+        .slots
+        .get(3)
+        .unwrap_or(&value_bindings.slots[0]);
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+
+    unsafe {
+        merge_sort_tuple3_by_key_expr_first_pass_kernel::launch_unchecked::<
+            First::Item,
+            Second::Item,
+            Third::Item,
+            Value::Item,
+            First::Expr,
+            Second::Expr,
+            Third::Expr,
+            Value::Expr,
+            Less,
+            First::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+            unsafe {
+                BufferArg::from_raw_parts(first_bindings.input.clone(), first_bindings.input_len)
+            },
+            unsafe {
+                BufferArg::from_raw_parts(first_bindings.rhs.clone(), first_bindings.rhs_len)
+            },
+            unsafe { BufferArg::from_raw_parts(first_slot2.clone(), *first_slot2_len) },
+            unsafe { BufferArg::from_raw_parts(first_slot3.clone(), *first_slot3_len) },
+            unsafe { BufferArg::from_raw_parts(first_offsets.clone(), 4) },
+            unsafe {
+                BufferArg::from_raw_parts(second_bindings.input.clone(), second_bindings.input_len)
+            },
+            unsafe {
+                BufferArg::from_raw_parts(second_bindings.rhs.clone(), second_bindings.rhs_len)
+            },
+            unsafe { BufferArg::from_raw_parts(second_slot2.clone(), *second_slot2_len) },
+            unsafe { BufferArg::from_raw_parts(second_slot3.clone(), *second_slot3_len) },
+            unsafe { BufferArg::from_raw_parts(second_offsets.clone(), 4) },
+            unsafe {
+                BufferArg::from_raw_parts(third_bindings.input.clone(), third_bindings.input_len)
+            },
+            unsafe {
+                BufferArg::from_raw_parts(third_bindings.rhs.clone(), third_bindings.rhs_len)
+            },
+            unsafe { BufferArg::from_raw_parts(third_slot2.clone(), *third_slot2_len) },
+            unsafe { BufferArg::from_raw_parts(third_slot3.clone(), *third_slot3_len) },
+            unsafe { BufferArg::from_raw_parts(third_offsets.clone(), 4) },
+            unsafe {
+                BufferArg::from_raw_parts(value_bindings.input.clone(), value_bindings.input_len)
+            },
+            unsafe {
+                BufferArg::from_raw_parts(value_bindings.rhs.clone(), value_bindings.rhs_len)
+            },
+            unsafe { BufferArg::from_raw_parts(value_slot2.clone(), *value_slot2_len) },
+            unsafe { BufferArg::from_raw_parts(value_slot3.clone(), *value_slot3_len) },
+            unsafe { BufferArg::from_raw_parts(value_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(scratch_first_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(scratch_second_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(scratch_third_a.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(scratch_values_a.clone(), len) },
+        );
+    }
+
+    let mut input_first_handle = scratch_first_a.clone();
+    let mut input_second_handle = scratch_second_a.clone();
+    let mut input_third_handle = scratch_third_a.clone();
+    let mut input_values_handle = scratch_values_a.clone();
+    let mut output_first_handle = scratch_first_b.clone();
+    let mut output_second_handle = scratch_second_b.clone();
+    let mut output_third_handle = scratch_third_b.clone();
+    let mut output_values_handle = scratch_values_b.clone();
+    let mut next_uses_a = true;
+    let mut width = 2usize;
+
+    while width < len {
+        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
+        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
+        unsafe {
+            merge_sort_tuple3_by_key_pass_kernel::launch_unchecked::<
+                First::Item,
+                Second::Item,
+                Third::Item,
+                Value::Item,
+                Less,
+                First::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                unsafe { BufferArg::from_raw_parts(input_first_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(input_second_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(input_third_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(input_values_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(output_first_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(output_second_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(output_third_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(output_values_handle.clone(), len) },
+            );
+        }
+
+        input_first_handle = output_first_handle.clone();
+        input_second_handle = output_second_handle.clone();
+        input_third_handle = output_third_handle.clone();
+        input_values_handle = output_values_handle.clone();
+        if next_uses_a {
+            output_first_handle = scratch_first_a.clone();
+            output_second_handle = scratch_second_a.clone();
+            output_third_handle = scratch_third_a.clone();
+            output_values_handle = scratch_values_a.clone();
+        } else {
+            output_first_handle = scratch_first_b.clone();
+            output_second_handle = scratch_second_b.clone();
+            output_third_handle = scratch_third_b.clone();
+            output_values_handle = scratch_values_b.clone();
+        }
+        next_uses_a = !next_uses_a;
+        width *= 2;
+    }
+
+    Ok((
+        DeviceVec::from_handle(policy.id(), input_first_handle, len),
+        DeviceVec::from_handle(policy.id(), input_second_handle, len),
+        DeviceVec::from_handle(policy.id(), input_third_handle, len),
+        DeviceVec::from_handle(policy.id(), input_values_handle, len),
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn sort_tuple7_indices_input<A, B, C, D, E, F, G, Less>(
+    policy: &CubePolicy<A::Runtime>,
+    a: &A,
+    b: &B,
+    c: &C,
+    d: &D,
+    e: &E,
+    f: &F,
+    g: &G,
+    _less: GpuOp<Less>,
+) -> Result<DeviceVec<A::Runtime, u32>, Error>
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: CubePrimitive + CubeElement,
+    B::Item: CubePrimitive + CubeElement,
+    C::Item: CubePrimitive + CubeElement,
+    D::Item: CubePrimitive + CubeElement,
+    E::Item: CubePrimitive + CubeElement,
+    F::Item: CubePrimitive + CubeElement,
+    G::Item: CubePrimitive + CubeElement,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    B::Expr: DeviceGpuExpr<B::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    E::Expr: DeviceGpuExpr<E::Item>,
+    F::Expr: DeviceGpuExpr<F::Item>,
+    G::Expr: DeviceGpuExpr<G::Item>,
+    Less: BinaryPredicateOp<(
+        A::Item,
+        B::Item,
+        C::Item,
+        D::Item,
+        E::Item,
+        F::Item,
+        G::Item,
+    )>,
+{
+    a.validate()?;
+    b.validate()?;
+    c.validate()?;
+    d.validate()?;
+    e.validate()?;
+    f.validate()?;
+    g.validate()?;
+    ensure_same_len(b.len(), a.len())?;
+    ensure_same_len(c.len(), a.len())?;
+    ensure_same_len(d.len(), a.len())?;
+    ensure_same_len(e.len(), a.len())?;
+    ensure_same_len(f.len(), a.len())?;
+    ensure_same_len(g.len(), a.len())?;
+
+    let len = a.len();
+    if len == 0 {
+        return Ok(policy.empty_device_vec());
+    }
+
+    let client = policy.client();
+    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let workspace = Workspace::new(policy);
+    let (scratch_a, scratch_b) = workspace.alloc_pair::<u32>(len);
+    let a_bindings = a.stage(policy)?;
+    let b_bindings = b.stage(policy)?;
+    let c_bindings = c.stage(policy)?;
+    let d_bindings = d.stage(policy)?;
+    let e_bindings = e.stage(policy)?;
+    let f_bindings = f.stage(policy)?;
+    let g_bindings = g.stage(policy)?;
+    let a_offsets = a_bindings.slot_offsets_handle(client)?;
+    let b_offsets = b_bindings.slot_offsets_handle(client)?;
+    let c_offsets = c_bindings.slot_offsets_handle(client)?;
+    let d_offsets = d_bindings.slot_offsets_handle(client)?;
+    let e_offsets = e_bindings.slot_offsets_handle(client)?;
+    let f_offsets = f_bindings.slot_offsets_handle(client)?;
+    let g_offsets = g_bindings.slot_offsets_handle(client)?;
+    let a0 = a_bindings.slot_or_first(0);
+    let a1 = a_bindings.slot_or_first(1);
+    let a2 = a_bindings.slot_or_first(2);
+    let a3 = a_bindings.slot_or_first(3);
+    let b0 = b_bindings.slot_or_first(0);
+    let b1 = b_bindings.slot_or_first(1);
+    let b2 = b_bindings.slot_or_first(2);
+    let b3 = b_bindings.slot_or_first(3);
+    let c0 = c_bindings.slot_or_first(0);
+    let c1 = c_bindings.slot_or_first(1);
+    let c2 = c_bindings.slot_or_first(2);
+    let c3 = c_bindings.slot_or_first(3);
+    let d0 = d_bindings.slot_or_first(0);
+    let d1 = d_bindings.slot_or_first(1);
+    let d2 = d_bindings.slot_or_first(2);
+    let d3 = d_bindings.slot_or_first(3);
+    let e0 = e_bindings.slot_or_first(0);
+    let e1 = e_bindings.slot_or_first(1);
+    let e2 = e_bindings.slot_or_first(2);
+    let e3 = e_bindings.slot_or_first(3);
+    let f0 = f_bindings.slot_or_first(0);
+    let f1 = f_bindings.slot_or_first(1);
+    let f2 = f_bindings.slot_or_first(2);
+    let f3 = f_bindings.slot_or_first(3);
+    let g0 = g_bindings.slot_or_first(0);
+    let g1 = g_bindings.slot_or_first(1);
+    let g2 = g_bindings.slot_or_first(2);
+    let g3 = g_bindings.slot_or_first(3);
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+
+    unsafe {
+        merge_sort_tuple7_indices_expr_first_pass_kernel::launch_unchecked::<
+            A::Item,
+            B::Item,
+            C::Item,
+            D::Item,
+            E::Item,
+            F::Item,
+            G::Item,
+            A::Expr,
+            B::Expr,
+            C::Expr,
+            D::Expr,
+            E::Expr,
+            F::Expr,
+            G::Expr,
+            Less,
+            A::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+            unsafe { BufferArg::from_raw_parts(a0.0.clone(), a0.1) },
+            unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
+            unsafe { BufferArg::from_raw_parts(a2.0.clone(), a2.1) },
+            unsafe { BufferArg::from_raw_parts(a3.0.clone(), a3.1) },
+            unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(b0.0.clone(), b0.1) },
+            unsafe { BufferArg::from_raw_parts(b1.0.clone(), b1.1) },
+            unsafe { BufferArg::from_raw_parts(b2.0.clone(), b2.1) },
+            unsafe { BufferArg::from_raw_parts(b3.0.clone(), b3.1) },
+            unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(c0.0.clone(), c0.1) },
+            unsafe { BufferArg::from_raw_parts(c1.0.clone(), c1.1) },
+            unsafe { BufferArg::from_raw_parts(c2.0.clone(), c2.1) },
+            unsafe { BufferArg::from_raw_parts(c3.0.clone(), c3.1) },
+            unsafe { BufferArg::from_raw_parts(c_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(d0.0.clone(), d0.1) },
+            unsafe { BufferArg::from_raw_parts(d1.0.clone(), d1.1) },
+            unsafe { BufferArg::from_raw_parts(d2.0.clone(), d2.1) },
+            unsafe { BufferArg::from_raw_parts(d3.0.clone(), d3.1) },
+            unsafe { BufferArg::from_raw_parts(d_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(e0.0.clone(), e0.1) },
+            unsafe { BufferArg::from_raw_parts(e1.0.clone(), e1.1) },
+            unsafe { BufferArg::from_raw_parts(e2.0.clone(), e2.1) },
+            unsafe { BufferArg::from_raw_parts(e3.0.clone(), e3.1) },
+            unsafe { BufferArg::from_raw_parts(e_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(f0.0.clone(), f0.1) },
+            unsafe { BufferArg::from_raw_parts(f1.0.clone(), f1.1) },
+            unsafe { BufferArg::from_raw_parts(f2.0.clone(), f2.1) },
+            unsafe { BufferArg::from_raw_parts(f3.0.clone(), f3.1) },
+            unsafe { BufferArg::from_raw_parts(f_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(g0.0.clone(), g0.1) },
+            unsafe { BufferArg::from_raw_parts(g1.0.clone(), g1.1) },
+            unsafe { BufferArg::from_raw_parts(g2.0.clone(), g2.1) },
+            unsafe { BufferArg::from_raw_parts(g3.0.clone(), g3.1) },
+            unsafe { BufferArg::from_raw_parts(g_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(scratch_a.clone(), len) },
+        );
+    }
+
+    let mut input_handle = scratch_a.clone();
+    let mut output_handle = scratch_b.clone();
+    let mut next_uses_a = true;
+    let mut width = 2usize;
+
+    while width < len {
+        let width_u32 = u32::try_from(width).map_err(|_| Error::LengthTooLarge { len: width })?;
+        let width_handle = client.create_from_slice(u32::as_bytes(&[width_u32]));
+        unsafe {
+            merge_sort_tuple7_indices_pass_kernel::launch_unchecked::<
+                A::Item,
+                B::Item,
+                C::Item,
+                D::Item,
+                E::Item,
+                F::Item,
+                G::Item,
+                A::Expr,
+                B::Expr,
+                C::Expr,
+                D::Expr,
+                E::Expr,
+                F::Expr,
+                G::Expr,
+                Less,
+                A::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                unsafe { BufferArg::from_raw_parts(a0.0.clone(), a0.1) },
+                unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
+                unsafe { BufferArg::from_raw_parts(a2.0.clone(), a2.1) },
+                unsafe { BufferArg::from_raw_parts(a3.0.clone(), a3.1) },
+                unsafe { BufferArg::from_raw_parts(a_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(b0.0.clone(), b0.1) },
+                unsafe { BufferArg::from_raw_parts(b1.0.clone(), b1.1) },
+                unsafe { BufferArg::from_raw_parts(b2.0.clone(), b2.1) },
+                unsafe { BufferArg::from_raw_parts(b3.0.clone(), b3.1) },
+                unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(c0.0.clone(), c0.1) },
+                unsafe { BufferArg::from_raw_parts(c1.0.clone(), c1.1) },
+                unsafe { BufferArg::from_raw_parts(c2.0.clone(), c2.1) },
+                unsafe { BufferArg::from_raw_parts(c3.0.clone(), c3.1) },
+                unsafe { BufferArg::from_raw_parts(c_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(d0.0.clone(), d0.1) },
+                unsafe { BufferArg::from_raw_parts(d1.0.clone(), d1.1) },
+                unsafe { BufferArg::from_raw_parts(d2.0.clone(), d2.1) },
+                unsafe { BufferArg::from_raw_parts(d3.0.clone(), d3.1) },
+                unsafe { BufferArg::from_raw_parts(d_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(e0.0.clone(), e0.1) },
+                unsafe { BufferArg::from_raw_parts(e1.0.clone(), e1.1) },
+                unsafe { BufferArg::from_raw_parts(e2.0.clone(), e2.1) },
+                unsafe { BufferArg::from_raw_parts(e3.0.clone(), e3.1) },
+                unsafe { BufferArg::from_raw_parts(e_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(f0.0.clone(), f0.1) },
+                unsafe { BufferArg::from_raw_parts(f1.0.clone(), f1.1) },
+                unsafe { BufferArg::from_raw_parts(f2.0.clone(), f2.1) },
+                unsafe { BufferArg::from_raw_parts(f3.0.clone(), f3.1) },
+                unsafe { BufferArg::from_raw_parts(f_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(g0.0.clone(), g0.1) },
+                unsafe { BufferArg::from_raw_parts(g1.0.clone(), g1.1) },
+                unsafe { BufferArg::from_raw_parts(g2.0.clone(), g2.1) },
+                unsafe { BufferArg::from_raw_parts(g3.0.clone(), g3.1) },
+                unsafe { BufferArg::from_raw_parts(g_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(input_handle.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
+            );
+        }
+
+        input_handle = output_handle.clone();
+        output_handle = if next_uses_a {
+            scratch_a.clone()
+        } else {
+            scratch_b.clone()
+        };
+        next_uses_a = !next_uses_a;
+        width *= 2;
+    }
+
+    Ok(DeviceVec::from_handle(policy.id(), input_handle, len))
+}

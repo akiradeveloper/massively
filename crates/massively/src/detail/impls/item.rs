@@ -205,6 +205,76 @@ macro_rules! impl_mitem_tuple {
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
+            #[allow(clippy::too_many_arguments)]
+            fn transform_septenary<First, Second, Third, Fourth, Fifth, Sixth, Seventh, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                first: crate::detail::device::DeviceColumnView<R, First>,
+                second: crate::detail::device::DeviceColumnView<R, Second>,
+                third: crate::detail::device::DeviceColumnView<R, Third>,
+                fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+                fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+                sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
+                seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
+                op: Op,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
+                Fourth: Scalar,
+                Fifth: Scalar,
+                Sixth: Scalar,
+                Seventh: Scalar,
+                Op: op::UnaryOp<
+                    R,
+                    (First, Second, Third, Fourth, Fifth, Sixth, Seventh),
+                    Output = Self,
+                >,
+                Self: crate::detail::TransformSoA7Output<
+                    R,
+                    First,
+                    Second,
+                    Third,
+                    Fourth,
+                    Fifth,
+                    Sixth,
+                    Seventh,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA7Output<
+                        R,
+                        First,
+                        Second,
+                        Third,
+                        Fourth,
+                        Fifth,
+                        Sixth,
+                        Seventh,
+                        KernelOp<R, Op>,
+                    >>::run(
+                        policy,
+                        first,
+                        second,
+                        third,
+                        fourth,
+                        fifth,
+                        sixth,
+                        seventh,
+                )?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
             fn reduce_inner<Op>(
                 policy: &crate::detail::CubePolicy<R>,
                 input: <Self as MItem<R>>::Inner,
@@ -334,6 +404,148 @@ macro_rules! impl_wide_mitem_tuple {
             R: Runtime,
             $( $ty: Scalar, )+
         {
+            fn transform_unary<Input, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: crate::detail::device::DeviceColumnView<
+                    R,
+                    Input,
+                >,
+                op: Op,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                Input: Scalar,
+                Op: op::UnaryOp<R, (Input,), Output = Self>,
+                Self: crate::detail::TransformUnaryOutput<
+                    R,
+                    Input,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformUnaryOutput<
+                        R,
+                        Input,
+                        KernelOp<R, Op>,
+                    >>::run(policy, input)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            fn transform_septenary<First, Second, Third, Fourth, Fifth, Sixth, Seventh, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                first: crate::detail::device::DeviceColumnView<R, First>,
+                second: crate::detail::device::DeviceColumnView<R, Second>,
+                third: crate::detail::device::DeviceColumnView<R, Third>,
+                fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+                fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+                sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
+                seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
+                op: Op,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
+                Fourth: Scalar,
+                Fifth: Scalar,
+                Sixth: Scalar,
+                Seventh: Scalar,
+                Op: op::UnaryOp<
+                    R,
+                    (First, Second, Third, Fourth, Fifth, Sixth, Seventh),
+                    Output = Self,
+                >,
+                Self: crate::detail::TransformSoA7Output<
+                    R,
+                    First,
+                    Second,
+                    Third,
+                    Fourth,
+                    Fifth,
+                    Sixth,
+                    Seventh,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA7Output<
+                        R,
+                        First,
+                        Second,
+                        Third,
+                        Fourth,
+                        Fifth,
+                        Sixth,
+                        Seventh,
+                        KernelOp<R, Op>,
+                    >>::run(
+                        policy,
+                        first,
+                        second,
+                        third,
+                        fourth,
+                        fifth,
+                        sixth,
+                        seventh,
+                )?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+        }
+    };
+}
+
+macro_rules! impl_wide_mitem_tuple_empty_dispatch {
+    ($( $ty:ident : $var:ident ),+) => {
+        impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: Scalar, )+
+        {
+            type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
+            type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
+            type Vec = ($( DeviceVec<R, $ty>, )+);
+
+            fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
+                let ($( $var, )+) = inner;
+                ($( DeviceVec::from_inner($var), )+)
+            }
+        }
+
+        impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
+        where
+            R: Runtime,
+            $( $ty: Scalar, )+
+        {
+            type Item = ($( $ty, )+);
+
+            fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
+                <Self::Item as MItem<R>>::vec_from_inner(inner)
+            }
+        }
+
+        impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: Scalar, )+
+        {
         }
     };
 }
@@ -342,11 +554,11 @@ impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d);
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e);
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f);
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k);
-impl_wide_mitem_tuple!(
+impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h);
+impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i);
+impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j);
+impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k);
+impl_wide_mitem_tuple_empty_dispatch!(
     A: a,
     B0: b,
     C: c,

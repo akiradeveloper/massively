@@ -152,6 +152,51 @@ where
     }
 }
 
+impl<First, Second, Third, Less> KernelSortByKeyKeys<Less> for (First, Second, Third)
+where
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Item: Scalar + 'static,
+    Second::Item: Scalar + 'static,
+    Third::Item: Scalar + 'static,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Third::Expr: DeviceGpuExpr<Third::Item>,
+    Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+{
+    type Runtime = First::Runtime;
+    type OutputKeys = DeviceSoA3<
+        DeviceVec<First::Runtime, First::Item>,
+        DeviceVec<First::Runtime, Second::Item>,
+        DeviceVec<First::Runtime, Third::Item>,
+    >;
+
+    fn sort_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
+        let indices = primitive_range::indices_u32(policy, <First as KernelColumn>::len(&self.0))?;
+        let (first, second, third, indices) =
+            primitive_ordering::sort_tuple3_by_key_input_with_policy(
+                policy,
+                &self.0,
+                &self.1,
+                &self.2,
+                &indices,
+                crate::op::GpuOp::<Less>::new(),
+            )?;
+        Ok((
+            DeviceSoA3 {
+                first,
+                second,
+                third,
+            },
+            indices,
+        ))
+    }
+}
+
 impl<ValueSource, IndexSource> KernelSortByKeyValues<IndexSource> for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
@@ -341,6 +386,74 @@ where
     }
 }
 
+impl<A, B, C, D, E, F, G, IndexSource> KernelSortByKeyValues<IndexSource> for (A, B, C, D, E, F, G)
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = A::Runtime, Item = u32> + KernelColumnAt<S0>,
+    A::Item: Scalar + 'static,
+    B::Item: Scalar + 'static,
+    C::Item: Scalar + 'static,
+    D::Item: Scalar + 'static,
+    E::Item: Scalar + 'static,
+    F::Item: Scalar + 'static,
+    G::Item: Scalar + 'static,
+    A::Expr: GpuExpr<A::Item>,
+    B::Expr: GpuExpr<B::Item>,
+    C::Expr: GpuExpr<C::Item>,
+    D::Expr: GpuExpr<D::Item>,
+    E::Expr: GpuExpr<E::Item>,
+    F::Expr: GpuExpr<F::Item>,
+    G::Expr: GpuExpr<G::Item>,
+    IndexSource::Expr: GpuExpr<u32>,
+{
+    type Runtime = A::Runtime;
+    type OutputValues = (
+        DeviceVec<A::Runtime, A::Item>,
+        DeviceVec<A::Runtime, B::Item>,
+        DeviceVec<A::Runtime, C::Item>,
+        DeviceVec<A::Runtime, D::Item>,
+        DeviceVec<A::Runtime, E::Item>,
+        DeviceVec<A::Runtime, F::Item>,
+        DeviceVec<A::Runtime, G::Item>,
+    );
+
+    fn sort_by_key_values(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        indices: &IndexSource,
+    ) -> Result<Self::OutputValues, Error> {
+        self.0.validate()?;
+        self.1.validate()?;
+        self.2.validate()?;
+        self.3.validate()?;
+        self.4.validate()?;
+        self.5.validate()?;
+        self.6.validate()?;
+        ensure_same_len(self.1.len(), self.0.len())?;
+        ensure_same_len(self.2.len(), self.0.len())?;
+        ensure_same_len(self.3.len(), self.0.len())?;
+        ensure_same_len(self.4.len(), self.0.len())?;
+        ensure_same_len(self.5.len(), self.0.len())?;
+        ensure_same_len(self.6.len(), self.0.len())?;
+        validate_key_column(indices, self.0.len())?;
+        Ok((
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.0, indices)?,
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.1, indices)?,
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.2, indices)?,
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.3, indices)?,
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.4, indices)?,
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.5, indices)?,
+            crate::detail::api::device_expr_gather_with_policy(policy, &self.6, indices)?,
+        ))
+    }
+}
+
 impl<LeftKey, RightKey, Less> KernelMergeByKeyKeys<RightKey, Less> for LeftKey
 where
     LeftKey: KernelColumn + KernelColumnAt<S0>,
@@ -412,6 +525,92 @@ where
             self.0,
             policy,
             right_keys.0,
+        )
+    }
+}
+
+impl<LeftA, LeftB, RightA, RightB, Less> KernelMergeByKeyKeys<(RightA, RightB), Less>
+    for (LeftA, LeftB)
+where
+    LeftA: KernelColumn + KernelColumnAt<S0>,
+    LeftB: KernelColumn<Runtime = LeftA::Runtime> + KernelColumnAt<S0>,
+    RightA: KernelColumn<Runtime = LeftA::Runtime, Item = LeftA::Item> + KernelColumnAt<S0>,
+    RightB: KernelColumn<Runtime = LeftA::Runtime, Item = LeftB::Item> + KernelColumnAt<S0>,
+    LeftA::Item: Scalar + 'static,
+    LeftB::Item: Scalar + 'static,
+    LeftA::Expr: DeviceGpuExpr<LeftA::Item>,
+    LeftB::Expr: DeviceGpuExpr<LeftB::Item>,
+    RightA::Expr: DeviceGpuExpr<RightA::Item>,
+    RightB::Expr: DeviceGpuExpr<RightB::Item>,
+    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item)>,
+{
+    type Runtime = LeftA::Runtime;
+    type OutputKeys =
+        DeviceSoA2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>;
+
+    fn merge_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        right_keys: (RightA, RightB),
+    ) -> Result<(Self::OutputKeys, primitive_ordering::MergeByKeyControl), Error> {
+        crate::detail::api::device_expr_merge_tuple2_by_key_control_with_policy::<
+            LeftA,
+            LeftB,
+            RightA,
+            RightB,
+            Less,
+        >(policy, &self.0, &self.1, &right_keys.0, &right_keys.1)
+    }
+}
+
+impl<LeftA, LeftB, LeftC, RightA, RightB, RightC, Less>
+    KernelMergeByKeyKeys<(RightA, RightB, RightC), Less> for (LeftA, LeftB, LeftC)
+where
+    LeftA: KernelColumn + KernelColumnAt<S0>,
+    LeftB: KernelColumn<Runtime = LeftA::Runtime> + KernelColumnAt<S0>,
+    LeftC: KernelColumn<Runtime = LeftA::Runtime> + KernelColumnAt<S0>,
+    RightA: KernelColumn<Runtime = LeftA::Runtime, Item = LeftA::Item> + KernelColumnAt<S0>,
+    RightB: KernelColumn<Runtime = LeftA::Runtime, Item = LeftB::Item> + KernelColumnAt<S0>,
+    RightC: KernelColumn<Runtime = LeftA::Runtime, Item = LeftC::Item> + KernelColumnAt<S0>,
+    LeftA::Item: Scalar + 'static,
+    LeftB::Item: Scalar + 'static,
+    LeftC::Item: Scalar + 'static,
+    LeftA::Expr: DeviceGpuExpr<LeftA::Item>,
+    LeftB::Expr: DeviceGpuExpr<LeftB::Item>,
+    LeftC::Expr: DeviceGpuExpr<LeftC::Item>,
+    RightA::Expr: DeviceGpuExpr<RightA::Item>,
+    RightB::Expr: DeviceGpuExpr<RightB::Item>,
+    RightC::Expr: DeviceGpuExpr<RightC::Item>,
+    Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
+{
+    type Runtime = LeftA::Runtime;
+    type OutputKeys = DeviceSoA3<
+        DeviceVec<LeftA::Runtime, LeftA::Item>,
+        DeviceVec<LeftA::Runtime, LeftB::Item>,
+        DeviceVec<LeftA::Runtime, LeftC::Item>,
+    >;
+
+    fn merge_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        right_keys: (RightA, RightB, RightC),
+    ) -> Result<(Self::OutputKeys, primitive_ordering::MergeByKeyControl), Error> {
+        crate::detail::api::device_expr_merge_tuple3_by_key_control_with_policy::<
+            LeftA,
+            LeftB,
+            LeftC,
+            RightA,
+            RightB,
+            RightC,
+            Less,
+        >(
+            policy,
+            &self.0,
+            &self.1,
+            &self.2,
+            &right_keys.0,
+            &right_keys.1,
+            &right_keys.2,
         )
     }
 }
@@ -684,5 +883,122 @@ where
             },
             control,
         )
+    }
+}
+
+impl<LA, LB, LC, LD, LE, LF, LG, RA, RB, RC, RD, RE, RF, RG>
+    KernelMergeByKeyValues<(RA, RB, RC, RD, RE, RF, RG)> for (LA, LB, LC, LD, LE, LF, LG)
+where
+    LA: KernelColumn + KernelColumnAt<S0>,
+    LB: KernelColumn<Runtime = LA::Runtime> + KernelColumnAt<S0>,
+    LC: KernelColumn<Runtime = LA::Runtime> + KernelColumnAt<S0>,
+    LD: KernelColumn<Runtime = LA::Runtime> + KernelColumnAt<S0>,
+    LE: KernelColumn<Runtime = LA::Runtime> + KernelColumnAt<S0>,
+    LF: KernelColumn<Runtime = LA::Runtime> + KernelColumnAt<S0>,
+    LG: KernelColumn<Runtime = LA::Runtime> + KernelColumnAt<S0>,
+    RA: KernelColumn<Runtime = LA::Runtime, Item = LA::Item> + KernelColumnAt<S0>,
+    RB: KernelColumn<Runtime = LA::Runtime, Item = LB::Item> + KernelColumnAt<S0>,
+    RC: KernelColumn<Runtime = LA::Runtime, Item = LC::Item> + KernelColumnAt<S0>,
+    RD: KernelColumn<Runtime = LA::Runtime, Item = LD::Item> + KernelColumnAt<S0>,
+    RE: KernelColumn<Runtime = LA::Runtime, Item = LE::Item> + KernelColumnAt<S0>,
+    RF: KernelColumn<Runtime = LA::Runtime, Item = LF::Item> + KernelColumnAt<S0>,
+    RG: KernelColumn<Runtime = LA::Runtime, Item = LG::Item> + KernelColumnAt<S0>,
+    LA::Item: Scalar + 'static,
+    LB::Item: Scalar + 'static,
+    LC::Item: Scalar + 'static,
+    LD::Item: Scalar + 'static,
+    LE::Item: Scalar + 'static,
+    LF::Item: Scalar + 'static,
+    LG::Item: Scalar + 'static,
+    LA::Expr: DeviceGpuExpr<LA::Item>,
+    LB::Expr: DeviceGpuExpr<LB::Item>,
+    LC::Expr: DeviceGpuExpr<LC::Item>,
+    LD::Expr: DeviceGpuExpr<LD::Item>,
+    LE::Expr: DeviceGpuExpr<LE::Item>,
+    LF::Expr: DeviceGpuExpr<LF::Item>,
+    LG::Expr: DeviceGpuExpr<LG::Item>,
+    RA::Expr: DeviceGpuExpr<RA::Item>,
+    RB::Expr: DeviceGpuExpr<RB::Item>,
+    RC::Expr: DeviceGpuExpr<RC::Item>,
+    RD::Expr: DeviceGpuExpr<RD::Item>,
+    RE::Expr: DeviceGpuExpr<RE::Item>,
+    RF::Expr: DeviceGpuExpr<RF::Item>,
+    RG::Expr: DeviceGpuExpr<RG::Item>,
+{
+    type Runtime = LA::Runtime;
+    type OutputValues = (
+        DeviceVec<LA::Runtime, LA::Item>,
+        DeviceVec<LA::Runtime, LB::Item>,
+        DeviceVec<LA::Runtime, LC::Item>,
+        DeviceVec<LA::Runtime, LD::Item>,
+        DeviceVec<LA::Runtime, LE::Item>,
+        DeviceVec<LA::Runtime, LF::Item>,
+        DeviceVec<LA::Runtime, LG::Item>,
+    );
+
+    fn merge_by_key_values(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        right_values: (RA, RB, RC, RD, RE, RF, RG),
+        control: &primitive_ordering::MergeByKeyControl,
+    ) -> Result<Self::OutputValues, Error> {
+        self.0.validate()?;
+        self.1.validate()?;
+        self.2.validate()?;
+        self.3.validate()?;
+        self.4.validate()?;
+        self.5.validate()?;
+        self.6.validate()?;
+        right_values.0.validate()?;
+        right_values.1.validate()?;
+        right_values.2.validate()?;
+        right_values.3.validate()?;
+        right_values.4.validate()?;
+        right_values.5.validate()?;
+        right_values.6.validate()?;
+        Ok((
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.0,
+                &right_values.0,
+                control,
+            )?,
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.1,
+                &right_values.1,
+                control,
+            )?,
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.2,
+                &right_values.2,
+                control,
+            )?,
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.3,
+                &right_values.3,
+                control,
+            )?,
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.4,
+                &right_values.4,
+                control,
+            )?,
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.5,
+                &right_values.5,
+                control,
+            )?,
+            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                policy,
+                &self.6,
+                &right_values.6,
+                control,
+            )?,
+        ))
     }
 }
