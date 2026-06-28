@@ -74,8 +74,8 @@ pub struct TabulateRead<R: Runtime> {
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug)]
 pub struct TransformRead<R, Source, Op, Output> {
-    len: usize,
-    source: Source,
+    pub(crate) len: usize,
+    pub(crate) source: Source,
     _marker: PhantomData<fn() -> (R, Op, Output)>,
 }
 
@@ -185,9 +185,7 @@ where
     Output: Scalar + 'static,
     Op: op::UnaryOp<R, Input::Item, Output = (Output,)>,
     TransformRead<R, Input::Inner, Op, Output>:
-        KernelColumn<Runtime = R, Item = Output> + KernelColumnAt<S0>,
-    <TransformRead<R, Input::Inner, Op, Output> as KernelColumn>::Expr:
-        GpuExpr<Output> + DeviceGpuExpr<Output>,
+        crate::detail::impls::IntoMaterializedColumn<R, Output>,
 {
     type Item = Output;
     type Read = TransformRead<R, Input::Inner, Op, Output>;

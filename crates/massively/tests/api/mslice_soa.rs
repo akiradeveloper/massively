@@ -11,6 +11,28 @@ impl UnaryOp<WgpuRuntime, (u32,)> for AddOneU32 {
     }
 }
 
+struct SeededIndexF32;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u64, u32)> for SeededIndexF32 {
+    type Output = (f32,);
+
+    fn apply(input: (u64, u32)) -> (f32,) {
+        ((input.0 as f32) + (input.1 as f32),)
+    }
+}
+
+struct PairInsideTen;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (f32, f32)> for PairInsideTen {
+    type Output = (u32,);
+
+    fn apply(input: (f32, f32)) -> (u32,) {
+        ((input.0 + input.1 < 10.0) as u32,)
+    }
+}
+
 struct PairSumU32;
 
 #[cubecl::cube]
@@ -70,6 +92,46 @@ fn soa2_accepts_mixed_mslice_columns() {
     .unwrap();
 
     assert_eq!(sum, (9, 30));
+}
+
+#[test]
+fn transform_accepts_binary_transform_slice_columns() {
+    let exec = exec();
+    let len = 5;
+    let seed1 = massively::slice::constant_slice(len, 1_u64);
+    let seed2 = massively::slice::constant_slice(len, 2_u64);
+    let idx1 = massively::slice::tabulate_slice(len);
+    let idx2 = massively::slice::tabulate_slice(len);
+    let x = massively::slice::transform_slice(massively::SoA2(seed1, idx1), SeededIndexF32);
+    let y = massively::slice::transform_slice(massively::SoA2(seed2, idx2), SeededIndexF32);
+    let out = exec.filled(len, 0_u32).unwrap();
+
+    transform(
+        &exec,
+        massively::SoA2(x, y),
+        PairInsideTen,
+        massively::SoA1(out.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out).unwrap(), vec![1, 1, 1, 1, 0]);
+}
+
+#[test]
+fn transform_slice_accepts_binary_transform_slice_columns() {
+    let exec = exec();
+    let len = 5;
+    let seed1 = massively::slice::constant_slice(len, 1_u64);
+    let seed2 = massively::slice::constant_slice(len, 2_u64);
+    let idx1 = massively::slice::tabulate_slice(len);
+    let idx2 = massively::slice::tabulate_slice(len);
+    let x = massively::slice::transform_slice(massively::SoA2(seed1, idx1), SeededIndexF32);
+    let y = massively::slice::transform_slice(massively::SoA2(seed2, idx2), SeededIndexF32);
+
+    let hits = massively::slice::transform_slice(massively::SoA2(x, y), PairInsideTen);
+    let sum = reduce(&exec, massively::SoA1(hits), (0_u32,), Sum).unwrap();
+
+    assert_eq!(sum, (4,));
 }
 
 #[test]
