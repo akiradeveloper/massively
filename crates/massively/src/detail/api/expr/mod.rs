@@ -9,10 +9,10 @@ mod selection;
 pub use collect::device_expr_collect_into_with_policy;
 pub(in crate::detail) use collect::{device_expr_collect_with_policy, device_expr_reverse_collect};
 
-pub(in crate::detail) use indexed::device_expr_gather_with_policy;
-pub use indexed::{
-    device_expr_gather_into_with_policy, device_expr_gather_where_into_with_policy,
-    device_expr_scatter_into_with_policy, device_expr_scatter_where_into_with_policy,
+pub use indexed::{device_expr_gather_into_with_policy, device_expr_scatter_into_with_policy};
+pub(in crate::detail) use indexed::{
+    device_expr_gather_where_into_with_control, device_expr_gather_with_policy,
+    device_expr_scatter_where_into_with_control,
 };
 
 #[allow(unused_imports)]
@@ -24,13 +24,14 @@ pub(in crate::detail) use scan::{
 
 pub(in crate::detail) use search::device_expr_minmax_element_with_policy;
 
+pub use selection::device_expr_copy_where_into_with_policy;
 pub(in crate::detail) use selection::{
     device_expr_compact_rejected_with_selection_with_policy,
     device_expr_compact_with_flags_with_policy, device_expr_compact_with_selection_with_policy,
     device_expr_copy_where_with_policy, device_expr_count_if_with_policy,
-    device_expr_find_if_with_policy, device_expr_selection_handles_with_policy,
+    device_expr_find_if_with_policy, device_expr_selection_flags_with_policy,
+    device_expr_selection_handles_with_policy, replace_where_into_with_control,
 };
-pub use selection::{device_expr_copy_where_into_with_policy, replace_where_into_with_policy};
 
 pub(super) fn offset_handle<R: Runtime>(
     client: &ComputeClient<R>,

@@ -81,8 +81,8 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MItem<R>,
-        LeftIter: MIter<R, Item = Self>,
-        RightIter: MIter<R>,
+        LeftIter: MIter<R, Item = Self, Inner = <Self as MItem<R>>::View>,
+        RightIter: MIter<R, Inner = <<RightIter as MIter<R>>::Item as MItem<R>>::View>,
         TransformOp: op::BinaryOp<R, Self, <RightIter as MIter<R>>::Item, Output = Output>,
         Output: MItem<R>,
         ReduceOp: op::ReductionOp<R, Output>,
@@ -111,8 +111,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     where
         Self: MItem<R>,
         LeftScalar: Scalar + 'static,
-        LeftIter: MIter<R, Item = (LeftScalar,)>,
-        RightIter: MIter<R, Item = Self>,
+        (LeftScalar,): MItem<R, View = (crate::detail::device::DeviceColumnView<R, LeftScalar>,)>,
+        LeftIter: MIter<R, Item = (LeftScalar,), Inner = <(LeftScalar,) as MItem<R>>::View>,
+        RightIter: MIter<R, Item = Self, Inner = <Self as MItem<R>>::View>,
         TransformOp: op::BinaryOp<R, (LeftScalar,), Self, Output = Output>,
         Output: MItem<R>,
         ReduceOp: op::ReductionOp<R, Output>,

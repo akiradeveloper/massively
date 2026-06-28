@@ -19,6 +19,9 @@
 //! User-defined operations are written as CubeCL cube traits. Low-level CubeCL
 //! launch and storage details remain internal implementation details.
 
+#[cfg(feature = "bench-diagnostics")]
+#[doc(hidden)]
+pub mod __bench;
 pub mod algorithm;
 mod detail;
 mod error;

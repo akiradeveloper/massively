@@ -22,6 +22,74 @@ fn exclusive_scan_by_key_uses_supplied_key_equality() {
 }
 
 #[test]
+fn exclusive_scan_by_key_handles_one_run() {
+    let exec = exec();
+    let keys = exec.to_device(&[0_u32, 0, 0, 0]).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
+
+    let (output,) = exclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        (0_u32,),
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 3, 6]);
+}
+
+#[test]
+fn exclusive_scan_by_key_handles_all_same_key_long_run() {
+    let exec = exec();
+    let len = 512;
+    let keys = vec![7_u32; len];
+    let values = vec![1_u32; len];
+    let expected = (0..len as u32).collect::<Vec<_>>();
+
+    let keys = exec.to_device(&keys).unwrap();
+    let values = exec.to_device(&values).unwrap();
+    let (output,) = exclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        (0_u32,),
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), expected);
+}
+
+#[test]
+fn exclusive_scan_by_key_handles_block_boundary_runs() {
+    let exec = exec();
+    let mut keys = vec![0_u32; 300];
+    keys.extend(vec![1_u32; 20]);
+    keys.extend(vec![0_u32; 10]);
+    let values = vec![1_u32; keys.len()];
+    let mut expected = (0..300_u32).collect::<Vec<_>>();
+    expected.extend(0..20_u32);
+    expected.extend(0..10_u32);
+
+    let keys = exec.to_device(&keys).unwrap();
+    let values = exec.to_device(&values).unwrap();
+    let (output,) = exclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        (0_u32,),
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), expected);
+}
+
+#[test]
 fn exclusive_scan_by_key_accepts_tuple_values() {
     let exec = exec();
     let keys = exec.to_device(&[0_u32, 0, 1, 1, 1, 2]).unwrap();

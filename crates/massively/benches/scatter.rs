@@ -1,7 +1,7 @@
 use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SIZES, dense_f32, reverse_indices, sync};
+use common::{Runtime, SIZES, dense_f32, iter_gpu, reverse_indices, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
@@ -21,7 +21,7 @@ impl UnaryOp<WgpuRuntime, (f32,)> for MulTwo {
 fn check_scatter(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let indices = exec.to_device(&[3_u32, 2, 1, 0]).unwrap();
-    let mut output = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let output = exec.to_device(&[0.0_f32; 4]).unwrap();
     scatter(
         &exec,
         massively::SoA1(values.slice(..)),
@@ -41,8 +41,8 @@ fn bench_scatter(c: &mut Criterion) {
         for &len in SIZES {
             let input = exec.to_device(&dense_f32(len)).unwrap();
             let indices = exec.to_device(&reverse_indices(len)).unwrap();
-            let mut values = exec.to_device(&vec![0.0_f32; len]).unwrap();
-            let mut output = exec.to_device(&vec![0.0_f32; len]).unwrap();
+            let values = exec.to_device(&vec![0.0_f32; len]).unwrap();
+            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             transform(
                 &exec,
                 massively::SoA1(input.slice(..)),
@@ -52,7 +52,7 @@ fn bench_scatter(c: &mut Criterion) {
             .unwrap();
             sync(&exec);
             group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter(|| {
+                iter_gpu(b, || {
                     scatter(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
@@ -69,5 +69,9 @@ fn bench_scatter(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_scatter);
+criterion_group! {
+    name = benches;
+    config = common::criterion();
+    targets = bench_scatter
+}
 criterion_main!(benches);

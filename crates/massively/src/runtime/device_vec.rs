@@ -144,20 +144,6 @@ where
             self.len,
         )
     }
-
-    pub(crate) fn column_view_as<U>(&self) -> Option<crate::detail::device::DeviceColumnView<R, U>>
-    where
-        U: Scalar + 'static,
-        T: 'static,
-    {
-        let source = self.source as &dyn std::any::Any;
-        let source = source.downcast_ref::<DeviceVec<R, U>>()?;
-        Some(crate::detail::device::DeviceColumnView::from_slice(
-            &source.inner,
-            self.offset,
-            self.len,
-        ))
-    }
 }
 
 impl<'a, R, T> dispatch::ToHostDispatch<R> for DeviceSlice<'a, R, T>

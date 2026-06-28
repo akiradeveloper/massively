@@ -1,8 +1,9 @@
-//! Kernel read lowering.
+//! Transitional internal algorithm/lowering traits.
 //!
-//! This module is the internal axis for read-only algorithm inputs. Public
-//! `MIter` values lower into these traits so algorithms can move toward one
-//! conceptual operation: read the logical item at index `i`.
+//! Public `MIter` values still lower through these traits, but v0.20 moves the
+//! long-term architecture toward explicit algorithm modules and `detail::control`
+//! streams. New code should keep this module as a compatibility/lowering seam
+//! rather than adding new control-stream ownership here.
 
 use cubecl::prelude::*;
 

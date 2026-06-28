@@ -29,11 +29,4 @@ pub trait MSlice<R: Runtime>: Sized {
 
     #[doc(hidden)]
     fn into_read(self, policy: &CubePolicy<R>) -> Result<Self::Read, Error>;
-
-    #[doc(hidden)]
-    fn column_view<T: Scalar + 'static>(
-        &self,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, T>>, Error> {
-        Ok(None)
-    }
 }

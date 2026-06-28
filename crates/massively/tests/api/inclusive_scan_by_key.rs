@@ -27,6 +27,89 @@ fn inclusive_scan_by_key_handles_block_boundary_runs() {
 }
 
 #[test]
+fn inclusive_scan_by_key_handles_all_same_key_long_run() {
+    let exec = exec();
+    let len = 512;
+    let keys = vec![7_u32; len];
+    let values = vec![1_u32; len];
+    let expected = (1..=len as u32).collect::<Vec<_>>();
+
+    let keys = exec.to_device(&keys).unwrap();
+    let values = exec.to_device(&values).unwrap();
+    let (output,) = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), expected);
+}
+
+#[test]
+fn inclusive_scan_by_key_handles_run_length_128_patterns() {
+    let exec = exec();
+    let mut keys = Vec::new();
+    let mut expected = Vec::new();
+    for key in 0..3_u32 {
+        keys.extend(std::iter::repeat(key).take(128));
+        expected.extend(1..=128_u32);
+    }
+    let values = vec![1_u32; keys.len()];
+
+    let keys = exec.to_device(&keys).unwrap();
+    let values = exec.to_device(&values).unwrap();
+    let (output,) = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), expected);
+}
+
+#[test]
+fn inclusive_scan_by_key_handles_singleton_runs() {
+    let exec = exec();
+    let keys = exec.to_device(&[0_u32, 1, 2, 3]).unwrap();
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+
+    let (output,) = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![10, 20, 30, 40]);
+}
+
+#[test]
+fn inclusive_scan_by_key_handles_one_run() {
+    let exec = exec();
+    let keys = exec.to_device(&[0_u32, 0, 0, 0]).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
+
+    let (output,) = inclusive_scan_by_key(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        EqualU32,
+        Sum,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 6, 10]);
+}
+
+#[test]
 fn inclusive_scan_by_key_accepts_tuple_values() {
     let exec = exec();
     let keys = exec.to_device(&[0_u32, 0, 1, 1, 1, 2]).unwrap();

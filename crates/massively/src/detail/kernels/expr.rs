@@ -1860,12 +1860,14 @@ pub(crate) fn copy_if_expr_flag_only_kernel<
     flags: &mut [u32],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let selected = Pred::apply(Expr::eval(input, indices, rhs, rhs_indices, unit));
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply(Expr::eval(input, indices, rhs, rhs_indices, global));
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
-            flags[unit] = 1u32;
+            flags[global] = 1u32;
         } else {
-            flags[unit] = 0u32;
+            flags[global] = 0u32;
         }
     }
 }
@@ -1886,12 +1888,14 @@ pub(crate) fn copy_if_device_expr_flag_only_kernel<
     flags: &mut [u32],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let selected = Pred::apply(Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, unit));
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply(Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global));
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
-            flags[unit] = 1u32;
+            flags[global] = 1u32;
         } else {
-            flags[unit] = 0u32;
+            flags[global] = 0u32;
         }
     }
 }
@@ -1918,27 +1922,29 @@ pub(crate) fn copy_if_stencil_expr_flags_kernel<
     values: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
         let value = ValueExpr::eval(
             value_input,
             value_indices,
             value_rhs,
             value_rhs_indices,
-            unit,
+            global,
         );
         let stencil = StencilExpr::eval(
             stencil_input,
             stencil_indices,
             stencil_rhs,
             stencil_rhs_indices,
-            unit,
+            global,
         );
-        values[unit] = value;
+        values[global] = value;
         let selected = Pred::apply(stencil);
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
-            flags[unit] = 1u32;
+            flags[global] = 1u32;
         } else {
-            flags[unit] = 0u32;
+            flags[global] = 0u32;
         }
     }
 }
@@ -1964,13 +1970,15 @@ pub(crate) fn transform_if_stencil_expr_kernel<
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
         let stencil = StencilExpr::eval(
             stencil_input,
             stencil_indices,
             stencil_rhs,
             stencil_rhs_indices,
-            unit,
+            global,
         );
         if Pred::apply(stencil) {
             let value = ValueExpr::eval(
@@ -1978,9 +1986,9 @@ pub(crate) fn transform_if_stencil_expr_kernel<
                 value_indices,
                 value_rhs,
                 value_rhs_indices,
-                unit,
+                global,
             );
-            output[unit] = Op::apply(value);
+            output[global] = Op::apply(value);
         }
     }
 }
@@ -3264,15 +3272,17 @@ pub(crate) fn inclusive_scan_by_key_expr_kernel<
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let start = RuntimeCell::<usize>::new(unit);
-        while start.read() > 0usize && KeyEq::apply(keys[start.read() - 1usize], keys[unit]) {
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && KeyEq::apply(keys[start.read() - 1usize], keys[global]) {
             start.store(start.read() - 1usize);
         }
 
         let acc = RuntimeCell::<T>::new(Expr::eval(input, indices, rhs, rhs_indices, start.read()));
         let index = RuntimeCell::<usize>::new(start.read() + 1usize);
-        while index.read() <= unit {
+        while index.read() <= global {
             acc.store(Op::apply(
                 acc.read(),
                 Expr::eval(input, indices, rhs, rhs_indices, index.read()),
@@ -3280,7 +3290,7 @@ pub(crate) fn inclusive_scan_by_key_expr_kernel<
             index.store(index.read() + 1usize);
         }
 
-        output[unit] = acc.read();
+        output[global] = acc.read();
     }
 }
 
@@ -3305,9 +3315,11 @@ pub(crate) fn inclusive_scan_by_key_expr_keys_expr_kernel<
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let current_key = KeyExpr::eval(key_input, key_indices, key_rhs, key_rhs_indices, unit);
-        let start = RuntimeCell::<usize>::new(unit);
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let current_key = KeyExpr::eval(key_input, key_indices, key_rhs, key_rhs_indices, global);
+        let start = RuntimeCell::<usize>::new(global);
         while start.read() > 0usize
             && KeyEq::apply(
                 KeyExpr::eval(
@@ -3331,7 +3343,7 @@ pub(crate) fn inclusive_scan_by_key_expr_keys_expr_kernel<
             start.read(),
         ));
         let index = RuntimeCell::<usize>::new(start.read() + 1usize);
-        while index.read() <= unit {
+        while index.read() <= global {
             acc.store(Op::apply(
                 acc.read(),
                 ValueExpr::eval(
@@ -3345,7 +3357,7 @@ pub(crate) fn inclusive_scan_by_key_expr_keys_expr_kernel<
             index.store(index.read() + 1usize);
         }
 
-        output[unit] = acc.read();
+        output[global] = acc.read();
     }
 }
 
@@ -3367,15 +3379,17 @@ pub(crate) fn exclusive_scan_by_key_expr_kernel<
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let start = RuntimeCell::<usize>::new(unit);
-        while start.read() > 0usize && KeyEq::apply(keys[start.read() - 1usize], keys[unit]) {
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let start = RuntimeCell::<usize>::new(global);
+        while start.read() > 0usize && KeyEq::apply(keys[start.read() - 1usize], keys[global]) {
             start.store(start.read() - 1usize);
         }
 
         let acc = RuntimeCell::<T>::new(init[0]);
         let index = RuntimeCell::<usize>::new(start.read());
-        while index.read() < unit {
+        while index.read() < global {
             acc.store(Op::apply(
                 acc.read(),
                 Expr::eval(input, indices, rhs, rhs_indices, index.read()),
@@ -3383,7 +3397,7 @@ pub(crate) fn exclusive_scan_by_key_expr_kernel<
             index.store(index.read() + 1usize);
         }
 
-        output[unit] = acc.read();
+        output[global] = acc.read();
     }
 }
 
@@ -3409,9 +3423,11 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < (len[0] as usize) {
-        let current_key = KeyExpr::eval(key_input, key_indices, key_rhs, key_rhs_indices, unit);
-        let start = RuntimeCell::<usize>::new(unit);
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let current_key = KeyExpr::eval(key_input, key_indices, key_rhs, key_rhs_indices, global);
+        let start = RuntimeCell::<usize>::new(global);
         while start.read() > 0usize
             && KeyEq::apply(
                 KeyExpr::eval(
@@ -3429,7 +3445,7 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
 
         let acc = RuntimeCell::<T>::new(init[0]);
         let index = RuntimeCell::<usize>::new(start.read());
-        while index.read() < unit {
+        while index.read() < global {
             acc.store(Op::apply(
                 acc.read(),
                 ValueExpr::eval(
@@ -3443,7 +3459,7 @@ pub(crate) fn exclusive_scan_by_key_expr_keys_expr_kernel<
             index.store(index.read() + 1usize);
         }
 
-        output[unit] = acc.read();
+        output[global] = acc.read();
     }
 }
 

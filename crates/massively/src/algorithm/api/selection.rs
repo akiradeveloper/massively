@@ -48,6 +48,7 @@ where
 {
     validate_mslice(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = lowering::u32_stencil(exec.policy(), stencil, "replace_where stencil", false)?;
+    let stencil =
+        lowering::u32_stencil_flags(exec.policy(), stencil, "replace_where stencil", false)?;
     out.replace_where_inner(exec.policy(), replacement, stencil)
 }

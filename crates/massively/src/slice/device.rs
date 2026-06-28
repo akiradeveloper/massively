@@ -23,10 +23,4 @@ where
     fn into_read(self, _policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
         Ok(self.column_view())
     }
-
-    fn column_view<U: Scalar + 'static>(
-        &self,
-    ) -> Result<Option<crate::detail::device::DeviceColumnView<R, U>>, Error> {
-        Ok(self.column_view_as::<U>())
-    }
 }

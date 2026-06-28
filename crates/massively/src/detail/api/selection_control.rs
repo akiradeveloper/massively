@@ -10,6 +10,14 @@ pub(crate) trait SelectionStencil<Pred> {
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
     ) -> Result<select::SelectionHandles, Error>;
+
+    fn selection_flags_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
+        self.selection_handles_with_policy(policy, invert)
+    }
 }
 
 #[doc(hidden)]
@@ -34,6 +42,25 @@ impl<R: Runtime> PrecomputedSelection<R> {
             _runtime: std::marker::PhantomData,
         })
     }
+
+    pub(crate) fn from_stencil_flags_with_policy<Stencil, Pred>(
+        policy: &crate::policy::CubePolicy<R>,
+        stencil: &Stencil,
+        invert: bool,
+    ) -> Result<Self, Error>
+    where
+        Stencil: SelectionStencil<Pred, Runtime = R>,
+    {
+        Ok(Self {
+            len: stencil.len(),
+            handles: stencil.selection_flags_with_policy(policy, invert)?,
+            _runtime: std::marker::PhantomData,
+        })
+    }
+
+    pub(crate) fn control(&self) -> &select::SelectionControl {
+        &self.handles
+    }
 }
 
 impl<R, Pred> SelectionStencil<Pred> for PrecomputedSelection<R>
@@ -47,6 +74,14 @@ where
     }
 
     fn selection_handles_with_policy(
+        &self,
+        _policy: &crate::policy::CubePolicy<Self::Runtime>,
+        _invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
+        Ok(self.handles.clone())
+    }
+
+    fn selection_flags_with_policy(
         &self,
         _policy: &crate::policy::CubePolicy<Self::Runtime>,
         _invert: bool,
@@ -76,6 +111,14 @@ where
     ) -> Result<select::SelectionHandles, Error> {
         device_expr_selection_handles_with_policy::<Stencil, Pred>(policy, self, invert)
     }
+
+    fn selection_flags_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
+        device_expr_selection_flags_with_policy::<Stencil, Pred>(policy, self, invert)
+    }
 }
 
 impl<Stencil, Pred> SelectionStencil<Pred> for (Stencil,)
@@ -98,6 +141,16 @@ where
         invert: bool,
     ) -> Result<select::SelectionHandles, Error> {
         device_expr_selection_handles_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
+            policy, &self.0, invert,
+        )
+    }
+
+    fn selection_flags_with_policy(
+        &self,
+        policy: &crate::policy::CubePolicy<Self::Runtime>,
+        invert: bool,
+    ) -> Result<select::SelectionHandles, Error> {
+        device_expr_selection_flags_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
             policy, &self.0, invert,
         )
     }

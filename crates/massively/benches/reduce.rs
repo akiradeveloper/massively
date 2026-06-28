@@ -1,7 +1,7 @@
 use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SIZES, dense_f32, sync};
+use common::{Runtime, SIZES, dense_f32, iter_gpu, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
@@ -61,7 +61,7 @@ fn bench_reduce(c: &mut Criterion) {
             let values = exec.to_device(&dense_f32(len)).unwrap();
             sync(&exec);
             reduce_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter(|| {
+                iter_gpu(b, || {
                     let output = reduce(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
@@ -87,7 +87,7 @@ fn bench_reduce(c: &mut Criterion) {
             let values = exec.to_device(&dense_f32(len)).unwrap();
             sync(&exec);
             reduce_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                b.iter(|| {
+                iter_gpu(b, || {
                     let output: (
                         (DeviceVec<WgpuRuntime, u32>,),
                         (DeviceVec<WgpuRuntime, f32>,),
@@ -109,5 +109,9 @@ fn bench_reduce(c: &mut Criterion) {
     reduce_by_key_group.finish();
 }
 
-criterion_group!(benches, bench_reduce);
+criterion_group! {
+    name = benches;
+    config = common::criterion();
+    targets = bench_reduce
+}
 criterion_main!(benches);

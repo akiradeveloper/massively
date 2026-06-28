@@ -21,8 +21,8 @@ macro_rules! inner_product_left_item_body {
 
 macro_rules! inner_product_right_item_body {
     ($R:ident; ($right_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        let left = column_view_at::<$R, LeftIter, LeftScalar>(&$left, 0, "inner_product")?;
-        let right = column_view_at::<$R, RightIter, $right_ty>(&$right, 0, "inner_product")?;
+        let (left,) = $left.into_inner_with_policy($policy)?;
+        let (right,) = $right.into_inner_with_policy($policy)?;
         let transformed = <Output as sealed::MItemDispatch<$R>>::transform_binary(
             $policy,
             left,
@@ -48,6 +48,7 @@ macro_rules! impl_mitem_tuple {
             $( $ty: Scalar, )+
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
+            type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
             type Vec = ($( DeviceVec<R, $ty>, )+);
 
             fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
@@ -232,8 +233,11 @@ macro_rules! impl_mitem_tuple {
                 reduce_op: ReduceOp,
             ) -> Result<Output, Error>
             where
-                LeftIter: MIter<R, Item = Self>,
-                RightIter: MIter<R>,
+                LeftIter: MIter<R, Item = Self, Inner = <Self as MItem<R>>::View>,
+                RightIter: MIter<
+                    R,
+                    Inner = <<RightIter as MIter<R>>::Item as MItem<R>>::View,
+                >,
                 TransformOp:
                     op::BinaryOp<R, Self, <RightIter as MIter<R>>::Item, Output = Output>,
                 Output: MItem<R>,
@@ -268,8 +272,11 @@ macro_rules! impl_mitem_tuple {
             ) -> Result<Output, Error>
             where
                 LeftScalar: Scalar + 'static,
-                LeftIter: MIter<R, Item = (LeftScalar,)>,
-                RightIter: MIter<R, Item = Self>,
+                (LeftScalar,):
+                    MItem<R, View = (crate::detail::device::DeviceColumnView<R, LeftScalar>,)>,
+                LeftIter:
+                    MIter<R, Item = (LeftScalar,), Inner = <(LeftScalar,) as MItem<R>>::View>,
+                RightIter: MIter<R, Item = Self, Inner = <Self as MItem<R>>::View>,
                 TransformOp: op::BinaryOp<R, (LeftScalar,), Self, Output = Output>,
                 Output: MItem<R>,
                 ReduceOp: op::ReductionOp<R, Output>,
@@ -301,6 +308,7 @@ macro_rules! impl_wide_mitem_tuple {
             $( $ty: Scalar, )+
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
+            type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
             type Vec = ($( DeviceVec<R, $ty>, )+);
 
             fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
@@ -427,12 +435,11 @@ macro_rules! impl_miter_mut_tuple {
             {
                 let output = self.into_inner();
                 $(
-                    crate::detail::api::replace_where_into_with_policy(
+                    crate::detail::api::replace_where_into_with_control(
                         policy,
                         replacement.$idx,
-                        &stencil,
+                        stencil.control(),
                         &output.$idx,
-                        KernelOp::<R, StencilFlag>::new(),
                     )?;
                 )+
                 Ok(())

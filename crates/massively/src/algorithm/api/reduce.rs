@@ -1,7 +1,7 @@
 use super::*;
 
 /// Applies a binary transform over two inputs and reduces the result.
-pub fn inner_product<R, Left, Right, ZipperOp, ReduceOp>(
+pub fn inner_product<R, Left, Right, ZipperOp, ReduceOp, LeftItem, RightItem>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
@@ -11,9 +11,11 @@ pub fn inner_product<R, Left, Right, ZipperOp, ReduceOp>(
 ) -> Result<ZipperOp::Output, Error>
 where
     R: Runtime,
-    Left: MIter<R>,
-    Right: MIter<R>,
-    ZipperOp: op::BinaryOp<R, Left::Item, Right::Item>,
+    LeftItem: MItem<R>,
+    RightItem: MItem<R>,
+    Left: MIter<R, Item = LeftItem, Inner = <LeftItem as MItem<R>>::View>,
+    Right: MIter<R, Item = RightItem, Inner = <RightItem as MItem<R>>::View>,
+    ZipperOp: op::BinaryOp<R, LeftItem, RightItem>,
     ReduceOp: op::ReductionOp<R, ZipperOp::Output>,
 {
     validate_input(exec, &left)?;

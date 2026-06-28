@@ -12,7 +12,7 @@ use crate::value::MItem;
 pub struct KernelOp<R, Op>(PhantomData<fn() -> (R, Op)>);
 
 impl<R, Op> KernelOp<R, Op> {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(PhantomData)
     }
 }

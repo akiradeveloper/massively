@@ -98,6 +98,15 @@ impl BinaryPredicateOp<WgpuRuntime, (f32,)> for Less {
     }
 }
 
+pub(crate) struct EqualF32;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (f32,)> for EqualF32 {
+    fn apply(lhs: (f32,), rhs: (f32,)) -> bool {
+        lhs.0 == rhs.0
+    }
+}
+
 pub(crate) struct LessU32;
 
 #[cubecl::cube]

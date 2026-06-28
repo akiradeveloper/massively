@@ -7,6 +7,8 @@ use crate::{
 };
 use cubecl::prelude::*;
 
+pub(crate) use crate::detail::control::SelectionControl;
+
 const BLOCK_SELECT_SIZE: u32 = 256;
 
 fn select_block_count(len: usize) -> Result<u32, Error> {
@@ -14,43 +16,7 @@ fn select_block_count(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
-#[allow(dead_code)]
-#[derive(Clone)]
-pub(crate) struct SelectionControl {
-    pub(crate) flag: cubecl::server::Handle,
-    pub(crate) position: cubecl::server::Handle,
-    pub(crate) value: cubecl::server::Handle,
-    pub(crate) count: cubecl::server::Handle,
-    pub(crate) len: usize,
-    pub(crate) len_u32: u32,
-}
-
-pub(crate) type SelectionHandles = SelectionControl;
-
-impl SelectionControl {
-    fn empty<R: Runtime>(client: &ComputeClient<R>) -> Self {
-        Self {
-            flag: crate::policy::empty_handle(client),
-            position: crate::policy::empty_handle(client),
-            value: crate::policy::empty_handle(client),
-            count: client.empty(std::mem::size_of::<u32>()),
-            len: 0,
-            len_u32: 0,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn for_value(&self, value_handle: cubecl::server::Handle) -> Self {
-        Self {
-            flag: self.flag.clone(),
-            position: self.position.clone(),
-            value: value_handle,
-            count: self.count.clone(),
-            len: self.len,
-            len_u32: self.len_u32,
-        }
-    }
-}
+pub(crate) type SelectionHandles = crate::detail::control::SelectionHandles;
 
 pub(crate) fn handles_from_flags<R>(
     policy: &CubePolicy<R>,
