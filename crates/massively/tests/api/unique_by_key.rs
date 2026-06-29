@@ -15,8 +15,8 @@ fn unique_by_key_accepts_tuple_values() {
         EqualU32,
     )
     .unwrap();
-    let (keys,) = keys;
-    let (a, b, c) = values;
+    let massively::SoA1(keys) = keys;
+    let massively::SoA3(a, b, c) = values;
 
     assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1]);
     assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0]);
@@ -41,8 +41,8 @@ fn unique_by_key_accepts_tuple_values_with_multiple_runs() {
         EqualU32,
     )
     .unwrap();
-    let (keys,) = keys;
-    let (a, b, c) = values;
+    let massively::SoA1(keys) = keys;
+    let massively::SoA3(a, b, c) = values;
 
     assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 2, 3]);
     assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 4.0, 5.0]);
@@ -67,8 +67,8 @@ fn unique_by_key_accepts_three_column_keys() {
         MixedTuple3Equal,
     )
     .unwrap();
-    let (k0, k1, k2) = keys;
-    let (values,) = values;
+    let massively::SoA3(k0, k1, k2) = keys;
+    let massively::SoA1(values) = values;
 
     assert_eq!(exec.to_host(&k0).unwrap(), vec![1.0, 1.0, 2.0]);
     assert_eq!(exec.to_host(&k1).unwrap(), vec![10, 11, 10]);
@@ -107,8 +107,8 @@ fn unique_by_key_accepts_three_column_keys_and_seven_column_values() {
         MixedTuple3Equal,
     )
     .unwrap();
-    let (k0, k1, k2) = keys;
-    let (a, b, c, d, e, f, g) = values;
+    let massively::SoA3(k0, k1, k2) = keys;
+    let massively::SoA7(a, b, c, d, e, f, g) = values;
 
     assert_eq!(exec.to_host(&k0).unwrap(), vec![1.0, 1.0, 2.0]);
     assert_eq!(exec.to_host(&k1).unwrap(), vec![10, 11, 10]);

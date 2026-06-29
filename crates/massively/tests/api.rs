@@ -13,6 +13,8 @@ mod copy_where;
 mod count_if;
 #[path = "api/device_slice.rs"]
 mod device_slice;
+#[path = "api/eager.rs"]
+mod eager;
 #[path = "api/equal.rs"]
 mod equal;
 #[path = "api/equal_range.rs"]
@@ -53,8 +55,6 @@ mod merge_by_key;
 mod minmax_element;
 #[path = "api/mismatch.rs"]
 mod mismatch;
-#[path = "api/mslice_soa.rs"]
-mod mslice_soa;
 #[path = "api/partition.rs"]
 mod partition;
 #[path = "api/random.rs"]
@@ -79,8 +79,6 @@ mod set_difference;
 mod set_intersection;
 #[path = "api/set_union.rs"]
 mod set_union;
-#[path = "api/slice.rs"]
-mod slice;
 #[path = "api/sort.rs"]
 mod sort;
 #[path = "api/sort_by_key.rs"]

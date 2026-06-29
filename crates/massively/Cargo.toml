@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.23.0"
+version = "0.24.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -60,7 +60,6 @@ harness = false
 
 [features]
 default = ["wgpu"]
-bench-diagnostics = []
 cuda = ["cubecl/cuda"]
 hip = ["cubecl/hip"]
 wgpu = ["cubecl/wgpu"]
@@ -154,6 +153,10 @@ name = "lower-bound"
 path = "examples/algorithm/lower_bound.rs"
 
 [[example]]
+name = "map"
+path = "examples/algorithm/map.rs"
+
+[[example]]
 name = "max-element"
 path = "examples/algorithm/max_element.rs"
 
@@ -184,6 +187,10 @@ path = "examples/algorithm/none_of.rs"
 [[example]]
 name = "partition"
 path = "examples/algorithm/partition.rs"
+
+[[example]]
+name = "permute"
+path = "examples/algorithm/permute.rs"
 
 [[example]]
 name = "reduce"
@@ -262,21 +269,21 @@ name = "runtime-copy"
 path = "examples/runtime/copy.rs"
 
 [[example]]
-name = "runtime-filled"
-path = "examples/runtime/filled.rs"
+name = "runtime-alloc"
+path = "examples/runtime/alloc.rs"
 
 [[example]]
-name = "util-random"
-path = "examples/util/random.rs"
+name = "runtime-constant"
+path = "examples/runtime/constant.rs"
+
+[[example]]
+name = "runtime-tabulate"
+path = "examples/runtime/tabulate.rs"
 
 [[example]]
 name = "runtime-to-device"
 path = "examples/runtime/to_device.rs"
 
 [[example]]
-name = "slice-constant"
-path = "examples/slice/constant.rs"
-
-[[example]]
-name = "slice-transform"
-path = "examples/slice/transform.rs"
+name = "util-random"
+path = "examples/util/random.rs"

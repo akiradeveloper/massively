@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, dense_f32, iter_gpu, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
-use massively::{DeviceVec, Executor, reduce, reduce_by_key};
+use massively::{DeviceVec, Executor, SoA1, reduce, reduce_by_key};
 
 struct Sum;
 
@@ -38,7 +38,7 @@ fn check_reduce(exec: &Executor<WgpuRuntime>) {
 fn check_reduce_by_key(exec: &Executor<WgpuRuntime>) {
     let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
-    let ((out_keys,), (out_values,)) = reduce_by_key(
+    let (SoA1(out_keys), SoA1(out_values)) = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -89,8 +89,8 @@ fn bench_reduce(c: &mut Criterion) {
             reduce_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
                     let output: (
-                        (DeviceVec<WgpuRuntime, u32>,),
-                        (DeviceVec<WgpuRuntime, f32>,),
+                        SoA1<DeviceVec<WgpuRuntime, u32>>,
+                        SoA1<DeviceVec<WgpuRuntime, f32>>,
                     ) = reduce_by_key(
                         &exec,
                         massively::SoA1(black_box(keys.slice(..))),

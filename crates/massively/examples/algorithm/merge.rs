@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, merge};
 
 fn main() -> common::Result {
@@ -8,10 +9,10 @@ fn main() -> common::Result {
     let left = exec.to_device(&[1.0_f32, 3.0])?;
     let right = exec.to_device(&[2.0_f32, 4.0])?;
 
-    let (output,) = merge(
+    let SoA1(output) = merge(
         &exec,
-        massively::SoA1(left.slice(..)),
-        massively::SoA1(right.slice(..)),
+        SoA1(left.slice(..)),
+        SoA1(right.slice(..)),
         common::LessF32,
     )?;
 

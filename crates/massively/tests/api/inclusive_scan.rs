@@ -7,7 +7,7 @@ fn inclusive_scan_accepts_tuple_columns() {
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let output =
         inclusive_scan(&exec, massively::SoA2(a.slice(..), b.slice(..)), TupleSum).unwrap();
-    let (a, b) = output;
+    let massively::SoA2(a, b) = output;
     assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0, 6.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30, 60]);
 }
@@ -17,7 +17,8 @@ fn inclusive_scan_accepts_tuple_max_u32() {
     let exec = exec();
     let values = exec.to_device(&[1_u32, 3, 2, 0, 5, 4]).unwrap();
 
-    let (output,) = inclusive_scan(&exec, massively::SoA1(values.slice(..)), MaxU32).unwrap();
+    let massively::SoA1(output) =
+        inclusive_scan(&exec, massively::SoA1(values.slice(..)), MaxU32).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 3, 3, 5, 5]);
 }
@@ -27,7 +28,7 @@ fn inclusive_scan_accepts_single_column_as_tuple_item() {
     let exec = exec();
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let (a,) = inclusive_scan(&exec, massively::SoA1(a.slice(..)), TupleSum).unwrap();
+    let massively::SoA1(a) = inclusive_scan(&exec, massively::SoA1(a.slice(..)), TupleSum).unwrap();
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0, 6.0]);
 }
@@ -39,7 +40,7 @@ fn inclusive_scan_accepts_three_column_tuple_item_op() {
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let (a, b, c) = inclusive_scan(
+    let massively::SoA3(a, b, c) = inclusive_scan(
         &exec,
         massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         TupleSum,
@@ -62,7 +63,7 @@ fn inclusive_scan_accepts_seven_tuple_columns() {
     let f = exec.to_device(&[4_u32, 5, 6]).unwrap();
     let g = exec.to_device(&[0.5_f32, 1.5, 2.5]).unwrap();
 
-    let (a, b, c, d, e, f, g) = inclusive_scan(
+    let massively::SoA7(a, b, c, d, e, f, g) = inclusive_scan(
         &exec,
         massively::SoA7(
             a.slice(..),

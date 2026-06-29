@@ -54,26 +54,26 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let mut urgency = exec.filled(stock.len(), 0_u32)?;
+    let urgency = exec.constant(stock.len(), 0_u32)?;
     transform(
         exec,
         SoA2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
         SoA1(urgency.slice_mut(..)),
     )?;
-    let (sku, urgency) = copy_where(
+    let SoA2(sku, urgency) = copy_where(
         exec,
         SoA2(sku.slice(..), urgency.slice(..)),
         urgency.slice(..),
     )?;
-    let ((urgency,), (sku,)) = sort_by_key(
+    let (SoA1(urgency), SoA1(sku)) = sort_by_key(
         exec,
         SoA1(urgency.slice(..)),
         SoA1(sku.slice(..)),
         common::LessU32,
     )?;
-    let (urgency,) = reverse(exec, SoA1(urgency.slice(..)))?;
-    let (sku,) = reverse(exec, SoA1(sku.slice(..)))?;
+    let SoA1(urgency) = reverse(exec, SoA1(urgency.slice(..)))?;
+    let SoA1(sku) = reverse(exec, SoA1(sku.slice(..)))?;
     Ok(Output { sku, urgency })
 }
 

@@ -29,13 +29,13 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let ((racer_id,), (lap_time_ms,)) = sort_by_key(
+    let (SoA1(racer_id), SoA1(lap_time_ms)) = sort_by_key(
         exec,
         SoA1(racer_id.slice(..)),
         SoA1(lap_time_ms.slice(..)),
         common::LessU32,
     )?;
-    let ((racer_id,), (total_time_ms,)) = reduce_by_key(
+    let (SoA1(racer_id), SoA1(total_time_ms)) = reduce_by_key(
         exec,
         SoA1(racer_id.slice(..)),
         SoA1(lap_time_ms.slice(..)),
@@ -43,7 +43,7 @@ where
         (0_u32,),
         common::SumU32,
     )?;
-    let ((total_time_ms,), (racer_id,)) = sort_by_key(
+    let (SoA1(total_time_ms), SoA1(racer_id)) = sort_by_key(
         exec,
         SoA1(total_time_ms.slice(..)),
         SoA1(racer_id.slice(..)),

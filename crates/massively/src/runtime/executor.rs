@@ -7,6 +7,7 @@ use cubecl::prelude::{CubeElement, CubePrimitive, Runtime};
 use crate::Error;
 use crate::detail::dispatch;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
+use crate::value::MItem;
 
 /// Scalar value that can be stored in one device column.
 pub trait Scalar: CubePrimitive + CubeElement {}
@@ -83,11 +84,31 @@ impl<R: Runtime> Executor<R> {
     }
 
     /// Allocates device-resident storage and fills it with `value`.
-    pub fn filled<T>(&self, len: usize, value: T) -> Result<DeviceVec<R, T>, Error>
+    pub fn constant<T>(&self, len: usize, value: T) -> Result<DeviceVec<R, T>, Error>
     where
         T: Scalar,
     {
         Ok(DeviceVec::from_inner(self.inner.device_filled(len, value)?))
+    }
+
+    /// Allocates uninitialized owned device storage for `Item`.
+    ///
+    /// This does not launch an initialization kernel. The returned columns are
+    /// intended as temporary output buffers for algorithms that write every
+    /// element before the data is read. Reading an allocated buffer before
+    /// writing it produces unspecified values.
+    pub fn alloc<Item>(&self, len: usize) -> Result<Item::Vec, Error>
+    where
+        Item: MItem<R>,
+    {
+        Item::alloc_vec(self, len)
+    }
+
+    /// Allocates a `u32` device vector containing `0..len`.
+    pub fn tabulate(&self, len: usize) -> Result<DeviceVec<R, u32>, Error> {
+        Ok(DeviceVec::from_inner(
+            crate::detail::primitives::range::indices_u32(self.policy(), len)?,
+        ))
     }
 
     /// Copies device-resident storage back to host memory.

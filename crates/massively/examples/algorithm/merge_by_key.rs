@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, merge_by_key};
 
 fn main() -> common::Result {
@@ -10,12 +11,12 @@ fn main() -> common::Result {
     let right_keys = exec.to_device(&[1_u32, 3])?;
     let right_values = exec.to_device(&[10.0_f32, 30.0])?;
 
-    let ((keys,), (values,)) = merge_by_key(
+    let (SoA1(keys), SoA1(values)) = merge_by_key(
         &exec,
-        massively::SoA1(left_keys.slice(..)),
-        massively::SoA1(left_values.slice(..)),
-        massively::SoA1(right_keys.slice(..)),
-        massively::SoA1(right_values.slice(..)),
+        SoA1(left_keys.slice(..)),
+        SoA1(left_values.slice(..)),
+        SoA1(right_keys.slice(..)),
+        SoA1(right_values.slice(..)),
         common::LessU32,
     )?;
 

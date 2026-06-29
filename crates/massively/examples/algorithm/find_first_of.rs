@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, find_first_of};
 
 fn main() -> common::Result {
@@ -10,8 +11,8 @@ fn main() -> common::Result {
 
     let index = find_first_of(
         &exec,
-        massively::SoA1(input.slice(..)),
-        massively::SoA1(needles.slice(..)),
+        SoA1(input.slice(..)),
+        SoA1(needles.slice(..)),
         common::EqualF32,
     )?;
 

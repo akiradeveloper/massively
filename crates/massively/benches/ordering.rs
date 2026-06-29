@@ -7,7 +7,7 @@ use common::{
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{Executor, merge, set_difference, set_intersection, set_union, sort};
+use massively::{Executor, SoA1, merge, set_difference, set_intersection, set_union, sort};
 
 struct Less;
 
@@ -24,12 +24,12 @@ fn shifted_u32(len: usize, offset: usize) -> Vec<u32> {
 
 fn check_ordering(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[3_u32, 1, 2]).unwrap();
-    let (sorted,) = sort(exec, massively::SoA1(values.slice(..)), Less).unwrap();
+    let SoA1(sorted) = sort(exec, massively::SoA1(values.slice(..)), Less).unwrap();
     assert_eq!(exec.to_host(&sorted).unwrap(), vec![1, 2, 3]);
 
     let left = exec.to_device(&[1_u32, 3]).unwrap();
     let right = exec.to_device(&[2_u32, 4]).unwrap();
-    let (merged,) = merge(
+    let SoA1(merged) = merge(
         exec,
         massively::SoA1(left.slice(..)),
         massively::SoA1(right.slice(..)),

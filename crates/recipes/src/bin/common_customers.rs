@@ -22,7 +22,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = set_intersection(exec, SoA1(a.slice(..)), SoA1(b.slice(..)), common::LessU32)?;
+    let SoA1(out) = set_intersection(exec, SoA1(a.slice(..)), SoA1(b.slice(..)), common::LessU32)?;
     Ok(out)
 }
 

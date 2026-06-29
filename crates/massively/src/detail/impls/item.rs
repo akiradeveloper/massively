@@ -1,5 +1,73 @@
 use super::*;
 
+macro_rules! soa_type {
+    ($a:ty) => {
+        SoA1<$a>
+    };
+    ($a:ty, $b:ty) => {
+        SoA2<$a, $b>
+    };
+    ($a:ty, $b:ty, $c:ty) => {
+        SoA3<$a, $b, $c>
+    };
+    ($a:ty, $b:ty, $c:ty, $d:ty) => {
+        SoA4<$a, $b, $c, $d>
+    };
+    ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty) => {
+        SoA5<$a, $b, $c, $d, $e>
+    };
+    ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty) => {
+        SoA6<$a, $b, $c, $d, $e, $f>
+    };
+    ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty) => {
+        SoA7<$a, $b, $c, $d, $e, $f, $g>
+    };
+}
+
+macro_rules! soa_value {
+    ($a:expr) => {
+        SoA1($a)
+    };
+    ($a:expr, $b:expr) => {
+        SoA2($a, $b)
+    };
+    ($a:expr, $b:expr, $c:expr) => {
+        SoA3($a, $b, $c)
+    };
+    ($a:expr, $b:expr, $c:expr, $d:expr) => {
+        SoA4($a, $b, $c, $d)
+    };
+    ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr) => {
+        SoA5($a, $b, $c, $d, $e)
+    };
+    ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr) => {
+        SoA6($a, $b, $c, $d, $e, $f)
+    };
+    ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr) => {
+        SoA7($a, $b, $c, $d, $e, $f, $g)
+    };
+}
+
+macro_rules! alloc_inner {
+    ($exec:expr, $len:expr; $( $ty:ty ),+) => {{
+        let len = $len;
+        u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let policy = $exec.policy();
+        if len == 0 {
+            Ok(($( policy.empty_device_vec::<$ty>(), )+))
+        } else {
+            let client = policy.client();
+            Ok(($(
+                crate::detail::DeviceVec::from_handle(
+                    policy.id(),
+                    client.empty(len * std::mem::size_of::<$ty>()),
+                    len,
+                ),
+            )+))
+        }
+    }};
+}
+
 macro_rules! inner_product_left_item_body {
     ($R:ident; ($left_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
         <<RightIter as MIter<$R>>::Item as sealed::MItemDispatch<$R>>::inner_product_with_left_scalar::<
@@ -49,23 +117,43 @@ macro_rules! impl_mitem_tuple {
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Vec = ($( DeviceVec<R, $ty>, )+);
+            type Vec = soa_type!($( DeviceVec<R, $ty> ),+);
 
             fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
                 let ($( $var, )+) = inner;
-                ($( DeviceVec::from_inner($var), )+)
+                soa_value!($( DeviceVec::from_inner($var) ),+)
+            }
+
+            fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error> {
+                Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
             }
         }
 
-        impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
+        impl<R, $( $ty ),+> MVec<R> for soa_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: Scalar + 'static, )+
+            for<'a> soa_type!($( DeviceSliceMut<'a, R, $ty> ),+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
+            type SliceMut<'a>
+                = soa_type!($( DeviceSliceMut<'a, R, $ty> ),+)
+            where
+                Self: 'a;
 
             fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
                 <Self::Item as MItem<R>>::vec_from_inner(inner)
+            }
+
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            where
+                Bounds: std::ops::RangeBounds<usize>,
+            {
+                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice_mut(self, range)
             }
         }
 
@@ -379,23 +467,43 @@ macro_rules! impl_wide_mitem_tuple {
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Vec = ($( DeviceVec<R, $ty>, )+);
+            type Vec = soa_type!($( DeviceVec<R, $ty> ),+);
 
             fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
                 let ($( $var, )+) = inner;
-                ($( DeviceVec::from_inner($var), )+)
+                soa_value!($( DeviceVec::from_inner($var) ),+)
+            }
+
+            fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error> {
+                Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
             }
         }
 
-        impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
+        impl<R, $( $ty ),+> MVec<R> for soa_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: Scalar + 'static, )+
+            for<'a> soa_type!($( DeviceSliceMut<'a, R, $ty> ),+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
+            type SliceMut<'a>
+                = soa_type!($( DeviceSliceMut<'a, R, $ty> ),+)
+            where
+                Self: 'a;
 
             fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
                 <Self::Item as MItem<R>>::vec_from_inner(inner)
+            }
+
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            where
+                Bounds: std::ops::RangeBounds<usize>,
+            {
+                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice_mut(self, range)
             }
         }
 
@@ -527,17 +635,39 @@ macro_rules! impl_wide_mitem_tuple_empty_dispatch {
                 let ($( $var, )+) = inner;
                 ($( DeviceVec::from_inner($var), )+)
             }
+
+            fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error> {
+                Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
+            }
         }
 
         impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: Scalar + 'static, )+
+            for<'a> ($( DeviceSliceMut<'a, R, $ty>, )+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
+            type SliceMut<'a>
+                = ($( DeviceSliceMut<'a, R, $ty>, )+)
+            where
+                Self: 'a;
 
             fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
                 <Self::Item as MItem<R>>::vec_from_inner(inner)
+            }
+
+            fn len(&self) -> usize {
+                self.0.len()
+            }
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            where
+                Bounds: std::ops::RangeBounds<usize>,
+            {
+                let range = crate::iter::normalize_soa_range(self.0.len(), range);
+                let ($( $var, )+) = self;
+                ($( $var.slice_mut(range.clone()), )+)
             }
         }
 

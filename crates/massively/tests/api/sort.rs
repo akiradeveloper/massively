@@ -44,7 +44,7 @@ fn sort_returns_device_storage() {
     let x = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
 
     let sorted = sort(&exec, massively::SoA1(x.slice(..)), Less).unwrap();
-    let (sorted,) = sorted;
+    let massively::SoA1(sorted) = sorted;
 
     assert_eq!(exec.to_host(&sorted).unwrap(), vec![1.0, 2.0, 3.0]);
     assert_eq!(exec.to_host(&x).unwrap(), vec![3.0, 1.0, 2.0]);
@@ -62,7 +62,7 @@ fn tuple_sort_preserves_soa_components() {
         MixedTupleLess,
     )
     .unwrap();
-    let (x, y) = sorted;
+    let massively::SoA2(x, y) = sorted;
 
     assert_eq!(exec.to_host(&x).unwrap(), vec![1.0, 2.0, 3.0]);
     assert_eq!(exec.to_host(&y).unwrap(), vec![10, 20, 30]);
@@ -80,7 +80,7 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
         MixedTupleLess,
     )
     .unwrap();
-    let (values, tags) = sorted;
+    let massively::SoA2(values, tags) = sorted;
     assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 2.0, 2.0, 3.0]);
     assert_eq!(exec.to_host(&tags).unwrap(), vec![30, 10, 20, 40]);
 
@@ -94,7 +94,7 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
         MixedTuple3Less,
     )
     .unwrap();
-    let (values, tags, payload) = sorted;
+    let massively::SoA3(values, tags, payload) = sorted;
     assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 3.0, 2.0, 4.0]);
     assert_eq!(exec.to_host(&tags).unwrap(), vec![10, 10, 20, 20]);
     assert_eq!(
@@ -128,7 +128,7 @@ fn sort_accepts_seven_tuple_columns() {
         Tuple7MixedLess,
     )
     .unwrap();
-    let (a, b, c, d, e, f, g) = sorted;
+    let massively::SoA7(a, b, c, d, e, f, g) = sorted;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![2.0, 2.0, 1.0, 3.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![10, 20, 30, 40]);
@@ -166,7 +166,7 @@ fn stable_sort_accepts_seven_tuple_columns_and_preserves_equal_order() {
         Tuple7MixedLess,
     )
     .unwrap();
-    let (a, b, c, d, e, f, g) = sorted;
+    let massively::SoA7(a, b, c, d, e, f, g) = sorted;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![0.0, 1.0, 1.0, 1.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![1, 1, 1, 2]);

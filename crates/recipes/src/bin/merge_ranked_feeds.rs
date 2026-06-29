@@ -30,7 +30,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let ((timestamp,), (event_id,)) = merge_by_key(
+    let (SoA1(timestamp), SoA1(event_id)) = merge_by_key(
         exec,
         SoA1(left_timestamp.slice(..)),
         SoA1(left_event_id.slice(..)),

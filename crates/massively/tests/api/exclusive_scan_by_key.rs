@@ -16,7 +16,7 @@ fn exclusive_scan_by_key_uses_supplied_key_equality() {
         TupleSum,
     )
     .unwrap();
-    let (values, ids) = output;
+    let massively::SoA2(values, ids) = output;
     assert_eq!(exec.to_host(&values).unwrap(), vec![100.0, 100.0, 100.0]);
     assert_eq!(exec.to_host(&ids).unwrap(), vec![1000, 1000, 1000]);
 }
@@ -27,7 +27,7 @@ fn exclusive_scan_by_key_handles_one_run() {
     let keys = exec.to_device(&[0_u32, 0, 0, 0]).unwrap();
     let values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
 
-    let (output,) = exclusive_scan_by_key(
+    let massively::SoA1(output) = exclusive_scan_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -50,7 +50,7 @@ fn exclusive_scan_by_key_handles_all_same_key_long_run() {
 
     let keys = exec.to_device(&keys).unwrap();
     let values = exec.to_device(&values).unwrap();
-    let (output,) = exclusive_scan_by_key(
+    let massively::SoA1(output) = exclusive_scan_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -76,7 +76,7 @@ fn exclusive_scan_by_key_handles_block_boundary_runs() {
 
     let keys = exec.to_device(&keys).unwrap();
     let values = exec.to_device(&values).unwrap();
-    let (output,) = exclusive_scan_by_key(
+    let massively::SoA1(output) = exclusive_scan_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -108,7 +108,7 @@ fn exclusive_scan_by_key_accepts_tuple_values() {
         TupleSum,
     )
     .unwrap();
-    let (a, b, c) = output;
+    let massively::SoA3(a, b, c) = output;
     assert_eq!(
         exec.to_host(&a).unwrap(),
         vec![0.0, 1.0, 0.0, 3.0, 7.0, 0.0]
@@ -128,7 +128,7 @@ fn exclusive_scan_by_key_accepts_three_column_keys() {
     let key_c = exec.to_device(&[5.0_f32, 5.0, 5.0, 6.0, 7.0, 7.0]).unwrap();
     let values = exec.to_device(&[1_u32, 2, 3, 4, 5, 6]).unwrap();
 
-    let (output,) = exclusive_scan_by_key(
+    let massively::SoA1(output) = exclusive_scan_by_key(
         &exec,
         massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -153,7 +153,7 @@ fn exclusive_scan_by_key_accepts_three_column_keys_and_tuple_values() {
         .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
         .unwrap();
 
-    let (a, b, c) = exclusive_scan_by_key(
+    let massively::SoA3(a, b, c) = exclusive_scan_by_key(
         &exec,
         massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
         massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
@@ -192,7 +192,7 @@ fn exclusive_scan_by_key_accepts_three_column_keys_and_seven_column_values() {
     let f = exec.to_device(&[4_u32, 5, 6, 7, 8, 9]).unwrap();
     let g = exec.to_device(&[0.5_f32, 1.5, 2.5, 3.5, 4.5, 5.5]).unwrap();
 
-    let (a, b, c, d, e, f, g) = exclusive_scan_by_key(
+    let massively::SoA7(a, b, c, d, e, f, g) = exclusive_scan_by_key(
         &exec,
         massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
         massively::SoA7(

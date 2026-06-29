@@ -5,10 +5,7 @@ use common::{Runtime, SIZES, iter_gpu, select_flags, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{Executor, copy_where, partition, remove_where, unique};
-
-#[cfg(feature = "bench-diagnostics")]
-use massively::__bench as bench_diag;
+use massively::{Executor, SoA1, copy_where, partition, remove_where, unique};
 
 fn alternating_signed(len: usize) -> Vec<f32> {
     (0..len)
@@ -41,7 +38,7 @@ impl BinaryPredicateOp<WgpuRuntime, (f32,)> for Equal {
 fn check_copy_where(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
-    let (output,) =
+    let SoA1(output) =
         copy_where(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0]);
 }
@@ -50,17 +47,17 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
 
-    let (removed,) =
+    let SoA1(removed) =
         remove_where(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
     assert_eq!(exec.to_host(&removed).unwrap(), vec![-1.0, -3.0]);
 
-    let ((positives,), (non_positives,)) =
+    let (SoA1(positives), SoA1(non_positives)) =
         partition(&exec, massively::SoA1(values.slice(..)), Positive).unwrap();
     assert_eq!(exec.to_host(&positives).unwrap(), vec![2.0, 4.0]);
     assert_eq!(exec.to_host(&non_positives).unwrap(), vec![-1.0, -3.0]);
 
     let repeated = exec.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 3.0]).unwrap();
-    let (unique_values,) = unique(&exec, massively::SoA1(repeated.slice(..)), Equal).unwrap();
+    let SoA1(unique_values) = unique(&exec, massively::SoA1(repeated.slice(..)), Equal).unwrap();
     assert_eq!(exec.to_host(&unique_values).unwrap(), vec![1.0, 2.0, 3.0]);
 }
 
@@ -182,169 +179,6 @@ fn bench_select(c: &mut Criterion) {
         }
     }
     unique_group.finish();
-
-    #[cfg(feature = "bench-diagnostics")]
-    bench_selection_diagnostics(c);
-}
-
-#[cfg(feature = "bench-diagnostics")]
-fn bench_selection_diagnostics(c: &mut Criterion) {
-    let mut control_group = c.benchmark_group("selection_control");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-
-        for &len in SIZES {
-            let stencil = exec.to_device(&select_flags(len, 50)).unwrap();
-            sync(&exec);
-            control_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                iter_gpu(b, || {
-                    let control = bench_diag::selection_control_from_u32_stencil(
-                        &exec,
-                        black_box(stencil.slice(..)),
-                    )
-                    .unwrap();
-                    let control_len = control.len();
-                    sync(&exec);
-                    black_box(control_len)
-                })
-            });
-        }
-    }
-    control_group.finish();
-
-    let mut flags_group = c.benchmark_group("selection_flags");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-
-        for &len in SIZES {
-            let stencil = exec.to_device(&select_flags(len, 50)).unwrap();
-            sync(&exec);
-            flags_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                iter_gpu(b, || {
-                    let control = bench_diag::selection_flags_from_u32_stencil(
-                        &exec,
-                        black_box(stencil.slice(..)),
-                    )
-                    .unwrap();
-                    let control_len = control.len();
-                    sync(&exec);
-                    black_box(control_len)
-                })
-            });
-        }
-    }
-    flags_group.finish();
-
-    let mut apply_group = c.benchmark_group("selection_apply");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-
-        for &selected_per_100 in &[0_usize, 50, 100] {
-            for &len in SIZES {
-                let values = exec.to_device(&alternating_signed(len)).unwrap();
-                let stencil = exec
-                    .to_device(&select_flags(len, selected_per_100))
-                    .unwrap();
-                let output = exec.filled(len, 0.0_f32).unwrap();
-                let control =
-                    bench_diag::selection_control_from_u32_stencil(&exec, stencil.slice(..))
-                        .unwrap();
-                sync(&exec);
-                apply_group.bench_function(
-                    BenchmarkId::new(format!("{}-{}pct", backend.name(), selected_per_100), len),
-                    |b| {
-                        iter_gpu(b, || {
-                            bench_diag::apply_copy_where_with_control(
-                                &exec,
-                                black_box(values.slice(..)),
-                                black_box(&control),
-                                black_box(output.slice_mut(..)),
-                            )
-                            .unwrap();
-                            sync(&exec);
-                            black_box(output.len())
-                        })
-                    },
-                );
-            }
-        }
-    }
-    apply_group.finish();
-
-    let mut partition_group = c.benchmark_group("partition_phases");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-
-        for &len in SIZES {
-            let values = exec.to_device(&alternating_signed(len)).unwrap();
-            let matching_output = exec.filled(len, 0.0_f32).unwrap();
-            let failing_output = exec.filled(len, 0.0_f32).unwrap();
-            let matching_control = bench_diag::selection_control_from_predicate::<_, _, Positive>(
-                &exec,
-                values.slice(..),
-                false,
-            )
-            .unwrap();
-            let failing_control = bench_diag::selection_control_from_predicate::<_, _, Positive>(
-                &exec,
-                values.slice(..),
-                true,
-            )
-            .unwrap();
-            sync(&exec);
-
-            partition_group.bench_function(
-                BenchmarkId::new(format!("{}-control", backend.name()), len),
-                |b| {
-                    iter_gpu(b, || {
-                        let control =
-                            bench_diag::selection_control_from_predicate::<_, _, Positive>(
-                                &exec,
-                                black_box(values.slice(..)),
-                                false,
-                            )
-                            .unwrap();
-                        let control_len = control.len();
-                        sync(&exec);
-                        black_box(control_len)
-                    })
-                },
-            );
-            partition_group.bench_function(
-                BenchmarkId::new(format!("{}-matching-apply", backend.name()), len),
-                |b| {
-                    iter_gpu(b, || {
-                        bench_diag::apply_copy_where_with_control(
-                            &exec,
-                            black_box(values.slice(..)),
-                            black_box(&matching_control),
-                            black_box(matching_output.slice_mut(..)),
-                        )
-                        .unwrap();
-                        sync(&exec);
-                        black_box(matching_output.len())
-                    })
-                },
-            );
-            partition_group.bench_function(
-                BenchmarkId::new(format!("{}-failing-apply", backend.name()), len),
-                |b| {
-                    iter_gpu(b, || {
-                        bench_diag::apply_copy_where_with_control(
-                            &exec,
-                            black_box(values.slice(..)),
-                            black_box(&failing_control),
-                            black_box(failing_output.slice_mut(..)),
-                        )
-                        .unwrap();
-                        sync(&exec);
-                        black_box(failing_output.len())
-                    })
-                },
-            );
-        }
-    }
-    partition_group.finish();
 }
 
 criterion_group! {

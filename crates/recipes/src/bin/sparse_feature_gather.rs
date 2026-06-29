@@ -30,8 +30,8 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let mut gathered_age = exec.filled(row_index.len(), 0_u32)?;
-    let mut gathered_score = exec.filled(row_index.len(), 0.0_f32)?;
+    let gathered_age = exec.constant(row_index.len(), 0_u32)?;
+    let gathered_score = exec.constant(row_index.len(), 0.0_f32)?;
     gather(
         exec,
         SoA2(age.slice(..), score.slice(..)),

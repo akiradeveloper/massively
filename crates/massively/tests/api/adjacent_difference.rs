@@ -13,7 +13,7 @@ fn adjacent_difference_accepts_three_tuple_columns() {
         TupleSum,
     )
     .unwrap();
-    let (a_out, b_out, c_out) = output;
+    let massively::SoA3(a_out, b_out, c_out) = output;
 
     assert_eq!(exec.to_host(&a_out).unwrap(), vec![1.0, 4.0, 9.0, 16.0]);
     assert_eq!(exec.to_host(&b_out).unwrap(), vec![10, 40, 90, 160]);

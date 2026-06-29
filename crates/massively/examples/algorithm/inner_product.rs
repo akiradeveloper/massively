@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, inner_product};
 
 fn main() -> common::Result {
@@ -10,8 +11,8 @@ fn main() -> common::Result {
 
     let dot = inner_product(
         &exec,
-        massively::SoA1(x.slice(..)),
-        massively::SoA1(y.slice(..)),
+        SoA1(x.slice(..)),
+        SoA1(y.slice(..)),
         common::PairProduct,
         (0.0,),
         common::SumF32,

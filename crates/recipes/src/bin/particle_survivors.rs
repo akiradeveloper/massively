@@ -16,6 +16,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
+use massively::prelude::*;
 use massively::{DeviceVec, Executor, SoA3, remove_where, transform};
 
 struct AdvanceParticle;
@@ -67,9 +68,9 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let mut next_x = exec.filled(x.len(), 0.0_f32)?;
-    let mut next_y = exec.filled(y.len(), 0.0_f32)?;
-    let mut next_vx = exec.filled(vx.len(), 0.0_f32)?;
+    let next_x = exec.constant(x.len(), 0.0_f32)?;
+    let next_y = exec.constant(y.len(), 0.0_f32)?;
+    let next_vx = exec.constant(vx.len(), 0.0_f32)?;
     transform(
         exec,
         SoA3(x.slice(..), y.slice(..), vx.slice(..)),
@@ -80,14 +81,14 @@ where
             next_vx.slice_mut(..),
         ),
     )?;
-    let mut stencil = exec.filled(next_x.len(), 0_u32)?;
+    let stencil = exec.constant(next_x.len(), 0_u32)?;
     transform(
         exec,
         SoA3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         OutsideParticleBox,
-        massively::SoA1(stencil.slice_mut(..)),
+        SoA1(stencil.slice_mut(..)),
     )?;
-    let (x, y, vx) = remove_where(
+    let SoA3(x, y, vx) = remove_where(
         exec,
         SoA3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         stencil.slice(..),

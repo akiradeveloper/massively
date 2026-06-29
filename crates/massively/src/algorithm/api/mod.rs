@@ -3,11 +3,11 @@
 use cubecl::prelude::Runtime;
 
 use crate::detail::dispatch as sealed;
+use crate::detail::op_adapter::{KernelOp, StencilFlag};
 use crate::iter::{MIter, MIterMut};
 use crate::op;
-use crate::runtime::Executor;
-use crate::slice::{MSlice, lowering};
-use crate::value::MItem;
+use crate::runtime::{DeviceSlice, Executor};
+use crate::value::{MItem, MVec};
 
 pub use crate::Error;
 
@@ -27,12 +27,43 @@ where
     <Output as sealed::MIterMutDispatch<R>>::validate_executor(output, exec)
 }
 
-fn validate_mslice<R, Slice>(exec: &Executor<R>, slice: &Slice) -> Result<(), Error>
+fn validate_device_slice<R, T>(
+    exec: &Executor<R>,
+    slice: &DeviceSlice<'_, R, T>,
+) -> Result<(), Error>
 where
     R: Runtime,
-    Slice: MSlice<R>,
 {
-    slice.validate_executor(exec)
+    exec.ensure_policy_id(slice.policy_id())
+}
+
+fn u32_stencil<R>(
+    policy: &crate::detail::CubePolicy<R>,
+    stencil: DeviceSlice<'_, R, u32>,
+    invert: bool,
+) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
+where
+    R: Runtime,
+{
+    crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, KernelOp<R, StencilFlag>>(
+        policy,
+        &(stencil.column_view(),),
+        invert,
+    )
+}
+
+fn u32_stencil_flags<R>(
+    policy: &crate::detail::CubePolicy<R>,
+    stencil: DeviceSlice<'_, R, u32>,
+    invert: bool,
+) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
+where
+    R: Runtime,
+{
+    crate::detail::api::PrecomputedSelection::from_stencil_flags_with_policy::<
+        _,
+        KernelOp<R, StencilFlag>,
+    >(policy, &(stencil.column_view(),), invert)
 }
 
 mod indexed;
@@ -46,7 +77,7 @@ mod set;
 mod transform;
 mod unique;
 
-pub use indexed::{gather, gather_where, scatter, scatter_where};
+pub use indexed::{gather, gather_where, permute, scatter, scatter_where};
 pub use ordering::{
     merge, merge_by_key, reverse, sort, sort_by_key, stable_sort, stable_sort_by_key,
 };
@@ -63,5 +94,5 @@ pub use search::{
 };
 pub use selection::{copy_where, remove_where, replace_where};
 pub use set::{set_difference, set_intersection, set_union};
-pub use transform::{transform, transform_where};
+pub use transform::{map, transform, transform_where};
 pub use unique::{unique, unique_by_key};

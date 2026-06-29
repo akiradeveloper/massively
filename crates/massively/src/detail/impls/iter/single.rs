@@ -1,11 +1,9 @@
 use super::*;
 
-impl<R, S, T> MIter<R> for SoA1<S>
+impl<'a, R, T> MIter<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
 where
     R: Runtime,
-    S: MSlice<R, Item = T>,
     T: Scalar + 'static,
-    S::Read: IntoMaterializedColumn<R, T>,
     (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     type Item = (T,);
@@ -23,20 +21,19 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
     ) -> Result<Self::Inner, Error> {
-        Ok((lower_mslice_column(self.0, policy)?,))
+        let _ = policy;
+        Ok((self.0.column_view(),))
     }
 }
 
-impl<R, S, T> sealed::MIterDispatch<R> for SoA1<S>
+impl<'a, R, T> sealed::MIterDispatch<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
 where
     R: Runtime,
-    S: MSlice<R, Item = T>,
     T: Scalar + 'static,
-    S::Read: IntoMaterializedColumn<R, T>,
     (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
-        self.0.validate_executor(exec)
+        exec.ensure_policy_id(self.0.policy_id())
     }
 
     fn transform_dispatch<Op, Output>(
@@ -52,6 +49,20 @@ where
         let input = self.into_inner_with_policy(policy)?.0;
         let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
         output.write_from_inner(policy, inner)
+    }
+
+    fn map_dispatch<Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        op: Op,
+    ) -> Result<Output, Error>
+    where
+        Output: MVec<R>,
+        Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+    {
+        let input = self.into_inner_with_policy(policy)?.0;
+        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
+        Ok(array_from_inner::<R, Output::Item, Output>(inner))
     }
 
     fn transform_where_dispatch<Op, Output>(
@@ -717,6 +728,22 @@ where
                 message: "gather output must match input shape".to_string(),
             })?;
         crate::detail::api::device_expr_gather_into_with_policy(policy, &input, &indices, &output)
+    }
+
+    fn permute_dispatch<Indices, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        indices: Indices,
+    ) -> Result<Output, Error>
+    where
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
+        <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let input = self.into_inner_with_policy(policy)?.0;
+        let inner = crate::detail::api::device_expr_gather_with_policy(policy, &input, &indices)?;
+        Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
     fn reduce_dispatch<Op>(

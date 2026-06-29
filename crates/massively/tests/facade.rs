@@ -452,7 +452,7 @@ fn reverse2_wraps_reverse_with_slice_array_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let (output,) = reverse2(&exec, SoA1(input.slice(..))).unwrap();
+    let massively::SoA1(output) = reverse2(&exec, SoA1(input.slice(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![3, 2, 1]);
 }
@@ -462,7 +462,7 @@ fn sort2_wraps_sort_with_slice_array_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let input = exec.to_device(&[3_u32, 1, 2]).unwrap();
 
-    let (output,) = sort2(&exec, SoA1(input.slice(..)), TupleU32Less).unwrap();
+    let massively::SoA1(output) = sort2(&exec, SoA1(input.slice(..)), TupleU32Less).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 }
@@ -539,7 +539,7 @@ fn sort2_wraps_two_column_sort_with_slice_array_signature() {
     let left = exec.to_device(&[3_u32, 1, 2]).unwrap();
     let right = exec.to_device(&[30_u32, 10, 20]).unwrap();
 
-    let (out_left, out_right) =
+    let SoA2(out_left, out_right) =
         sort2(&exec, SoA2(left.slice(..), right.slice(..)), PairU32Less).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![1, 2, 3]);
@@ -580,7 +580,7 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
     let second = exec.to_device(&[30_u32, 10, 20]).unwrap();
     let third = exec.to_device(&[300_u32, 100, 200]).unwrap();
 
-    let (out_first, out_second, out_third) = sort2(
+    let massively::SoA3(out_first, out_second, out_third) = sort2(
         &exec,
         SoA3(first.slice(..), second.slice(..), third.slice(..)),
         TripleU32Less,
@@ -695,7 +695,7 @@ fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
 
-    let (out_left, out_right) = copy_where2(
+    let SoA2(out_left, out_right) = copy_where2(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
         stencil.slice(..),
@@ -745,7 +745,7 @@ fn remove_where2_wraps_two_column_remove_where_with_stencil() {
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
 
-    let (out_left, out_right) = remove_where2(
+    let SoA2(out_left, out_right) = remove_where2(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
         stencil.slice(..),
@@ -762,7 +762,7 @@ fn partition2_wraps_two_column_partition_with_tuple_predicate() {
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
-    let ((true_left, true_right), (false_left, false_right)) =
+    let (SoA2(true_left, true_right), SoA2(false_left, false_right)) =
         partition2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(exec.to_host(&true_left).unwrap(), vec![21, 43]);
@@ -803,7 +803,7 @@ fn unique2_wraps_two_column_unique_with_tuple_predicate() {
     let left = exec.to_device(&[1_u32, 1, 2, 2, 2, 3]).unwrap();
     let right = exec.to_device(&[10_u32, 10, 20, 21, 21, 30]).unwrap();
 
-    let (out_left, out_right) =
+    let SoA2(out_left, out_right) =
         unique2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![1, 2, 2, 3]);
@@ -816,7 +816,7 @@ fn adjacent_difference2_wraps_two_column_tuple_op() {
     let left = exec.to_device(&[10_u32, 13, 20]).unwrap();
     let right = exec.to_device(&[100_u32, 107, 120]).unwrap();
 
-    let (out_left, out_right) =
+    let SoA2(out_left, out_right) =
         adjacent_difference2(&exec, SoA2(left.slice(..), right.slice(..)), PairDifference).unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 3, 7]);

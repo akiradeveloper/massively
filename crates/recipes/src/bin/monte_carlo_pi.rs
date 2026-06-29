@@ -48,7 +48,7 @@ where
 {
     let x = random::uniform_distribution_u32(exec, samples, 0, SCALE, 0x1234_5678)?;
     let y = random::uniform_distribution_u32(exec, samples, 0, SCALE, 0x8765_4321)?;
-    let mut inside = exec.filled(samples, 0_u32)?;
+    let inside = exec.constant(samples, 0_u32)?;
     transform(
         exec,
         SoA2(x.slice(..), y.slice(..)),

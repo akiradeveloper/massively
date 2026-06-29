@@ -336,7 +336,7 @@ fn soa7_reverse_returns_all_columns() {
     let f = exec.to_device(&[51_u32, 52, 53]).unwrap();
     let g = exec.to_device(&[61_u32, 62, 63]).unwrap();
 
-    let (a, b, c, d, e, f, g) = reverse(
+    let massively::SoA7(a, b, c, d, e, f, g) = reverse(
         &exec,
         massively::SoA7(
             a.slice(..),

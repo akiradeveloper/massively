@@ -15,7 +15,7 @@ fn merge_accepts_borrowed_tuple_columns() {
         MixedTupleLess,
     )
     .unwrap();
-    let (a, b) = output;
+    let massively::SoA2(a, b) = output;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![10, 20, 30, 40]);

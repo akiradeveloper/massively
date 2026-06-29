@@ -57,8 +57,8 @@ fn merge_by_key_accepts_tuple_values() {
         LessU32,
     )
     .unwrap();
-    let (keys,) = keys;
-    let (values, ids) = values;
+    let massively::SoA1(keys) = keys;
+    let massively::SoA2(values, ids) = values;
 
     assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1, 2, 2, 2, 4, 5]);
     assert_eq!(
@@ -80,7 +80,7 @@ fn merge_by_key_accepts_three_column_keys() {
     let left_values = exec.to_device(&[90_u32, 13, 20]).unwrap();
     let right_values = exec.to_device(&[19_u32, 200]).unwrap();
 
-    let ((out_k0, out_k1, out_k2), (out_values,)) = merge_by_key(
+    let (massively::SoA3(out_k0, out_k1, out_k2), massively::SoA1(out_values)) = merge_by_key(
         &exec,
         massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
         massively::SoA1(left_values.slice(..)),
@@ -121,15 +121,16 @@ fn merge_by_key_accepts_three_column_keys_and_tuple_values() {
     let rb = exec.to_device(&[190_u32, 2000]).unwrap();
     let rc = exec.to_device(&[1900.0_f32, 20000.0]).unwrap();
 
-    let ((out_k0, out_k1, out_k2), (out_a, out_b, out_c)) = merge_by_key(
-        &exec,
-        massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
-        massively::SoA3(la.slice(..), lb.slice(..), lc.slice(..)),
-        massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
-        massively::SoA3(ra.slice(..), rb.slice(..), rc.slice(..)),
-        MixedTuple3LexLess,
-    )
-    .unwrap();
+    let (massively::SoA3(out_k0, out_k1, out_k2), massively::SoA3(out_a, out_b, out_c)) =
+        merge_by_key(
+            &exec,
+            massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
+            massively::SoA3(la.slice(..), lb.slice(..), lc.slice(..)),
+            massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
+            massively::SoA3(ra.slice(..), rb.slice(..), rc.slice(..)),
+            MixedTuple3LexLess,
+        )
+        .unwrap();
 
     assert_eq!(
         exec.to_host(&out_k0).unwrap(),
@@ -178,32 +179,34 @@ fn merge_by_key_accepts_three_column_keys_and_seven_column_values() {
     let rf = exec.to_device(&[200_u32, 2010]).unwrap();
     let rg = exec.to_device(&[20.0_f32, 201.0]).unwrap();
 
-    let ((out_k0, out_k1, out_k2), (out_a, out_b, out_c, out_d, out_e, out_f, out_g)) =
-        merge_by_key(
-            &exec,
-            massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
-            massively::SoA7(
-                la.slice(..),
-                lb.slice(..),
-                lc.slice(..),
-                ld.slice(..),
-                le.slice(..),
-                lf.slice(..),
-                lg.slice(..),
-            ),
-            massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
-            massively::SoA7(
-                ra.slice(..),
-                rb.slice(..),
-                rc.slice(..),
-                rd.slice(..),
-                re.slice(..),
-                rf.slice(..),
-                rg.slice(..),
-            ),
-            MixedTuple3LexLess,
-        )
-        .unwrap();
+    let (
+        massively::SoA3(out_k0, out_k1, out_k2),
+        massively::SoA7(out_a, out_b, out_c, out_d, out_e, out_f, out_g),
+    ) = merge_by_key(
+        &exec,
+        massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
+        massively::SoA7(
+            la.slice(..),
+            lb.slice(..),
+            lc.slice(..),
+            ld.slice(..),
+            le.slice(..),
+            lf.slice(..),
+            lg.slice(..),
+        ),
+        massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
+        massively::SoA7(
+            ra.slice(..),
+            rb.slice(..),
+            rc.slice(..),
+            rd.slice(..),
+            re.slice(..),
+            rf.slice(..),
+            rg.slice(..),
+        ),
+        MixedTuple3LexLess,
+    )
+    .unwrap();
 
     assert_eq!(
         exec.to_host(&out_k0).unwrap(),

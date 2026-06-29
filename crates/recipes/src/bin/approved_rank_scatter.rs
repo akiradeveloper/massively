@@ -25,7 +25,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let mut out = exec.filled(len, 0_u32)?;
+    let out = exec.constant(len, 0_u32)?;
     scatter_where(
         exec,
         SoA1(item_id.slice(..)),

@@ -26,6 +26,20 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("transform")
     }
 
+    fn map_dispatch<Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        op: Op,
+    ) -> Result<Output, Error>
+    where
+        Self: MIter<R>,
+        Output: MVec<R>,
+        Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+    {
+        let _ = (policy, op);
+        unsupported("map")
+    }
+
     fn transform_where_dispatch<Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -447,6 +461,23 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     {
         let _ = (policy, indices, output);
         unsupported("gather")
+    }
+
+    fn permute_dispatch<Indices, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        indices: Indices,
+    ) -> Result<Output, Error>
+    where
+        Self: MIter<R>,
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
+        <Indices as crate::detail::device::KernelColumn>::Expr:
+            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, indices);
+        unsupported("permute")
     }
 
     fn gather_where_dispatch<Indices, Output>(

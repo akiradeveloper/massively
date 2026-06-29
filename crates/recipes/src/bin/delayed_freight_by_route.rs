@@ -31,18 +31,18 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (delayed_route, delayed_weight) = copy_where(
+    let SoA2(delayed_route, delayed_weight) = copy_where(
         exec,
         SoA2(route_id.slice(..), weight.slice(..)),
         delayed.slice(..),
     )?;
-    let ((sorted_route,), (sorted_weight,)) = sort_by_key(
+    let (SoA1(sorted_route), SoA1(sorted_weight)) = sort_by_key(
         exec,
         SoA1(delayed_route.slice(..)),
         SoA1(delayed_weight.slice(..)),
         common::LessU32,
     )?;
-    let ((route_id,), (delayed_weight,)) = reduce_by_key(
+    let (SoA1(route_id), SoA1(delayed_weight)) = reduce_by_key(
         exec,
         SoA1(sorted_route.slice(..)),
         SoA1(sorted_weight.slice(..)),
