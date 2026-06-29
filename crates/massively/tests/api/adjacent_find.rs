@@ -1,6 +1,7 @@
 use crate::common::*;
 
 #[cfg(any())]
+#[cfg(any())]
 #[test]
 fn adjacent_find_accepts_borrowed_heterogeneous_soa12() {
     let exec = exec();

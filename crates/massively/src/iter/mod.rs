@@ -220,6 +220,12 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
         Ok(self.into_inner())
     }
 
+    #[doc(hidden)]
+    fn into_view_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<<Self::Item as MItem<R>>::View, Error>;
+
     /// Returns the logical length.
     fn len(&self) -> usize;
 

@@ -4,7 +4,11 @@ impl<'a, R, T> MIter<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
 where
     R: Runtime,
     T: Scalar + 'static,
-    (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
+    (T,): MItem<
+            R,
+            Inner = (crate::detail::DeviceVec<R, T>,),
+            View = (crate::detail::device::DeviceColumnView<R, T>,),
+        >,
 {
     type Item = (T,);
     type Inner = (crate::detail::device::DeviceColumnView<R, T>,);
@@ -24,13 +28,25 @@ where
         let _ = policy;
         Ok((self.0.column_view(),))
     }
+
+    fn into_view_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<<Self::Item as MItem<R>>::View, Error> {
+        let _ = policy;
+        Ok((self.0.column_view(),))
+    }
 }
 
 impl<'a, R, T> sealed::MIterDispatch<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
 where
     R: Runtime,
     T: Scalar + 'static,
-    (T,): MItem<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
+    (T,): MItem<
+            R,
+            Inner = (crate::detail::DeviceVec<R, T>,),
+            View = (crate::detail::device::DeviceColumnView<R, T>,),
+        >,
 {
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
         exec.ensure_policy_id(self.0.policy_id())
@@ -497,14 +513,14 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        RightValues: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
         K: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: MVec<R, Item = (K,)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_inner_with_policy(policy)?.0;
-        let right_value = right_values.into_inner_with_policy(policy)?.0;
+        let left_value = self.into_view_with_policy(policy)?.0;
+        let right_value = right_values.into_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             crate::detail::device::SoAView1 { source: left_keys },
@@ -534,7 +550,7 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        RightValues: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
         K1: Scalar + 'static,
         K2: Scalar + 'static,
         K3: Scalar + 'static,
@@ -542,8 +558,8 @@ where
         KeyOutput: MVec<R, Item = (K1, K2, K3)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_inner_with_policy(policy)?.0;
-        let right_value = right_values.into_inner_with_policy(policy)?.0;
+        let left_value = self.into_view_with_policy(policy)?.0;
+        let right_value = right_values.into_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key, left_third_key),
@@ -690,16 +706,16 @@ where
         less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item>,
         LeftValues: MIter<R>,
-        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item, Inner = <LeftValues as MIter<R>>::Inner>,
+        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item>,
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MVec<R, Item = <LeftValues as MIter<R>>::Item>,
     {
-        let (left_keys,) = self.into_inner_with_policy(policy)?;
-        let (right_keys,) = right_keys.into_inner_with_policy(policy)?;
+        let (left_keys,) = self.into_view_with_policy(policy)?;
+        let (right_keys,) = right_keys.into_view_with_policy(policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_single_key_same_dispatch(
             left_values,
             policy,
@@ -1080,13 +1096,13 @@ where
         _less: Less,
     ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
-        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Values: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let inner = crate::detail::lower_bound_many(
             policy,
-            self.into_inner_with_policy(policy)?,
-            values.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            values.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(crate::runtime::DeviceVec::from_inner(inner))
@@ -1099,13 +1115,13 @@ where
         _less: Less,
     ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
-        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Values: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let inner = crate::detail::upper_bound_many(
             policy,
-            self.into_inner_with_policy(policy)?,
-            values.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            values.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(crate::runtime::DeviceVec::from_inner(inner))
@@ -1224,13 +1240,13 @@ where
         _eq: Eq,
     ) -> Result<bool, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         crate::detail::equal(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -1242,13 +1258,13 @@ where
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         crate::detail::mismatch(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -1260,13 +1276,13 @@ where
         _eq: Eq,
     ) -> Result<Option<usize>, Error>
     where
-        Needles: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         crate::detail::find_first_of(
             policy,
-            self.into_inner_with_policy(policy)?,
-            needles.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            needles.into_view_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -1278,13 +1294,13 @@ where
         _less: Less,
     ) -> Result<bool, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         crate::detail::lexicographical_compare(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )
     }
@@ -1296,14 +1312,14 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let inner = crate::detail::merge(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1316,14 +1332,14 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let inner = crate::detail::set_union(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1336,14 +1352,14 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let inner = crate::detail::set_intersection(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -1356,14 +1372,14 @@ where
         _less: Less,
     ) -> Result<Output, Error>
     where
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let inner = crate::detail::set_difference(
             policy,
-            self.into_inner_with_policy(policy)?,
-            right.into_inner_with_policy(policy)?,
+            self.into_view_with_policy(policy)?,
+            right.into_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))

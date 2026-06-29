@@ -283,7 +283,7 @@ fn lower_bound2<R, S1, Values, Less>(
 where
     R: Runtime,
     S1: MIter<R>,
-    Values: MIter<R, Item = S1::Item, Inner = S1::Inner>,
+    Values: MIter<R, Item = S1::Item>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::lower_bound(exec, source, values, less)

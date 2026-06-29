@@ -1,6 +1,7 @@
 use crate::common::*;
 
 #[cfg(any())]
+#[cfg(any())]
 #[test]
 fn is_partitioned_accepts_borrowed_heterogeneous_soa12() {
     let exec = exec();

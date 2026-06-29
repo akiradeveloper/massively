@@ -204,6 +204,7 @@ fn tuple_sort_accepts_wide_borrowed_soas() {
 }
 
 #[cfg(any())]
+#[cfg(any())]
 #[test]
 fn tuple_sort_accepts_soa12() {
     let exec = exec();

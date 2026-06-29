@@ -25,6 +25,7 @@ fn partition_puts_everything_on_failing_side_when_no_values_match() {
 }
 
 #[cfg(any())]
+#[cfg(any())]
 #[test]
 fn partition_accepts_borrowed_heterogeneous_soa12() {
     let exec = exec();

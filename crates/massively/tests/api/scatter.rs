@@ -22,6 +22,7 @@ fn scatter_accepts_heterogeneous_columns() {
 }
 
 #[cfg(any())]
+#[cfg(any())]
 #[test]
 fn scatter_accepts_soa12_values() {
     let exec = exec();

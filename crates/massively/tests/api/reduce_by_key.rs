@@ -1,5 +1,25 @@
 use crate::common::*;
 
+fn count_reduced_values_after_mvec_slice<Values, Op, Pred>(
+    exec: &massively::Executor<WgpuRuntime>,
+    keys: massively::SoA1<massively::DeviceSlice<'_, WgpuRuntime, u32>>,
+    values: Values,
+    init: Values::Item,
+    op: Op,
+    pred: Pred,
+) -> usize
+where
+    Values: massively::MIter<WgpuRuntime>,
+    Op: ReductionOp<WgpuRuntime, Values::Item>,
+    Pred: PredicateOp<WgpuRuntime, Values::Item>,
+{
+    use massively::MVec as _;
+
+    let (_, values) = reduce_by_key(exec, keys, values, EqualU32, init, op).unwrap();
+    let values = values.slice(..);
+    count_if(exec, values, pred).unwrap()
+}
+
 #[test]
 fn reduce_by_key_uses_supplied_key_equality() {
     let exec = exec();
@@ -129,6 +149,43 @@ fn reduce_by_key_accepts_tuple_values() {
     assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2]);
     assert_eq!(exec.to_host(&values).unwrap(), vec![3.0, 12.0]);
     assert_eq!(exec.to_host(&ids).unwrap(), vec![30, 120]);
+}
+
+#[test]
+fn reduce_by_key_output_values_support_generic_mvec_slice_for_single_column() {
+    let exec = exec();
+    let keys = exec.to_device(&[1_u32, 1, 2, 2]).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 10, 20]).unwrap();
+
+    let count = count_reduced_values_after_mvec_slice(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA1(values.slice(..)),
+        (0_u32,),
+        Sum,
+        NonZero,
+    );
+
+    assert_eq!(count, 2);
+}
+
+#[test]
+fn reduce_by_key_output_values_support_generic_mvec_slice_for_multi_column() {
+    let exec = exec();
+    let keys = exec.to_device(&[1_u32, 1, 2, 2]).unwrap();
+    let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
+    let ids = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+
+    let count = count_reduced_values_after_mvec_slice(
+        &exec,
+        massively::SoA1(keys.slice(..)),
+        massively::SoA2(values.slice(..), ids.slice(..)),
+        (0.0_f32, 0_u32),
+        TupleSum,
+        PairMixedFirstPositive,
+    );
+
+    assert_eq!(count, 2);
 }
 
 #[test]

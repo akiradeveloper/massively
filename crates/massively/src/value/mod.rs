@@ -6,7 +6,7 @@ use cubecl::prelude::{CubeType, Runtime};
 
 use crate::Error;
 use crate::detail::dispatch;
-use crate::iter::MIterMut;
+use crate::iter::{MIter, MIterMut};
 use crate::runtime::Executor;
 
 /// Logical item handled by massively algorithms.
@@ -14,7 +14,9 @@ use crate::runtime::Executor;
 /// An `MItem` is one element of an [`crate::iter::MIter`]. The current public
 /// model represents items as tuples such as `(T,)`, `(T, U)`, and `(T, U, V)`;
 /// internally those tuples are stored as SoA device columns for backend `R`.
-pub trait MItem<R: Runtime>: dispatch::MItemDispatch<R> + CubeType + Sized + 'static {
+pub trait MItem<R: Runtime>:
+    dispatch::MItemDispatch<R> + CubeType + Copy + Sized + 'static
+{
     #[doc(hidden)]
     type Inner;
 
@@ -35,10 +37,12 @@ pub trait MItem<R: Runtime>: dispatch::MItemDispatch<R> + CubeType + Sized + 'st
 ///
 /// Algorithms that return owned output use this trait through `MItem::Vec`.
 /// `Executor::alloc::<Item>(len)` also returns this storage shape, and
-/// `slice_mut` turns it into a mutable output view for algorithms such as
-/// `scatter` and `transform`.
+/// `slice` / `slice_mut` turn it into device-backed SoA views.
 pub trait MVec<R: Runtime>: Sized {
     type Item: MItem<R>;
+    type Slice<'a>: MIter<R, Item = Self::Item>
+    where
+        Self: 'a;
     type SliceMut<'a>: MIterMut<R, Item = Self::Item>
     where
         Self: 'a;
@@ -50,6 +54,10 @@ pub trait MVec<R: Runtime>: Sized {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<usize>;
 
     fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
     where

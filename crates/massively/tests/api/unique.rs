@@ -76,6 +76,7 @@ fn unique_accepts_seven_tuple_columns() {
 }
 
 #[cfg(any())]
+#[cfg(any())]
 #[test]
 fn unique_accepts_borrowed_heterogeneous_soa12() {
     let exec = exec();
