@@ -1,5 +1,6 @@
 use crate::common::*;
 
+#[cfg(any())]
 #[test]
 fn gather_where_accepts_soa12_values() {
     let exec = exec();

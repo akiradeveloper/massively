@@ -1,5 +1,29 @@
 use crate::common::*;
 
+fn merge_by_key_with_generic_right<LeftKeys, LeftValues, RightKeys, RightValues, Less>(
+    exec: &Executor<WgpuRuntime>,
+    left_keys: LeftKeys,
+    left_values: LeftValues,
+    right_keys: RightKeys,
+    right_values: RightValues,
+    less: Less,
+) -> Result<
+    (
+        <LeftKeys::Item as massively::MItem<WgpuRuntime>>::Vec,
+        <LeftValues::Item as massively::MItem<WgpuRuntime>>::Vec,
+    ),
+    massively::Error,
+>
+where
+    LeftKeys: massively::MIter<WgpuRuntime>,
+    LeftValues: massively::MIter<WgpuRuntime>,
+    RightKeys: massively::MIter<WgpuRuntime, Item = LeftKeys::Item>,
+    RightValues: massively::MIter<WgpuRuntime, Item = LeftValues::Item>,
+    Less: BinaryPredicateOp<WgpuRuntime, LeftKeys::Item>,
+{
+    merge_by_key(exec, left_keys, left_values, right_keys, right_values, less)
+}
+
 #[allow(unused_macros)]
 macro_rules! soa12_rows {
     ($exec:expr; [$( $x:expr ),+ $(,)?]) => {{
@@ -36,6 +60,34 @@ macro_rules! assert_soa12_rows {
         assert_eq!(exec.to_host(&k).unwrap(), vec![$(($x as f32) + 2000.0),*]);
         assert_eq!(exec.to_host(&l).unwrap(), vec![$(($x as u32) + 20000),*]);
     }};
+}
+
+#[test]
+fn merge_by_key_accepts_generic_right_without_inner_equality_bound() {
+    let exec = exec();
+    let left_keys = exec.to_device(&[0_u32, 2, 2, 5]).unwrap();
+    let right_keys = exec.to_device(&[1_u32, 2, 4]).unwrap();
+    let left_values = exec.to_device(&[0.0_f32, 20.0, 21.0, 50.0]).unwrap();
+    let left_ids = exec.to_device(&[0_u32, 20, 21, 50]).unwrap();
+    let right_values = exec.to_device(&[10.0_f32, 22.0, 40.0]).unwrap();
+    let right_ids = exec.to_device(&[10_u32, 22, 40]).unwrap();
+
+    let (massively::SoA1(keys), massively::SoA2(values, ids)) = merge_by_key_with_generic_right(
+        &exec,
+        massively::SoA1(left_keys.slice(..)),
+        massively::SoA2(left_values.slice(..), left_ids.slice(..)),
+        massively::SoA1(right_keys.slice(..)),
+        massively::SoA2(right_values.slice(..), right_ids.slice(..)),
+        LessU32,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1, 2, 2, 2, 4, 5]);
+    assert_eq!(
+        exec.to_host(&values).unwrap(),
+        vec![0.0, 10.0, 20.0, 21.0, 22.0, 40.0, 50.0]
+    );
+    assert_eq!(exec.to_host(&ids).unwrap(), vec![0, 10, 20, 21, 22, 40, 50]);
 }
 
 #[test]

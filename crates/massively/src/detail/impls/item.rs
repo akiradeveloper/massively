@@ -93,9 +93,14 @@ macro_rules! impl_mitem_tuple {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
+            for<'a> soa_type!($( DeviceSlice<'a, R, $ty> ),+): MIter<R, Item = ($( $ty, )+)>,
             for<'a> soa_type!($( DeviceSliceMut<'a, R, $ty> ),+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
+            type Slice<'a>
+                = soa_type!($( DeviceSlice<'a, R, $ty> ),+)
+            where
+                Self: 'a;
             type SliceMut<'a>
                 = soa_type!($( DeviceSliceMut<'a, R, $ty> ),+)
             where
@@ -107,6 +112,13 @@ macro_rules! impl_mitem_tuple {
 
             fn len(&self) -> usize {
                 self.0.len()
+            }
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: std::ops::RangeBounds<usize>,
+            {
+                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice(self, range)
             }
 
             fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
@@ -369,9 +381,14 @@ macro_rules! impl_wide_mitem_tuple {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
+            for<'a> soa_type!($( DeviceSlice<'a, R, $ty> ),+): MIter<R, Item = ($( $ty, )+)>,
             for<'a> soa_type!($( DeviceSliceMut<'a, R, $ty> ),+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
+            type Slice<'a>
+                = soa_type!($( DeviceSlice<'a, R, $ty> ),+)
+            where
+                Self: 'a;
             type SliceMut<'a>
                 = soa_type!($( DeviceSliceMut<'a, R, $ty> ),+)
             where
@@ -383,6 +400,13 @@ macro_rules! impl_wide_mitem_tuple {
 
             fn len(&self) -> usize {
                 self.0.len()
+            }
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: std::ops::RangeBounds<usize>,
+            {
+                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice(self, range)
             }
 
             fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
@@ -506,245 +530,7 @@ macro_rules! impl_wide_mitem_tuple {
     };
 }
 
-macro_rules! impl_wide_mitem_tuple_empty_dispatch {
-    ($( $ty:ident : $var:ident ),+) => {
-        impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
-        where
-            R: Runtime,
-            $( $ty: Scalar, )+
-        {
-            type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
-            type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Vec = ($( DeviceVec<R, $ty>, )+);
-
-            fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
-                let ($( $var, )+) = inner;
-                ($( DeviceVec::from_inner($var), )+)
-            }
-
-            fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error> {
-                Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
-            }
-        }
-
-        impl<R, $( $ty ),+> MVec<R> for ($( DeviceVec<R, $ty>, )+)
-        where
-            R: Runtime,
-            $( $ty: Scalar + 'static, )+
-            for<'a> ($( DeviceSliceMut<'a, R, $ty>, )+): MIterMut<R, Item = ($( $ty, )+)>,
-        {
-            type Item = ($( $ty, )+);
-            type SliceMut<'a>
-                = ($( DeviceSliceMut<'a, R, $ty>, )+)
-            where
-                Self: 'a;
-
-            fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-                <Self::Item as MItem<R>>::vec_from_inner(inner)
-            }
-
-            fn len(&self) -> usize {
-                self.0.len()
-            }
-
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-            where
-                Bounds: std::ops::RangeBounds<usize>,
-            {
-                let range = crate::iter::normalize_soa_range(self.0.len(), range);
-                let ($( $var, )+) = self;
-                ($( $var.slice_mut(range.clone()), )+)
-            }
-        }
-
-        impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
-        where
-            R: Runtime,
-            $( $ty: Scalar, )+
-        {
-        }
-    };
-}
-
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d);
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e);
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f);
 impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g);
-impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h);
-impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i);
-impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j);
-impl_wide_mitem_tuple_empty_dispatch!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g, H: h, I: i, J: j, K: k);
-impl_wide_mitem_tuple_empty_dispatch!(
-    A: a,
-    B0: b,
-    C: c,
-    D: d,
-    E: e,
-    F: f,
-    G: g,
-    H: h,
-    I: i,
-    J: j,
-    K: k,
-    L: l
-);
-
-macro_rules! impl_miter_mut_tuple {
-    ($( $ty:ident : $var:ident : $idx:tt ),+) => {
-        impl<'a, R, $( $ty ),+> MIterMut<R> for ($( DeviceSliceMut<'a, R, $ty>, )+)
-        where
-            R: Runtime,
-            $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+)>,
-        {
-            type Item = ($( $ty, )+);
-            type Inner = ($( crate::detail::device::DeviceColumnMutView<R, $ty>, )+);
-
-            fn into_inner(self) -> Self::Inner {
-                ($(
-                    crate::detail::device::DeviceColumnMutView::from_slice(
-                        &self.$idx.source.inner,
-                        self.$idx.offset,
-                        self.$idx.len,
-                    ),
-                )+)
-            }
-
-            fn write_from_inner(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                inner: <Self::Item as MItem<R>>::Inner,
-            ) -> Result<(), Error> {
-                let output = self.into_inner();
-                $(
-                    {
-                        let input =
-                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
-                        crate::detail::api::device_expr_collect_into_with_policy(
-                            policy,
-                            &input,
-                            &output.$idx,
-                        )?;
-                    }
-                )+
-                Ok(())
-            }
-
-            fn write_where_from_inner(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                inner: <Self::Item as MItem<R>>::Inner,
-                stencil: crate::detail::api::PrecomputedSelection<R>,
-            ) -> Result<(), Error>
-            {
-                let output = self.into_inner();
-                $(
-                    {
-                        let input =
-                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
-                        crate::detail::api::device_expr_copy_where_into_with_policy(
-                            policy,
-                            &input,
-                            &stencil,
-                            &output.$idx,
-                            KernelOp::<R, StencilFlag>::new(),
-                        )?;
-                    }
-                )+
-                Ok(())
-            }
-
-            fn replace_where_inner(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                replacement: Self::Item,
-                stencil: crate::detail::api::PrecomputedSelection<R>,
-            ) -> Result<(), Error>
-            {
-                let output = self.into_inner();
-                $(
-                    crate::detail::api::replace_where_into_with_control(
-                        policy,
-                        replacement.$idx,
-                        stencil.control(),
-                        &output.$idx,
-                    )?;
-                )+
-                Ok(())
-            }
-
-            fn fill_inner(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                value: Self::Item,
-            ) -> Result<(), Error>
-            {
-                let output = self.into_inner();
-                $(
-                    crate::detail::primitives::fill_slice_with_policy(
-                        policy,
-                        value.$idx,
-                        &output.$idx,
-                    )?;
-                )+
-                Ok(())
-            }
-
-            fn len(&self) -> usize {
-                self.0.len()
-            }
-        }
-
-        impl<'a, R, $( $ty ),+> sealed::MIterMutDispatch<R> for ($( DeviceSliceMut<'a, R, $ty>, )+)
-        where
-            R: Runtime,
-            $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+)>,
-        {
-            fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
-                $(
-                    exec.ensure_policy_id(self.$idx.source.inner.policy_id())?;
-                    ensure_same_len(self.$idx.len(), self.0.len())?;
-                )+
-                Ok(())
-            }
-
-            fn column_mut_view_by_index_inner<U: 'static>(
-                &self,
-                index: usize,
-            ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, U>>, Error>
-            where
-                U: Scalar,
-            {
-                $(
-                    if index == $idx {
-                        let source = &*self.$idx.source as &dyn Any;
-                        let source = match source.downcast_ref::<DeviceVec<R, U>>() {
-                            Some(source) => source,
-                            None => return Ok(None),
-                        };
-                        return Ok(Some(crate::detail::device::DeviceColumnMutView::from_slice(
-                            &source.inner,
-                            self.$idx.offset,
-                            self.$idx.len,
-                        )));
-                    }
-                )+
-                Ok(None)
-            }
-        }
-    };
-}
-
-impl_miter_mut_tuple!(A: a: 0);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10);
-impl_miter_mut_tuple!(A: a: 0, B0: b: 1, C: c: 2, D: d: 3, E: e: 4, F: f: 5, G: g: 6, H: h: 7, I: i: 8, J: j: 9, K: k: 10, L: l: 11);

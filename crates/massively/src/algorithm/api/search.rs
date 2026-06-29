@@ -25,7 +25,7 @@ pub fn equal<R, Left, Right, Eq>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Eq: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -43,7 +43,7 @@ pub fn find_first_of<R, Input, Needles, Eq>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Needles: MIter<R, Item = Input::Item, Inner = Input::Inner>,
+    Needles: MIter<R, Item = Input::Item>,
     Eq: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
@@ -91,7 +91,7 @@ pub fn lexicographical_compare<R, Left, Right, Less>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -114,7 +114,7 @@ pub fn lower_bound<R, Input, Values, Less>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Values: MIter<R, Item = Input::Item, Inner = Input::Inner>,
+    Values: MIter<R, Item = Input::Item>,
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
@@ -177,7 +177,7 @@ pub fn mismatch<R, Left, Right, Eq>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Eq: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -195,7 +195,7 @@ pub fn upper_bound<R, Input, Values, Less>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Values: MIter<R, Item = Input::Item, Inner = Input::Inner>,
+    Values: MIter<R, Item = Input::Item>,
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;

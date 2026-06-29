@@ -10,7 +10,7 @@ pub fn set_difference<R, Left, Right, Less>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -28,7 +28,7 @@ pub fn set_intersection<R, Left, Right, Less>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -46,7 +46,7 @@ pub fn set_union<R, Left, Right, Less>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;

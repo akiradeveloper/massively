@@ -397,7 +397,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<R>,
-        RightValues: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
         K: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: MVec<R, Item = (K,)>,
@@ -423,7 +423,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<R>,
-        RightValues: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
         K1: Scalar + 'static,
         K2: Scalar + 'static,
         K3: Scalar + 'static,
@@ -830,7 +830,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -846,7 +846,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -862,7 +862,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<R>,
-        Needles: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -878,7 +878,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
         Self: MIter<R>,
-        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Values: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let _ = (policy, values, _less);
@@ -893,7 +893,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
         Self: MIter<R>,
-        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Values: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         let _ = (policy, values, _less);
@@ -934,7 +934,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -950,7 +950,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -967,7 +967,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -984,7 +984,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1001,7 +1001,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Right: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1144,9 +1144,9 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         Self: MIter<R>,
-        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
+        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item>,
         LeftValues: MIter<R>,
-        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item, Inner = <LeftValues as MIter<R>>::Inner>,
+        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item>,
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,

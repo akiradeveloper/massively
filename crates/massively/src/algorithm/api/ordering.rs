@@ -10,7 +10,7 @@ pub fn merge<R, Left, Right, Less>(
 where
     R: Runtime,
     Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item, Inner = Left::Inner>,
+    Right: MIter<R, Item = Left::Item>,
     Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
@@ -36,9 +36,9 @@ pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less>(
 where
     R: Runtime,
     LeftKeys: MIter<R>,
-    RightKeys: MIter<R, Item = LeftKeys::Item, Inner = LeftKeys::Inner>,
+    RightKeys: MIter<R, Item = LeftKeys::Item>,
     LeftValues: MIter<R>,
-    RightValues: MIter<R, Item = LeftValues::Item, Inner = LeftValues::Inner>,
+    RightValues: MIter<R, Item = LeftValues::Item>,
     Less: op::BinaryPredicateOp<R, LeftKeys::Item>,
 {
     validate_input(exec, &left_keys)?;
