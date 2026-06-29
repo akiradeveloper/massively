@@ -105,7 +105,7 @@ impl<R: Runtime> Executor<R> {
     }
 
     /// Allocates a `u32` device vector containing `0..len`.
-    pub fn tabulate(&self, len: usize) -> Result<DeviceVec<R, u32>, Error> {
+    pub fn counting(&self, len: usize) -> Result<DeviceVec<R, u32>, Error> {
         Ok(DeviceVec::from_inner(
             crate::detail::primitives::range::indices_u32(self.policy(), len)?,
         ))

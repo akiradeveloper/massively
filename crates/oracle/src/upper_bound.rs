@@ -1,4 +1,4 @@
-pub fn upper_bound(input: &[u32], value: u32) -> usize {
+pub(crate) fn upper_bound_one(input: &[u32], value: u32) -> usize {
     let mut first = 0;
     let mut count = input.len();
     while count > 0 {
@@ -12,4 +12,11 @@ pub fn upper_bound(input: &[u32], value: u32) -> usize {
         }
     }
     first
+}
+
+pub fn upper_bound(input: &[u32], values: &[u32]) -> Vec<u32> {
+    values
+        .iter()
+        .map(|&value| upper_bound_one(input, value) as u32)
+        .collect()
 }

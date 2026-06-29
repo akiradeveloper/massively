@@ -9,11 +9,11 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Use `equal_range` with an ascending score comparator.
+//! 1. Lower-bound and upper-bound the target score.
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, equal_range};
+use massively::{DeviceVec, Executor, SoA1, lower_bound, upper_bound};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -23,7 +23,22 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    equal_range(exec, SoA1(score.slice(..)), (target,), common::LessU32)
+    let query = exec.to_device(&[target])?;
+    let lower = lower_bound(
+        exec,
+        SoA1(score.slice(..)),
+        SoA1(query.slice(..)),
+        common::LessU32,
+    )?;
+    let upper = upper_bound(
+        exec,
+        SoA1(score.slice(..)),
+        SoA1(query.slice(..)),
+        common::LessU32,
+    )?;
+    let lower = exec.to_host(&lower)?;
+    let upper = exec.to_host(&upper)?;
+    Ok((lower[0] as usize, upper[0] as usize))
 }
 
 fn main() -> common::Result {

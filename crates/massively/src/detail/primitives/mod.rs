@@ -7,3 +7,4 @@ pub(crate) mod select;
 pub(crate) mod workspace;
 
 pub(crate) use crate::error::ensure_same_len;
+pub(crate) use range::fill_slice_with_policy;

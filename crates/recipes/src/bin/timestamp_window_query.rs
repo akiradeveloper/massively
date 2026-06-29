@@ -9,8 +9,7 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Lower-bound `start`.
-//! 2. Lower-bound `end`.
+//! 1. Lower-bound `[start, end]` in parallel.
 
 mod common;
 
@@ -25,9 +24,15 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let lower = lower_bound(exec, SoA1(timestamp.slice(..)), (start,), common::LessU32)?;
-    let upper = lower_bound(exec, SoA1(timestamp.slice(..)), (end,), common::LessU32)?;
-    Ok((lower, upper))
+    let queries = exec.to_device(&[start, end])?;
+    let indices = lower_bound(
+        exec,
+        SoA1(timestamp.slice(..)),
+        SoA1(queries.slice(..)),
+        common::LessU32,
+    )?;
+    let indices = exec.to_host(&indices)?;
+    Ok((indices[0] as usize, indices[1] as usize))
 }
 
 fn main() -> common::Result {

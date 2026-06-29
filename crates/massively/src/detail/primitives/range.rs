@@ -1,4 +1,9 @@
-use crate::{device::DeviceVec, error::Error, kernels::*, policy::CubePolicy};
+use crate::{
+    device::{DeviceColumnMutView, DeviceVec},
+    error::Error,
+    kernels::*,
+    policy::CubePolicy,
+};
 use cubecl::prelude::*;
 
 const BLOCK_RANGE_SIZE: u32 = 256;
@@ -53,6 +58,45 @@ where
     }
 
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
+}
+
+pub(crate) fn fill_slice_with_policy<R, T>(
+    policy: &CubePolicy<R>,
+    value: T,
+    output: &DeviceColumnMutView<R, T>,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    let offset_u32 =
+        u32::try_from(output.offset).map_err(|_| Error::LengthTooLarge { len: output.offset })?;
+    let len_u32 =
+        u32::try_from(output.len).map_err(|_| Error::LengthTooLarge { len: output.len })?;
+    if output.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let values = [value];
+    let value_handle = client.create_from_slice(T::as_bytes(&values));
+    let metadata_handle = client.create_from_slice(u32::as_bytes(&[offset_u32, len_u32]));
+
+    let block_count = output.len.div_ceil(BLOCK_RANGE_SIZE as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+    unsafe {
+        fill_slice_kernel::launch_unchecked::<T, R>(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_RANGE_SIZE),
+            unsafe { BufferArg::from_raw_parts(value_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), 2) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]

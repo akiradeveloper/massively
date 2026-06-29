@@ -48,3 +48,13 @@ where
     let stencil = u32_stencil_flags(exec.policy(), stencil, false)?;
     out.replace_where_inner(exec.policy(), replacement, stencil)
 }
+
+/// Fills every element of an output range with `value`.
+pub fn fill<R, Output>(exec: &Executor<R>, value: Output::Item, out: Output) -> Result<(), Error>
+where
+    R: Runtime,
+    Output: MIterMut<R>,
+{
+    validate_output(exec, &out)?;
+    out.fill_inner(exec.policy(), value)
+}

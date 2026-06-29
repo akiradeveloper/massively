@@ -1084,6 +1084,236 @@ define_tuple_search_device_expr_kernels!(
         input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c)
 );
 
+macro_rules! define_tuple_bound_many_device_expr_kernels {
+    (
+        $lower_fn:ident,
+        $upper_fn:ident,
+        ($first_ty:ident : $first_source_expr:ident / $first_value_expr:ident :
+            $first_source_slot0:ident, $first_source_slot1:ident, $first_source_slot2:ident, $first_source_slot3:ident, $first_source_offsets:ident /
+            $first_value_slot0:ident, $first_value_slot1:ident, $first_value_slot2:ident, $first_value_slot3:ident, $first_value_offsets:ident
+        $(, $ty:ident : $source_expr:ident / $value_expr:ident :
+            $source_slot0:ident, $source_slot1:ident, $source_slot2:ident, $source_slot3:ident, $source_offsets:ident /
+            $value_slot0:ident, $value_slot1:ident, $value_slot2:ident, $value_slot3:ident, $value_offsets:ident
+        )*)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $lower_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_source_expr: DeviceGpuExpr<$first_ty>,
+            $first_value_expr: DeviceGpuExpr<$first_ty>,
+            $( $source_expr: DeviceGpuExpr<$ty>, )*
+            $( $value_expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_source_slot0: &[$first_ty],
+            $first_source_slot1: &[$first_ty],
+            $first_source_slot2: &[$first_ty],
+            $first_source_slot3: &[$first_ty],
+            $first_source_offsets: &[u32],
+            $first_value_slot0: &[$first_ty],
+            $first_value_slot1: &[$first_ty],
+            $first_value_slot2: &[$first_ty],
+            $first_value_slot3: &[$first_ty],
+            $first_value_offsets: &[u32],
+            $(
+                $source_slot0: &[$ty],
+                $source_slot1: &[$ty],
+                $source_slot2: &[$ty],
+                $source_slot3: &[$ty],
+                $source_offsets: &[u32],
+                $value_slot0: &[$ty],
+                $value_slot1: &[$ty],
+                $value_slot2: &[$ty],
+                $value_slot3: &[$ty],
+                $value_offsets: &[u32],
+            )*
+            source_len: &[u32],
+            value_len: &[u32],
+            output: &mut [u32],
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (value_len[0] as usize) {
+                let value = (
+                    $first_value_expr::eval(
+                        $first_value_slot0,
+                        $first_value_slot1,
+                        $first_value_slot2,
+                        $first_value_slot3,
+                        $first_value_offsets,
+                        global,
+                    ),
+                    $(
+                        $value_expr::eval(
+                            $value_slot0,
+                            $value_slot1,
+                            $value_slot2,
+                            $value_slot3,
+                            $value_offsets,
+                            global,
+                        ),
+                    )*
+                );
+                let mut first = 0usize;
+                let mut count = source_len[0] as usize;
+                while count > 0usize {
+                    let step = count / 2usize;
+                    let mid = first + step;
+                    let candidate = (
+                        $first_source_expr::eval(
+                            $first_source_slot0,
+                            $first_source_slot1,
+                            $first_source_slot2,
+                            $first_source_slot3,
+                            $first_source_offsets,
+                            mid,
+                        ),
+                        $(
+                            $source_expr::eval(
+                                $source_slot0,
+                                $source_slot1,
+                                $source_slot2,
+                                $source_slot3,
+                                $source_offsets,
+                                mid,
+                            ),
+                        )*
+                    );
+                    if Less::apply(candidate, value) {
+                        first = mid + 1usize;
+                        count = count - step - 1usize;
+                    } else {
+                        count = step;
+                    }
+                }
+                output[global] = first as u32;
+            }
+        }
+
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $upper_fn<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_source_expr: DeviceGpuExpr<$first_ty>,
+            $first_value_expr: DeviceGpuExpr<$first_ty>,
+            $( $source_expr: DeviceGpuExpr<$ty>, )*
+            $( $value_expr: DeviceGpuExpr<$ty>, )*
+            Less: BinaryPredicateOp<($first_ty, $( $ty, )*)>,
+        >(
+            $first_source_slot0: &[$first_ty],
+            $first_source_slot1: &[$first_ty],
+            $first_source_slot2: &[$first_ty],
+            $first_source_slot3: &[$first_ty],
+            $first_source_offsets: &[u32],
+            $first_value_slot0: &[$first_ty],
+            $first_value_slot1: &[$first_ty],
+            $first_value_slot2: &[$first_ty],
+            $first_value_slot3: &[$first_ty],
+            $first_value_offsets: &[u32],
+            $(
+                $source_slot0: &[$ty],
+                $source_slot1: &[$ty],
+                $source_slot2: &[$ty],
+                $source_slot3: &[$ty],
+                $source_offsets: &[u32],
+                $value_slot0: &[$ty],
+                $value_slot1: &[$ty],
+                $value_slot2: &[$ty],
+                $value_slot3: &[$ty],
+                $value_offsets: &[u32],
+            )*
+            source_len: &[u32],
+            value_len: &[u32],
+            output: &mut [u32],
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (value_len[0] as usize) {
+                let value = (
+                    $first_value_expr::eval(
+                        $first_value_slot0,
+                        $first_value_slot1,
+                        $first_value_slot2,
+                        $first_value_slot3,
+                        $first_value_offsets,
+                        global,
+                    ),
+                    $(
+                        $value_expr::eval(
+                            $value_slot0,
+                            $value_slot1,
+                            $value_slot2,
+                            $value_slot3,
+                            $value_offsets,
+                            global,
+                        ),
+                    )*
+                );
+                let mut first = 0usize;
+                let mut count = source_len[0] as usize;
+                while count > 0usize {
+                    let step = count / 2usize;
+                    let mid = first + step;
+                    let candidate = (
+                        $first_source_expr::eval(
+                            $first_source_slot0,
+                            $first_source_slot1,
+                            $first_source_slot2,
+                            $first_source_slot3,
+                            $first_source_offsets,
+                            mid,
+                        ),
+                        $(
+                            $source_expr::eval(
+                                $source_slot0,
+                                $source_slot1,
+                                $source_slot2,
+                                $source_slot3,
+                                $source_offsets,
+                                mid,
+                            ),
+                        )*
+                    );
+                    if !Less::apply(value, candidate) {
+                        first = mid + 1usize;
+                        count = count - step - 1usize;
+                    } else {
+                        count = step;
+                    }
+                }
+                output[global] = first as u32;
+            }
+        }
+    };
+}
+
+define_tuple_bound_many_device_expr_kernels!(
+    tuple2_lower_bound_device_expr_many_kernel,
+    tuple2_upper_bound_device_expr_many_kernel,
+    (TyA: SourceExprA / ValueExprA:
+        source_a_slot0, source_a_slot1, source_a_slot2, source_a_slot3, source_a_offsets /
+        value_a_slot0, value_a_slot1, value_a_slot2, value_a_slot3, value_a_offsets,
+     TyB: SourceExprB / ValueExprB:
+        source_b_slot0, source_b_slot1, source_b_slot2, source_b_slot3, source_b_offsets /
+        value_b_slot0, value_b_slot1, value_b_slot2, value_b_slot3, value_b_offsets)
+);
+define_tuple_bound_many_device_expr_kernels!(
+    tuple3_lower_bound_device_expr_many_kernel,
+    tuple3_upper_bound_device_expr_many_kernel,
+    (TyA: SourceExprA / ValueExprA:
+        source_a_slot0, source_a_slot1, source_a_slot2, source_a_slot3, source_a_offsets /
+        value_a_slot0, value_a_slot1, value_a_slot2, value_a_slot3, value_a_offsets,
+     TyB: SourceExprB / ValueExprB:
+        source_b_slot0, source_b_slot1, source_b_slot2, source_b_slot3, source_b_offsets /
+        value_b_slot0, value_b_slot1, value_b_slot2, value_b_slot3, value_b_offsets,
+     TyC: SourceExprC / ValueExprC:
+        source_c_slot0, source_c_slot1, source_c_slot2, source_c_slot3, source_c_offsets /
+        value_c_slot0, value_c_slot1, value_c_slot2, value_c_slot3, value_c_offsets)
+);
+
 macro_rules! define_tuple_membership_device_expr_flags_kernel {
     (
         $fn_name:ident,

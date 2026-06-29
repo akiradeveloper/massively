@@ -1,7 +1,8 @@
 use crate::{
     detail::op::kernel::BinaryPredicateOp,
     device::{
-        KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA2, SoA3, SoAView1, SoAView2, SoAView3,
+        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA2, SoA3, SoAView1, SoAView2,
+        SoAView3,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -321,6 +322,146 @@ where
     }
 
     Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+}
+
+fn device_expr_lower_bound_many<Source, Values, Less>(
+    policy: &CubePolicy<Source::Runtime>,
+    input: &Source,
+    values: &Values,
+) -> Result<DeviceVec<Source::Runtime, u32>, Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Values::Expr: DeviceGpuExpr<Values::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    input.validate()?;
+    values.validate()?;
+    let source_len = input.len();
+    let value_len = values.len();
+    let source_len_u32 =
+        u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
+    let value_len_u32 =
+        u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
+    if value_len == 0 {
+        return Ok(policy.empty_device_vec());
+    }
+    if source_len == 0 {
+        return policy.device_filled(value_len, 0u32);
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(value_len)?;
+    let output_handle = client.empty(value_len * std::mem::size_of::<u32>());
+    let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
+    let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
+    let input = stage_search_column(policy, input)?;
+    let values = stage_search_column(policy, values)?;
+
+    unsafe {
+        lower_bound_device_expr_many_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Values::Expr,
+            Less,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot2.0.clone(), input.slot2.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot3.0.clone(), input.slot3.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(values.slot0.0.clone(), values.slot0.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot1.0.clone(), values.slot1.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot2.0.clone(), values.slot2.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot3.0.clone(), values.slot3.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(
+        policy.id(),
+        output_handle,
+        value_len,
+    ))
+}
+
+fn device_expr_upper_bound_many<Source, Values, Less>(
+    policy: &CubePolicy<Source::Runtime>,
+    input: &Source,
+    values: &Values,
+) -> Result<DeviceVec<Source::Runtime, u32>, Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Values::Expr: DeviceGpuExpr<Values::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    input.validate()?;
+    values.validate()?;
+    let source_len = input.len();
+    let value_len = values.len();
+    let source_len_u32 =
+        u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
+    let value_len_u32 =
+        u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
+    if value_len == 0 {
+        return Ok(policy.empty_device_vec());
+    }
+    if source_len == 0 {
+        return policy.device_filled(value_len, 0u32);
+    }
+
+    let client = policy.client();
+    let block_count_u32 = search_block_count(value_len)?;
+    let output_handle = client.empty(value_len * std::mem::size_of::<u32>());
+    let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
+    let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
+    let input = stage_search_column(policy, input)?;
+    let values = stage_search_column(policy, values)?;
+
+    unsafe {
+        upper_bound_device_expr_many_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Values::Expr,
+            Less,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+            unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot2.0.clone(), input.slot2.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot3.0.clone(), input.slot3.1) },
+            unsafe { BufferArg::from_raw_parts(input.slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(values.slot0.0.clone(), values.slot0.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot1.0.clone(), values.slot1.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot2.0.clone(), values.slot2.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot3.0.clone(), values.slot3.1) },
+            unsafe { BufferArg::from_raw_parts(values.slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(
+        policy.id(),
+        output_handle,
+        value_len,
+    ))
 }
 
 fn device_expr_find_first_of<Left, Right, Op>(
@@ -698,19 +839,6 @@ where
     type Runtime = Source::Runtime;
     type Item = Source::Item;
 
-    fn equal_range_input(
-        self,
-        policy: &CubePolicy<Source::Runtime>,
-        value: Self::Item,
-        _less: GpuOp<Less>,
-    ) -> Result<(usize, usize), Error> {
-        ReadOnlySoA::validate(&self)?;
-        Ok((
-            device_expr_lower_bound::<Source, Less>(policy, &self.source, value.clone())?,
-            device_expr_upper_bound::<Source, Less>(policy, &self.source, value)?,
-        ))
-    }
-
     fn lower_bound_input(
         self,
         policy: &CubePolicy<Source::Runtime>,
@@ -754,6 +882,43 @@ where
     }
 }
 
+impl<Source, Values, Less> crate::detail::read::KernelSortedSearchManyInput<SoAView1<Values>, Less>
+    for SoAView1<Source>
+where
+    Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
+    SoAView1<Values>: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Values::Expr: DeviceGpuExpr<Values::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    type Runtime = Source::Runtime;
+
+    fn lower_bound_many_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        values: SoAView1<Values>,
+        _less: GpuOp<Less>,
+    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+        ReadOnlySoA::validate(&self)?;
+        ReadOnlySoA::validate(&values)?;
+        device_expr_lower_bound_many::<Source, Values, Less>(policy, &self.source, &values.source)
+    }
+
+    fn upper_bound_many_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        values: SoAView1<Values>,
+        _less: GpuOp<Less>,
+    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+        ReadOnlySoA::validate(&self)?;
+        ReadOnlySoA::validate(&values)?;
+        device_expr_upper_bound_many::<Source, Values, Less>(policy, &self.source, &values.source)
+    }
+}
+
 impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -763,20 +928,6 @@ where
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
-
-    fn equal_range_input(
-        self,
-        policy: &CubePolicy<Source::Runtime>,
-        value: Self::Item,
-        less: GpuOp<Less>,
-    ) -> Result<(usize, usize), Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::equal_range_input(
-            SoAView1 { source: self },
-            policy,
-            value,
-            less,
-        )
-    }
 
     fn lower_bound_input(
         self,
@@ -831,6 +982,52 @@ where
     }
 }
 
+impl<Source, Values, Less> crate::detail::read::KernelSortedSearchManyInput<Values, Less> for Source
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Values::Expr: DeviceGpuExpr<Values::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    type Runtime = Source::Runtime;
+
+    fn lower_bound_many_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        values: Values,
+        less: GpuOp<Less>,
+    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
+            SoAView1<Values>,
+            Less,
+        >>::lower_bound_many_input(
+            SoAView1 { source: self },
+            policy,
+            SoAView1 { source: values },
+            less,
+        )
+    }
+
+    fn upper_bound_many_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        values: Values,
+        less: GpuOp<Less>,
+    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+        <SoAView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
+            SoAView1<Values>,
+            Less,
+        >>::upper_bound_many_input(
+            SoAView1 { source: self },
+            policy,
+            SoAView1 { source: values },
+            less,
+        )
+    }
+}
+
 impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -840,20 +1037,6 @@ where
 {
     type Runtime = Source::Runtime;
     type Item = (Source::Item,);
-
-    fn equal_range_input(
-        self,
-        policy: &CubePolicy<Source::Runtime>,
-        value: Self::Item,
-        _less: GpuOp<Less>,
-    ) -> Result<(usize, usize), Error> {
-        <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::equal_range_input(
-            self.0,
-            policy,
-            value.0,
-            GpuOp::<super::Tuple1Less<Less>>::new(),
-        )
-    }
 
     fn lower_bound_input(
         self,
@@ -908,6 +1091,53 @@ where
     }
 }
 
+impl<Source, Values, Less> crate::detail::read::KernelSortedSearchManyInput<(Values,), Less>
+    for (Source,)
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+    Source::Item: CubePrimitive + CubeElement,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Values::Expr: DeviceGpuExpr<Values::Item>,
+    Less: BinaryPredicateOp<(Source::Item,)>,
+{
+    type Runtime = Source::Runtime;
+
+    fn lower_bound_many_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        values: (Values,),
+        _less: GpuOp<Less>,
+    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+        <Source as crate::detail::read::KernelSortedSearchManyInput<
+            Values,
+            super::Tuple1Less<Less>,
+        >>::lower_bound_many_input(
+            self.0,
+            policy,
+            values.0,
+            GpuOp::<super::Tuple1Less<Less>>::new(),
+        )
+    }
+
+    fn upper_bound_many_input(
+        self,
+        policy: &CubePolicy<Source::Runtime>,
+        values: (Values,),
+        _less: GpuOp<Less>,
+    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+        <Source as crate::detail::read::KernelSortedSearchManyInput<
+            Values,
+            super::Tuple1Less<Less>,
+        >>::upper_bound_many_input(
+            self.0,
+            policy,
+            values.0,
+            GpuOp::<super::Tuple1Less<Less>>::new(),
+        )
+    }
+}
+
 macro_rules! impl_sorted_search_tuple_input {
     ($view:ident < $( $ty:ident ),+ > { $( $field:ident: $index:tt ),+ }) => {
         impl<$( $ty ),+, Less> crate::detail::read::KernelSortedSearchInput<Less> for ($( $ty ),+)
@@ -916,20 +1146,6 @@ macro_rules! impl_sorted_search_tuple_input {
         {
             type Runtime = <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime;
             type Item = <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::Item;
-
-            fn equal_range_input(
-                self,
-                policy: &CubePolicy<Self::Runtime>,
-                value: Self::Item,
-                less: GpuOp<Less>,
-            ) -> Result<(usize, usize), Error> {
-                <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::equal_range_input(
-                    $view { $( $field: self.$index ),+ },
-                    policy,
-                    value,
-                    less,
-                )
-            }
 
             fn lower_bound_input(
                 self,
@@ -1274,6 +1490,8 @@ macro_rules! impl_tuple_search {
         $sorted_break_kernel:ident,
         $lower_bound_kernel:ident,
         $upper_bound_kernel:ident,
+        $lower_bound_many_kernel:ident,
+        $upper_bound_many_kernel:ident,
         $minmax_element_kernel:ident,
         $minmax_index_kernel:ident
     ) => {
@@ -1527,102 +1745,6 @@ macro_rules! impl_tuple_search {
                 $( impl_tuple_search!(@item_ty $rest) ),+
             );
 
-            fn equal_range_input(
-                self,
-                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
-                value: Self::Item,
-                _less: GpuOp<Less>,
-            ) -> Result<(usize, usize), Error> {
-                ReadOnlySoA::validate(&self)?;
-                let len = self.$first_field.len();
-                let $first_field = stage_search_column(policy, &self.$first_field)?;
-                $(
-                    let $field = stage_search_column(policy, &self.$field)?;
-                )+
-                if len == 0 {
-                    return Ok((0, 0));
-                }
-                let client = policy.client();
-                let lower_flag = client.empty(len * std::mem::size_of::<u32>());
-                let upper_flag = client.empty(len * std::mem::size_of::<u32>());
-                let first_value_handle = client.create_from_slice(
-                    <<$first as KernelColumn>::Item as CubeElement>::as_bytes(&[value.$first_index])
-                );
-                $(
-                    let $field = (
-                        $field,
-                        client.create_from_slice(
-                            <<$rest as KernelColumn>::Item as CubeElement>::as_bytes(&[value.$index])
-                        ),
-                    );
-                )+
-                let block_count_u32 = search_block_count(len)?;
-                unsafe {
-                    $lower_bound_kernel::launch_unchecked::<
-                        <$first as KernelColumn>::Item,
-                        $( <$rest as KernelColumn>::Item, )+
-                        <$first as KernelColumn>::Expr,
-                        $( <$rest as KernelColumn>::Expr, )+
-                        Less,
-                        <$first as KernelColumn>::Runtime,
-                    >(
-                        client,
-                        CubeCount::Static(block_count_u32, 1, 1),
-                        CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
-                        $(
-                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
-                        )+
-                        unsafe { BufferArg::from_raw_parts(first_value_handle.clone(), 1) },
-                        $(
-                            unsafe { BufferArg::from_raw_parts($field.1.clone(), 1) },
-                        )+
-                        unsafe { BufferArg::from_raw_parts(lower_flag.clone(), len) },
-                    );
-                    $upper_bound_kernel::launch_unchecked::<
-                        <$first as KernelColumn>::Item,
-                        $( <$rest as KernelColumn>::Item, )+
-                        <$first as KernelColumn>::Expr,
-                        $( <$rest as KernelColumn>::Expr, )+
-                        Less,
-                        <$first as KernelColumn>::Runtime,
-                    >(
-                        client,
-                        CubeCount::Static(block_count_u32, 1, 1),
-                        CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-                        unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot2.0.clone(), $first_field.slot2.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot3.0.clone(), $first_field.slot3.1) },
-                        unsafe { BufferArg::from_raw_parts($first_field.slot_offsets.clone(), 4) },
-                        $(
-                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
-                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
-                        )+
-                        unsafe { BufferArg::from_raw_parts(first_value_handle.clone(), 1) },
-                        $(
-                            unsafe { BufferArg::from_raw_parts($field.1.clone(), 1) },
-                        )+
-                        unsafe { BufferArg::from_raw_parts(upper_flag.clone(), len) },
-                    );
-                }
-                Ok((
-                    search::first_flag(policy, lower_flag, len, len)?.unwrap_or(len),
-                    search::first_flag(policy, upper_flag, len, len)?.unwrap_or(len),
-                ))
-            }
-
             fn lower_bound_input(
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
@@ -1811,6 +1933,187 @@ macro_rules! impl_tuple_search {
                     )?
                     == len,
                 )
+            }
+        }
+
+        impl<$first, $( $rest ),+, Less>
+            crate::detail::read::KernelSortedSearchManyInput<$name<$first, $( $rest ),+>, Less>
+            for $name<$first, $( $rest ),+>
+        where
+            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            $first: KernelColumn + KernelColumnAt<S0>,
+            $(
+                $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            <$first as KernelColumn>::Expr: DeviceGpuExpr<<$first as KernelColumn>::Item>,
+            $(
+                <$rest as KernelColumn>::Item: CubePrimitive + CubeElement,
+            )+
+            $(
+                <$rest as KernelColumn>::Expr: DeviceGpuExpr<<$rest as KernelColumn>::Item>,
+            )+
+            Less: BinaryPredicateOp<(
+                impl_tuple_search!(@item_ty $first),
+                $( impl_tuple_search!(@item_ty $rest) ),+
+            )>,
+        {
+            type Runtime = <$first as KernelColumn>::Runtime;
+
+            fn lower_bound_many_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                values: $name<$first, $( $rest ),+>,
+                _less: GpuOp<Less>,
+            ) -> Result<DeviceVec<<$first as KernelColumn>::Runtime, u32>, Error> {
+                ReadOnlySoA::validate(&self)?;
+                ReadOnlySoA::validate(&values)?;
+                let source_len = self.$first_field.len();
+                let value_len = values.$first_field.len();
+                let source_len_u32 = u32::try_from(source_len)
+                    .map_err(|_| Error::LengthTooLarge { len: source_len })?;
+                let value_len_u32 = u32::try_from(value_len)
+                    .map_err(|_| Error::LengthTooLarge { len: value_len })?;
+                if value_len == 0 {
+                    return Ok(policy.empty_device_vec());
+                }
+                if source_len == 0 {
+                    return policy.device_filled(value_len, 0u32);
+                }
+                let source_len_handle = policy.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
+                let value_len_handle = policy.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
+                let output_handle = policy.client().empty(value_len * std::mem::size_of::<u32>());
+                let block_count_u32 = search_block_count(value_len)?;
+                let $first_field = (
+                    stage_search_column(policy, &self.$first_field)?,
+                    stage_search_column(policy, &values.$first_field)?,
+                );
+                $(
+                    let $field = (
+                        stage_search_column(policy, &self.$field)?,
+                        stage_search_column(policy, &values.$field)?,
+                    );
+                )+
+                unsafe {
+                    $lower_bound_many_kernel::launch_unchecked::<
+                        <$first as KernelColumn>::Item,
+                        $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
+                        $( <$rest as KernelColumn>::Expr, )+
+                        Less,
+                        <$first as KernelColumn>::Runtime,
+                    >(
+                        policy.client(),
+                        CubeCount::Static(block_count_u32, 1, 1),
+                        CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot0.0.clone(), $first_field.0.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot1.0.clone(), $first_field.0.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot2.0.clone(), $first_field.0.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot3.0.clone(), $first_field.0.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot_offsets.clone(), 4) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot0.0.clone(), $first_field.1.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot1.0.clone(), $first_field.1.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot2.0.clone(), $first_field.1.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot3.0.clone(), $first_field.1.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot_offsets.clone(), 4) },
+                        $(
+                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot0.0.clone(), $field.1.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot1.0.clone(), $field.1.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot2.0.clone(), $field.1.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot3.0.clone(), $field.1.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot_offsets.clone(), 4) },
+                        )+
+                        unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
+                    );
+                }
+                Ok(DeviceVec::from_handle(policy.id(), output_handle, value_len))
+            }
+
+            fn upper_bound_many_input(
+                self,
+                policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
+                values: $name<$first, $( $rest ),+>,
+                _less: GpuOp<Less>,
+            ) -> Result<DeviceVec<<$first as KernelColumn>::Runtime, u32>, Error> {
+                ReadOnlySoA::validate(&self)?;
+                ReadOnlySoA::validate(&values)?;
+                let source_len = self.$first_field.len();
+                let value_len = values.$first_field.len();
+                let source_len_u32 = u32::try_from(source_len)
+                    .map_err(|_| Error::LengthTooLarge { len: source_len })?;
+                let value_len_u32 = u32::try_from(value_len)
+                    .map_err(|_| Error::LengthTooLarge { len: value_len })?;
+                if value_len == 0 {
+                    return Ok(policy.empty_device_vec());
+                }
+                if source_len == 0 {
+                    return policy.device_filled(value_len, 0u32);
+                }
+                let source_len_handle = policy.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
+                let value_len_handle = policy.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
+                let output_handle = policy.client().empty(value_len * std::mem::size_of::<u32>());
+                let block_count_u32 = search_block_count(value_len)?;
+                let $first_field = (
+                    stage_search_column(policy, &self.$first_field)?,
+                    stage_search_column(policy, &values.$first_field)?,
+                );
+                $(
+                    let $field = (
+                        stage_search_column(policy, &self.$field)?,
+                        stage_search_column(policy, &values.$field)?,
+                    );
+                )+
+                unsafe {
+                    $upper_bound_many_kernel::launch_unchecked::<
+                        <$first as KernelColumn>::Item,
+                        $( <$rest as KernelColumn>::Item, )+
+                        <$first as KernelColumn>::Expr,
+                        <$first as KernelColumn>::Expr,
+                        $( <$rest as KernelColumn>::Expr, )+
+                        $( <$rest as KernelColumn>::Expr, )+
+                        Less,
+                        <$first as KernelColumn>::Runtime,
+                    >(
+                        policy.client(),
+                        CubeCount::Static(block_count_u32, 1, 1),
+                        CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot0.0.clone(), $first_field.0.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot1.0.clone(), $first_field.0.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot2.0.clone(), $first_field.0.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot3.0.clone(), $first_field.0.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.0.slot_offsets.clone(), 4) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot0.0.clone(), $first_field.1.slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot1.0.clone(), $first_field.1.slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot2.0.clone(), $first_field.1.slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot3.0.clone(), $first_field.1.slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_field.1.slot_offsets.clone(), 4) },
+                        $(
+                            unsafe { BufferArg::from_raw_parts($field.0.slot0.0.clone(), $field.0.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot1.0.clone(), $field.0.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot2.0.clone(), $field.0.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot3.0.clone(), $field.0.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.0.slot_offsets.clone(), 4) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot0.0.clone(), $field.1.slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot1.0.clone(), $field.1.slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot2.0.clone(), $field.1.slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot3.0.clone(), $field.1.slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($field.1.slot_offsets.clone(), 4) },
+                        )+
+                        unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
+                    );
+                }
+                Ok(DeviceVec::from_handle(policy.id(), output_handle, value_len))
             }
         }
 
@@ -2170,13 +2473,13 @@ macro_rules! impl_tuple_pair_search {
     };
 }
 
-impl_tuple_search!(SoAView2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(SoAView2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_lower_bound_device_expr_many_kernel, tuple2_upper_bound_device_expr_many_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_lower_bound_device_expr_many_kernel, tuple3_upper_bound_device_expr_many_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
 
 impl_tuple_pair_search!(SoAView2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
 impl_tuple_pair_search!(SoAView3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_search!(SoA2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoA3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(SoA2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_lower_bound_device_expr_many_kernel, tuple2_upper_bound_device_expr_many_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(SoA3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_lower_bound_device_expr_many_kernel, tuple3_upper_bound_device_expr_many_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
 impl_tuple_pair_search!(SoA2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
 impl_tuple_pair_search!(SoA3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
 
@@ -2269,43 +2572,46 @@ where
     input.find_first_of_input(policy, needles, GpuOp::<Eq>::new())
 }
 
-/// Returns the equal range for `value` in a sorted input.
-pub fn equal_range<Input, Less>(
-    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
+/// Finds the first sorted insertion point for each value.
+pub fn lower_bound_many<Input, Values, Less>(
+    policy: &CubePolicy<
+        <Input as crate::detail::read::KernelSortedSearchManyInput<Values, Less>>::Runtime,
+    >,
     input: Input,
-    value: <Input as crate::detail::read::KernelSortedSearchInput<Less>>::Item,
+    values: Values,
     _less: Less,
-) -> Result<(usize, usize), Error>
+) -> Result<
+    DeviceVec<
+        <Input as crate::detail::read::KernelSortedSearchManyInput<Values, Less>>::Runtime,
+        u32,
+    >,
+    Error,
+>
 where
-    Input: crate::detail::read::KernelSortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchManyInput<Values, Less>,
 {
-    input.equal_range_input(policy, value, GpuOp::<Less>::new())
+    input.lower_bound_many_input(policy, values, GpuOp::<Less>::new())
 }
 
-/// Finds the first sorted insertion point for `value`.
-pub fn lower_bound<Input, Less>(
-    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
+/// Finds the last sorted insertion point for each value.
+pub fn upper_bound_many<Input, Values, Less>(
+    policy: &CubePolicy<
+        <Input as crate::detail::read::KernelSortedSearchManyInput<Values, Less>>::Runtime,
+    >,
     input: Input,
-    value: <Input as crate::detail::read::KernelSortedSearchInput<Less>>::Item,
+    values: Values,
     _less: Less,
-) -> Result<usize, Error>
+) -> Result<
+    DeviceVec<
+        <Input as crate::detail::read::KernelSortedSearchManyInput<Values, Less>>::Runtime,
+        u32,
+    >,
+    Error,
+>
 where
-    Input: crate::detail::read::KernelSortedSearchInput<Less>,
+    Input: crate::detail::read::KernelSortedSearchManyInput<Values, Less>,
 {
-    input.lower_bound_input(policy, value, GpuOp::<Less>::new())
-}
-
-/// Finds the last sorted insertion point for `value`.
-pub fn upper_bound<Input, Less>(
-    policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
-    input: Input,
-    value: <Input as crate::detail::read::KernelSortedSearchInput<Less>>::Item,
-    _less: Less,
-) -> Result<usize, Error>
-where
-    Input: crate::detail::read::KernelSortedSearchInput<Less>,
-{
-    input.upper_bound_input(policy, value, GpuOp::<Less>::new())
+    input.upper_bound_many_input(policy, values, GpuOp::<Less>::new())
 }
 
 /// Returns the first position where the sorted order is broken.

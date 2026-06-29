@@ -6,7 +6,7 @@ use crate::detail::dispatch as sealed;
 use crate::detail::op_adapter::{KernelOp, StencilFlag};
 use crate::iter::{MIter, MIterMut};
 use crate::op;
-use crate::runtime::{DeviceSlice, Executor};
+use crate::runtime::{DeviceSlice, DeviceVec, Executor};
 use crate::value::{MItem, MVec};
 
 pub use crate::Error;
@@ -82,17 +82,16 @@ pub use ordering::{
     merge, merge_by_key, reverse, sort, sort_by_key, stable_sort, stable_sort_by_key,
 };
 pub use predicate::{all_of, any_of, count_if, find_if, is_partitioned, none_of, partition};
-pub use reduce::{inner_product, reduce, reduce_by_key};
+pub use reduce::{reduce, reduce_by_key};
 pub use scan::{
     adjacent_difference, exclusive_scan, exclusive_scan_by_key, inclusive_scan,
     inclusive_scan_by_key,
 };
 pub use search::{
-    adjacent_find, equal, equal_range, find_first_of, is_sorted, is_sorted_until,
-    lexicographical_compare, lower_bound, max_element, min_element, minmax_element, mismatch,
-    upper_bound,
+    adjacent_find, equal, find_first_of, is_sorted, is_sorted_until, lexicographical_compare,
+    lower_bound, max_element, min_element, minmax_element, mismatch, upper_bound,
 };
-pub use selection::{copy_where, remove_where, replace_where};
+pub use selection::{copy_where, fill, remove_where, replace_where};
 pub use set::{set_difference, set_intersection, set_union};
 pub use transform::{map, transform, transform_where};
 pub use unique::{unique, unique_by_key};

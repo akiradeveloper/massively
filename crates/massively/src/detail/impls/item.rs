@@ -68,46 +68,6 @@ macro_rules! alloc_inner {
     }};
 }
 
-macro_rules! inner_product_left_item_body {
-    ($R:ident; ($left_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        <<RightIter as MIter<$R>>::Item as sealed::MItemDispatch<$R>>::inner_product_with_left_scalar::<
-            LeftIter,
-            RightIter,
-            $left_ty,
-            TransformOp,
-            ReduceOp,
-            Output,
-        >($policy, $left, $right, $transform_op, $init, $reduce_op)
-    }};
-    ($R:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        let _ = ($policy, $left, $right, $transform_op, $init, $reduce_op);
-        Err(Error::Launch {
-            message: "inner_product is not supported for this iterator shape".to_string(),
-        })
-    }};
-}
-
-macro_rules! inner_product_right_item_body {
-    ($R:ident; ($right_ty:ident); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        let (left,) = $left.into_inner_with_policy($policy)?;
-        let (right,) = $right.into_inner_with_policy($policy)?;
-        let transformed = <Output as sealed::MItemDispatch<$R>>::transform_binary(
-            $policy,
-            left,
-            right,
-            KernelTuple1InnerProductOp::<$R, TransformOp, Output>::new(),
-        )?;
-        let _ = $transform_op;
-        <Output as sealed::MItemDispatch<$R>>::reduce_inner($policy, transformed, $init, $reduce_op)
-    }};
-    ($R:ident; ($first:ident, $( $rest:ident ),+); $policy:ident, $left:ident, $right:ident, $transform_op:ident, $init:ident, $reduce_op:ident) => {{
-        let _ = ($policy, $left, $right, $transform_op, $init, $reduce_op);
-        Err(Error::Launch {
-            message: "inner_product is not supported for this iterator shape".to_string(),
-        })
-    }};
-}
-
 macro_rules! impl_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
         impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
@@ -376,80 +336,6 @@ macro_rules! impl_mitem_tuple {
                 crate::detail::reduce(policy, input, init, KernelOp::<R, Op>::new())
             }
 
-            fn inner_product_with_right_item<
-                LeftIter,
-                RightIter,
-                TransformOp,
-                ReduceOp,
-                Output,
-            >(
-                policy: &crate::detail::CubePolicy<R>,
-                left: LeftIter,
-                right: RightIter,
-                transform_op: TransformOp,
-                init: Output,
-                reduce_op: ReduceOp,
-            ) -> Result<Output, Error>
-            where
-                LeftIter: MIter<R, Item = Self, Inner = <Self as MItem<R>>::View>,
-                RightIter: MIter<
-                    R,
-                    Inner = <<RightIter as MIter<R>>::Item as MItem<R>>::View,
-                >,
-                TransformOp:
-                    op::BinaryOp<R, Self, <RightIter as MIter<R>>::Item, Output = Output>,
-                Output: MItem<R>,
-                ReduceOp: op::ReductionOp<R, Output>,
-            {
-                inner_product_left_item_body!(
-                    R;
-                    ($( $ty ),+);
-                    policy,
-                    left,
-                    right,
-                    transform_op,
-                    init,
-                    reduce_op
-                )
-            }
-
-            fn inner_product_with_left_scalar<
-                LeftIter,
-                RightIter,
-                LeftScalar,
-                TransformOp,
-                ReduceOp,
-                Output,
-            >(
-                policy: &crate::detail::CubePolicy<R>,
-                left: LeftIter,
-                right: RightIter,
-                transform_op: TransformOp,
-                init: Output,
-                reduce_op: ReduceOp,
-            ) -> Result<Output, Error>
-            where
-                LeftScalar: Scalar + 'static,
-                (LeftScalar,):
-                    MItem<R, View = (crate::detail::device::DeviceColumnView<R, LeftScalar>,)>,
-                LeftIter:
-                    MIter<R, Item = (LeftScalar,), Inner = <(LeftScalar,) as MItem<R>>::View>,
-                RightIter: MIter<R, Item = Self, Inner = <Self as MItem<R>>::View>,
-                TransformOp: op::BinaryOp<R, (LeftScalar,), Self, Output = Output>,
-                Output: MItem<R>,
-                ReduceOp: op::ReductionOp<R, Output>,
-            {
-                inner_product_right_item_body!(
-                    R;
-                    ($( $ty ),+);
-                    policy,
-                    left,
-                    right,
-                    transform_op,
-                    init,
-                    reduce_op
-                )
-            }
         }
     };
 }
@@ -781,6 +667,23 @@ macro_rules! impl_miter_mut_tuple {
                         policy,
                         replacement.$idx,
                         stencil.control(),
+                        &output.$idx,
+                    )?;
+                )+
+                Ok(())
+            }
+
+            fn fill_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                value: Self::Item,
+            ) -> Result<(), Error>
+            {
+                let output = self.into_inner();
+                $(
+                    crate::detail::primitives::fill_slice_with_policy(
+                        policy,
+                        value.$idx,
                         &output.$idx,
                     )?;
                 )+

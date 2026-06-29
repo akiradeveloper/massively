@@ -33,9 +33,9 @@ fn executor_constant_allocates_owned_device_vec() {
 }
 
 #[test]
-fn executor_tabulate_allocates_owned_device_vec() {
+fn executor_counting_allocates_owned_device_vec() {
     let exec = exec();
-    let input = exec.tabulate(5).unwrap();
+    let input = exec.counting(5).unwrap();
 
     assert_eq!(exec.to_host(&input).unwrap(), vec![0, 1, 2, 3, 4]);
 }

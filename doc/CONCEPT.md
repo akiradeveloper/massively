@@ -45,6 +45,7 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - T?は、Option<T>を表す。
 - []nはOwnedなDeviceVecのTupleを表す。MVec<n>と呼ぶ。
 - &[T]はDeviceSlice<T>を表す。
+- [T]はDeviceVec<T>を表す。
 
 ### リスト
 
@@ -59,21 +60,20 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - copy_where(xs: &[]a, stencil: &[u32]) -> []a
 - count_if(xs: &[]a, p: a->bool) -> int
 - equal(xs: &[]a, ys: &[]a, eq: a->a->bool) -> bool
-- equal_range(xs: &[]a, v: a, cmp: a->a->bool) -> int
 - exclusive_scan(xs: &[]a, zero: a, sum: a->a->a) -> []a
 - exclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, zero: a, sum: a->a->a) -> []a
+- fill(v: a, out: &mut[]a)
 - find_first_of(xs: &[]a, needles: &[]a, eq: a->a->bool) -> int?
 - find_if(xs: &[]a, p: a->bool) -> int?
 - gather(xs: &[]a, indices: &[u32], out: &mut[]a)
 - gather_where(xs: &[]a, indices: &[u32], stencil: &[u32], out: &mut[]a)
 - inclusive_scan(xs: &[]a, op: a->a->a) -> []a
 - inclusive_scan_by_key(keys: &[]k, values: &[]a, eq: k->k->bool, sum: a->a->a) -> []a
-- inner_product(xs: &[]a, ys: &[]b, zipper: a->b->c, zero: c, sum: c->c->c) -> c
 - is_partitioned(xs: &[]a, p: a->bool) -> bool
 - is_sorted_until(xs: &[]a, cmp: a->a->bool) -> int
 - is_sorted(xs: &[]a, cmp: a->a->bool) -> bool
 - lexicographical_compare(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> bool
-- lower_bound(xs: &[]a, v: a, cmp: a->a->bool) -> int
+- lower_bound(xs: &[]a, vs: &[]a, cmp: a->a->bool) -> [u32]
 - max_element(xs: &[]a, cmp: a->a->bool) -> int?
 - merge(xs: &[]a, ys: &[]a, cmp: a->a->bool) -> []a
 - merge_by_key(keys1: &[]k, values1: &[]a, keys2: &[]k, values2: &[]a, cmp: k->k->bool) -> ([]k, []a)
@@ -100,4 +100,4 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - transform_where(xs: &[]a, op: a->b, stencil: &[u32], out: &mut[]b)
 - unique(xs: &[]a, eq: a->a->bool) -> []a
 - unique_by_key(keys: &[]k, values: &[]a, cmp: k->k->bool) -> ([]k, []a)
-- upper_bound(xs: &[]a, v: a, cmp: a->a->bool) -> int
+- upper_bound(xs: &[]a, vs: &[]a, cmp: a->a->bool) -> [u32]

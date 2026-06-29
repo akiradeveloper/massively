@@ -38,13 +38,6 @@ pub(crate) trait KernelSortedSearchInput<Less>: Sized {
     type Runtime: Runtime;
     type Item;
 
-    fn equal_range_input(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        value: Self::Item,
-        less: GpuOp<Less>,
-    ) -> Result<(usize, usize), Error>;
-
     fn lower_bound_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
@@ -70,6 +63,25 @@ pub(crate) trait KernelSortedSearchInput<Less>: Sized {
         policy: &CubePolicy<Self::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<bool, Error>;
+}
+
+#[allow(dead_code)]
+pub(crate) trait KernelSortedSearchManyInput<Values, Less>: Sized {
+    type Runtime: Runtime;
+
+    fn lower_bound_many_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        values: Values,
+        less: GpuOp<Less>,
+    ) -> Result<crate::detail::DeviceVec<Self::Runtime, u32>, Error>;
+
+    fn upper_bound_many_input(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        values: Values,
+        less: GpuOp<Less>,
+    ) -> Result<crate::detail::DeviceVec<Self::Runtime, u32>, Error>;
 }
 
 #[allow(dead_code)]

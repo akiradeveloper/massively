@@ -274,18 +274,19 @@ where
     massively::adjacent_find(exec, source, pred)
 }
 
-fn lower_bound2<R, S1, Less>(
+fn lower_bound2<R, S1, Values, Less>(
     exec: &Executor<R>,
     source: S1,
-    value: S1::Item,
+    values: Values,
     less: Less,
-) -> Result<usize, massively::Error>
+) -> Result<massively::DeviceVec<R, u32>, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    Values: MIter<R, Item = S1::Item, Inner = S1::Inner>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
-    massively::lower_bound(exec, source, value, less)
+    massively::lower_bound(exec, source, values, less)
 }
 
 fn is_sorted2<R, S1, Less>(
@@ -623,21 +624,21 @@ fn search_queries_wrap_two_column_tuple_inputs() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let left = exec.to_device(&[1_u32, 2, 2, 4]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 20, 40]).unwrap();
+    let query_left = exec.to_device(&[2_u32, 5]).unwrap();
+    let query_right = exec.to_device(&[0_u32, 50]).unwrap();
 
     assert_eq!(
         adjacent_find2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap(),
         Some(1)
     );
-    assert_eq!(
-        lower_bound2(
-            &exec,
-            SoA2(left.slice(..), right.slice(..)),
-            (2_u32, 0_u32),
-            PairU32Less
-        )
-        .unwrap(),
-        1
-    );
+    let lower = lower_bound2(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        SoA2(query_left.slice(..), query_right.slice(..)),
+        PairU32Less,
+    )
+    .unwrap();
+    assert_eq!(exec.to_host(&lower).unwrap(), vec![1, 4]);
     assert!(is_sorted2(&exec, SoA2(left.slice(..), right.slice(..)), PairU32Less).unwrap());
 }
 

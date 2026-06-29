@@ -870,46 +870,34 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         })
     }
 
-    fn lower_bound_dispatch<Less>(
+    fn lower_bound_dispatch<Values, Less>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        value: <Self as MIter<R>>::Item,
+        values: Values,
         _less: Less,
-    ) -> Result<usize, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
         Self: MIter<R>,
+        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, value, _less);
+        let _ = (policy, values, _less);
         unsupported("lower_bound")
     }
 
-    fn upper_bound_dispatch<Less>(
+    fn upper_bound_dispatch<Values, Less>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        value: <Self as MIter<R>>::Item,
+        values: Values,
         _less: Less,
-    ) -> Result<usize, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
         Self: MIter<R>,
+        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, value, _less);
+        let _ = (policy, values, _less);
         unsupported("upper_bound")
-    }
-
-    fn equal_range_dispatch<Less>(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-        value: <Self as MIter<R>>::Item,
-        _less: Less,
-    ) -> Result<(usize, usize), Error>
-    where
-        Self: MIter<R>,
-        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-    {
-        let _ = (policy, value, _less);
-        unsupported("equal_range")
     }
 
     fn is_sorted_until_dispatch<Less>(
@@ -1019,27 +1007,6 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     {
         Err(Error::Launch {
             message: "set_difference is not supported for this iterator shape".to_string(),
-        })
-    }
-
-    fn inner_product_dispatch<Right, TransformOp, ReduceOp, Output>(
-        self,
-        _policy: &crate::detail::CubePolicy<R>,
-        _right: Right,
-        _transform_op: TransformOp,
-        _init: Output,
-        _reduce_op: ReduceOp,
-    ) -> Result<Output, Error>
-    where
-        Self: MIter<R>,
-        Right: MIter<R>,
-        TransformOp:
-            op::BinaryOp<R, <Self as MIter<R>>::Item, <Right as MIter<R>>::Item, Output = Output>,
-        Output: MItem<R>,
-        ReduceOp: op::ReductionOp<R, Output>,
-    {
-        Err(Error::Launch {
-            message: "inner_product is not supported for this iterator shape".to_string(),
         })
     }
 
@@ -1164,26 +1131,6 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     {
         Err(Error::Launch {
             message: "set_difference is not supported for this iterator shape".to_string(),
-        })
-    }
-
-    fn inner_product_same_dispatch<TransformOp, ReduceOp, Output>(
-        self,
-        _policy: &crate::detail::CubePolicy<R>,
-        _right: Self,
-        _transform_op: TransformOp,
-        _init: Output,
-        _reduce_op: ReduceOp,
-    ) -> Result<Output, Error>
-    where
-        Self: MIter<R>,
-        TransformOp:
-            op::BinaryOp<R, <Self as MIter<R>>::Item, <Self as MIter<R>>::Item, Output = Output>,
-        Output: MItem<R>,
-        ReduceOp: op::ReductionOp<R, Output>,
-    {
-        Err(Error::Launch {
-            message: "inner_product is not supported for this iterator shape".to_string(),
         })
     }
 

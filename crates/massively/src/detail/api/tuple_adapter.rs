@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp};
+use crate::detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp};
 use cubecl::prelude::*;
 
 #[doc(hidden)]
@@ -44,31 +44,6 @@ where
 {
     fn apply(lhs: T, rhs: T) -> T {
         Op::apply((lhs,), (rhs,)).0
-    }
-}
-
-#[doc(hidden)]
-pub struct Tuple1InnerProductZipper<Op> {
-    _op: PhantomData<fn() -> Op>,
-}
-
-impl<Op> Default for Tuple1InnerProductZipper<Op> {
-    fn default() -> Self {
-        Self { _op: PhantomData }
-    }
-}
-
-#[cubecl::cube]
-impl<Left, Right, Op> UnaryOp<(Left, Right)> for Tuple1InnerProductZipper<Op>
-where
-    Left: CubePrimitive + CubeElement,
-    Right: CubePrimitive + CubeElement,
-    Op: UnaryOp<((Left,), (Right,))>,
-{
-    type Output = Op::Output;
-
-    fn apply(input: (Left, Right)) -> Self::Output {
-        Op::apply(((input.0,), (input.1,)))
     }
 }
 

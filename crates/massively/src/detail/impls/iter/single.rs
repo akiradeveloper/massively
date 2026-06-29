@@ -1073,55 +1073,42 @@ where
         )
     }
 
-    fn lower_bound_dispatch<Less>(
+    fn lower_bound_dispatch<Values, Less>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        value: <Self as MIter<R>>::Item,
+        values: Values,
         _less: Less,
-    ) -> Result<usize, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
+        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::lower_bound(
+        let inner = crate::detail::lower_bound_many(
             policy,
             self.into_inner_with_policy(policy)?,
-            value,
+            values.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
-        )
+        )?;
+        Ok(crate::runtime::DeviceVec::from_inner(inner))
     }
 
-    fn upper_bound_dispatch<Less>(
+    fn upper_bound_dispatch<Values, Less>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        value: <Self as MIter<R>>::Item,
+        values: Values,
         _less: Less,
-    ) -> Result<usize, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
     where
+        Values: MIter<R, Item = <Self as MIter<R>>::Item, Inner = <Self as MIter<R>>::Inner>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        crate::detail::upper_bound(
+        let inner = crate::detail::upper_bound_many(
             policy,
             self.into_inner_with_policy(policy)?,
-            value,
+            values.into_inner_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
-        )
-    }
-
-    fn equal_range_dispatch<Less>(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-        value: <Self as MIter<R>>::Item,
-        _less: Less,
-    ) -> Result<(usize, usize), Error>
-    where
-        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-    {
-        crate::detail::equal_range(
-            policy,
-            self.into_inner_with_policy(policy)?,
-            value,
-            KernelOp::<R, Less>::new(),
-        )
+        )?;
+        Ok(crate::runtime::DeviceVec::from_inner(inner))
     }
 
     fn is_sorted_until_dispatch<Less>(
@@ -1588,6 +1575,15 @@ where
             stencil.control(),
             &output,
         )
+    }
+
+    fn fill_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        value: Self::Item,
+    ) -> Result<(), Error> {
+        let output = self.into_inner().0;
+        crate::detail::primitives::fill_slice_with_policy(policy, value.0, &output)
     }
 }
 

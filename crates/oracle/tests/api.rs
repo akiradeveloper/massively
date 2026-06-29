@@ -1,12 +1,12 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
+use massively::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::{
     DeviceVec, Executor as ApiExecutor, adjacent_difference as api_adjacent_difference,
     adjacent_find, all_of as api_all_of, any_of as api_any_of, copy_where as api_copy_where,
-    count_if as api_count_if, equal, equal_range, exclusive_scan as api_exclusive_scan,
-    exclusive_scan_by_key, find_first_of, find_if as api_find_if, gather as api_gather,
-    gather_where, inclusive_scan as api_inclusive_scan, inclusive_scan_by_key, inner_product,
+    count_if as api_count_if, equal, exclusive_scan as api_exclusive_scan, exclusive_scan_by_key,
+    fill as api_fill, find_first_of, find_if as api_find_if, gather as api_gather, gather_where,
+    inclusive_scan as api_inclusive_scan, inclusive_scan_by_key,
     is_partitioned as api_is_partitioned, is_sorted, is_sorted_until, lexicographical_compare,
     lower_bound, max_element, merge, merge_by_key, min_element, minmax_element, mismatch,
     none_of as api_none_of, partition as api_partition, reduce as api_reduce, reduce_by_key,
@@ -41,17 +41,6 @@ struct TupleMaxOp;
 impl ReductionOp<ApiRuntime, (u32,)> for TupleMaxOp {
     fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
         (lhs.0.max(rhs.0),)
-    }
-}
-
-struct TuplePairMax;
-
-#[cubecl::cube]
-impl BinaryOp<ApiRuntime, (u32,), (u32,)> for TuplePairMax {
-    type Output = (u32,);
-
-    fn apply(lhs: (u32,), rhs: (u32,)) -> (u32,) {
-        if lhs.0 > rhs.0 { lhs } else { rhs }
     }
 }
 
@@ -284,6 +273,17 @@ proptest! {
     }
 
     #[test]
+    fn fill_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), replacement in any::<u32>()) {
+        let _guard = gpu_lock();
+        let exec = api_exec();
+        let output_g = padded_device(&exec, &input);
+        let mut expected = input.clone();
+        oracle::fill(replacement, &mut expected);
+        api_fill(&exec, (replacement,), massively::SoA1(output_g.slice_mut(slice_range(&input)))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(slice_range(&input))).unwrap(), expected);
+    }
+
+    #[test]
     fn unique_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let exec = api_exec();
@@ -385,30 +385,35 @@ proptest! {
     }
 
     #[test]
-    fn lower_bound_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), value in any::<u32>()) {
+    fn lower_bound_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
-        prop_assert_eq!(lower_bound(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), (value,), TupleBucketThenValueLess).unwrap(), oracle::lower_bound(&sorted, value));
+        let values_g = padded_device(&exec, &values);
+        let output = lower_bound(
+            &exec,
+            massively::SoA1(sorted_g.slice(slice_range(&sorted))),
+            massively::SoA1(values_g.slice(slice_range(&values))),
+            TupleBucketThenValueLess,
+        ).unwrap();
+        prop_assert_eq!(exec.to_host(&output).unwrap(), oracle::lower_bound(&sorted, &values));
     }
 
     #[test]
-    fn upper_bound_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), value in any::<u32>()) {
+    fn upper_bound_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
         let _guard = gpu_lock();
         let sorted = oracle::sort(&input);
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
-        prop_assert_eq!(upper_bound(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), (value,), TupleBucketThenValueLess).unwrap(), oracle::upper_bound(&sorted, value));
-    }
-
-    #[test]
-    fn equal_range_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), value in any::<u32>()) {
-        let _guard = gpu_lock();
-        let sorted = oracle::sort(&input);
-        let exec = exec();
-        let sorted_g = padded_device(&exec, &sorted);
-        prop_assert_eq!(equal_range(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), (value,), TupleBucketThenValueLess).unwrap(), oracle::equal_range(&sorted, value));
+        let values_g = padded_device(&exec, &values);
+        let output = upper_bound(
+            &exec,
+            massively::SoA1(sorted_g.slice(slice_range(&sorted))),
+            massively::SoA1(values_g.slice(slice_range(&values))),
+            TupleBucketThenValueLess,
+        ).unwrap();
+        prop_assert_eq!(exec.to_host(&output).unwrap(), oracle::upper_bound(&sorted, &values));
     }
 
     #[test]
@@ -550,26 +555,6 @@ proptest! {
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
         prop_assert_eq!(lexicographical_compare(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap(), oracle::lexicographical_compare(&left, &right));
-    }
-
-    #[test]
-    fn inner_product_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN), init in any::<u32>()) {
-        let _guard = gpu_lock();
-        let right = oracle::transform(&input);
-        let exec = exec();
-        let left_g = padded_device(&exec, &input);
-        let right_g = padded_device(&exec, &right);
-        prop_assert_eq!(
-            inner_product(&exec,
-                massively::SoA1(left_g.slice(slice_range(&input))),
-                massively::SoA1(right_g.slice(slice_range(&right))),
-                TuplePairMax,
-                (init,),
-                TupleMaxOp
-            )
-            .unwrap(),
-            (oracle::inner_product(&input, &right, init),)
-        );
     }
 
     #[test]

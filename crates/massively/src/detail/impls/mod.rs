@@ -4,9 +4,7 @@ use cubecl::prelude::*;
 
 use crate::Error;
 use crate::detail::dispatch::{self as sealed, array_from_inner};
-use crate::detail::op_adapter::{
-    KernelOp, KernelTuple1InnerProductOp, KernelTuple1Op, StencilFlag,
-};
+use crate::detail::op_adapter::{KernelOp, KernelTuple1Op, StencilFlag};
 use crate::error::ensure_same_len;
 use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
 use crate::op;

@@ -80,7 +80,7 @@ Run one with Cargo:
 ```sh
 cargo run -p massively --example transform
 cargo run -p massively --example util-random
-cargo run -p massively --example runtime-tabulate
+cargo run -p massively --example runtime-counting
 ```
 
 ## Recipes
