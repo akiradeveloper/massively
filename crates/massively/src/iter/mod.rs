@@ -262,6 +262,13 @@ pub trait MIterMut<R: Runtime>: dispatch::MIterMutDispatch<R> + Sized {
         stencil: crate::detail::api::PrecomputedSelection<R>,
     ) -> Result<(), Error>;
 
+    #[doc(hidden)]
+    fn fill_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        value: Self::Item,
+    ) -> Result<(), Error>;
+
     /// Returns the logical length.
     fn len(&self) -> usize;
 

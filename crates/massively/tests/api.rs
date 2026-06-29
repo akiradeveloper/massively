@@ -17,12 +17,12 @@ mod device_slice;
 mod eager;
 #[path = "api/equal.rs"]
 mod equal;
-#[path = "api/equal_range.rs"]
-mod equal_range;
 #[path = "api/exclusive_scan.rs"]
 mod exclusive_scan;
 #[path = "api/exclusive_scan_by_key.rs"]
 mod exclusive_scan_by_key;
+#[path = "api/fill.rs"]
+mod fill;
 #[path = "api/find_first_of.rs"]
 mod find_first_of;
 #[path = "api/find_if.rs"]
@@ -35,8 +35,6 @@ mod gather_where;
 mod inclusive_scan;
 #[path = "api/inclusive_scan_by_key.rs"]
 mod inclusive_scan_by_key;
-#[path = "api/inner_product.rs"]
-mod inner_product;
 #[path = "api/is_partitioned.rs"]
 mod is_partitioned;
 #[path = "api/is_sorted.rs"]

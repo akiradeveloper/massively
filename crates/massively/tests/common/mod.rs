@@ -2,17 +2,15 @@
 pub(crate) use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
 pub(crate) use cubecl::prelude::*;
-pub(crate) use massively::algorithm::op::{
-    BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp,
-};
+pub(crate) use massively::algorithm::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 pub(crate) use massively::{
-    Executor, adjacent_difference, adjacent_find, copy_where, count_if, equal, equal_range,
-    exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_where,
-    inclusive_scan, inclusive_scan_by_key, inner_product, is_partitioned, is_sorted,
-    is_sorted_until, lexicographical_compare, lower_bound, map, max_element, merge, merge_by_key,
-    min_element, minmax_element, mismatch, partition, permute, reduce, reduce_by_key, remove_where,
-    replace_where, reverse, scatter, scatter_where, set_difference, set_intersection, set_union,
-    sort, sort_by_key, transform, transform_where, unique, unique_by_key, upper_bound,
+    Executor, adjacent_difference, adjacent_find, copy_where, count_if, equal, exclusive_scan,
+    exclusive_scan_by_key, fill, find_first_of, find_if, gather, gather_where, inclusive_scan,
+    inclusive_scan_by_key, is_partitioned, is_sorted, is_sorted_until, lexicographical_compare,
+    lower_bound, map, max_element, merge, merge_by_key, min_element, minmax_element, mismatch,
+    partition, permute, reduce, reduce_by_key, remove_where, replace_where, reverse, scatter,
+    scatter_where, set_difference, set_intersection, set_union, sort, sort_by_key, transform,
+    transform_where, unique, unique_by_key, upper_bound,
 };
 
 pub(crate) fn exec() -> Executor<WgpuRuntime> {
@@ -82,28 +80,6 @@ impl ReductionOp<WgpuRuntime, (f32, u32, f32, u32, f32, u32, f32)> for TupleSum 
             lhs.5 + rhs.5,
             lhs.6 + rhs.6,
         )
-    }
-}
-
-pub(crate) struct TupleProduct;
-
-#[cubecl::cube]
-impl BinaryOp<WgpuRuntime, (f32,), (f32,)> for TupleProduct {
-    type Output = (f32,);
-
-    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
-        (lhs.0 * rhs.0,)
-    }
-}
-
-pub(crate) struct TupleWeightedProduct;
-
-#[cubecl::cube]
-impl BinaryOp<WgpuRuntime, (f32,), (u32,)> for TupleWeightedProduct {
-    type Output = (f32,);
-
-    fn apply(lhs: (f32,), rhs: (u32,)) -> (f32,) {
-        (lhs.0 * rhs.0 as f32,)
     }
 }
 

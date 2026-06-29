@@ -801,6 +801,124 @@ pub(crate) fn upper_bound_device_expr_flags_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn lower_bound_device_expr_many_kernel<
+    T: CubePrimitive,
+    SourceExpr: DeviceGpuExpr<T>,
+    ValueExpr: DeviceGpuExpr<T>,
+    Less: BinaryPredicateOp<T>,
+>(
+    source_slot0: &[T],
+    source_slot1: &[T],
+    source_slot2: &[T],
+    source_slot3: &[T],
+    source_offsets: &[u32],
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let value = ValueExpr::eval(
+            value_slot0,
+            value_slot1,
+            value_slot2,
+            value_slot3,
+            value_offsets,
+            global,
+        );
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            if Less::apply(
+                SourceExpr::eval(
+                    source_slot0,
+                    source_slot1,
+                    source_slot2,
+                    source_slot3,
+                    source_offsets,
+                    mid,
+                ),
+                value,
+            ) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn upper_bound_device_expr_many_kernel<
+    T: CubePrimitive,
+    SourceExpr: DeviceGpuExpr<T>,
+    ValueExpr: DeviceGpuExpr<T>,
+    Less: BinaryPredicateOp<T>,
+>(
+    source_slot0: &[T],
+    source_slot1: &[T],
+    source_slot2: &[T],
+    source_slot3: &[T],
+    source_offsets: &[u32],
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let value = ValueExpr::eval(
+            value_slot0,
+            value_slot1,
+            value_slot2,
+            value_slot3,
+            value_offsets,
+            global,
+        );
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            if !Less::apply(
+                value,
+                SourceExpr::eval(
+                    source_slot0,
+                    source_slot1,
+                    source_slot2,
+                    source_slot3,
+                    source_offsets,
+                    mid,
+                ),
+            ) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn binary_search_at_kernel<T: CubePrimitive, Less: BinaryPredicateOp<T>>(
     input: &[T],
     value: &[T],

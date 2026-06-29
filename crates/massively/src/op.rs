@@ -35,8 +35,7 @@ where
     fn apply(input: Input) -> Self::Output;
 }
 
-/// Compile-time binary transform used by algorithms such as
-/// [`inner_product`](crate::inner_product).
+/// Compile-time binary transform.
 #[cube]
 pub trait BinaryOp<R, X, Y>: 'static + Send + Sync
 where

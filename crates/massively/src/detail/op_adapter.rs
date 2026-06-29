@@ -27,16 +27,6 @@ impl<R, Op> KernelTuple1Op<R, Op> {
     }
 }
 
-#[doc(hidden)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct KernelTuple1InnerProductOp<R, Op, Output>(PhantomData<fn() -> (R, Op, Output)>);
-
-impl<R, Op, Output> KernelTuple1InnerProductOp<R, Op, Output> {
-    pub(super) fn new() -> Self {
-        Self(PhantomData)
-    }
-}
-
 #[cubecl::cube]
 impl<R, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<R, Op>
 where
@@ -84,24 +74,6 @@ where
 {
     fn apply(lhs: T, rhs: T) -> bool {
         Op::apply((lhs,), (rhs,))
-    }
-}
-
-#[cubecl::cube]
-impl<R, Left, Right, Op, Output> op::UnaryOp<R, (Left, Right)>
-    for KernelTuple1InnerProductOp<R, Op, Output>
-where
-    R: Runtime,
-    Left: Scalar,
-    Right: Scalar,
-    Output: MItem<R>,
-    Output: 'static,
-    Op: op::BinaryOp<R, (Left,), (Right,), Output = Output>,
-{
-    type Output = Output;
-
-    fn apply(input: (Left, Right)) -> Self::Output {
-        Op::apply((input.0,), (input.1,))
     }
 }
 

@@ -10,6 +10,15 @@ pub(crate) fn fill_kernel<T: CubePrimitive>(value: &[T], len: &[u32], output: &m
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn fill_slice_kernel<T: CubePrimitive>(value: &[T], metadata: &[u32], output: &mut [T]) {
+    let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let len = metadata[1] as usize;
+    if unit < len {
+        output[metadata[0] as usize + unit] = value[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn copy_kernel<T: CubePrimitive>(input: &[T], output: &mut [T]) {
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {

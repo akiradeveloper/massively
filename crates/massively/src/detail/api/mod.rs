@@ -43,9 +43,8 @@ pub use scan::{
     inclusive_scan_by_key,
 };
 pub use search::{
-    adjacent_find, equal, equal_range, find_first_of, is_sorted, is_sorted_until,
-    lexicographical_compare, lower_bound, max_element, min_element, minmax_element, mismatch,
-    upper_bound,
+    adjacent_find, equal, find_first_of, is_sorted, is_sorted_until, lexicographical_compare,
+    lower_bound_many, max_element, min_element, minmax_element, mismatch, upper_bound_many,
 };
 pub use selection::{
     all_of, any_of, copy_where, count_if, find_if, is_partitioned, none_of, partition, remove_if,

@@ -1,34 +1,5 @@
 use super::*;
 
-/// Applies a binary transform over two inputs and reduces the result.
-pub fn inner_product<R, Left, Right, ZipperOp, ReduceOp, LeftItem, RightItem>(
-    exec: &Executor<R>,
-    left: Left,
-    right: Right,
-    transform_op: ZipperOp,
-    init: ZipperOp::Output,
-    reduce_op: ReduceOp,
-) -> Result<ZipperOp::Output, Error>
-where
-    R: Runtime,
-    LeftItem: MItem<R>,
-    RightItem: MItem<R>,
-    Left: MIter<R, Item = LeftItem, Inner = <LeftItem as MItem<R>>::View>,
-    Right: MIter<R, Item = RightItem, Inner = <RightItem as MItem<R>>::View>,
-    ZipperOp: op::BinaryOp<R, LeftItem, RightItem>,
-    ReduceOp: op::ReductionOp<R, ZipperOp::Output>,
-{
-    validate_input(exec, &left)?;
-    validate_input(exec, &right)?;
-    <Left::Item as sealed::MItemDispatch<R>>::inner_product_with_right_item::<
-        Left,
-        Right,
-        ZipperOp,
-        ReduceOp,
-        ZipperOp::Output,
-    >(exec.policy(), left, right, transform_op, init, reduce_op)
-}
-
 /// Reduces a massively iterator to one host item.
 pub fn reduce<R, Input, Op>(
     exec: &Executor<R>,

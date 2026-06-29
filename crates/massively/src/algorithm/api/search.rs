@@ -33,22 +33,6 @@ where
     <Left as sealed::MIterDispatch<R>>::equal_dispatch(left, exec.policy(), right, eq)
 }
 
-/// Finds the equal range of `value` in a sorted input.
-pub fn equal_range<R, Input, Less>(
-    exec: &Executor<R>,
-    source: Input,
-    value: Input::Item,
-    less: Less,
-) -> Result<(usize, usize), Error>
-where
-    R: Runtime,
-    Input: MIter<R>,
-    Less: op::BinaryPredicateOp<R, Input::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::equal_range_dispatch(source, exec.policy(), value, less)
-}
-
 /// Finds the first input element equal to any needle.
 pub fn find_first_of<R, Input, Needles, Eq>(
     exec: &Executor<R>,
@@ -120,20 +104,22 @@ where
     )
 }
 
-/// Finds the lower bound of `value` in a sorted input.
-pub fn lower_bound<R, Input, Less>(
+/// Finds the lower bound of each value in a sorted input.
+pub fn lower_bound<R, Input, Values, Less>(
     exec: &Executor<R>,
     source: Input,
-    value: Input::Item,
+    values: Values,
     less: Less,
-) -> Result<usize, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
+    Values: MIter<R, Item = Input::Item, Inner = Input::Inner>,
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::lower_bound_dispatch(source, exec.policy(), value, less)
+    validate_input(exec, &values)?;
+    <Input as sealed::MIterDispatch<R>>::lower_bound_dispatch(source, exec.policy(), values, less)
 }
 
 /// Finds the maximum element index.
@@ -199,18 +185,20 @@ where
     <Left as sealed::MIterDispatch<R>>::mismatch_dispatch(left, exec.policy(), right, eq)
 }
 
-/// Finds the upper bound of `value` in a sorted input.
-pub fn upper_bound<R, Input, Less>(
+/// Finds the upper bound of each value in a sorted input.
+pub fn upper_bound<R, Input, Values, Less>(
     exec: &Executor<R>,
     source: Input,
-    value: Input::Item,
+    values: Values,
     less: Less,
-) -> Result<usize, Error>
+) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
+    Values: MIter<R, Item = Input::Item, Inner = Input::Inner>,
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::upper_bound_dispatch(source, exec.policy(), value, less)
+    validate_input(exec, &values)?;
+    <Input as sealed::MIterDispatch<R>>::upper_bound_dispatch(source, exec.policy(), values, less)
 }

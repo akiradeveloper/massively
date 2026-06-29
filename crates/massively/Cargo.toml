@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.24.0"
+version = "0.25.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -58,6 +58,10 @@ harness = false
 name = "ordering"
 harness = false
 
+[[bench]]
+name = "search"
+harness = false
+
 [features]
 default = ["wgpu"]
 cuda = ["cubecl/cuda"]
@@ -93,8 +97,8 @@ name = "equal"
 path = "examples/algorithm/equal.rs"
 
 [[example]]
-name = "equal-range"
-path = "examples/algorithm/equal_range.rs"
+name = "fill"
+path = "examples/algorithm/fill.rs"
 
 [[example]]
 name = "exclusive-scan"
@@ -127,10 +131,6 @@ path = "examples/algorithm/inclusive_scan.rs"
 [[example]]
 name = "inclusive-scan-by-key"
 path = "examples/algorithm/inclusive_scan_by_key.rs"
-
-[[example]]
-name = "inner-product"
-path = "examples/algorithm/inner_product.rs"
 
 [[example]]
 name = "is-partitioned"
@@ -277,8 +277,8 @@ name = "runtime-constant"
 path = "examples/runtime/constant.rs"
 
 [[example]]
-name = "runtime-tabulate"
-path = "examples/runtime/tabulate.rs"
+name = "runtime-counting"
+path = "examples/runtime/counting.rs"
 
 [[example]]
 name = "runtime-to-device"
