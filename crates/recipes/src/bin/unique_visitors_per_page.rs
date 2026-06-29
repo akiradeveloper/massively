@@ -55,18 +55,18 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (page_id, user_id) = sort(
+    let SoA2(page_id, user_id) = sort(
         exec,
         SoA2(page_id.slice(..), user_id.slice(..)),
         LessVisitPair,
     )?;
-    let (page_id, _user_id) = unique(
+    let SoA2(page_id, _user_id) = unique(
         exec,
         SoA2(page_id.slice(..), user_id.slice(..)),
         EqualVisitPair,
     )?;
-    let ones = exec.filled(page_id.len(), 1_u32)?;
-    let ((page_id,), (unique_count,)) = reduce_by_key(
+    let ones = exec.constant(page_id.len(), 1_u32)?;
+    let (SoA1(page_id), SoA1(unique_count)) = reduce_by_key(
         exec,
         SoA1(page_id.slice(..)),
         SoA1(ones.slice(..)),

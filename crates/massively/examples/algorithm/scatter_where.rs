@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, scatter_where};
 
 fn main() -> common::Result {
@@ -12,10 +13,10 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 3])?;
     scatter_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        SoA1(values.slice(..)),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        SoA1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![0.0, 30.0, 10.0]);

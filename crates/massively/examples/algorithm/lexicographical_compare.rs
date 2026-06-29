@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, lexicographical_compare};
 
 fn main() -> common::Result {
@@ -10,8 +11,8 @@ fn main() -> common::Result {
 
     let result = lexicographical_compare(
         &exec,
-        massively::SoA1(left.slice(..)),
-        massively::SoA1(right.slice(..)),
+        SoA1(left.slice(..)),
+        SoA1(right.slice(..)),
         common::LessF32,
     )?;
 

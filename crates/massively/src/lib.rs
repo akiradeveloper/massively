@@ -19,16 +19,12 @@
 //! User-defined operations are written as CubeCL cube traits. Low-level CubeCL
 //! launch and storage details remain internal implementation details.
 
-#[cfg(feature = "bench-diagnostics")]
-#[doc(hidden)]
-pub mod __bench;
 pub mod algorithm;
 mod detail;
 mod error;
 pub mod iter;
 pub mod op;
 pub mod runtime;
-pub mod slice;
 pub mod util;
 pub mod value;
 
@@ -36,17 +32,16 @@ pub use algorithm::{
     adjacent_difference, adjacent_find, all_of, any_of, copy_where, count_if, equal, equal_range,
     exclusive_scan, exclusive_scan_by_key, find_first_of, find_if, gather, gather_where,
     inclusive_scan, inclusive_scan_by_key, inner_product, is_partitioned, is_sorted,
-    is_sorted_until, lexicographical_compare, lower_bound, max_element, merge, merge_by_key,
-    min_element, minmax_element, mismatch, none_of, partition, reduce, reduce_by_key, remove_where,
-    replace_where, reverse, scatter, scatter_where, set_difference, set_intersection, set_union,
-    sort, sort_by_key, stable_sort, stable_sort_by_key, transform, transform_where, unique,
-    unique_by_key, upper_bound,
+    is_sorted_until, lexicographical_compare, lower_bound, map, max_element, merge, merge_by_key,
+    min_element, minmax_element, mismatch, none_of, partition, permute, reduce, reduce_by_key,
+    remove_where, replace_where, reverse, scatter, scatter_where, set_difference, set_intersection,
+    set_union, sort, sort_by_key, stable_sort, stable_sort_by_key, transform, transform_where,
+    unique, unique_by_key, upper_bound,
 };
 pub use error::Error;
 pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
-pub use slice::MSlice;
-pub use value::MItem;
+pub use value::{MItem, MVec};
 
 /// Common facade traits and types.
 ///
@@ -54,8 +49,8 @@ pub use value::MItem;
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MSlice, SoA1,
-        SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MVec, SoA1, SoA2,
+        SoA3, SoA4, SoA5, SoA6, SoA7,
     };
 }
 

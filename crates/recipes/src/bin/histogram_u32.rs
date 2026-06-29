@@ -25,9 +25,9 @@ fn solve<B>(exec: &Executor<B>, category_id: DeviceVec<B, u32>) -> common::Resul
 where
     B: cubecl::prelude::Runtime,
 {
-    let (sorted,) = sort(exec, SoA1(category_id.slice(..)), common::LessU32)?;
-    let ones = exec.filled(sorted.len(), 1_u32)?;
-    let ((category_id,), (count,)) = reduce_by_key(
+    let SoA1(sorted) = sort(exec, SoA1(category_id.slice(..)), common::LessU32)?;
+    let ones = exec.constant(sorted.len(), 1_u32)?;
+    let (SoA1(category_id), SoA1(count)) = reduce_by_key(
         exec,
         SoA1(sorted.slice(..)),
         SoA1(ones.slice(..)),

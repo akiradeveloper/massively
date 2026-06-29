@@ -12,7 +12,7 @@ fn exclusive_scan_accepts_tuple_columns() {
         TupleSum,
     )
     .unwrap();
-    let (a, b) = output;
+    let massively::SoA2(a, b) = output;
     assert_eq!(exec.to_host(&a).unwrap(), vec![0.0, 1.0, 3.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![0, 10, 30]);
 }
@@ -22,7 +22,8 @@ fn exclusive_scan_accepts_single_column_as_tuple_item() {
     let exec = exec();
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let (a,) = exclusive_scan(&exec, massively::SoA1(a.slice(..)), (0.0_f32,), TupleSum).unwrap();
+    let massively::SoA1(a) =
+        exclusive_scan(&exec, massively::SoA1(a.slice(..)), (0.0_f32,), TupleSum).unwrap();
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![0.0, 1.0, 3.0]);
 }
@@ -34,7 +35,7 @@ fn exclusive_scan_accepts_three_column_tuple_item_op() {
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
 
-    let (a, b, c) = exclusive_scan(
+    let massively::SoA3(a, b, c) = exclusive_scan(
         &exec,
         massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         (0.0_f32, 0_u32, 0.0_f32),
@@ -58,7 +59,7 @@ fn exclusive_scan_accepts_seven_tuple_columns() {
     let f = exec.to_device(&[4_u32, 5, 6]).unwrap();
     let g = exec.to_device(&[0.5_f32, 1.5, 2.5]).unwrap();
 
-    let (a, b, c, d, e, f, g) = exclusive_scan(
+    let massively::SoA7(a, b, c, d, e, f, g) = exclusive_scan(
         &exec,
         massively::SoA7(
             a.slice(..),

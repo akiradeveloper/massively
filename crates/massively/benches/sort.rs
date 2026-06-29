@@ -5,7 +5,7 @@ use common::{Runtime, SORT_SIZES, descending_f32, iter_gpu, shuffled_u32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{Executor, sort_by_key};
+use massively::{Executor, SoA1, sort_by_key};
 
 struct Less;
 
@@ -19,7 +19,7 @@ impl BinaryPredicateOp<WgpuRuntime, (u32,)> for Less {
 fn check_sort_by_key(exec: &Executor<WgpuRuntime>) {
     let keys = exec.to_device(&[2_u32, 0, 1]).unwrap();
     let values = exec.to_device(&[20.0_f32, 0.0, 10.0]).unwrap();
-    let ((keys,), (values,)) = sort_by_key(
+    let (SoA1(keys), SoA1(values)) = sort_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),

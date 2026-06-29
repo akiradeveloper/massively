@@ -13,7 +13,7 @@ fn remove_where_accepts_heterogeneous_tuple_stencil() {
         stencil.slice(..),
     )
     .unwrap();
-    let (values, tags) = removed;
+    let massively::SoA2(values, tags) = removed;
     assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 4.0]);
     assert_eq!(exec.to_host(&tags).unwrap(), vec![10, 30]);
 }
@@ -44,7 +44,7 @@ fn remove_where_accepts_seven_tuple_columns() {
         stencil.slice(..),
     )
     .unwrap();
-    let (a, b, c, d, e, f, g) = remaining;
+    let massively::SoA7(a, b, c, d, e, f, g) = remaining;
     assert_eq!(exec.to_host(&a).unwrap(), vec![1, 3, 5]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![11, 13, 15]);
     assert_eq!(exec.to_host(&c).unwrap(), vec![21, 23, 25]);
@@ -60,7 +60,7 @@ fn remove_where_keeps_all_values_when_no_flags_are_selected() {
     let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let stencil = exec.to_device(&[0_u32, 0, 0]).unwrap();
 
-    let (remaining,) =
+    let massively::SoA1(remaining) =
         remove_where(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
 
     assert_eq!(exec.to_host(&remaining).unwrap(), vec![10, 20, 30]);
@@ -72,7 +72,7 @@ fn remove_where_returns_empty_when_all_flags_are_selected() {
     let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let stencil = exec.to_device(&[1_u32, 1, 1]).unwrap();
 
-    let (remaining,) =
+    let massively::SoA1(remaining) =
         remove_where(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
 
     assert_eq!(exec.to_host(&remaining).unwrap(), Vec::<u32>::new());

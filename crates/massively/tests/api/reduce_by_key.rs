@@ -15,8 +15,8 @@ fn reduce_by_key_uses_supplied_key_equality() {
         Sum,
     )
     .unwrap();
-    let (keys,) = keys;
-    let (values,) = values;
+    let massively::SoA1(keys) = keys;
+    let massively::SoA1(values) = values;
     assert_eq!(exec.to_host(&keys).unwrap(), vec![4, 3]);
     assert_eq!(exec.to_host(&values).unwrap(), vec![6.0, 9.0]);
 }
@@ -27,7 +27,7 @@ fn reduce_by_key_handles_singleton_runs() {
     let keys = exec.to_device(&[0_u32, 1, 2, 3]).unwrap();
     let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
 
-    let ((out_keys,), (out_values,)) = reduce_by_key(
+    let (massively::SoA1(out_keys), massively::SoA1(out_values)) = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -47,7 +47,7 @@ fn reduce_by_key_handles_one_run() {
     let keys = exec.to_device(&[0_u32, 0, 0, 0]).unwrap();
     let values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
 
-    let ((out_keys,), (out_values,)) = reduce_by_key(
+    let (massively::SoA1(out_keys), massively::SoA1(out_values)) = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -70,7 +70,7 @@ fn reduce_by_key_handles_all_same_key_long_run() {
 
     let keys = exec.to_device(&keys).unwrap();
     let values = exec.to_device(&values).unwrap();
-    let ((out_keys,), (out_values,)) = reduce_by_key(
+    let (massively::SoA1(out_keys), massively::SoA1(out_values)) = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -94,7 +94,7 @@ fn reduce_by_key_handles_block_boundary_runs() {
 
     let keys = exec.to_device(&keys).unwrap();
     let values = exec.to_device(&values).unwrap();
-    let ((out_keys,), (out_values,)) = reduce_by_key(
+    let (massively::SoA1(out_keys), massively::SoA1(out_values)) = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -124,8 +124,8 @@ fn reduce_by_key_accepts_tuple_values() {
         TupleSum,
     )
     .unwrap();
-    let (keys,) = keys;
-    let (values, ids) = values;
+    let massively::SoA1(keys) = keys;
+    let massively::SoA2(values, ids) = values;
     assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2]);
     assert_eq!(exec.to_host(&values).unwrap(), vec![3.0, 12.0]);
     assert_eq!(exec.to_host(&ids).unwrap(), vec![30, 120]);
@@ -150,8 +150,8 @@ fn reduce_by_key_accepts_three_tuple_values() {
         TupleSum,
     )
     .unwrap();
-    let (keys,) = keys;
-    let (a, b, c) = values;
+    let massively::SoA1(keys) = keys;
+    let massively::SoA3(a, b, c) = values;
     assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2]);
     assert_eq!(exec.to_host(&a).unwrap(), vec![3.0, 12.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![30, 120]);
@@ -166,7 +166,7 @@ fn reduce_by_key_accepts_three_column_keys() {
     let k2 = exec.to_device(&[5.0_f32, 5.0, 5.0, 6.0, 1.0, 1.0]).unwrap();
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]).unwrap();
 
-    let ((out_k0, out_k1, out_k2), (out_values,)) = reduce_by_key(
+    let (massively::SoA3(out_k0, out_k1, out_k2), massively::SoA1(out_values)) = reduce_by_key(
         &exec,
         massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -196,15 +196,16 @@ fn reduce_by_key_accepts_three_column_keys_and_tuple_values() {
         .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
         .unwrap();
 
-    let ((out_k0, out_k1, out_k2), (out_a, out_b, out_c)) = reduce_by_key(
-        &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
-        MixedTuple3Equal,
-        (0.0_f32, 0_u32, 0.0_f32),
-        TupleSum,
-    )
-    .unwrap();
+    let (massively::SoA3(out_k0, out_k1, out_k2), massively::SoA3(out_a, out_b, out_c)) =
+        reduce_by_key(
+            &exec,
+            massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
+            massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+            MixedTuple3Equal,
+            (0.0_f32, 0_u32, 0.0_f32),
+            TupleSum,
+        )
+        .unwrap();
 
     assert_eq!(exec.to_host(&out_k0).unwrap(), vec![1.0, 1.0, 1.0, 2.0]);
     assert_eq!(exec.to_host(&out_k1).unwrap(), vec![0, 1, 1, 0]);
@@ -237,24 +238,26 @@ fn reduce_by_key_accepts_three_column_keys_and_seven_column_values() {
         .to_device(&[70.0_f32, 80.0, 90.0, 100.0, 110.0, 120.0])
         .unwrap();
 
-    let ((out_k0, out_k1, out_k2), (out_a, out_b, out_c, out_d, out_e, out_f, out_g)) =
-        reduce_by_key(
-            &exec,
-            massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-            massively::SoA7(
-                a.slice(..),
-                b.slice(..),
-                c.slice(..),
-                d.slice(..),
-                e.slice(..),
-                f.slice(..),
-                g.slice(..),
-            ),
-            MixedTuple3Equal,
-            (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32),
-            TupleSum,
-        )
-        .unwrap();
+    let (
+        massively::SoA3(out_k0, out_k1, out_k2),
+        massively::SoA7(out_a, out_b, out_c, out_d, out_e, out_f, out_g),
+    ) = reduce_by_key(
+        &exec,
+        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::SoA7(
+            a.slice(..),
+            b.slice(..),
+            c.slice(..),
+            d.slice(..),
+            e.slice(..),
+            f.slice(..),
+            g.slice(..),
+        ),
+        MixedTuple3Equal,
+        (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32),
+        TupleSum,
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&out_k0).unwrap(), vec![1.0, 1.0, 1.0, 2.0]);
     assert_eq!(exec.to_host(&out_k1).unwrap(), vec![0, 1, 1, 0]);

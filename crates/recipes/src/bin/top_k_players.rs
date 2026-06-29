@@ -30,14 +30,14 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let ((score,), (player_id,)) = sort_by_key(
+    let (SoA1(score), SoA1(player_id)) = sort_by_key(
         exec,
         SoA1(score.slice(..)),
         SoA1(player_id.slice(..)),
         common::LessF32,
     )?;
-    let (score,) = reverse(exec, SoA1(score.slice(..)))?;
-    let (player_id,) = reverse(exec, SoA1(player_id.slice(..)))?;
+    let SoA1(score) = reverse(exec, SoA1(score.slice(..)))?;
+    let SoA1(player_id) = reverse(exec, SoA1(player_id.slice(..)))?;
     Ok(Output {
         player_id: exec.to_device(&exec.to_host(&player_id.slice(..k))?)?,
         score: exec.to_device(&exec.to_host(&score.slice(..k))?)?,

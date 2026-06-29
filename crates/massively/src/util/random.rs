@@ -290,19 +290,19 @@ fn open_unit_f64(seed: u64, index: u32, stream: u64) -> f64 {
 
 /// Returns a deterministic uniformly distributed `f32` value in `[0, 1]`.
 #[cube]
-pub fn uniform_f32(seed: u64, i: u32) -> f32 {
+fn uniform_f32(seed: u64, i: u32) -> f32 {
     unit_f32(seed, i, 0u64)
 }
 
 /// Returns a deterministic uniformly distributed `f64` value in `[0, 1]`.
 #[cube]
-pub fn uniform_f64(seed: u64, i: u32) -> f64 {
+fn uniform_f64(seed: u64, i: u32) -> f64 {
     unit_f64(seed, i, 0u64)
 }
 
 /// Returns a deterministic uniformly distributed `u32` value in `[min, max]`.
 #[cube]
-pub fn uniform_u32(min: u32, max: u32, seed: u64, i: u32) -> u32 {
+fn uniform_u32(min: u32, max: u32, seed: u64, i: u32) -> u32 {
     let span = max - min;
     let value = random_u32_at(seed, i, 0u64);
     if span == 0xffff_ffffu32 {
@@ -314,7 +314,7 @@ pub fn uniform_u32(min: u32, max: u32, seed: u64, i: u32) -> u32 {
 
 /// Returns a deterministic uniformly distributed `u64` value in `[min, max]`.
 #[cube]
-pub fn uniform_u64(min: u64, max: u64, seed: u64, i: u32) -> u64 {
+fn uniform_u64(min: u64, max: u64, seed: u64, i: u32) -> u64 {
     let span = max - min;
     let value = random_u64_at(seed, i, 0u64);
     if span == 0xffff_ffff_ffff_ffffu64 {
@@ -326,7 +326,7 @@ pub fn uniform_u64(min: u64, max: u64, seed: u64, i: u32) -> u64 {
 
 /// Returns a deterministic normally distributed `f32` value.
 #[cube]
-pub fn normal_f32(mean: f32, stddev: f32, seed: u64, i: u32) -> f32 {
+fn normal_f32(mean: f32, stddev: f32, seed: u64, i: u32) -> f32 {
     let u1 = open_unit_f32(seed, i, 0u64);
     let u2 = open_unit_f32(seed, i, 1u64);
     let radius = (-2.0f32 * u1.ln()).sqrt();
@@ -336,7 +336,7 @@ pub fn normal_f32(mean: f32, stddev: f32, seed: u64, i: u32) -> f32 {
 
 /// Returns a deterministic normally distributed `f64` value.
 #[cube]
-pub fn normal_f64(mean: f64, stddev: f64, seed: u64, i: u32) -> f64 {
+fn normal_f64(mean: f64, stddev: f64, seed: u64, i: u32) -> f64 {
     let u1 = open_unit_f32(seed, i, 0u64);
     let u2 = open_unit_f32(seed, i, 1u64);
     let radius = (-2.0f32 * u1.ln()).sqrt();

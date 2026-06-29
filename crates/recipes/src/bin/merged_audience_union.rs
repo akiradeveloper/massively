@@ -22,7 +22,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = set_union(
+    let SoA1(out) = set_union(
         exec,
         SoA1(left.slice(..)),
         SoA1(right.slice(..)),

@@ -285,33 +285,22 @@ macro_rules! impl_wide_reduce_dispatch_body {
         let g = KernelColumn::stage(&$input.6, $policy)?;
         crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
             R,
-            <$ty0 as MSlice<R>>::Item,
-            <$ty1 as MSlice<R>>::Item,
-            <$ty2 as MSlice<R>>::Item,
-            <$ty3 as MSlice<R>>::Item,
-            <$ty4 as MSlice<R>>::Item,
-            <$ty5 as MSlice<R>>::Item,
-            <$ty6 as MSlice<R>>::Item,
-            <crate::detail::device::DeviceColumnView<R, <$ty0 as MSlice<R>>::Item> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, <$ty1 as MSlice<R>>::Item> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, <$ty2 as MSlice<R>>::Item> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, <$ty3 as MSlice<R>>::Item> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, <$ty4 as MSlice<R>>::Item> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, <$ty5 as MSlice<R>>::Item> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, <$ty6 as MSlice<R>>::Item> as KernelColumn>::Expr,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
+            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty4> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty5> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty6> as KernelColumn>::Expr,
             KernelOp<R, Op>,
-        >(
-            $policy,
-            &a,
-            &b,
-            &c,
-            &d,
-            &e,
-            &f,
-            &g,
-            $input.0.len,
-            $init,
-        )
+        >($policy, &a, &b, &c, &d, &e, &f, &g, $input.0.len, $init)
     }};
     ($policy:ident, $input:ident, $init:ident; $( $ty:ident ),+; $( $idx:tt ),+) => {{
         let _ = ($policy, $init);
@@ -326,13 +315,13 @@ macro_rules! impl_wide_inclusive_scan_dispatch_body {
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
             R,
-            <$ty0 as MSlice<R>>::Item,
-            <$ty1 as MSlice<R>>::Item,
-            <$ty2 as MSlice<R>>::Item,
-            <$ty3 as MSlice<R>>::Item,
-            <$ty4 as MSlice<R>>::Item,
-            <$ty5 as MSlice<R>>::Item,
-            <$ty6 as MSlice<R>>::Item,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
             KernelOp<R, Op>,
         >(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
@@ -351,13 +340,13 @@ macro_rules! impl_wide_exclusive_scan_dispatch_body {
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
             R,
-            <$ty0 as MSlice<R>>::Item,
-            <$ty1 as MSlice<R>>::Item,
-            <$ty2 as MSlice<R>>::Item,
-            <$ty3 as MSlice<R>>::Item,
-            <$ty4 as MSlice<R>>::Item,
-            <$ty5 as MSlice<R>>::Item,
-            <$ty6 as MSlice<R>>::Item,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
             KernelOp<R, Op>,
         >(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
@@ -437,12 +426,10 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         >($policy, &$input.0, &$input.1, &$control)?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice(<$ty0 as MSlice<R>>::Item::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice(<$ty1 as MSlice<R>>::Item::as_bytes(&[$init.1]));
-        let reduced_a_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty0 as MSlice<R>>::Item>());
-        let reduced_b_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty1 as MSlice<R>>::Item>());
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
         let num_blocks = $first_key
             .len
             .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
@@ -450,8 +437,8 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
             u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
         unsafe {
             crate::kernels::reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
-                <$ty0 as MSlice<R>>::Item,
-                <$ty1 as MSlice<R>>::Item,
+                $ty0,
+                $ty1,
                 KernelOp<R, Op>,
                 R,
             >(
@@ -501,14 +488,8 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, <$ty0 as MSlice<R>>::Item>(
-                    $policy,
-                    value_a_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty1 as MSlice<R>>::Item>(
-                    $policy,
-                    value_b_handles,
-                )?,
+                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
             ),
         ))
     }};
@@ -524,15 +505,12 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         >($policy, &$input.0, &$input.1, &$input.2, &$control)?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice(<$ty0 as MSlice<R>>::Item::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice(<$ty1 as MSlice<R>>::Item::as_bytes(&[$init.1]));
-        let init_c = client.create_from_slice(<$ty2 as MSlice<R>>::Item::as_bytes(&[$init.2]));
-        let reduced_a_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty0 as MSlice<R>>::Item>());
-        let reduced_b_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty1 as MSlice<R>>::Item>());
-        let reduced_c_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty2 as MSlice<R>>::Item>());
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
+        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
+        let reduced_c_handle = client.empty($first_key.len * std::mem::size_of::<$ty2>());
         let num_blocks = $first_key
             .len
             .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
@@ -540,9 +518,9 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
             u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
         unsafe {
             crate::kernels::reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
-                <$ty0 as MSlice<R>>::Item,
-                <$ty1 as MSlice<R>>::Item,
-                <$ty2 as MSlice<R>>::Item,
+                $ty0,
+                $ty1,
+                $ty2,
                 KernelOp<R, Op>,
                 R,
             >(
@@ -602,18 +580,9 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, <$ty0 as MSlice<R>>::Item>(
-                    $policy,
-                    value_a_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty1 as MSlice<R>>::Item>(
-                    $policy,
-                    value_b_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty2 as MSlice<R>>::Item>(
-                    $policy,
-                    value_c_handles,
-                )?,
+                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
             ),
         ))
     }};
@@ -623,13 +592,13 @@ macro_rules! impl_wide_inclusive_scan_by_three_key_values_body {
     ($policy:ident, $input:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::read::inclusive_scan_by_flags_seven_views::<
             R,
-            <$ty0 as MSlice<R>>::Item,
-            <$ty1 as MSlice<R>>::Item,
-            <$ty2 as MSlice<R>>::Item,
-            <$ty3 as MSlice<R>>::Item,
-            <$ty4 as MSlice<R>>::Item,
-            <$ty5 as MSlice<R>>::Item,
-            <$ty6 as MSlice<R>>::Item,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
             (K1, K2, K3),
             (),
             KernelOp<R, KeyEq>,
@@ -653,13 +622,13 @@ macro_rules! impl_wide_exclusive_scan_by_three_key_values_body {
     ($policy:ident, $input:ident, $control:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::read::exclusive_scan_by_flags_seven_views::<
             R,
-            <$ty0 as MSlice<R>>::Item,
-            <$ty1 as MSlice<R>>::Item,
-            <$ty2 as MSlice<R>>::Item,
-            <$ty3 as MSlice<R>>::Item,
-            <$ty4 as MSlice<R>>::Item,
-            <$ty5 as MSlice<R>>::Item,
-            <$ty6 as MSlice<R>>::Item,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
             (K1, K2, K3),
             (),
             KernelOp<R, KeyEq>,
@@ -683,13 +652,13 @@ macro_rules! impl_wide_reduce_by_three_key_values_body {
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         let inclusive = crate::detail::read::inclusive_scan_by_flags_seven_views::<
             R,
-            <$ty0 as MSlice<R>>::Item,
-            <$ty1 as MSlice<R>>::Item,
-            <$ty2 as MSlice<R>>::Item,
-            <$ty3 as MSlice<R>>::Item,
-            <$ty4 as MSlice<R>>::Item,
-            <$ty5 as MSlice<R>>::Item,
-            <$ty6 as MSlice<R>>::Item,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
             (K1, K2, K3),
             (),
             KernelOp<R, KeyEq>,
@@ -700,27 +669,20 @@ macro_rules! impl_wide_reduce_by_three_key_values_body {
         )?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice(<$ty0 as MSlice<R>>::Item::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice(<$ty1 as MSlice<R>>::Item::as_bytes(&[$init.1]));
-        let init_c = client.create_from_slice(<$ty2 as MSlice<R>>::Item::as_bytes(&[$init.2]));
-        let init_d = client.create_from_slice(<$ty3 as MSlice<R>>::Item::as_bytes(&[$init.3]));
-        let init_e = client.create_from_slice(<$ty4 as MSlice<R>>::Item::as_bytes(&[$init.4]));
-        let init_f = client.create_from_slice(<$ty5 as MSlice<R>>::Item::as_bytes(&[$init.5]));
-        let init_g = client.create_from_slice(<$ty6 as MSlice<R>>::Item::as_bytes(&[$init.6]));
-        let reduced_a_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty0 as MSlice<R>>::Item>());
-        let reduced_b_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty1 as MSlice<R>>::Item>());
-        let reduced_c_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty2 as MSlice<R>>::Item>());
-        let reduced_d_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty3 as MSlice<R>>::Item>());
-        let reduced_e_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty4 as MSlice<R>>::Item>());
-        let reduced_f_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty5 as MSlice<R>>::Item>());
-        let reduced_g_handle =
-            client.empty($first_key.len * std::mem::size_of::<<$ty6 as MSlice<R>>::Item>());
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
+        let init_d = client.create_from_slice($ty3::as_bytes(&[$init.3]));
+        let init_e = client.create_from_slice($ty4::as_bytes(&[$init.4]));
+        let init_f = client.create_from_slice($ty5::as_bytes(&[$init.5]));
+        let init_g = client.create_from_slice($ty6::as_bytes(&[$init.6]));
+        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
+        let reduced_c_handle = client.empty($first_key.len * std::mem::size_of::<$ty2>());
+        let reduced_d_handle = client.empty($first_key.len * std::mem::size_of::<$ty3>());
+        let reduced_e_handle = client.empty($first_key.len * std::mem::size_of::<$ty4>());
+        let reduced_f_handle = client.empty($first_key.len * std::mem::size_of::<$ty5>());
+        let reduced_g_handle = client.empty($first_key.len * std::mem::size_of::<$ty6>());
         let num_blocks = $first_key
             .len
             .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
@@ -728,13 +690,13 @@ macro_rules! impl_wide_reduce_by_three_key_values_body {
             u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
         unsafe {
             crate::kernels::reduce_by_key_tuple7_apply_init_kernel::launch_unchecked::<
-                <$ty0 as MSlice<R>>::Item,
-                <$ty1 as MSlice<R>>::Item,
-                <$ty2 as MSlice<R>>::Item,
-                <$ty3 as MSlice<R>>::Item,
-                <$ty4 as MSlice<R>>::Item,
-                <$ty5 as MSlice<R>>::Item,
-                <$ty6 as MSlice<R>>::Item,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                $ty5,
+                $ty6,
                 KernelOp<R, Op>,
                 R,
             >(
@@ -834,34 +796,13 @@ macro_rules! impl_wide_reduce_by_three_key_values_body {
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, <$ty0 as MSlice<R>>::Item>(
-                    $policy,
-                    value_a_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty1 as MSlice<R>>::Item>(
-                    $policy,
-                    value_b_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty2 as MSlice<R>>::Item>(
-                    $policy,
-                    value_c_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty3 as MSlice<R>>::Item>(
-                    $policy,
-                    value_d_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty4 as MSlice<R>>::Item>(
-                    $policy,
-                    value_e_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty5 as MSlice<R>>::Item>(
-                    $policy,
-                    value_f_handles,
-                )?,
-                crate::detail::primitives::select::compact::<R, <$ty6 as MSlice<R>>::Item>(
-                    $policy,
-                    value_g_handles,
-                )?,
+                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty3>($policy, value_d_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty4>($policy, value_e_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty5>($policy, value_f_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty6>($policy, value_g_handles)?,
             ),
         ))
     }};
@@ -885,18 +826,17 @@ macro_rules! impl_wide_reduce_by_three_key_values_body {
 
 macro_rules! impl_miter_soa {
     ($name:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+ => $transform:ident) => {
-        impl<R, $( $ty ),+> MIter<R> for $name<$( $ty ),+>
+        impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: MSlice<R>, )+
-            $( <$ty as MSlice<R>>::Read: IntoMaterializedColumn<R, <$ty as MSlice<R>>::Item>, )+
-            ($( <$ty as MSlice<R>>::Item, )+): MItem<
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<
                 R,
-                Inner = ($( crate::detail::DeviceVec<R, <$ty as MSlice<R>>::Item>, )+),
+                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
             >,
         {
-            type Item = ($( <$ty as MSlice<R>>::Item, )+);
-            type Inner = ($( crate::detail::device::DeviceColumnView<R, <$ty as MSlice<R>>::Item>, )+);
+            type Item = ($( $ty, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
 
             fn len(&self) -> usize {
                 self.0.len()
@@ -910,23 +850,24 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<Self::Inner, Error> {
-                Ok(($( lower_mslice_column(self.$idx, policy)?, )+))
+                let _ = policy;
+                Ok(($( self.$idx.column_view(), )+))
             }
         }
 
-        impl<R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( $ty ),+>
+        impl<'a, R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: MSlice<R>, )+
-            $( <$ty as MSlice<R>>::Read: IntoMaterializedColumn<R, <$ty as MSlice<R>>::Item>, )+
-            ($( <$ty as MSlice<R>>::Item, )+): MItem<
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<
                 R,
-                Inner = ($( crate::detail::DeviceVec<R, <$ty as MSlice<R>>::Item>, )+),
+                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
             >,
         {
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
                 $(
-                    self.$idx.validate_executor(exec)?;
+                    exec.ensure_policy_id(self.$idx.policy_id())?;
+                    ensure_same_len(self.$idx.len(), self.0.len())?;
                 )+
                 Ok(())
             }
@@ -948,6 +889,24 @@ macro_rules! impl_miter_soa {
                     op,
                 )?;
                 output.write_from_inner(policy, inner)
+            }
+
+            fn map_dispatch<Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                op: Op,
+            ) -> Result<Output, Error>
+            where
+                Output: MVec<R>,
+                Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = <Output::Item as sealed::MItemDispatch<R>>::$transform(
+                    policy,
+                    $( input.$idx, )+
+                    op,
+                )?;
+                Ok(array_from_inner::<R, Output::Item, Output>(inner))
             }
 
             fn transform_where_dispatch<Op, Output>(
@@ -1535,7 +1494,7 @@ macro_rules! impl_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -1550,6 +1509,29 @@ macro_rules! impl_miter_soa {
                     )?;
                 )+
                 Ok(())
+            }
+
+            fn permute_dispatch<Indices, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                indices: Indices,
+            ) -> Result<Output, Error>
+            where
+                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
+                <Indices as crate::detail::device::KernelColumn>::Expr:
+                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                $(
+                    let $tmp = crate::detail::api::device_expr_gather_with_policy(
+                        policy,
+                        &input.$idx,
+                        &indices,
+                    )?;
+                )+
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
             fn reduce_dispatch<Op>(
@@ -1933,7 +1915,7 @@ macro_rules! impl_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -1965,7 +1947,7 @@ macro_rules! impl_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -1998,7 +1980,7 @@ macro_rules! impl_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -2524,18 +2506,17 @@ macro_rules! impl_miter_mut_soa {
 
 macro_rules! impl_wide_miter_soa {
     ($name:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+) => {
-        impl<R, $( $ty ),+> MIter<R> for $name<$( $ty ),+>
+        impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: MSlice<R>, )+
-            $( <$ty as MSlice<R>>::Read: IntoMaterializedColumn<R, <$ty as MSlice<R>>::Item>, )+
-            ($( <$ty as MSlice<R>>::Item, )+): MItem<
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<
                 R,
-                Inner = ($( crate::detail::DeviceVec<R, <$ty as MSlice<R>>::Item>, )+),
+                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
             >,
         {
-            type Item = ($( <$ty as MSlice<R>>::Item, )+);
-            type Inner = ($( crate::detail::device::DeviceColumnView<R, <$ty as MSlice<R>>::Item>, )+);
+            type Item = ($( $ty, )+);
+            type Inner = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
 
             fn len(&self) -> usize {
                 self.0.len()
@@ -2549,23 +2530,24 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<Self::Inner, Error> {
-                Ok(($( lower_mslice_column(self.$idx, policy)?, )+))
+                let _ = policy;
+                Ok(($( self.$idx.column_view(), )+))
             }
         }
 
-        impl<R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( $ty ),+>
+        impl<'a, R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: MSlice<R>, )+
-            $( <$ty as MSlice<R>>::Read: IntoMaterializedColumn<R, <$ty as MSlice<R>>::Item>, )+
-            ($( <$ty as MSlice<R>>::Item, )+): MItem<
+            $( $ty: Scalar + 'static, )+
+            ($( $ty, )+): MItem<
                 R,
-                Inner = ($( crate::detail::DeviceVec<R, <$ty as MSlice<R>>::Item>, )+),
+                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
             >,
         {
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
                 $(
-                    self.$idx.validate_executor(exec)?;
+                    exec.ensure_policy_id(self.$idx.policy_id())?;
+                    ensure_same_len(self.$idx.len(), self.0.len())?;
                 )+
                 Ok(())
             }
@@ -2583,6 +2565,25 @@ macro_rules! impl_wide_miter_soa {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_transform_dispatch_body!(policy, input, op; $( $idx ),+)?;
                 output.write_from_inner(policy, inner)
+            }
+
+            fn map_dispatch<Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                op: Op,
+            ) -> Result<Output, Error>
+            where
+                Output: MVec<R>,
+                Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = impl_wide_transform_dispatch_body!(
+                    policy,
+                    input,
+                    op;
+                    $( $idx ),+
+                )?;
+                Ok(array_from_inner::<R, Output::Item, Output>(inner))
             }
 
             fn transform_where_dispatch<Op, Output>(
@@ -2842,7 +2843,7 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -2857,6 +2858,29 @@ macro_rules! impl_wide_miter_soa {
                     )?;
                 )+
                 Ok(())
+            }
+
+            fn permute_dispatch<Indices, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                indices: Indices,
+            ) -> Result<Output, Error>
+            where
+                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
+                <Indices as crate::detail::device::KernelColumn>::Expr:
+                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                $(
+                    let $tmp = crate::detail::api::device_expr_gather_with_policy(
+                        policy,
+                        &input.$idx,
+                        &indices,
+                    )?;
+                )+
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
             fn gather_where_dispatch<Indices, Output>(
@@ -2875,7 +2899,7 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -2907,7 +2931,7 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?
@@ -2940,7 +2964,7 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<<$ty as MSlice<R>>::Item>(
+                    let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
                         $idx,
                     )?

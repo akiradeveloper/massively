@@ -26,15 +26,6 @@ GPU上のデータ領域を表す。
   - DeviceSliceMut::slice -> DeviceSlice
   - DeviceSliceMut::slice_mut -> DeviceSliceMut
 
-### MSlice
-
-DeviceSliceの抽象化であり、インデックスiからスカラTへのマッピング。
-実装として、
-- DeviceSlice
-- constant_slice
-- transform_slice
-がある。
-
 ### SoA (Structure of Array)
 
 GPUで計算を行うに当たって、AoSよりSoAの方が性能上有利。
@@ -53,7 +44,7 @@ MIterMut<n> = SoAn(DeviceSliceMut, DeviceSliceMut, ...)
 - &mut[T]はMIterMut<n>を表す。
 - T?は、Option<T>を表す。
 - []nはOwnedなDeviceVecのTupleを表す。MVec<n>と呼ぶ。
-- &[T]はMSlice<Item=T>を表す。
+- &[T]はDeviceSlice<T>を表す。
 
 ### リスト
 

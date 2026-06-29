@@ -86,6 +86,40 @@ fn tuple1_transform_returns_soa1_storage() {
 }
 
 #[test]
+fn transform_can_write_in_place_for_single_column() {
+    let exec = exec();
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+
+    transform(
+        &exec,
+        massively::SoA1(values.slice(..)),
+        Double,
+        massively::SoA1(values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&values).unwrap(), vec![2.0, 4.0, 6.0]);
+}
+
+#[test]
+fn transform_can_write_in_place_for_multi_column() {
+    let exec = exec();
+    let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let tags = exec.to_device(&[10_u32, 20, 30]).unwrap();
+
+    transform(
+        &exec,
+        massively::SoA2(values.slice(..), tags.slice(..)),
+        PairMixedSplit,
+        massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&values).unwrap(), vec![11.0, 12.0, 13.0]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![11, 21, 31]);
+}
+
+#[test]
 fn unary_transform_accepts_seven_tuple_output() {
     let exec = exec();
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
@@ -432,7 +466,7 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
         Tuple5To3MixedSplit,
     )
     .unwrap();
-    let (x, y, z) = out_5_to_3;
+    let massively::SoA3(x, y, z) = out_5_to_3;
     assert_eq!(exec.to_host(&x).unwrap(), vec![10101.0, 20202.0]);
     assert_eq!(exec.to_host(&y).unwrap(), vec![1010, 2020]);
     assert_eq!(exec.to_host(&z).unwrap(), vec![9999.0, 19998.0]);
@@ -508,7 +542,7 @@ fn transform_accepts_extreme_mismatched_tuple_widths() {
         Tuple12To2MixedProject,
     )
     .unwrap();
-    let (x, y) = projected;
+    let massively::SoA2(x, y) = projected;
     assert_eq!(exec.to_host(&x).unwrap(), vec![7101.0, 8202.0]);
     assert_eq!(exec.to_host(&y).unwrap(), vec![170010, 280020]);
 }
@@ -567,7 +601,7 @@ fn transform_accepts_soa5_to_soa11_heterogeneous_tuple_outputs() {
     assert_eq!(exec.to_host(&e6).unwrap(), vec![10005.0]);
     assert_eq!(exec.to_host(&f6).unwrap(), vec![100006]);
 
-    let (a7, b7, c7, d7, e7, f7, g7) = transform(
+    let massively::SoA7(a7, b7, c7, d7, e7, f7, g7) = transform(
         &exec,
         zip7(
             a.slice(..),

@@ -30,7 +30,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let ((sku,), (delta,)) = merge_by_key(
+    let (SoA1(sku), SoA1(delta)) = merge_by_key(
         exec,
         SoA1(left_sku.slice(..)),
         SoA1(left_delta.slice(..)),
@@ -38,7 +38,7 @@ where
         SoA1(right_delta.slice(..)),
         common::LessU32,
     )?;
-    let ((sku,), (delta,)) = reduce_by_key(
+    let (SoA1(sku), SoA1(delta)) = reduce_by_key(
         exec,
         SoA1(sku.slice(..)),
         SoA1(delta.slice(..)),

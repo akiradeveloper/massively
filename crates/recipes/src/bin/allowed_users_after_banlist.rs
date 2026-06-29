@@ -23,7 +23,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (out,) = set_difference(
+    let SoA1(out) = set_difference(
         exec,
         SoA1(allowlist.slice(..)),
         SoA1(banlist.slice(..)),

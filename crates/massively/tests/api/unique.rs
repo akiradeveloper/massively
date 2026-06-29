@@ -5,7 +5,8 @@ fn unique_keeps_one_value_when_all_values_are_equal() {
     let exec = exec();
     let values = exec.to_device(&[7.0_f32, 7.0, 7.0, 7.0]).unwrap();
 
-    let (output,) = unique(&exec, massively::SoA1(values.slice(..)), EqualF32).unwrap();
+    let massively::SoA1(output) =
+        unique(&exec, massively::SoA1(values.slice(..)), EqualF32).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![7.0]);
 }
@@ -15,7 +16,8 @@ fn unique_keeps_all_values_when_no_adjacent_values_are_equal() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
 
-    let (output,) = unique(&exec, massively::SoA1(values.slice(..)), EqualF32).unwrap();
+    let massively::SoA1(output) =
+        unique(&exec, massively::SoA1(values.slice(..)), EqualF32).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
 }
@@ -53,7 +55,7 @@ fn unique_accepts_seven_tuple_columns() {
         Tuple7MixedEqual,
     )
     .unwrap();
-    let (a, b, c, d, e, f, g) = output;
+    let massively::SoA7(a, b, c, d, e, f, g) = output;
 
     assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 2.0, 2.0, 3.0]);
     assert_eq!(exec.to_host(&b).unwrap(), vec![10, 20, 20, 30]);

@@ -1,6 +1,7 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
+use massively::prelude::*;
 use massively::{Executor, stable_sort_by_key};
 
 fn main() -> common::Result {
@@ -8,10 +9,10 @@ fn main() -> common::Result {
     let keys = exec.to_device(&[2_u32, 0, 1])?;
     let values = exec.to_device(&[20.0_f32, 0.0, 10.0])?;
 
-    let ((keys,), (values,)) = stable_sort_by_key(
+    let (SoA1(keys), SoA1(values)) = stable_sort_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        SoA1(keys.slice(..)),
+        SoA1(values.slice(..)),
         common::LessU32,
     )?;
 

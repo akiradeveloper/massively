@@ -5,7 +5,6 @@ This directory contains small runnable programs for public `massively` APIs.
 - `algorithm/`: one example per `massively::algorithm` free-function API.
 - `runtime/`: CubeCL runtime/device setup, host/device transfer, allocation,
   initialization, and memory-copy examples.
-- `slice/`: lazy `MSlice` examples for generated stencils.
 - `util/`: utility examples such as random generation.
 
 Run one example:
@@ -13,7 +12,8 @@ Run one example:
 ```sh
 cargo run --example sort
 cargo run --example util-random
-cargo run --example slice-constant
+cargo run --example runtime-alloc
+cargo run --example runtime-constant
 ```
 
 Algorithm example names match the Rust function names, for example:

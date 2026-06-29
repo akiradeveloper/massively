@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, dense_f32, iter_gpu, run_keys, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
-use massively::{Executor, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key};
+use massively::{Executor, SoA1, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key};
 
 struct Sum;
 
@@ -38,7 +38,7 @@ fn check_by_key(exec: &Executor<WgpuRuntime>) {
     let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
 
-    let (inclusive,) = inclusive_scan_by_key(
+    let SoA1(inclusive) = inclusive_scan_by_key(
         exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
@@ -51,7 +51,7 @@ fn check_by_key(exec: &Executor<WgpuRuntime>) {
         vec![1.0, 3.0, 10.0, 30.0]
     );
 
-    let (exclusive,) = exclusive_scan_by_key(
+    let SoA1(exclusive) = exclusive_scan_by_key(
         exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),

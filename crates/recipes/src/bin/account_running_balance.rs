@@ -23,7 +23,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (balance,) = inclusive_scan_by_key(
+    let SoA1(balance) = inclusive_scan_by_key(
         exec,
         SoA1(account_id.slice(..)),
         SoA1(amount_delta.slice(..)),

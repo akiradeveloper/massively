@@ -17,6 +17,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::{PredicateOp, UnaryOp};
+use massively::prelude::*;
 use massively::{DeviceVec, Executor, SoA3, copy_where, partition, transform};
 
 struct SuspiciousTransaction;
@@ -69,21 +70,21 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let mut flag = exec.filled(account_id.len(), 0_u32)?;
+    let flag = exec.constant(account_id.len(), 0_u32)?;
     transform(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         SuspiciousTransaction,
-        massively::SoA1(flag.slice_mut(..)),
+        SoA1(flag.slice_mut(..)),
     )?;
-    let (account_id, amount, risk_score) = copy_where(
+    let SoA3(account_id, amount, risk_score) = copy_where(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         flag.slice(..),
     )?;
     let (
-        (high_account, high_amount, high_risk_score),
-        (review_account, review_amount, review_risk_score),
+        SoA3(high_account, high_amount, high_risk_score),
+        SoA3(review_account, review_amount, review_risk_score),
     ) = partition(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),

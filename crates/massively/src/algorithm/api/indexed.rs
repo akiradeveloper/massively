@@ -1,47 +1,60 @@
 use super::*;
 
 /// Gathers a massively iterator at index positions into `out`.
-pub fn gather<R, Input, Indices, Output>(
+pub fn gather<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: Indices,
+    indices: DeviceSlice<'_, R, u32>,
     out: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Indices: MSlice<R, Item = u32>,
     Output: MIterMut<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
-    validate_mslice(exec, &indices)?;
+    validate_device_slice(exec, &indices)?;
     validate_output(exec, &out)?;
-    let indices = lowering::u32_read::<R, Indices>(exec.policy(), indices)?;
+    let indices = indices.column_view();
     <Input as sealed::MIterDispatch<R>>::gather_dispatch(source, exec.policy(), indices, out)
 }
 
-/// Gathers elements whose `u32` stencil flag is non-zero.
-pub fn gather_where<R, Input, Indices, Stencil, Output>(
+/// Gathers a massively iterator at index positions into owned device storage.
+pub fn permute<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: Indices,
-    stencil: Stencil,
+    indices: DeviceSlice<'_, R, u32>,
+) -> Result<Output, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Output: MVec<R, Item = Input::Item>,
+{
+    validate_input(exec, &source)?;
+    validate_device_slice(exec, &indices)?;
+    let indices = indices.column_view();
+    <Input as sealed::MIterDispatch<R>>::permute_dispatch(source, exec.policy(), indices)
+}
+
+/// Gathers elements whose `u32` stencil flag is non-zero.
+pub fn gather_where<R, Input, Output>(
+    exec: &Executor<R>,
+    source: Input,
+    indices: DeviceSlice<'_, R, u32>,
+    stencil: DeviceSlice<'_, R, u32>,
     out: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Indices: MSlice<R, Item = u32>,
-    Stencil: MSlice<R, Item = u32>,
     Output: MIterMut<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
-    validate_mslice(exec, &indices)?;
-    validate_mslice(exec, &stencil)?;
+    validate_device_slice(exec, &indices)?;
+    validate_device_slice(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let indices = lowering::u32_read::<R, Indices>(exec.policy(), indices)?;
-    let stencil =
-        lowering::u32_stencil_flags(exec.policy(), stencil, "gather_where stencil", false)?;
+    let indices = indices.column_view();
+    let stencil = u32_stencil_flags(exec.policy(), stencil, false)?;
     <Input as sealed::MIterDispatch<R>>::gather_where_dispatch(
         source,
         exec.policy(),
@@ -52,47 +65,43 @@ where
 }
 
 /// Scatters values into `out`.
-pub fn scatter<R, Input, Indices, Output>(
+pub fn scatter<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: Indices,
+    indices: DeviceSlice<'_, R, u32>,
     out: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Indices: MSlice<R, Item = u32>,
     Output: MIterMut<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
-    validate_mslice(exec, &indices)?;
+    validate_device_slice(exec, &indices)?;
     validate_output(exec, &out)?;
-    let indices = lowering::u32_read::<R, Indices>(exec.policy(), indices)?;
+    let indices = indices.column_view();
     <Input as sealed::MIterDispatch<R>>::scatter_dispatch(source, exec.policy(), indices, out)
 }
 
 /// Scatters values whose `u32` stencil flag is non-zero into a newly allocated output.
-pub fn scatter_where<R, Input, Indices, Stencil, Output>(
+pub fn scatter_where<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: Indices,
-    stencil: Stencil,
+    indices: DeviceSlice<'_, R, u32>,
+    stencil: DeviceSlice<'_, R, u32>,
     out: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
-    Indices: MSlice<R, Item = u32>,
-    Stencil: MSlice<R, Item = u32>,
     Output: MIterMut<R, Item = Input::Item>,
 {
     validate_input(exec, &source)?;
-    validate_mslice(exec, &indices)?;
-    validate_mslice(exec, &stencil)?;
+    validate_device_slice(exec, &indices)?;
+    validate_device_slice(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let indices = lowering::u32_read::<R, Indices>(exec.policy(), indices)?;
-    let stencil =
-        lowering::u32_stencil_flags(exec.policy(), stencil, "scatter_where stencil", false)?;
+    let indices = indices.column_view();
+    let stencil = u32_stencil_flags(exec.policy(), stencil, false)?;
     <Input as sealed::MIterDispatch<R>>::scatter_where_dispatch(
         source,
         exec.policy(),
