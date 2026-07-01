@@ -11,9 +11,10 @@ struct MulTwo;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32,)> for MulTwo {
+    type Env = ();
     type Output = (f32,);
 
-    fn apply(input: (f32,)) -> (f32,) {
+    fn apply(_env: (), input: (f32,)) -> (f32,) {
         (input.0 * 2.0,)
     }
 }
@@ -47,6 +48,7 @@ fn bench_scatter(c: &mut Criterion) {
                 &exec,
                 massively::SoA1(input.slice(..)),
                 MulTwo,
+                (),
                 massively::SoA1(values.slice_mut(..)),
             )
             .unwrap();

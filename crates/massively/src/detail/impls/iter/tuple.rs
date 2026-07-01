@@ -15,6 +15,48 @@ macro_rules! impl_miter_view {
             third: $input.2,
         }
     };
+
+    ($input:ident; 0, 1, 2, 3) => {
+        crate::detail::device::SoAView4 {
+            a: $input.0,
+            b: $input.1,
+            c: $input.2,
+            d: $input.3,
+        }
+    };
+
+    ($input:ident; 0, 1, 2, 3, 4) => {
+        crate::detail::device::SoAView5 {
+            a: $input.0,
+            b: $input.1,
+            c: $input.2,
+            d: $input.3,
+            e: $input.4,
+        }
+    };
+
+    ($input:ident; 0, 1, 2, 3, 4, 5) => {
+        crate::detail::device::SoAView6 {
+            a: $input.0,
+            b: $input.1,
+            c: $input.2,
+            d: $input.3,
+            e: $input.4,
+            f: $input.5,
+        }
+    };
+
+    ($input:ident; 0, 1, 2, 3, 4, 5, 6) => {
+        crate::detail::device::SoAView7 {
+            a: $input.0,
+            b: $input.1,
+            c: $input.2,
+            d: $input.3,
+            e: $input.4,
+            f: $input.5,
+            g: $input.6,
+        }
+    };
 }
 
 macro_rules! impl_unique_by_key_dispatch_body {
@@ -189,6 +231,30 @@ macro_rules! impl_wide_transform_dispatch_body {
 }
 
 macro_rules! impl_wide_sort_by_single_key_dispatch_body {
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0, 1, 2, 3) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($keys,),
+            ($input.0, $input.1, $input.2, $input.3),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($keys,),
+            ($input.0, $input.1, $input.2, $input.3, $input.4),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($keys,),
+            ($input.0, $input.1, $input.2, $input.3, $input.4, $input.5),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
     ($policy:ident, $keys:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::sort_by_key(
             $policy,
@@ -208,6 +274,111 @@ macro_rules! impl_wide_sort_by_single_key_dispatch_body {
 }
 
 macro_rules! impl_wide_sort_dispatch_body {
+    ($policy:ident, $input:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            crate::detail::api::Tuple4AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
+        >(
+            $policy,
+            &$input.0,
+            &$input.1,
+            &$input.2,
+            &$input.3,
+            &dummy4,
+            &dummy5,
+            &dummy6,
+            crate::op::GpuOp::<
+                crate::detail::api::Tuple4AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
+            >::new(),
+        )?;
+        Ok((
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
+        ))
+    }};
+    ($policy:ident, $input:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            crate::detail::api::Tuple5AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
+        >(
+            $policy,
+            &$input.0,
+            &$input.1,
+            &$input.2,
+            &$input.3,
+            &$input.4,
+            &dummy5,
+            &dummy6,
+            crate::op::GpuOp::<
+                crate::detail::api::Tuple5AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
+            >::new(),
+        )?;
+        Ok((
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.4, &indices)?,
+        ))
+    }};
+    ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            crate::detail::api::Tuple6AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
+        >(
+            $policy,
+            &$input.0,
+            &$input.1,
+            &$input.2,
+            &$input.3,
+            &$input.4,
+            &$input.5,
+            &dummy6,
+            crate::op::GpuOp::<
+                crate::detail::api::Tuple6AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
+            >::new(),
+        )?;
+        Ok((
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.4, &indices)?,
+            crate::detail::api::device_expr_gather_with_policy($policy, &$input.5, &indices)?,
+        ))
+    }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
             _,
@@ -312,7 +483,220 @@ macro_rules! impl_wide_merge_by_three_key_dispatch_body {
     }};
 }
 
+macro_rules! impl_wide_merge_by_single_key_dispatch_body {
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3) => {{
+        let left_dummy4 =
+            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+        let left_dummy5 =
+            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+        let left_dummy6 =
+            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+        let right_dummy4 =
+            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+        let right_dummy5 =
+            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+        let right_dummy6 =
+            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+        let left_dummy4 = crate::detail::device::DeviceColumnView::from_column(&left_dummy4);
+        let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
+        let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
+        let right_dummy4 = crate::detail::device::DeviceColumnView::from_column(&right_dummy4);
+        let right_dummy5 = crate::detail::device::DeviceColumnView::from_column(&right_dummy5);
+        let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
+        let (key_inner, (a, b, c, d, _, _, _)) = crate::detail::merge_by_key(
+            $policy,
+            ($left_key,),
+            (
+                $left_values.0,
+                $left_values.1,
+                $left_values.2,
+                $left_values.3,
+                left_dummy4,
+                left_dummy5,
+                left_dummy6,
+            ),
+            ($right_key,),
+            (
+                $right_values.0,
+                $right_values.1,
+                $right_values.2,
+                $right_values.3,
+                right_dummy4,
+                right_dummy5,
+                right_dummy6,
+            ),
+            KernelOp::<R, Less>::new(),
+        )?;
+        Ok((key_inner, (a, b, c, d)))
+    }};
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3, 4) => {{
+        let left_dummy5 =
+            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+        let left_dummy6 =
+            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+        let right_dummy5 =
+            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+        let right_dummy6 =
+            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+        let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
+        let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
+        let right_dummy5 = crate::detail::device::DeviceColumnView::from_column(&right_dummy5);
+        let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
+        let (key_inner, (a, b, c, d, e, _, _)) = crate::detail::merge_by_key(
+            $policy,
+            ($left_key,),
+            (
+                $left_values.0,
+                $left_values.1,
+                $left_values.2,
+                $left_values.3,
+                $left_values.4,
+                left_dummy5,
+                left_dummy6,
+            ),
+            ($right_key,),
+            (
+                $right_values.0,
+                $right_values.1,
+                $right_values.2,
+                $right_values.3,
+                $right_values.4,
+                right_dummy5,
+                right_dummy6,
+            ),
+            KernelOp::<R, Less>::new(),
+        )?;
+        Ok((key_inner, (a, b, c, d, e)))
+    }};
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3, 4, 5) => {{
+        let left_dummy6 =
+            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+        let right_dummy6 =
+            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+        let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
+        let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
+        let (key_inner, (a, b, c, d, e, f, _)) = crate::detail::merge_by_key(
+            $policy,
+            ($left_key,),
+            (
+                $left_values.0,
+                $left_values.1,
+                $left_values.2,
+                $left_values.3,
+                $left_values.4,
+                $left_values.5,
+                left_dummy6,
+            ),
+            ($right_key,),
+            (
+                $right_values.0,
+                $right_values.1,
+                $right_values.2,
+                $right_values.3,
+                $right_values.4,
+                $right_values.5,
+                right_dummy6,
+            ),
+            KernelOp::<R, Less>::new(),
+        )?;
+        Ok((key_inner, (a, b, c, d, e, f)))
+    }};
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        crate::detail::merge_by_key(
+            $policy,
+            ($left_key,),
+            (
+                $left_values.0,
+                $left_values.1,
+                $left_values.2,
+                $left_values.3,
+                $left_values.4,
+                $left_values.5,
+                $left_values.6,
+            ),
+            ($right_key,),
+            (
+                $right_values.0,
+                $right_values.1,
+                $right_values.2,
+                $right_values.3,
+                $right_values.4,
+                $right_values.5,
+                $right_values.6,
+            ),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; $( $idx:tt ),+) => {{
+        let _ = (
+            $policy,
+            $left_values,
+            $right_values,
+            $left_key,
+            $right_key,
+            $less,
+        );
+        Err(Error::Launch {
+            message: "merge_by_key is not supported for this value iterator shape".to_string(),
+        })
+    }};
+}
+
 macro_rules! impl_wide_unique_dispatch_body {
+    ($policy:ident, $input:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        crate::detail::read::unique_tuple7_flags_read::<
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            crate::detail::api::Tuple4AsTuple7BinaryPredicateOp<KernelOp<R, Pred>>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
+        )
+    }};
+    ($policy:ident, $input:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        crate::detail::read::unique_tuple7_flags_read::<
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            crate::detail::api::Tuple5AsTuple7BinaryPredicateOp<KernelOp<R, Pred>>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
+        )
+    }};
+    ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        crate::detail::read::unique_tuple7_flags_read::<
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            crate::detail::api::Tuple6AsTuple7BinaryPredicateOp<KernelOp<R, Pred>>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
+        )
+    }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::read::unique_tuple7_flags_read::<_, _, _, _, _, _, _, KernelOp<R, Pred>>(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
@@ -328,6 +712,138 @@ macro_rules! impl_wide_unique_dispatch_body {
 }
 
 macro_rules! impl_wide_reduce_dispatch_body {
+    ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        use crate::detail::device::KernelColumn;
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let a = KernelColumn::stage(&$input.0, $policy)?;
+        let b = KernelColumn::stage(&$input.1, $policy)?;
+        let c = KernelColumn::stage(&$input.2, $policy)?;
+        let d = KernelColumn::stage(&$input.3, $policy)?;
+        let e = KernelColumn::stage(&dummy4, $policy)?;
+        let f = KernelColumn::stage(&dummy5, $policy)?;
+        let g = KernelColumn::stage(&dummy6, $policy)?;
+        let (a, b, c, d, _, _, _) = crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            u32,
+            u32,
+            u32,
+            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
+            crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
+        >(
+            $policy,
+            &a,
+            &b,
+            &c,
+            &d,
+            &e,
+            &f,
+            &g,
+            $input.0.len,
+            ($init.0, $init.1, $init.2, $init.3, 0, 0, 0),
+        )?;
+        Ok((a, b, c, d))
+    }};
+    ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        use crate::detail::device::KernelColumn;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let a = KernelColumn::stage(&$input.0, $policy)?;
+        let b = KernelColumn::stage(&$input.1, $policy)?;
+        let c = KernelColumn::stage(&$input.2, $policy)?;
+        let d = KernelColumn::stage(&$input.3, $policy)?;
+        let e = KernelColumn::stage(&$input.4, $policy)?;
+        let f = KernelColumn::stage(&dummy5, $policy)?;
+        let g = KernelColumn::stage(&dummy6, $policy)?;
+        let (a, b, c, d, e, _, _) = crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            u32,
+            u32,
+            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty4> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
+            crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+        >(
+            $policy,
+            &a,
+            &b,
+            &c,
+            &d,
+            &e,
+            &f,
+            &g,
+            $input.0.len,
+            ($init.0, $init.1, $init.2, $init.3, $init.4, 0, 0),
+        )?;
+        Ok((a, b, c, d, e))
+    }};
+    ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        use crate::detail::device::KernelColumn;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let a = KernelColumn::stage(&$input.0, $policy)?;
+        let b = KernelColumn::stage(&$input.1, $policy)?;
+        let c = KernelColumn::stage(&$input.2, $policy)?;
+        let d = KernelColumn::stage(&$input.3, $policy)?;
+        let e = KernelColumn::stage(&$input.4, $policy)?;
+        let f = KernelColumn::stage(&$input.5, $policy)?;
+        let g = KernelColumn::stage(&dummy6, $policy)?;
+        let (a, b, c, d, e, f, _) = crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            u32,
+            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty4> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, $ty5> as KernelColumn>::Expr,
+            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
+            crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+        >(
+            $policy,
+            &a,
+            &b,
+            &c,
+            &d,
+            &e,
+            &f,
+            &g,
+            $input.0.len,
+            ($init.0, $init.1, $init.2, $init.3, $init.4, $init.5, 0),
+        )?;
+        Ok((a, b, c, d, e, f))
+    }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         use crate::detail::device::KernelColumn;
         let a = KernelColumn::stage(&$input.0, $policy)?;
@@ -366,6 +882,69 @@ macro_rules! impl_wide_reduce_dispatch_body {
 }
 
 macro_rules! impl_wide_inclusive_scan_dispatch_body {
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, _, _, _) =
+            crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                u32,
+                u32,
+                u32,
+                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
+            )?;
+        Ok((a, b, c, d))
+    }};
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, e, _, _) =
+            crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                u32,
+                u32,
+                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
+            )?;
+        Ok((a, b, c, d, e))
+    }};
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, e, f, _) =
+            crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                $ty5,
+                u32,
+                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
+            )?;
+        Ok((a, b, c, d, e, f))
+    }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
             R,
@@ -391,6 +970,93 @@ macro_rules! impl_wide_inclusive_scan_dispatch_body {
 }
 
 macro_rules! impl_wide_exclusive_scan_dispatch_body {
+    ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, _, _, _) =
+            crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                u32,
+                u32,
+                u32,
+                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy,
+                &$input.0,
+                &$input.1,
+                &$input.2,
+                &$input.3,
+                &dummy4,
+                &dummy5,
+                &dummy6,
+                ($init.0, $init.1, $init.2, $init.3, 0, 0, 0),
+            )?;
+        Ok((a, b, c, d))
+    }};
+    ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, e, _, _) =
+            crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                u32,
+                u32,
+                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy,
+                &$input.0,
+                &$input.1,
+                &$input.2,
+                &$input.3,
+                &$input.4,
+                &dummy5,
+                &dummy6,
+                ($init.0, $init.1, $init.2, $init.3, $init.4, 0, 0),
+            )?;
+        Ok((a, b, c, d, e))
+    }};
+    ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, e, f, _) =
+            crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                $ty5,
+                u32,
+                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy,
+                &$input.0,
+                &$input.1,
+                &$input.2,
+                &$input.3,
+                &$input.4,
+                &$input.5,
+                &dummy6,
+                ($init.0, $init.1, $init.2, $init.3, $init.4, $init.5, 0),
+            )?;
+        Ok((a, b, c, d, e, f))
+    }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
             R,
@@ -414,6 +1080,836 @@ macro_rules! impl_wide_exclusive_scan_dispatch_body {
             message: "exclusive_scan is not supported for this iterator shape".to_string(),
         })
     }};
+}
+
+macro_rules! impl_wide_adjacent_difference_dispatch_body {
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, _, _, _) =
+            crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                u32,
+                u32,
+                u32,
+                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
+            )?;
+        Ok((a, b, c, d))
+    }};
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, e, _, _) =
+            crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                u32,
+                u32,
+                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
+            )?;
+        Ok((a, b, c, d, e))
+    }};
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (a, b, c, d, e, f, _) =
+            crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                $ty5,
+                u32,
+                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
+            )?;
+        Ok((a, b, c, d, e, f))
+    }};
+    ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
+        )
+    }};
+    ($policy:ident, $input:ident; $( $ty:ident ),+; $( $idx:tt ),+) => {{
+        let _ = $policy;
+        let _ = &$input;
+        Err(Error::Launch {
+            message: "adjacent_difference is not supported for this iterator shape".to_string(),
+        })
+    }};
+}
+
+macro_rules! impl_wide_predicate_selection_body {
+    ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        impl_wide_predicate_selection_body!(
+            @launch
+            $policy,
+            $env,
+            $invert,
+            crate::detail::api::Tuple4AsTuple7PredicateOp<KernelOp<R, Pred>>,
+            ($ty0, $ty1, $ty2, $ty3, u32, u32, u32),
+            (&$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6)
+        )
+    }};
+    ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        impl_wide_predicate_selection_body!(
+            @launch
+            $policy,
+            $env,
+            $invert,
+            crate::detail::api::Tuple5AsTuple7PredicateOp<KernelOp<R, Pred>>,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, u32, u32),
+            (&$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6)
+        )
+    }};
+    ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        impl_wide_predicate_selection_body!(
+            @launch
+            $policy,
+            $env,
+            $invert,
+            crate::detail::api::Tuple6AsTuple7PredicateOp<KernelOp<R, Pred>>,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32),
+            (&$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6)
+        )
+    }};
+    ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        impl_wide_predicate_selection_body!(
+            @launch
+            $policy,
+            $env,
+            $invert,
+            KernelOp<R, Pred>,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6),
+            (&$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6)
+        )
+    }};
+    (@launch $policy:ident, $env:ident, $invert:expr, $pred:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr)) => {{
+        let len = $a.len;
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        if len == 0 {
+            Ok(crate::detail::primitives::select::SelectionControl::empty($policy.client()))
+        } else {
+            let client = $policy.client();
+            let flag = client.empty(len * std::mem::size_of::<u32>());
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let invert_handle =
+                client.create_from_slice(u32::as_bytes(&[if $invert { 1_u32 } else { 0_u32 }]));
+            let offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::tuple7_view_predicate_flags_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $pred,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    $env,
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(offsets_handle.clone(), 7),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(invert_handle.clone(), 1),
+                    BufferArg::from_raw_parts(flag.clone(), len),
+                );
+            }
+            crate::detail::primitives::select::handles_from_flags(
+                $policy,
+                len,
+                len_u32,
+                flag,
+                $policy.empty_handle(),
+            )
+        }
+    }};
+}
+
+macro_rules! impl_wide_binary_predicate_views {
+    ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let left_dummy4 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
+        let left_dummy5 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
+        let left_dummy6 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
+        let right_dummy4 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let right_dummy5 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let right_dummy6 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let left_dummy4 = crate::detail::device::DeviceColumnView::from_column(&left_dummy4);
+        let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
+        let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
+        let right_dummy4 = crate::detail::device::DeviceColumnView::from_column(&right_dummy4);
+        let right_dummy5 = crate::detail::device::DeviceColumnView::from_column(&right_dummy5);
+        let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
+        $body!(
+            $policy,
+            crate::detail::api::Tuple4AsTuple7BinaryPredicateOp<KernelOp<R, $op>>,
+            ($ty0, $ty1, $ty2, $ty3, u32, u32, u32),
+            (&$left.0, &$left.1, &$left.2, &$left.3, &left_dummy4, &left_dummy5, &left_dummy6),
+            (&$right.0, &$right.1, &$right.2, &$right.3, &right_dummy4, &right_dummy5, &right_dummy6)
+        )
+    }};
+    ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let left_dummy5 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
+        let left_dummy6 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
+        let right_dummy5 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let right_dummy6 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
+        let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
+        let right_dummy5 = crate::detail::device::DeviceColumnView::from_column(&right_dummy5);
+        let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
+        $body!(
+            $policy,
+            crate::detail::api::Tuple5AsTuple7BinaryPredicateOp<KernelOp<R, $op>>,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, u32, u32),
+            (&$left.0, &$left.1, &$left.2, &$left.3, &$left.4, &left_dummy5, &left_dummy6),
+            (&$right.0, &$right.1, &$right.2, &$right.3, &$right.4, &right_dummy5, &right_dummy6)
+        )
+    }};
+    ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let left_dummy6 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
+        let right_dummy6 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
+        let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
+        $body!(
+            $policy,
+            crate::detail::api::Tuple6AsTuple7BinaryPredicateOp<KernelOp<R, $op>>,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32),
+            (&$left.0, &$left.1, &$left.2, &$left.3, &$left.4, &$left.5, &left_dummy6),
+            (&$right.0, &$right.1, &$right.2, &$right.3, &$right.4, &$right.5, &right_dummy6)
+        )
+    }};
+    ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        $body!(
+            $policy,
+            KernelOp<R, $op>,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6),
+            (&$left.0, &$left.1, &$left.2, &$left.3, &$left.4, &$left.5, &$left.6),
+            (&$right.0, &$right.1, &$right.2, &$right.3, &$right.4, &$right.5, &$right.6)
+        )
+    }};
+}
+
+macro_rules! impl_wide_mismatch_from_views {
+    ($policy:ident, $eq:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {{
+        let min_len = $a.len.min($ra.len);
+        if min_len == 0 {
+            if $a.len == $ra.len {
+                Ok(None)
+            } else {
+                Ok(Some(0))
+            }
+        } else {
+            let client = $policy.client();
+            let flag = client.empty(min_len * std::mem::size_of::<u32>());
+            let len_handle = client.create_from_slice(u32::as_bytes(&[
+                u32::try_from(min_len).map_err(|_| Error::LengthTooLarge { len: min_len })?,
+            ]));
+            let left_offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let right_offsets = [
+                u32::try_from($ra.offset).map_err(|_| Error::LengthTooLarge { len: $ra.offset })?,
+                u32::try_from($rb.offset).map_err(|_| Error::LengthTooLarge { len: $rb.offset })?,
+                u32::try_from($rc.offset).map_err(|_| Error::LengthTooLarge { len: $rc.offset })?,
+                u32::try_from($rd.offset).map_err(|_| Error::LengthTooLarge { len: $rd.offset })?,
+                u32::try_from($re.offset).map_err(|_| Error::LengthTooLarge { len: $re.offset })?,
+                u32::try_from($rf.offset).map_err(|_| Error::LengthTooLarge { len: $rf.offset })?,
+                u32::try_from($rg.offset).map_err(|_| Error::LengthTooLarge { len: $rg.offset })?,
+            ];
+            let left_offsets = client.create_from_slice(u32::as_bytes(&left_offsets));
+            let right_offsets = client.create_from_slice(u32::as_bytes(&right_offsets));
+            let block_size = 256_u32;
+            let block_count = min_len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::tuple7_view_mismatch_flags_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $eq,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts($ra.source.handle.clone(), $ra.source.len()),
+                    BufferArg::from_raw_parts($rb.source.handle.clone(), $rb.source.len()),
+                    BufferArg::from_raw_parts($rc.source.handle.clone(), $rc.source.len()),
+                    BufferArg::from_raw_parts($rd.source.handle.clone(), $rd.source.len()),
+                    BufferArg::from_raw_parts($re.source.handle.clone(), $re.source.len()),
+                    BufferArg::from_raw_parts($rf.source.handle.clone(), $rf.source.len()),
+                    BufferArg::from_raw_parts($rg.source.handle.clone(), $rg.source.len()),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(flag.clone(), min_len),
+                );
+            }
+            if let Some(index) =
+                crate::detail::primitives::search::first_flag($policy, flag, min_len, min_len)?
+            {
+                Ok(Some(index))
+            } else if $a.len == $ra.len {
+                Ok(None)
+            } else {
+                Ok(Some(min_len))
+            }
+        }
+    }};
+}
+
+macro_rules! impl_wide_adjacent_find_from_views {
+    ($policy:ident, $eq:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {{
+        let _ = ($ra, $rb, $rc, $rd, $re, $rf, $rg);
+        let len = $a.len;
+        if len < 2 {
+            Ok(None)
+        } else {
+            let client = $policy.client();
+            let flag = client.empty(len * std::mem::size_of::<u32>());
+            let len_handle = client.create_from_slice(u32::as_bytes(&[
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+            ]));
+            let offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let offsets = client.create_from_slice(u32::as_bytes(&offsets));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::tuple7_view_adjacent_find_flags_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $eq,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(flag.clone(), len),
+                );
+            }
+            crate::detail::primitives::search::first_flag($policy, flag, len, len - 1)
+        }
+    }};
+}
+
+macro_rules! impl_wide_find_first_of_from_views {
+    ($policy:ident, $eq:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {{
+        let len = $a.len;
+        let needle_len = $ra.len;
+        if len == 0 || needle_len == 0 {
+            Ok(None)
+        } else {
+            let client = $policy.client();
+            let flag = client.empty(len * std::mem::size_of::<u32>());
+            let needle_len_handle = client.create_from_slice(u32::as_bytes(&[
+                u32::try_from(needle_len).map_err(|_| Error::LengthTooLarge { len: needle_len })?,
+            ]));
+            let input_offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let needle_offsets = [
+                u32::try_from($ra.offset).map_err(|_| Error::LengthTooLarge { len: $ra.offset })?,
+                u32::try_from($rb.offset).map_err(|_| Error::LengthTooLarge { len: $rb.offset })?,
+                u32::try_from($rc.offset).map_err(|_| Error::LengthTooLarge { len: $rc.offset })?,
+                u32::try_from($rd.offset).map_err(|_| Error::LengthTooLarge { len: $rd.offset })?,
+                u32::try_from($re.offset).map_err(|_| Error::LengthTooLarge { len: $re.offset })?,
+                u32::try_from($rf.offset).map_err(|_| Error::LengthTooLarge { len: $rf.offset })?,
+                u32::try_from($rg.offset).map_err(|_| Error::LengthTooLarge { len: $rg.offset })?,
+            ];
+            let input_offsets = client.create_from_slice(u32::as_bytes(&input_offsets));
+            let needle_offsets = client.create_from_slice(u32::as_bytes(&needle_offsets));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::tuple7_view_find_first_of_flags_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $eq,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(input_offsets.clone(), 7),
+                    BufferArg::from_raw_parts($ra.source.handle.clone(), $ra.source.len()),
+                    BufferArg::from_raw_parts($rb.source.handle.clone(), $rb.source.len()),
+                    BufferArg::from_raw_parts($rc.source.handle.clone(), $rc.source.len()),
+                    BufferArg::from_raw_parts($rd.source.handle.clone(), $rd.source.len()),
+                    BufferArg::from_raw_parts($re.source.handle.clone(), $re.source.len()),
+                    BufferArg::from_raw_parts($rf.source.handle.clone(), $rf.source.len()),
+                    BufferArg::from_raw_parts($rg.source.handle.clone(), $rg.source.len()),
+                    BufferArg::from_raw_parts(needle_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(needle_len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(flag.clone(), len),
+                );
+            }
+            crate::detail::primitives::search::first_flag($policy, flag, len, len)
+        }
+    }};
+}
+
+macro_rules! impl_wide_bound_many_from_views {
+    ($policy:ident, $less:ty, $kernel:ident, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {{
+        let source_len = $a.len;
+        let value_len = $ra.len;
+        if value_len == 0 {
+            Ok($policy.empty_device_vec())
+        } else if source_len == 0 {
+            $policy.device_filled(value_len, 0u32)
+        } else {
+            let client = $policy.client();
+            let source_offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let value_offsets = [
+                u32::try_from($ra.offset).map_err(|_| Error::LengthTooLarge { len: $ra.offset })?,
+                u32::try_from($rb.offset).map_err(|_| Error::LengthTooLarge { len: $rb.offset })?,
+                u32::try_from($rc.offset).map_err(|_| Error::LengthTooLarge { len: $rc.offset })?,
+                u32::try_from($rd.offset).map_err(|_| Error::LengthTooLarge { len: $rd.offset })?,
+                u32::try_from($re.offset).map_err(|_| Error::LengthTooLarge { len: $re.offset })?,
+                u32::try_from($rf.offset).map_err(|_| Error::LengthTooLarge { len: $rf.offset })?,
+                u32::try_from($rg.offset).map_err(|_| Error::LengthTooLarge { len: $rg.offset })?,
+            ];
+            let source_len_u32 =
+                u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
+            let value_len_u32 =
+                u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
+            let source_offsets = client.create_from_slice(u32::as_bytes(&source_offsets));
+            let value_offsets = client.create_from_slice(u32::as_bytes(&value_offsets));
+            let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
+            let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
+            let output_handle = client.empty(value_len * std::mem::size_of::<u32>());
+            let block_size = 256_u32;
+            let block_count = value_len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $less,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(source_offsets.clone(), 7),
+                    BufferArg::from_raw_parts($ra.source.handle.clone(), $ra.source.len()),
+                    BufferArg::from_raw_parts($rb.source.handle.clone(), $rb.source.len()),
+                    BufferArg::from_raw_parts($rc.source.handle.clone(), $rc.source.len()),
+                    BufferArg::from_raw_parts($rd.source.handle.clone(), $rd.source.len()),
+                    BufferArg::from_raw_parts($re.source.handle.clone(), $re.source.len()),
+                    BufferArg::from_raw_parts($rf.source.handle.clone(), $rf.source.len()),
+                    BufferArg::from_raw_parts($rg.source.handle.clone(), $rg.source.len()),
+                    BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(source_len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(value_len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(output_handle.clone(), value_len),
+                );
+            }
+            Ok(crate::detail::DeviceVec::from_handle($policy.id(), output_handle, value_len))
+        }
+    }};
+}
+
+macro_rules! impl_wide_lower_bound_many_from_views {
+    ($policy:ident, $less:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {
+        impl_wide_bound_many_from_views!(
+            $policy,
+            $less,
+            tuple7_view_lower_bound_many_kernel,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6),
+            ($a, $b, $c, $d, $e, $f, $g),
+            ($ra, $rb, $rc, $rd, $re, $rf, $rg)
+        )
+    };
+}
+
+macro_rules! impl_wide_upper_bound_many_from_views {
+    ($policy:ident, $less:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {
+        impl_wide_bound_many_from_views!(
+            $policy,
+            $less,
+            tuple7_view_upper_bound_many_kernel,
+            ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6),
+            ($a, $b, $c, $d, $e, $f, $g),
+            ($ra, $rb, $rc, $rd, $re, $rf, $rg)
+        )
+    };
+}
+
+macro_rules! impl_wide_lexicographical_compare_from_views {
+    ($policy:ident, $less:ty, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {{
+        let left_len = $a.len;
+        let right_len = $ra.len;
+        let min_len = left_len.min(right_len);
+        if min_len == 0 {
+            Ok(left_len < right_len)
+        } else {
+            let client = $policy.client();
+            let left_offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let right_offsets = [
+                u32::try_from($ra.offset).map_err(|_| Error::LengthTooLarge { len: $ra.offset })?,
+                u32::try_from($rb.offset).map_err(|_| Error::LengthTooLarge { len: $rb.offset })?,
+                u32::try_from($rc.offset).map_err(|_| Error::LengthTooLarge { len: $rc.offset })?,
+                u32::try_from($rd.offset).map_err(|_| Error::LengthTooLarge { len: $rd.offset })?,
+                u32::try_from($re.offset).map_err(|_| Error::LengthTooLarge { len: $re.offset })?,
+                u32::try_from($rf.offset).map_err(|_| Error::LengthTooLarge { len: $rf.offset })?,
+                u32::try_from($rg.offset).map_err(|_| Error::LengthTooLarge { len: $rg.offset })?,
+            ];
+            let left_offsets = client.create_from_slice(u32::as_bytes(&left_offsets));
+            let right_offsets = client.create_from_slice(u32::as_bytes(&right_offsets));
+            let len_handle = client.create_from_slice(u32::as_bytes(&[
+                u32::try_from(min_len).map_err(|_| Error::LengthTooLarge { len: min_len })?,
+            ]));
+            let flag = client.empty(min_len * std::mem::size_of::<u32>());
+            let block_size = 256_u32;
+            let block_count = min_len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::tuple7_view_lexicographical_diff_flags_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $less,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts($ra.source.handle.clone(), $ra.source.len()),
+                    BufferArg::from_raw_parts($rb.source.handle.clone(), $rb.source.len()),
+                    BufferArg::from_raw_parts($rc.source.handle.clone(), $rc.source.len()),
+                    BufferArg::from_raw_parts($rd.source.handle.clone(), $rd.source.len()),
+                    BufferArg::from_raw_parts($re.source.handle.clone(), $re.source.len()),
+                    BufferArg::from_raw_parts($rf.source.handle.clone(), $rf.source.len()),
+                    BufferArg::from_raw_parts($rg.source.handle.clone(), $rg.source.len()),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(flag.clone(), min_len),
+                );
+            }
+            let Some(index) =
+                crate::detail::primitives::search::first_flag($policy, flag, min_len, min_len)?
+            else {
+                return Ok(left_len < right_len);
+            };
+            let index_handle = client.create_from_slice(u32::as_bytes(&[index as u32]));
+            let output_handle = client.empty(std::mem::size_of::<u32>());
+            unsafe {
+                crate::kernels::tuple7_view_lexicographical_compare_at_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $less,
+                    R,
+                >(
+                    client,
+                    CubeCount::new_single(),
+                    CubeDim::new_1d(1),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts($ra.source.handle.clone(), $ra.source.len()),
+                    BufferArg::from_raw_parts($rb.source.handle.clone(), $rb.source.len()),
+                    BufferArg::from_raw_parts($rc.source.handle.clone(), $rc.source.len()),
+                    BufferArg::from_raw_parts($rd.source.handle.clone(), $rd.source.len()),
+                    BufferArg::from_raw_parts($re.source.handle.clone(), $re.source.len()),
+                    BufferArg::from_raw_parts($rf.source.handle.clone(), $rf.source.len()),
+                    BufferArg::from_raw_parts($rg.source.handle.clone(), $rg.source.len()),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(index_handle.clone(), 1),
+                    BufferArg::from_raw_parts(output_handle.clone(), 1),
+                );
+            }
+            Ok(crate::detail::primitives::scan::read_u32_scalar::<R>(client, output_handle)? != 0)
+        }
+    }};
+}
+
+macro_rules! impl_wide_set_membership_flags_from_views {
+    ($policy:ident, $less:ty, $keep_intersection:expr, ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty), ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ra:expr, $rb:expr, $rc:expr, $rd:expr, $re:expr, $rf:expr, $rg:expr)) => {{
+        let len = $a.len;
+        if len == 0 {
+            Ok($policy.empty_handle())
+        } else {
+            let client = $policy.client();
+            let candidate_offsets = [
+                u32::try_from($a.offset).map_err(|_| Error::LengthTooLarge { len: $a.offset })?,
+                u32::try_from($b.offset).map_err(|_| Error::LengthTooLarge { len: $b.offset })?,
+                u32::try_from($c.offset).map_err(|_| Error::LengthTooLarge { len: $c.offset })?,
+                u32::try_from($d.offset).map_err(|_| Error::LengthTooLarge { len: $d.offset })?,
+                u32::try_from($e.offset).map_err(|_| Error::LengthTooLarge { len: $e.offset })?,
+                u32::try_from($f.offset).map_err(|_| Error::LengthTooLarge { len: $f.offset })?,
+                u32::try_from($g.offset).map_err(|_| Error::LengthTooLarge { len: $g.offset })?,
+            ];
+            let source_offsets = [
+                u32::try_from($ra.offset).map_err(|_| Error::LengthTooLarge { len: $ra.offset })?,
+                u32::try_from($rb.offset).map_err(|_| Error::LengthTooLarge { len: $rb.offset })?,
+                u32::try_from($rc.offset).map_err(|_| Error::LengthTooLarge { len: $rc.offset })?,
+                u32::try_from($rd.offset).map_err(|_| Error::LengthTooLarge { len: $rd.offset })?,
+                u32::try_from($re.offset).map_err(|_| Error::LengthTooLarge { len: $re.offset })?,
+                u32::try_from($rf.offset).map_err(|_| Error::LengthTooLarge { len: $rf.offset })?,
+                u32::try_from($rg.offset).map_err(|_| Error::LengthTooLarge { len: $rg.offset })?,
+            ];
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let source_len = $ra.len;
+            let source_len_u32 =
+                u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
+            let candidate_offsets = client.create_from_slice(u32::as_bytes(&candidate_offsets));
+            let source_offsets = client.create_from_slice(u32::as_bytes(&source_offsets));
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
+            let keep_intersection_handle = client.create_from_slice(u32::as_bytes(&[
+                if $keep_intersection { 1_u32 } else { 0_u32 },
+            ]));
+            let flag = client.empty(len * std::mem::size_of::<u32>());
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::tuple7_view_set_membership_flags_kernel::launch_unchecked::<
+                    $ty0,
+                    $ty1,
+                    $ty2,
+                    $ty3,
+                    $ty4,
+                    $ty5,
+                    $ty6,
+                    $less,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
+                    BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
+                    BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
+                    BufferArg::from_raw_parts($d.source.handle.clone(), $d.source.len()),
+                    BufferArg::from_raw_parts($e.source.handle.clone(), $e.source.len()),
+                    BufferArg::from_raw_parts($f.source.handle.clone(), $f.source.len()),
+                    BufferArg::from_raw_parts($g.source.handle.clone(), $g.source.len()),
+                    BufferArg::from_raw_parts(candidate_offsets.clone(), 7),
+                    BufferArg::from_raw_parts($ra.source.handle.clone(), $ra.source.len()),
+                    BufferArg::from_raw_parts($rb.source.handle.clone(), $rb.source.len()),
+                    BufferArg::from_raw_parts($rc.source.handle.clone(), $rc.source.len()),
+                    BufferArg::from_raw_parts($rd.source.handle.clone(), $rd.source.len()),
+                    BufferArg::from_raw_parts($re.source.handle.clone(), $re.source.len()),
+                    BufferArg::from_raw_parts($rf.source.handle.clone(), $rf.source.len()),
+                    BufferArg::from_raw_parts($rg.source.handle.clone(), $rg.source.len()),
+                    BufferArg::from_raw_parts(source_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(source_len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(keep_intersection_handle.clone(), 1),
+                    BufferArg::from_raw_parts(flag.clone(), len),
+                );
+            }
+            Ok(flag)
+        }
+    }};
+}
+
+macro_rules! impl_wide_set_difference_flags_from_views {
+    ($policy:ident, $less:ty, ($($ty:ty),+), ($($left:expr),+), ($($right:expr),+)) => {
+        impl_wide_set_membership_flags_from_views!(
+            $policy,
+            $less,
+            false,
+            ($($ty),+),
+            ($($left),+),
+            ($($right),+)
+        )
+    };
+}
+
+macro_rules! impl_wide_set_intersection_flags_from_views {
+    ($policy:ident, $less:ty, ($($ty:ty),+), ($($left:expr),+), ($($right:expr),+)) => {
+        impl_wide_set_membership_flags_from_views!(
+            $policy,
+            $less,
+            true,
+            ($($ty),+),
+            ($($left),+),
+            ($($right),+)
+        )
+    };
 }
 
 macro_rules! impl_tuple_inclusive_scan_by_three_key_values_body {
@@ -702,6 +2198,428 @@ macro_rules! impl_wide_exclusive_scan_by_three_key_values_body {
     }};
 }
 
+macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
+    ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, _, _, _) =
+            crate::detail::read::inclusive_scan_by_flags_seven_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                u32,
+                u32,
+                u32,
+                K,
+                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
+                &control,
+            )?;
+        Ok((a, b, c, d))
+    }};
+    ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, e, _, _) =
+            crate::detail::read::inclusive_scan_by_flags_seven_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                u32,
+                u32,
+                K,
+                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
+                &control,
+            )?;
+        Ok((a, b, c, d, e))
+    }};
+    ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, e, f, _) =
+            crate::detail::read::inclusive_scan_by_flags_seven_views::<
+                R,
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                $ty5,
+                u32,
+                K,
+                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
+                &control,
+            )?;
+        Ok((a, b, c, d, e, f))
+    }};
+    ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        crate::detail::read::inclusive_scan_by_flags_seven_views::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            $ty6,
+            K,
+            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
+            &control,
+        )
+    }};
+}
+
+macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, _, _, _) =
+            crate::detail::read::exclusive_scan_by_flags_seven_views::<
+                R, $ty0, $ty1, $ty2, $ty3, u32, u32, u32, K,
+                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
+                &control, ($init.0, $init.1, $init.2, $init.3, 0, 0, 0),
+            )?;
+        Ok((a, b, c, d))
+    }};
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, e, _, _) =
+            crate::detail::read::exclusive_scan_by_flags_seven_views::<
+                R, $ty0, $ty1, $ty2, $ty3, $ty4, u32, u32, K,
+                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
+                &control, ($init.0, $init.1, $init.2, $init.3, $init.4, 0, 0),
+            )?;
+        Ok((a, b, c, d, e))
+    }};
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, e, f, _) =
+            crate::detail::read::exclusive_scan_by_flags_seven_views::<
+                R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32, K,
+                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+            >(
+                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
+                &control, ($init.0, $init.1, $init.2, $init.3, $init.4, $init.5, 0),
+            )?;
+        Ok((a, b, c, d, e, f))
+    }};
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        let control =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::scan_by_key_control(($keys,), $policy)?;
+        crate::detail::read::exclusive_scan_by_flags_seven_views::<
+            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, K,
+            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
+            &control, $init,
+        )
+    }};
+}
+
+macro_rules! impl_wide_reduce_by_single_key_values_body {
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
+        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (key_inner, control) =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelReduceByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::reduce_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, _, _, _) = impl_wide_reduce_by_single_key_tuple7_values_body!(
+            $policy,
+            $input.0,
+            $input.1,
+            $input.2,
+            $input.3,
+            dummy4,
+            dummy5,
+            dummy6,
+            ($init.0, $init.1, $init.2, $init.3, 0, 0, 0),
+            control;
+            $ty0, $ty1, $ty2, $ty3, u32, u32, u32;
+            crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>
+        )?;
+        Ok(((key_inner.source,), (a, b, c, d)))
+    }};
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
+        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (key_inner, control) =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelReduceByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::reduce_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, e, _, _) = impl_wide_reduce_by_single_key_tuple7_values_body!(
+            $policy,
+            $input.0,
+            $input.1,
+            $input.2,
+            $input.3,
+            $input.4,
+            dummy5,
+            dummy6,
+            ($init.0, $init.1, $init.2, $init.3, $init.4, 0, 0),
+            control;
+            $ty0, $ty1, $ty2, $ty3, $ty4, u32, u32;
+            crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>
+        )?;
+        Ok(((key_inner.source,), (a, b, c, d, e)))
+    }};
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
+        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
+        let (key_inner, control) =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelReduceByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::reduce_by_key_control(($keys,), $policy)?;
+        let (a, b, c, d, e, f, _) = impl_wide_reduce_by_single_key_tuple7_values_body!(
+            $policy,
+            $input.0,
+            $input.1,
+            $input.2,
+            $input.3,
+            $input.4,
+            $input.5,
+            dummy6,
+            ($init.0, $init.1, $init.2, $init.3, $init.4, $init.5, 0),
+            control;
+            $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32;
+            crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>
+        )?;
+        Ok(((key_inner.source,), (a, b, c, d, e, f)))
+    }};
+    ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        let (key_inner, control) =
+            <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelReduceByKeyKeys<
+                KernelOp<R, KeyEq>,
+            >>::reduce_by_key_control(($keys,), $policy)?;
+        let values = impl_wide_reduce_by_single_key_tuple7_values_body!(
+            $policy,
+            $input.0,
+            $input.1,
+            $input.2,
+            $input.3,
+            $input.4,
+            $input.5,
+            $input.6,
+            $init,
+            control;
+            $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6;
+            KernelOp<R, Op>
+        )?;
+        Ok(((key_inner.source,), values))
+    }};
+}
+
+macro_rules! impl_wide_reduce_by_single_key_tuple7_values_body {
+    ($policy:ident, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $init:expr, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; $op:ty) => {{
+        let scan_control: crate::detail::control::ScanByKeyControl<
+            R,
+            K,
+            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+        > = (&$control).into();
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_seven_views::<
+            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, K,
+            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
+            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+            $op,
+        >(
+            $policy, &$a, &$b, &$c, &$d, &$e, &$f, &$g, &scan_control,
+        )?;
+        let client = $policy.client();
+        let len_handle = client.create_from_slice(u32::as_bytes(&[$control.len_u32]));
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
+        let init_d = client.create_from_slice($ty3::as_bytes(&[$init.3]));
+        let init_e = client.create_from_slice($ty4::as_bytes(&[$init.4]));
+        let init_f = client.create_from_slice($ty5::as_bytes(&[$init.5]));
+        let init_g = client.create_from_slice($ty6::as_bytes(&[$init.6]));
+        let reduced_a_handle = client.empty($control.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($control.len * std::mem::size_of::<$ty1>());
+        let reduced_c_handle = client.empty($control.len * std::mem::size_of::<$ty2>());
+        let reduced_d_handle = client.empty($control.len * std::mem::size_of::<$ty3>());
+        let reduced_e_handle = client.empty($control.len * std::mem::size_of::<$ty4>());
+        let reduced_f_handle = client.empty($control.len * std::mem::size_of::<$ty5>());
+        let reduced_g_handle = client.empty($control.len * std::mem::size_of::<$ty6>());
+        let num_blocks = $control
+            .len
+            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        unsafe {
+            crate::kernels::reduce_by_key_tuple7_apply_init_kernel::launch_unchecked::<
+                $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, $op, R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.0.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(inclusive.1.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(inclusive.2.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(inclusive.3.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(inclusive.4.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(inclusive.5.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(inclusive.6.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(init_c.clone(), 1),
+                BufferArg::from_raw_parts(init_d.clone(), 1),
+                BufferArg::from_raw_parts(init_e.clone(), 1),
+                BufferArg::from_raw_parts(init_f.clone(), 1),
+                BufferArg::from_raw_parts(init_g.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_c_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_d_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_e_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_f_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
+            );
+        }
+        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags.clone(),
+            reduced_a_handle,
+        )?;
+        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags.clone(),
+            reduced_b_handle,
+        )?;
+        let value_c_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags.clone(),
+            reduced_c_handle,
+        )?;
+        let value_d_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags.clone(),
+            reduced_d_handle,
+        )?;
+        let value_e_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags.clone(),
+            reduced_e_handle,
+        )?;
+        let value_f_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags.clone(),
+            reduced_f_handle,
+        )?;
+        let value_g_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $control.len,
+            $control.len_u32,
+            $control.end_flags,
+            reduced_g_handle,
+        )?;
+        Ok((
+            crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
+            crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+            crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
+            crate::detail::primitives::select::compact::<R, $ty3>($policy, value_d_handles)?,
+            crate::detail::primitives::select::compact::<R, $ty4>($policy, value_e_handles)?,
+            crate::detail::primitives::select::compact::<R, $ty5>($policy, value_f_handles)?,
+            crate::detail::primitives::select::compact::<R, $ty6>($policy, value_g_handles)?,
+        ))
+    }};
+}
+
 macro_rules! impl_wide_reduce_by_three_key_values_body {
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         let inclusive = crate::detail::read::inclusive_scan_by_flags_seven_views::<
@@ -888,6 +2806,15 @@ macro_rules! impl_wide_materialize_inner {
 }
 
 macro_rules! impl_wide_sort_or_materialize_body {
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {
+        impl_wide_sort_dispatch_body!($policy, $input; 0, 1, 2, 3)
+    };
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {
+        impl_wide_sort_dispatch_body!($policy, $input; 0, 1, 2, 3, 4)
+    };
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {
+        impl_wide_sort_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5)
+    };
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
         impl_wide_sort_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5, 6)
     };
@@ -897,6 +2824,15 @@ macro_rules! impl_wide_sort_or_materialize_body {
 }
 
 macro_rules! impl_wide_scan_or_materialize_body {
+    ($policy:ident, $input:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {
+        impl_wide_inclusive_scan_dispatch_body!($policy, $input; $($ty),+; 0, 1, 2, 3)
+    };
+    ($policy:ident, $input:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {
+        impl_wide_inclusive_scan_dispatch_body!($policy, $input; $($ty),+; 0, 1, 2, 3, 4)
+    };
+    ($policy:ident, $input:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {
+        impl_wide_inclusive_scan_dispatch_body!($policy, $input; $($ty),+; 0, 1, 2, 3, 4, 5)
+    };
     ($policy:ident, $input:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
         impl_wide_inclusive_scan_dispatch_body!($policy, $input; $($ty),+; 0, 1, 2, 3, 4, 5, 6)
     };
@@ -906,6 +2842,15 @@ macro_rules! impl_wide_scan_or_materialize_body {
 }
 
 macro_rules! impl_wide_exclusive_scan_or_materialize_body {
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {
+        impl_wide_exclusive_scan_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3)
+    };
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {
+        impl_wide_exclusive_scan_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4)
+    };
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {
+        impl_wide_exclusive_scan_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4, 5)
+    };
     ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
         impl_wide_exclusive_scan_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4, 5, 6)
     };
@@ -916,6 +2861,15 @@ macro_rules! impl_wide_exclusive_scan_or_materialize_body {
 }
 
 macro_rules! impl_wide_reduce_or_init_body {
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {
+        impl_wide_reduce_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3)
+    };
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {
+        impl_wide_reduce_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4)
+    };
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {
+        impl_wide_reduce_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4, 5)
+    };
     ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
         impl_wide_reduce_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4, 5, 6)
     };
@@ -926,6 +2880,15 @@ macro_rules! impl_wide_reduce_or_init_body {
 }
 
 macro_rules! impl_wide_sort_by_single_key_or_materialize_body {
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {
+        impl_wide_sort_by_single_key_dispatch_body!($policy, $keys, $less, $input; 0, 1, 2, 3)
+    };
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {
+        impl_wide_sort_by_single_key_dispatch_body!($policy, $keys, $less, $input; 0, 1, 2, 3, 4)
+    };
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {
+        impl_wide_sort_by_single_key_dispatch_body!($policy, $keys, $less, $input; 0, 1, 2, 3, 4, 5)
+    };
     ($policy:ident, $keys:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
         impl_wide_sort_by_single_key_dispatch_body!($policy, $keys, $less, $input; 0, 1, 2, 3, 4, 5, 6)
     };
@@ -952,6 +2915,39 @@ macro_rules! impl_wide_sort_by_three_key_or_materialize_body {
 }
 
 macro_rules! impl_wide_unique_inner_or_materialize_body {
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {{
+        let flags: cubecl::server::Handle =
+            impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3)?;
+        Ok((
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
+        ))
+    }};
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {{
+        let flags: cubecl::server::Handle =
+            impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4)?;
+        Ok((
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.4, flags.clone())?,
+        ))
+    }};
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {{
+        let flags: cubecl::server::Handle =
+            impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5)?;
+        Ok((
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.4, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.5, flags.clone())?,
+        ))
+    }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {{
         let flags: cubecl::server::Handle =
             impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5, 6)?;
@@ -2862,10 +4858,20 @@ macro_rules! impl_wide_miter_soa {
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let (key_inner,) = crate::detail::reverse(policy, (keys,))?;
-                let value_inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let (key_inner, control) =
+                    <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelUniqueByKeyKeys<
+                        KernelOp<R, Eq>,
+                    >>::unique_by_key_control((keys,), policy)?;
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &input.$idx,
+                        control.flags.clone(),
+                    )?;
+                )+
+                let value_inner = ($($tmp,)+);
                 Ok((
-                    array_from_inner::<R, (K,), KeyOutput>((key_inner,)),
+                    array_from_inner::<R, (K,), KeyOutput>((key_inner.source,)),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
@@ -2873,7 +4879,7 @@ macro_rules! impl_wide_miter_soa {
             fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                _keys: crate::detail::device::DeviceColumnView<R, K>,
+                keys: crate::detail::device::DeviceColumnView<R, K>,
                 _key_eq: KeyEq,
                 _op: Op,
             ) -> Result<Output, Error>
@@ -2884,16 +4890,18 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let inner = impl_wide_inclusive_scan_by_single_key_values_body!(
+                    policy, keys, input; $( $ty ),+; $( $idx ),+
+                )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                _keys: crate::detail::device::DeviceColumnView<R, K>,
+                keys: crate::detail::device::DeviceColumnView<R, K>,
                 _key_eq: KeyEq,
-                _init: <Self as MIter<R>>::Item,
+                init: <Self as MIter<R>>::Item,
                 _op: Op,
             ) -> Result<Output, Error>
             where
@@ -2903,7 +4911,9 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let inner = impl_wide_exclusive_scan_by_single_key_values_body!(
+                    policy, keys, input, init; $( $ty ),+; $( $idx ),+
+                )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
@@ -2923,10 +4933,11 @@ macro_rules! impl_wide_miter_soa {
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let (key_inner,) = crate::detail::reverse(policy, (keys,))?;
-                let value_inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let (key_inner, value_inner) = impl_wide_reduce_by_single_key_values_body!(
+                    policy, keys, input, _init; $( $ty ),+; $( $idx ),+
+                )?;
                 Ok((
-                    array_from_inner::<R, (K,), KeyOutput>((key_inner,)),
+                    array_from_inner::<R, (K,), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
@@ -2935,8 +4946,8 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 left_keys: crate::detail::device::DeviceColumnView<R, K>,
-                _right_keys: crate::detail::device::DeviceColumnView<R, K>,
-                _right_values: RightValues,
+                right_keys: crate::detail::device::DeviceColumnView<R, K>,
+                right_values: RightValues,
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
@@ -2946,11 +4957,13 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: MVec<R, Item = (K,)>,
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner_with_policy(policy)?;
-                let (key_inner,) = crate::detail::reverse(policy, (left_keys,))?;
-                let value_inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let left_values = self.into_view_with_policy(policy)?;
+                let right_values = right_values.into_view_with_policy(policy)?;
+                let (key_inner, value_inner) = impl_wide_merge_by_single_key_dispatch_body!(
+                    policy, left_values, right_values, left_keys, right_keys, Less; $( $idx ),+
+                )?;
                 Ok((
-                    array_from_inner::<R, (K,), KeyOutput>((key_inner,)),
+                    array_from_inner::<R, (K,), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
@@ -3289,7 +5302,9 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let inner = impl_wide_adjacent_difference_dispatch_body!(
+                    policy, input; $( $ty ),+; $( $idx ),+
+                )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
@@ -3310,62 +5325,88 @@ macro_rules! impl_wide_miter_soa {
 
             fn count_if_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<usize, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(self.len())
+                let input = self.into_inner_with_policy(policy)?;
+                let handles = impl_wide_predicate_selection_body!(
+                    policy, input, env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                crate::detail::primitives::select::selected_count(policy, &handles)
             }
 
             fn all_of_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(true)
+                let len = self.len();
+                let input = self.into_inner_with_policy(policy)?;
+                let handles = impl_wide_predicate_selection_body!(
+                    policy, input, env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                Ok(crate::detail::primitives::select::selected_count(policy, &handles)? == len)
             }
 
             fn any_of_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(self.len() != 0)
+                let input = self.into_inner_with_policy(policy)?;
+                let handles = impl_wide_predicate_selection_body!(
+                    policy, input, env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                Ok(crate::detail::primitives::select::selected_count(policy, &handles)? != 0)
             }
 
             fn none_of_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(false)
+                let input = self.into_inner_with_policy(policy)?;
+                let handles = impl_wide_predicate_selection_body!(
+                    policy, input, env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                Ok(crate::detail::primitives::select::selected_count(policy, &handles)? == 0)
             }
 
             fn find_if_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<usize>, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok((self.len() != 0).then_some(0))
+                let input = self.into_inner_with_policy(policy)?;
+                let handles = impl_wide_predicate_selection_body!(
+                    policy, input, env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                crate::detail::primitives::search::first_flag(
+                    policy,
+                    handles.flag,
+                    handles.len,
+                    handles.len,
+                )
             }
 
             fn partition_dispatch<Pred, Output>(
@@ -3379,10 +5420,30 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let matching_input = ($( input.$idx.clone(), )+);
-                let failing_input = input;
-                let matching = impl_wide_materialize_inner!(policy, matching_input; $( $idx: $tmp ),+);
-                let failing = impl_wide_materialize_inner!(policy, failing_input; $( $idx: $tmp ),+);
+                let matching_handles = impl_wide_predicate_selection_body!(
+                    policy, input, _env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                let matching_count =
+                    crate::detail::primitives::select::selected_count(policy, &matching_handles)?;
+                let failing_count = matching_handles.len - matching_count;
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
+                        policy,
+                        &input.$idx,
+                        &matching_handles,
+                        matching_count,
+                    )?;
+                )+
+                let matching = ($($tmp,)+);
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_rejected_with_selection_with_policy(
+                        policy,
+                        &input.$idx,
+                        &matching_handles,
+                        failing_count,
+                    )?;
+                )+
+                let failing = ($($tmp,)+);
                 Ok((
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(matching),
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(failing),
@@ -3391,111 +5452,182 @@ macro_rules! impl_wide_miter_soa {
 
             fn is_partitioned_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(true)
+                let input = self.into_inner_with_policy(policy)?;
+                let handles = impl_wide_predicate_selection_body!(
+                    policy, input, env, false; $( $ty ),+; $( $idx ),+
+                )?;
+                let first_rejected = crate::detail::primitives::search::first_unset_flag(
+                    policy,
+                    handles.flag.clone(),
+                    handles.len,
+                    handles.len,
+                )?
+                .unwrap_or(handles.len);
+                let selected_count =
+                    crate::detail::primitives::select::selected_count(policy, &handles)?;
+                Ok(selected_count == first_rejected)
             }
 
             fn min_element_dispatch<Less>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
             ) -> Result<Option<usize>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok((self.len() != 0).then_some(0))
+                let input = self.into_view_with_policy(policy)?;
+                crate::detail::min_element(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    KernelOp::<R, Less>::new(),
+                )
             }
 
             fn max_element_dispatch<Less>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
             ) -> Result<Option<usize>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok((self.len() != 0).then_some(0))
+                let input = self.into_view_with_policy(policy)?;
+                crate::detail::max_element(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    KernelOp::<R, Less>::new(),
+                )
             }
 
             fn minmax_element_dispatch<Less>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
             ) -> Result<Option<(usize, usize)>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok((self.len() != 0).then_some((0, 0)))
+                let input = self.into_view_with_policy(policy)?;
+                crate::detail::minmax_element(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    KernelOp::<R, Less>::new(),
+                )
             }
 
             fn adjacent_find_dispatch<Pred>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
             ) -> Result<Option<usize>, Error>
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok((self.len() > 1).then_some(0))
+                let input = self.into_view_with_policy(policy)?;
+                impl_wide_binary_predicate_views!(
+                    policy,
+                    input,
+                    input,
+                    Pred,
+                    impl_wide_adjacent_find_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )
             }
 
             fn lower_bound_dispatch<Values, Less>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                _values: Values,
+                values: Values,
                 _less: Less,
             ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
             where
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(crate::runtime::DeviceVec::from_inner(policy.empty_device_vec()))
+                let input = self.into_view_with_policy(policy)?;
+                let values = values.into_view_with_policy(policy)?;
+                Ok(crate::runtime::DeviceVec::from_inner(
+                    impl_wide_binary_predicate_views!(
+                        policy,
+                        input,
+                        values,
+                        Less,
+                        impl_wide_lower_bound_many_from_views;
+                        $( $ty ),+;
+                        $( $idx ),+
+                    )?,
+                ))
             }
 
             fn upper_bound_dispatch<Values, Less>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                _values: Values,
+                values: Values,
                 _less: Less,
             ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
             where
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(crate::runtime::DeviceVec::from_inner(policy.empty_device_vec()))
+                let input = self.into_view_with_policy(policy)?;
+                let values = values.into_view_with_policy(policy)?;
+                Ok(crate::runtime::DeviceVec::from_inner(
+                    impl_wide_binary_predicate_views!(
+                        policy,
+                        input,
+                        values,
+                        Less,
+                        impl_wide_upper_bound_many_from_views;
+                        $( $ty ),+;
+                        $( $idx ),+
+                    )?,
+                ))
             }
 
             fn is_sorted_until_dispatch<Less>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
             ) -> Result<usize, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(self.len())
+                let input = self.into_view_with_policy(policy)?;
+                crate::detail::is_sorted_until(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    KernelOp::<R, Less>::new(),
+                )
             }
 
             fn is_sorted_dispatch<Less>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
             ) -> Result<bool, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(true)
+                let input = self.into_view_with_policy(policy)?;
+                crate::detail::is_sorted(
+                    policy,
+                    impl_miter_view!(input; $( $idx ),+),
+                    KernelOp::<R, Less>::new(),
+                )
             }
 
             fn equal_dispatch<Right, Eq>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
+                policy: &crate::detail::CubePolicy<R>,
                 right: Right,
                 _eq: Eq,
             ) -> Result<bool, Error>
@@ -3503,52 +5635,93 @@ macro_rules! impl_wide_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(self.len() == right.len())
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                Ok(impl_wide_binary_predicate_views!(
+                    policy,
+                    left,
+                    right,
+                    Eq,
+                    impl_wide_mismatch_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )?
+                .is_none())
             }
 
             fn mismatch_dispatch<Right, Eq>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
-                _right: Right,
+                policy: &crate::detail::CubePolicy<R>,
+                right: Right,
                 _eq: Eq,
             ) -> Result<Option<usize>, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(None)
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                impl_wide_binary_predicate_views!(
+                    policy,
+                    left,
+                    right,
+                    Eq,
+                    impl_wide_mismatch_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )
             }
 
             fn find_first_of_dispatch<Needles, Eq>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
-                _needles: Needles,
+                policy: &crate::detail::CubePolicy<R>,
+                needles: Needles,
                 _eq: Eq,
             ) -> Result<Option<usize>, Error>
             where
                 Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok((self.len() != 0).then_some(0))
+                let input = self.into_view_with_policy(policy)?;
+                let needles = needles.into_view_with_policy(policy)?;
+                impl_wide_binary_predicate_views!(
+                    policy,
+                    input,
+                    needles,
+                    Eq,
+                    impl_wide_find_first_of_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )
             }
 
             fn lexicographical_compare_dispatch<Right, Less>(
                 self,
-                _policy: &crate::detail::CubePolicy<R>,
-                _right: Right,
+                policy: &crate::detail::CubePolicy<R>,
+                right: Right,
                 _less: Less,
             ) -> Result<bool, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                Ok(false)
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                impl_wide_binary_predicate_views!(
+                    policy,
+                    left,
+                    right,
+                    Less,
+                    impl_wide_lexicographical_compare_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )
             }
 
             fn merge_dispatch<Right, Output, Less>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                _right: Right,
+                right: Right,
                 _less: Less,
             ) -> Result<Output, Error>
             where
@@ -3556,8 +5729,27 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                $(
+                    let $tmp = {
+                        let left = crate::detail::api::device_expr_collect_with_policy(
+                            policy,
+                            &left.$idx,
+                        )?;
+                        let right = crate::detail::api::device_expr_collect_with_policy(
+                            policy,
+                            &right.$idx,
+                        )?;
+                        crate::detail::primitives::range::concat_device_with_policy(
+                            policy,
+                            &left,
+                            &right,
+                        )?
+                    };
+                )+
+                let input = ($($tmp,)+);
+                let inner = impl_wide_sort_or_materialize_body!(policy, input; $( $idx: $tmp ),+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
@@ -3565,42 +5757,109 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 right: Right,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                self.merge_dispatch(policy, right, less)
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                let right_extra_flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
+                    policy,
+                    right,
+                    left,
+                    Less,
+                    impl_wide_set_difference_flags_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )?;
+                $(
+                    let $tmp = {
+                        let left = crate::detail::api::device_expr_collect_with_policy(
+                            policy,
+                            &left.$idx,
+                        )?;
+                        let right_extra = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                            policy,
+                            &right.$idx,
+                            right_extra_flags.clone(),
+                        )?;
+                        crate::detail::primitives::range::concat_device_with_policy(
+                            policy,
+                            &left,
+                            &right_extra,
+                        )?
+                    };
+                )+
+                let input = ($($tmp,)+);
+                let inner = impl_wide_sort_or_materialize_body!(policy, input; $( $idx: $tmp ),+)?;
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn set_intersection_dispatch<Right, Output, Less>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 right: Right,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                self.merge_dispatch(policy, right, less)
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                let flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
+                    policy,
+                    left,
+                    right,
+                    Less,
+                    impl_wide_set_intersection_flags_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )?;
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &left.$idx,
+                        flags.clone(),
+                    )?;
+                )+
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
             fn set_difference_dispatch<Right, Output, Less>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 right: Right,
-                less: Less,
+                _less: Less,
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                self.merge_dispatch(policy, right, less)
+                let left = self.into_view_with_policy(policy)?;
+                let right = right.into_view_with_policy(policy)?;
+                let flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
+                    policy,
+                    left,
+                    right,
+                    Less,
+                    impl_wide_set_difference_flags_from_views;
+                    $( $ty ),+;
+                    $( $idx ),+
+                )?;
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &left.$idx,
+                        flags.clone(),
+                    )?;
+                )+
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
             fn inclusive_scan_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, Output>(

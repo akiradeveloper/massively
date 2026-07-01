@@ -96,18 +96,18 @@ pub fn compose<First, Second>(_first: First, _second: Second) -> Compose<First, 
 /// let massively::SoA1(output) = massively::map(
 ///     &exec,
 ///     massively::SoA1(input.slice(..)),
-///     massively::op::Const::<(u32,)>::new(),
+///     massively::op::Constant::<(u32,)>::new(),
 ///     (42_u32,),
 /// )
 /// .unwrap();
 /// # let _ = output;
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
-pub struct Const<Out> {
+pub struct Constant<Out> {
     _out: PhantomData<fn() -> Out>,
 }
 
-impl<Out> Const<Out> {
+impl<Out> Constant<Out> {
     /// Creates a constant operator marker.
     pub const fn new() -> Self {
         Self { _out: PhantomData }
@@ -115,8 +115,8 @@ impl<Out> Const<Out> {
 }
 
 /// Creates a marker for a unary operator that always returns its environment.
-pub fn constant<Out>() -> Const<Out> {
-    Const::new()
+pub fn constant<Out>() -> Constant<Out> {
+    Constant::new()
 }
 
 #[cube]
@@ -136,7 +136,7 @@ where
 }
 
 #[cube]
-impl<R, Input, Out> UnaryOp<R, Input> for Const<Out>
+impl<R, Input, Out> UnaryOp<R, Input> for Constant<Out>
 where
     R: cubecl::prelude::Runtime,
     Input: crate::MItem<R>,

@@ -2,13 +2,10 @@
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
-name = "oracle"
+name = "oracle-simple"
 publish = false
 repository.workspace = true
 version = "0.1.0"
-
-[lib]
-name = "oracle"
 
 [dependencies]
 

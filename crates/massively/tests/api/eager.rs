@@ -104,7 +104,7 @@ fn composed_unary_op_uses_paired_env() {
 }
 
 #[test]
-fn const_unary_op_returns_env_for_single_column() {
+fn constant_unary_op_returns_env_for_single_column() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
@@ -120,14 +120,14 @@ fn const_unary_op_returns_env_for_single_column() {
 }
 
 #[test]
-fn const_unary_op_returns_env_for_multi_column() {
+fn constant_unary_op_returns_env_for_multi_column() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let massively::SoA2(values, tags) = map(
         &exec,
         massively::SoA1(input.slice(..)),
-        massively::op::Const::<(f32, u32)>::new(),
+        massively::op::Constant::<(f32, u32)>::new(),
         (1.5_f32, 9_u32),
     )
     .unwrap();

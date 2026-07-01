@@ -2169,6 +2169,111 @@ where
     ))
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn adjacent_difference_tuple7_device_views<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    a: &DeviceColumnView<R, A>,
+    b: &DeviceColumnView<R, B>,
+    c: &DeviceColumnView<R, C>,
+    d: &DeviceColumnView<R, D>,
+    e: &DeviceColumnView<R, E>,
+    f: &DeviceColumnView<R, F>,
+    g: &DeviceColumnView<R, G>,
+) -> Result<
+    (
+        DeviceVec<R, A>,
+        DeviceVec<R, B>,
+        DeviceVec<R, C>,
+        DeviceVec<R, D>,
+        DeviceVec<R, E>,
+        DeviceVec<R, F>,
+        DeviceVec<R, G>,
+    ),
+    Error,
+>
+where
+    R: Runtime,
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+    D: CubePrimitive + CubeElement,
+    E: CubePrimitive + CubeElement,
+    F: CubePrimitive + CubeElement,
+    G: CubePrimitive + CubeElement,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    let len = a.len;
+    let client = policy.client();
+    if len == 0 {
+        return Ok((
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+            policy.empty_device_vec(),
+        ));
+    }
+
+    let output_a = client.empty(len * std::mem::size_of::<A>());
+    let output_b = client.empty(len * std::mem::size_of::<B>());
+    let output_c = client.empty(len * std::mem::size_of::<C>());
+    let output_d = client.empty(len * std::mem::size_of::<D>());
+    let output_e = client.empty(len * std::mem::size_of::<E>());
+    let output_f = client.empty(len * std::mem::size_of::<F>());
+    let output_g = client.empty(len * std::mem::size_of::<G>());
+    let offsets = [
+        u32::try_from(a.offset).map_err(|_| Error::LengthTooLarge { len: a.offset })?,
+        u32::try_from(b.offset).map_err(|_| Error::LengthTooLarge { len: b.offset })?,
+        u32::try_from(c.offset).map_err(|_| Error::LengthTooLarge { len: c.offset })?,
+        u32::try_from(d.offset).map_err(|_| Error::LengthTooLarge { len: d.offset })?,
+        u32::try_from(e.offset).map_err(|_| Error::LengthTooLarge { len: e.offset })?,
+        u32::try_from(f.offset).map_err(|_| Error::LengthTooLarge { len: f.offset })?,
+        u32::try_from(g.offset).map_err(|_| Error::LengthTooLarge { len: g.offset })?,
+    ];
+    let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        tuple7_view_adjacent_difference_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
+            BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
+            BufferArg::from_raw_parts(c.source.handle.clone(), c.source.len()),
+            BufferArg::from_raw_parts(d.source.handle.clone(), d.source.len()),
+            BufferArg::from_raw_parts(e.source.handle.clone(), e.source.len()),
+            BufferArg::from_raw_parts(f.source.handle.clone(), f.source.len()),
+            BufferArg::from_raw_parts(g.source.handle.clone(), g.source.len()),
+            BufferArg::from_raw_parts(offsets_handle.clone(), 7),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_a.clone(), len),
+            BufferArg::from_raw_parts(output_b.clone(), len),
+            BufferArg::from_raw_parts(output_c.clone(), len),
+            BufferArg::from_raw_parts(output_d.clone(), len),
+            BufferArg::from_raw_parts(output_e.clone(), len),
+            BufferArg::from_raw_parts(output_f.clone(), len),
+            BufferArg::from_raw_parts(output_g.clone(), len),
+        );
+    }
+
+    Ok((
+        DeviceVec::from_handle(policy.id(), output_a, len),
+        DeviceVec::from_handle(policy.id(), output_b, len),
+        DeviceVec::from_handle(policy.id(), output_c, len),
+        DeviceVec::from_handle(policy.id(), output_d, len),
+        DeviceVec::from_handle(policy.id(), output_e, len),
+        DeviceVec::from_handle(policy.id(), output_f, len),
+        DeviceVec::from_handle(policy.id(), output_g, len),
+    ))
+}
+
 #[allow(clippy::too_many_arguments)]
 fn inclusive_scan_tuple7_handles<R, A, B, C, D, E, F, G, Op>(
     policy: &CubePolicy<R>,
