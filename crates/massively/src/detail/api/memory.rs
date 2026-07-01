@@ -820,6 +820,131 @@ impl_transform_soa_empty_output3!(TransformSoA5Output<A: a, B: b, C: c, D: d, E:
 impl_transform_soa_empty_output2!(TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>);
 impl_transform_soa_empty_output3!(TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>);
 
+macro_rules! impl_wide_transform_soa_output {
+    (
+        $trait_name:ident < $first_in:ident : $first_arg:ident $(, $in_ty:ident : $arg:ident )+ >,
+        $kernel:ident,
+        ($( $out_ty:ident : $out_handle:ident : $field:tt ),+)
+    ) => {
+        impl<R, $first_in, $( $in_ty, )+ $( $out_ty, )+ Op> $trait_name<R, $first_in, $( $in_ty, )+ Op>
+            for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            $first_in: CubePrimitive + CubeElement,
+            $( $in_ty: CubePrimitive + CubeElement, )+
+            $( $out_ty: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<($first_in, $( $in_ty, )+), Output = ($( $out_ty, )+)>,
+        {
+            fn run(
+                policy: &CubePolicy<R>,
+                $first_arg: DeviceColumnView<R, $first_in>,
+                $( $arg: DeviceColumnView<R, $in_ty>, )+
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let len = $first_arg.len();
+                let client = policy.client();
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out_ty>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let $first_arg = (transform_offset_handle(client, $first_arg.offset)?, $first_arg);
+                    $(
+                        let $arg = (transform_offset_handle(client, $arg.offset)?, $arg);
+                    )+
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<$first_in, $( $in_ty, )+ $( $out_ty, )+ Op, R>(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            env,
+                            BufferArg::from_raw_parts($first_arg.1.source.handle.clone(), $first_arg.1.source.len()),
+                            $(
+                                BufferArg::from_raw_parts($arg.1.source.handle.clone(), $arg.1.source.len()),
+                            )+
+                            BufferArg::from_raw_parts($first_arg.0.clone(), 1),
+                            $(
+                                BufferArg::from_raw_parts($arg.0.clone(), 1),
+                            )+
+                            BufferArg::from_raw_parts(len_handle.clone(), 1),
+                            $(
+                                BufferArg::from_raw_parts($out_handle.clone(), len),
+                            )+
+                        );
+                    }
+                }
+                Ok(($( DeviceVec::from_handle(policy.id(), $out_handle, len), )+))
+            }
+        }
+    };
+}
+
+impl_wide_transform_soa_output!(
+    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    transform_tuple4_to_tuple4_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    transform_tuple4_to_tuple5_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    transform_tuple4_to_tuple6_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    transform_tuple4_to_tuple7_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    transform_tuple5_to_tuple4_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    transform_tuple5_to_tuple5_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    transform_tuple5_to_tuple6_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    transform_tuple5_to_tuple7_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    transform_tuple6_to_tuple4_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    transform_tuple6_to_tuple5_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    transform_tuple6_to_tuple6_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    transform_tuple6_to_tuple7_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+
 define_transform_soa_output_trait!(
     TransformSoA7Output<InA: a, InB: b, InC: c, InD: d, InE: e, InF: f, InG: g>
 );

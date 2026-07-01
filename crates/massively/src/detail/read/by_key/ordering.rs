@@ -152,6 +152,46 @@ where
     }
 }
 
+impl<First, Second, Less> KernelSortByKeyKeys<Less> for (First, Second)
+where
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Item: Scalar + 'static,
+    Second::Item: Scalar + 'static,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Less: BinaryPredicateOp<(First::Item, Second::Item)>,
+    crate::detail::api::Tuple2AsTuple3Less<Less>:
+        BinaryPredicateOp<(First::Item, Second::Item, u32)>,
+{
+    type Runtime = First::Runtime;
+    type OutputKeys =
+        DeviceSoA2<DeviceVec<First::Runtime, First::Item>, DeviceVec<First::Runtime, Second::Item>>;
+
+    fn sort_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
+        let indices = primitive_range::indices_u32(policy, <First as KernelColumn>::len(&self.0))?;
+        let (first, second, _stable_tie, indices) =
+            primitive_ordering::sort_tuple3_by_key_input_with_policy(
+                policy,
+                &self.0,
+                &self.1,
+                &indices,
+                &indices,
+                crate::op::GpuOp::<crate::detail::api::Tuple2AsTuple3Less<Less>>::new(),
+            )?;
+        Ok((
+            DeviceSoA2 {
+                left: first,
+                right: second,
+            },
+            indices,
+        ))
+    }
+}
+
 impl<First, Second, Third, Less> KernelSortByKeyKeys<Less> for (First, Second, Third)
 where
     First: KernelColumn + KernelColumnAt<S0>,
@@ -385,6 +425,51 @@ where
         )
     }
 }
+
+macro_rules! impl_kernel_sort_by_key_values_wide_tuple {
+    ($first_ty:ident : $first_idx:tt $(, $ty:ident : $idx:tt )+) => {
+        impl<$first_ty, $( $ty, )+ IndexSource> KernelSortByKeyValues<IndexSource>
+            for ($first_ty, $( $ty, )+)
+        where
+            $first_ty: KernelColumn + KernelColumnAt<S0>,
+            $(
+                $ty: KernelColumn<Runtime = $first_ty::Runtime> + KernelColumnAt<S0>,
+            )+
+            IndexSource: KernelColumn<Runtime = $first_ty::Runtime, Item = u32> + KernelColumnAt<S0>,
+            $first_ty::Item: Scalar + 'static,
+            $first_ty::Expr: GpuExpr<$first_ty::Item>,
+            $(
+                $ty::Runtime: Runtime,
+                $ty::Item: Scalar + 'static,
+                $ty::Expr: GpuExpr<$ty::Item>,
+            )+
+        {
+            type Runtime = $first_ty::Runtime;
+            type OutputValues = (
+                DeviceVec<Self::Runtime, $first_ty::Item>,
+                $( DeviceVec<Self::Runtime, $ty::Item>, )+
+            );
+
+            fn sort_by_key_values(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                indices: &IndexSource,
+            ) -> Result<Self::OutputValues, Error> {
+                self.$first_idx.validate()?;
+                $( self.$idx.validate()?; )+
+                validate_key_column(indices, self.0.len())?;
+                Ok((
+                    crate::detail::api::device_expr_gather_with_policy(policy, &self.$first_idx, indices)?,
+                    $( crate::detail::api::device_expr_gather_with_policy(policy, &self.$idx, indices)?, )+
+                ))
+            }
+        }
+    };
+}
+
+impl_kernel_sort_by_key_values_wide_tuple!(A: 0, B: 1, C: 2, D: 3);
+impl_kernel_sort_by_key_values_wide_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4);
+impl_kernel_sort_by_key_values_wide_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
 
 impl<A, B, C, D, E, F, G, IndexSource> KernelSortByKeyValues<IndexSource> for (A, B, C, D, E, F, G)
 where

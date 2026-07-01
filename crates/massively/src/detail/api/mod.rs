@@ -73,7 +73,12 @@ fn api_expr_block_count(len: usize) -> Result<u32, Error> {
 }
 
 mod tuple_adapter;
-pub use tuple_adapter::{Tuple1BinaryOp, Tuple1Less, Tuple1PredicateOp};
+pub use tuple_adapter::{
+    Tuple1BinaryOp, Tuple1Less, Tuple1PredicateOp, Tuple2AsTuple3Less, Tuple4AsTuple7BinaryOp,
+    Tuple4AsTuple7BinaryPredicateOp, Tuple4AsTuple7PredicateOp, Tuple5AsTuple7BinaryOp,
+    Tuple5AsTuple7BinaryPredicateOp, Tuple5AsTuple7PredicateOp, Tuple6AsTuple7BinaryOp,
+    Tuple6AsTuple7BinaryPredicateOp, Tuple6AsTuple7PredicateOp,
+};
 
 mod selection_control;
 pub use selection_control::PrecomputedSelection;

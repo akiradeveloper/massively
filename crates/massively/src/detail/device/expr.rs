@@ -44,6 +44,44 @@ pub struct SoAView3<First, Second, Third> {
 }
 
 #[doc(hidden)]
+pub struct SoAView4<A, B, C, D> {
+    pub(crate) a: A,
+    pub(crate) b: B,
+    pub(crate) c: C,
+    pub(crate) d: D,
+}
+
+#[doc(hidden)]
+pub struct SoAView5<A, B, C, D, E> {
+    pub(crate) a: A,
+    pub(crate) b: B,
+    pub(crate) c: C,
+    pub(crate) d: D,
+    pub(crate) e: E,
+}
+
+#[doc(hidden)]
+pub struct SoAView6<A, B, C, D, E, F> {
+    pub(crate) a: A,
+    pub(crate) b: B,
+    pub(crate) c: C,
+    pub(crate) d: D,
+    pub(crate) e: E,
+    pub(crate) f: F,
+}
+
+#[doc(hidden)]
+pub struct SoAView7<A, B, C, D, E, F, G> {
+    pub(crate) a: A,
+    pub(crate) b: B,
+    pub(crate) c: C,
+    pub(crate) d: D,
+    pub(crate) e: E,
+    pub(crate) f: F,
+    pub(crate) g: G,
+}
+
+#[doc(hidden)]
 pub struct S0;
 #[doc(hidden)]
 pub struct S1;
@@ -410,6 +448,73 @@ where
         Ok(())
     }
 }
+
+macro_rules! impl_read_only_wide_soa_view {
+    ($name:ident < $first:ident : $first_field:ident, $( $ty:ident : $field:ident ),+ > => ($($item:ty),+)) => {
+        impl<$first, $( $ty ),+> ReadOnlySoA for $name<$first, $( $ty ),+>
+        where
+            $first: KernelColumn + KernelColumnAt<S0>,
+            $(
+                $ty: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
+            )+
+            <$first as KernelColumn>::Item: CubePrimitive + CubeElement,
+            $(
+                <$ty as KernelColumn>::Item: CubePrimitive + CubeElement,
+            )+
+        {
+            type Runtime = <$first as KernelColumn>::Runtime;
+            type Item = ($($item,)+);
+            type Scalar = <$first as KernelColumn>::Item;
+
+            fn len(&self) -> usize {
+                KernelColumn::len(&self.$first_field)
+            }
+
+            fn validate(&self) -> Result<(), Error> {
+                KernelColumn::validate(&self.$first_field)?;
+                $(
+                    KernelColumn::validate(&self.$field)?;
+                    ensure_same_len(
+                        KernelColumn::len(&self.$field),
+                        KernelColumn::len(&self.$first_field),
+                    )?;
+                )+
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_read_only_wide_soa_view!(SoAView4<A: a, B: b, C: c, D: d> => (
+    <A as KernelColumn>::Item,
+    <B as KernelColumn>::Item,
+    <C as KernelColumn>::Item,
+    <D as KernelColumn>::Item
+));
+impl_read_only_wide_soa_view!(SoAView5<A: a, B: b, C: c, D: d, E: e> => (
+    <A as KernelColumn>::Item,
+    <B as KernelColumn>::Item,
+    <C as KernelColumn>::Item,
+    <D as KernelColumn>::Item,
+    <E as KernelColumn>::Item
+));
+impl_read_only_wide_soa_view!(SoAView6<A: a, B: b, C: c, D: d, E: e, F: f> => (
+    <A as KernelColumn>::Item,
+    <B as KernelColumn>::Item,
+    <C as KernelColumn>::Item,
+    <D as KernelColumn>::Item,
+    <E as KernelColumn>::Item,
+    <F as KernelColumn>::Item
+));
+impl_read_only_wide_soa_view!(SoAView7<A: a, B: b, C: c, D: d, E: e, F: f, G: g> => (
+    <A as KernelColumn>::Item,
+    <B as KernelColumn>::Item,
+    <C as KernelColumn>::Item,
+    <D as KernelColumn>::Item,
+    <E as KernelColumn>::Item,
+    <F as KernelColumn>::Item,
+    <G as KernelColumn>::Item
+));
 
 impl<First, Second, Third> SoA for SoA3<First, Second, Third>
 where

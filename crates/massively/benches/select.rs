@@ -52,7 +52,7 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     assert_eq!(exec.to_host(&removed).unwrap(), vec![-1.0, -3.0]);
 
     let (SoA1(positives), SoA1(non_positives)) =
-        partition(&exec, massively::SoA1(values.slice(..)), Positive).unwrap();
+        partition(&exec, massively::SoA1(values.slice(..)), Positive, ()).unwrap();
     assert_eq!(exec.to_host(&positives).unwrap(), vec![2.0, 4.0]);
     assert_eq!(exec.to_host(&non_positives).unwrap(), vec![-1.0, -3.0]);
 
@@ -65,7 +65,9 @@ struct Positive;
 
 #[cubecl::cube]
 impl massively::op::PredicateOp<WgpuRuntime, (f32,)> for Positive {
-    fn apply(input: (f32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32,)) -> bool {
         input.0 > 0.0
     }
 }
@@ -146,6 +148,7 @@ fn bench_select(c: &mut Criterion) {
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         Positive,
+                        (),
                     )
                     .unwrap();
                     let output_len = output.0.0.len() + output.1.0.len();

@@ -243,6 +243,38 @@ define_transform_tuple_to_tuple_kernel!(
     (OutA: output_a: 0)
 );
 define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple4_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple5_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple6_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple7_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+define_transform_tuple_to_tuple_kernel!(
     transform_tuple5_to_tuple1_kernel,
     (
         TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
@@ -252,6 +284,42 @@ define_transform_tuple_to_tuple_kernel!(
     (OutA: output_a: 0)
 );
 define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple5_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple4_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple6_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple7_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+define_transform_tuple_to_tuple_kernel!(
     transform_tuple6_to_tuple1_kernel,
     (
         TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
@@ -259,6 +327,42 @@ define_transform_tuple_to_tuple_kernel!(
         TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
     ),
     (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple6_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple4_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple5_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple7_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple7_to_tuple1_kernel,
@@ -448,6 +552,610 @@ pub(crate) fn tuple3_predicate_device_expr_flags_kernel<
         } else {
             flags[global] = 0u32;
         }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_predicate_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Pred: PredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    env: Pred::Env,
+    input_a: &[TyA],
+    input_b: &[TyB],
+    input_c: &[TyC],
+    input_d: &[TyD],
+    input_e: &[TyE],
+    input_f: &[TyF],
+    input_g: &[TyG],
+    offsets: &[u32],
+    len: &[u32],
+    invert: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply(
+            env,
+            (
+                input_a[offsets[0] as usize + global],
+                input_b[offsets[1] as usize + global],
+                input_c[offsets[2] as usize + global],
+                input_d[offsets[3] as usize + global],
+                input_e[offsets[4] as usize + global],
+                input_f[offsets[5] as usize + global],
+                input_g[offsets[6] as usize + global],
+            ),
+        );
+        if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
+            flags[global] = 1u32;
+        } else {
+            flags[global] = 0u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_mismatch_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Eq: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    left_a: &[TyA],
+    left_b: &[TyB],
+    left_c: &[TyC],
+    left_d: &[TyD],
+    left_e: &[TyE],
+    left_f: &[TyF],
+    left_g: &[TyG],
+    left_offsets: &[u32],
+    right_a: &[TyA],
+    right_b: &[TyB],
+    right_c: &[TyC],
+    right_d: &[TyD],
+    right_e: &[TyE],
+    right_f: &[TyF],
+    right_g: &[TyG],
+    right_offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let eq = Eq::apply(
+            (
+                left_a[left_offsets[0] as usize + global],
+                left_b[left_offsets[1] as usize + global],
+                left_c[left_offsets[2] as usize + global],
+                left_d[left_offsets[3] as usize + global],
+                left_e[left_offsets[4] as usize + global],
+                left_f[left_offsets[5] as usize + global],
+                left_g[left_offsets[6] as usize + global],
+            ),
+            (
+                right_a[right_offsets[0] as usize + global],
+                right_b[right_offsets[1] as usize + global],
+                right_c[right_offsets[2] as usize + global],
+                right_d[right_offsets[3] as usize + global],
+                right_e[right_offsets[4] as usize + global],
+                right_f[right_offsets[5] as usize + global],
+                right_g[right_offsets[6] as usize + global],
+            ),
+        );
+        if eq {
+            flags[global] = 0u32;
+        } else {
+            flags[global] = 1u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_adjacent_find_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Eq: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    input_a: &[TyA],
+    input_b: &[TyB],
+    input_c: &[TyC],
+    input_d: &[TyD],
+    input_e: &[TyE],
+    input_f: &[TyF],
+    input_g: &[TyG],
+    offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        if global + 1usize < len[0] as usize
+            && Eq::apply(
+                (
+                    input_a[offsets[0] as usize + global],
+                    input_b[offsets[1] as usize + global],
+                    input_c[offsets[2] as usize + global],
+                    input_d[offsets[3] as usize + global],
+                    input_e[offsets[4] as usize + global],
+                    input_f[offsets[5] as usize + global],
+                    input_g[offsets[6] as usize + global],
+                ),
+                (
+                    input_a[offsets[0] as usize + global + 1usize],
+                    input_b[offsets[1] as usize + global + 1usize],
+                    input_c[offsets[2] as usize + global + 1usize],
+                    input_d[offsets[3] as usize + global + 1usize],
+                    input_e[offsets[4] as usize + global + 1usize],
+                    input_f[offsets[5] as usize + global + 1usize],
+                    input_g[offsets[6] as usize + global + 1usize],
+                ),
+            )
+        {
+            flags[global] = 1u32;
+        } else {
+            flags[global] = 0u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_find_first_of_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Eq: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    input_a: &[TyA],
+    input_b: &[TyB],
+    input_c: &[TyC],
+    input_d: &[TyD],
+    input_e: &[TyE],
+    input_f: &[TyF],
+    input_g: &[TyG],
+    input_offsets: &[u32],
+    needle_a: &[TyA],
+    needle_b: &[TyB],
+    needle_c: &[TyC],
+    needle_d: &[TyD],
+    needle_e: &[TyE],
+    needle_f: &[TyF],
+    needle_g: &[TyG],
+    needle_offsets: &[u32],
+    needle_len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let value = (
+            input_a[input_offsets[0] as usize + global],
+            input_b[input_offsets[1] as usize + global],
+            input_c[input_offsets[2] as usize + global],
+            input_d[input_offsets[3] as usize + global],
+            input_e[input_offsets[4] as usize + global],
+            input_f[input_offsets[5] as usize + global],
+            input_g[input_offsets[6] as usize + global],
+        );
+        let needle = RuntimeCell::<usize>::new(0usize);
+        let found = RuntimeCell::<u32>::new(0u32);
+        while needle.read() < needle_len[0] as usize {
+            if Eq::apply(
+                value,
+                (
+                    needle_a[needle_offsets[0] as usize + needle.read()],
+                    needle_b[needle_offsets[1] as usize + needle.read()],
+                    needle_c[needle_offsets[2] as usize + needle.read()],
+                    needle_d[needle_offsets[3] as usize + needle.read()],
+                    needle_e[needle_offsets[4] as usize + needle.read()],
+                    needle_f[needle_offsets[5] as usize + needle.read()],
+                    needle_g[needle_offsets[6] as usize + needle.read()],
+                ),
+            ) {
+                found.store(1u32);
+            }
+            needle.store(needle.read() + 1usize);
+        }
+        flags[global] = found.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_lower_bound_many_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Less: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    source_a: &[TyA],
+    source_b: &[TyB],
+    source_c: &[TyC],
+    source_d: &[TyD],
+    source_e: &[TyE],
+    source_f: &[TyF],
+    source_g: &[TyG],
+    source_offsets: &[u32],
+    value_a: &[TyA],
+    value_b: &[TyB],
+    value_c: &[TyC],
+    value_d: &[TyD],
+    value_e: &[TyE],
+    value_f: &[TyF],
+    value_g: &[TyG],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let value = (
+            value_a[value_offsets[0] as usize + global],
+            value_b[value_offsets[1] as usize + global],
+            value_c[value_offsets[2] as usize + global],
+            value_d[value_offsets[3] as usize + global],
+            value_e[value_offsets[4] as usize + global],
+            value_f[value_offsets[5] as usize + global],
+            value_g[value_offsets[6] as usize + global],
+        );
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let candidate = (
+                source_a[source_offsets[0] as usize + mid],
+                source_b[source_offsets[1] as usize + mid],
+                source_c[source_offsets[2] as usize + mid],
+                source_d[source_offsets[3] as usize + mid],
+                source_e[source_offsets[4] as usize + mid],
+                source_f[source_offsets[5] as usize + mid],
+                source_g[source_offsets[6] as usize + mid],
+            );
+            if Less::apply(candidate, value) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_upper_bound_many_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Less: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    source_a: &[TyA],
+    source_b: &[TyB],
+    source_c: &[TyC],
+    source_d: &[TyD],
+    source_e: &[TyE],
+    source_f: &[TyF],
+    source_g: &[TyG],
+    source_offsets: &[u32],
+    value_a: &[TyA],
+    value_b: &[TyB],
+    value_c: &[TyC],
+    value_d: &[TyD],
+    value_e: &[TyE],
+    value_f: &[TyF],
+    value_g: &[TyG],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let value = (
+            value_a[value_offsets[0] as usize + global],
+            value_b[value_offsets[1] as usize + global],
+            value_c[value_offsets[2] as usize + global],
+            value_d[value_offsets[3] as usize + global],
+            value_e[value_offsets[4] as usize + global],
+            value_f[value_offsets[5] as usize + global],
+            value_g[value_offsets[6] as usize + global],
+        );
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let candidate = (
+                source_a[source_offsets[0] as usize + mid],
+                source_b[source_offsets[1] as usize + mid],
+                source_c[source_offsets[2] as usize + mid],
+                source_d[source_offsets[3] as usize + mid],
+                source_e[source_offsets[4] as usize + mid],
+                source_f[source_offsets[5] as usize + mid],
+                source_g[source_offsets[6] as usize + mid],
+            );
+            if !Less::apply(value, candidate) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_lexicographical_diff_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Less: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    left_a: &[TyA],
+    left_b: &[TyB],
+    left_c: &[TyC],
+    left_d: &[TyD],
+    left_e: &[TyE],
+    left_f: &[TyF],
+    left_g: &[TyG],
+    left_offsets: &[u32],
+    right_a: &[TyA],
+    right_b: &[TyB],
+    right_c: &[TyC],
+    right_d: &[TyD],
+    right_e: &[TyE],
+    right_f: &[TyF],
+    right_g: &[TyG],
+    right_offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let lhs = (
+            left_a[left_offsets[0] as usize + global],
+            left_b[left_offsets[1] as usize + global],
+            left_c[left_offsets[2] as usize + global],
+            left_d[left_offsets[3] as usize + global],
+            left_e[left_offsets[4] as usize + global],
+            left_f[left_offsets[5] as usize + global],
+            left_g[left_offsets[6] as usize + global],
+        );
+        let rhs = (
+            right_a[right_offsets[0] as usize + global],
+            right_b[right_offsets[1] as usize + global],
+            right_c[right_offsets[2] as usize + global],
+            right_d[right_offsets[3] as usize + global],
+            right_e[right_offsets[4] as usize + global],
+            right_f[right_offsets[5] as usize + global],
+            right_g[right_offsets[6] as usize + global],
+        );
+        flags[global] = if Less::apply(lhs, rhs) || Less::apply(rhs, lhs) {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_lexicographical_compare_at_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Less: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    left_a: &[TyA],
+    left_b: &[TyB],
+    left_c: &[TyC],
+    left_d: &[TyD],
+    left_e: &[TyE],
+    left_f: &[TyF],
+    left_g: &[TyG],
+    left_offsets: &[u32],
+    right_a: &[TyA],
+    right_b: &[TyB],
+    right_c: &[TyC],
+    right_d: &[TyD],
+    right_e: &[TyE],
+    right_f: &[TyF],
+    right_g: &[TyG],
+    right_offsets: &[u32],
+    index: &[u32],
+    output: &mut [u32],
+) {
+    if UNIT_POS == 0 {
+        let i = index[0] as usize;
+        let lhs = (
+            left_a[left_offsets[0] as usize + i],
+            left_b[left_offsets[1] as usize + i],
+            left_c[left_offsets[2] as usize + i],
+            left_d[left_offsets[3] as usize + i],
+            left_e[left_offsets[4] as usize + i],
+            left_f[left_offsets[5] as usize + i],
+            left_g[left_offsets[6] as usize + i],
+        );
+        let rhs = (
+            right_a[right_offsets[0] as usize + i],
+            right_b[right_offsets[1] as usize + i],
+            right_c[right_offsets[2] as usize + i],
+            right_d[right_offsets[3] as usize + i],
+            right_e[right_offsets[4] as usize + i],
+            right_f[right_offsets[5] as usize + i],
+            right_g[right_offsets[6] as usize + i],
+        );
+        output[0] = if Less::apply(lhs, rhs) { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_set_membership_flags_kernel<
+    TyA: CubePrimitive,
+    TyB: CubePrimitive,
+    TyC: CubePrimitive,
+    TyD: CubePrimitive,
+    TyE: CubePrimitive,
+    TyF: CubePrimitive,
+    TyG: CubePrimitive,
+    Less: BinaryPredicateOp<(TyA, TyB, TyC, TyD, TyE, TyF, TyG)>,
+>(
+    candidate_a: &[TyA],
+    candidate_b: &[TyB],
+    candidate_c: &[TyC],
+    candidate_d: &[TyD],
+    candidate_e: &[TyE],
+    candidate_f: &[TyF],
+    candidate_g: &[TyG],
+    candidate_offsets: &[u32],
+    source_a: &[TyA],
+    source_b: &[TyB],
+    source_c: &[TyC],
+    source_d: &[TyD],
+    source_e: &[TyE],
+    source_f: &[TyF],
+    source_g: &[TyG],
+    source_offsets: &[u32],
+    candidate_len: &[u32],
+    source_len: &[u32],
+    keep_intersection: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (candidate_len[0] as usize) {
+        let value = (
+            candidate_a[candidate_offsets[0] as usize + global],
+            candidate_b[candidate_offsets[1] as usize + global],
+            candidate_c[candidate_offsets[2] as usize + global],
+            candidate_d[candidate_offsets[3] as usize + global],
+            candidate_e[candidate_offsets[4] as usize + global],
+            candidate_f[candidate_offsets[5] as usize + global],
+            candidate_g[candidate_offsets[6] as usize + global],
+        );
+
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let probe = (
+                source_a[source_offsets[0] as usize + mid],
+                source_b[source_offsets[1] as usize + mid],
+                source_c[source_offsets[2] as usize + mid],
+                source_d[source_offsets[3] as usize + mid],
+                source_e[source_offsets[4] as usize + mid],
+                source_f[source_offsets[5] as usize + mid],
+                source_g[source_offsets[6] as usize + mid],
+            );
+            if Less::apply(probe, value) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+
+        let lower = first;
+        first = lower;
+        count = (source_len[0] as usize) - lower;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let probe = (
+                source_a[source_offsets[0] as usize + mid],
+                source_b[source_offsets[1] as usize + mid],
+                source_c[source_offsets[2] as usize + mid],
+                source_d[source_offsets[3] as usize + mid],
+                source_e[source_offsets[4] as usize + mid],
+                source_f[source_offsets[5] as usize + mid],
+                source_g[source_offsets[6] as usize + mid],
+            );
+            if !Less::apply(value, probe) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        let source_count = first - lower;
+
+        let mut rank = 0usize;
+        let mut cursor = global;
+        while cursor > 0usize {
+            let prev = (
+                candidate_a[candidate_offsets[0] as usize + cursor - 1usize],
+                candidate_b[candidate_offsets[1] as usize + cursor - 1usize],
+                candidate_c[candidate_offsets[2] as usize + cursor - 1usize],
+                candidate_d[candidate_offsets[3] as usize + cursor - 1usize],
+                candidate_e[candidate_offsets[4] as usize + cursor - 1usize],
+                candidate_f[candidate_offsets[5] as usize + cursor - 1usize],
+                candidate_g[candidate_offsets[6] as usize + cursor - 1usize],
+            );
+            if Less::apply(prev, value) || Less::apply(value, prev) {
+                cursor = 0usize;
+            } else {
+                rank += 1usize;
+                cursor -= 1usize;
+            }
+        }
+
+        let keep = if keep_intersection[0] != 0u32 {
+            rank < source_count
+        } else {
+            rank >= source_count
+        };
+        flags[global] = if keep { 1u32 } else { 0u32 };
     }
 }
 
@@ -688,6 +1396,84 @@ define_tuple_mismatch_device_expr_flags_kernel!(
         left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
         right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets)
 );
+define_tuple_mismatch_device_expr_flags_kernel!(
+    tuple4_mismatch_device_expr_flags_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets)
+);
+define_tuple_mismatch_device_expr_flags_kernel!(
+    tuple5_mismatch_device_expr_flags_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets,
+     TyE: LeftEExpr / RightEExpr:
+        left_e_slot0, left_e_slot1, left_e_slot2, left_e_slot3, left_e_offsets /
+        right_e_slot0, right_e_slot1, right_e_slot2, right_e_slot3, right_e_offsets)
+);
+define_tuple_mismatch_device_expr_flags_kernel!(
+    tuple6_mismatch_device_expr_flags_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets,
+     TyE: LeftEExpr / RightEExpr:
+        left_e_slot0, left_e_slot1, left_e_slot2, left_e_slot3, left_e_offsets /
+        right_e_slot0, right_e_slot1, right_e_slot2, right_e_slot3, right_e_offsets,
+     TyF: LeftFExpr / RightFExpr:
+        left_f_slot0, left_f_slot1, left_f_slot2, left_f_slot3, left_f_offsets /
+        right_f_slot0, right_f_slot1, right_f_slot2, right_f_slot3, right_f_offsets)
+);
+define_tuple_mismatch_device_expr_flags_kernel!(
+    tuple7_mismatch_device_expr_flags_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets,
+     TyE: LeftEExpr / RightEExpr:
+        left_e_slot0, left_e_slot1, left_e_slot2, left_e_slot3, left_e_offsets /
+        right_e_slot0, right_e_slot1, right_e_slot2, right_e_slot3, right_e_offsets,
+     TyF: LeftFExpr / RightFExpr:
+        left_f_slot0, left_f_slot1, left_f_slot2, left_f_slot3, left_f_offsets /
+        right_f_slot0, right_f_slot1, right_f_slot2, right_f_slot3, right_f_offsets,
+     TyG: LeftGExpr / RightGExpr:
+        left_g_slot0, left_g_slot1, left_g_slot2, left_g_slot3, left_g_offsets /
+        right_g_slot0, right_g_slot1, right_g_slot2, right_g_slot3, right_g_offsets)
+);
 
 macro_rules! define_tuple_find_first_of_device_expr_flags_kernel {
     (
@@ -817,6 +1603,84 @@ define_tuple_find_first_of_device_expr_flags_kernel!(
      TyC: InputCExpr / NeedleCExpr:
         input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets /
         needle_c_slot0, needle_c_slot1, needle_c_slot2, needle_c_slot3, needle_c_offsets)
+);
+define_tuple_find_first_of_device_expr_flags_kernel!(
+    tuple4_find_first_of_device_expr_flags_kernel,
+    (TyA: InputAExpr / NeedleAExpr:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets /
+        needle_a_slot0, needle_a_slot1, needle_a_slot2, needle_a_slot3, needle_a_offsets,
+     TyB: InputBExpr / NeedleBExpr:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets /
+        needle_b_slot0, needle_b_slot1, needle_b_slot2, needle_b_slot3, needle_b_offsets,
+     TyC: InputCExpr / NeedleCExpr:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets /
+        needle_c_slot0, needle_c_slot1, needle_c_slot2, needle_c_slot3, needle_c_offsets,
+     TyD: InputDExpr / NeedleDExpr:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets /
+        needle_d_slot0, needle_d_slot1, needle_d_slot2, needle_d_slot3, needle_d_offsets)
+);
+define_tuple_find_first_of_device_expr_flags_kernel!(
+    tuple5_find_first_of_device_expr_flags_kernel,
+    (TyA: InputAExpr / NeedleAExpr:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets /
+        needle_a_slot0, needle_a_slot1, needle_a_slot2, needle_a_slot3, needle_a_offsets,
+     TyB: InputBExpr / NeedleBExpr:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets /
+        needle_b_slot0, needle_b_slot1, needle_b_slot2, needle_b_slot3, needle_b_offsets,
+     TyC: InputCExpr / NeedleCExpr:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets /
+        needle_c_slot0, needle_c_slot1, needle_c_slot2, needle_c_slot3, needle_c_offsets,
+     TyD: InputDExpr / NeedleDExpr:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets /
+        needle_d_slot0, needle_d_slot1, needle_d_slot2, needle_d_slot3, needle_d_offsets,
+     TyE: InputEExpr / NeedleEExpr:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets /
+        needle_e_slot0, needle_e_slot1, needle_e_slot2, needle_e_slot3, needle_e_offsets)
+);
+define_tuple_find_first_of_device_expr_flags_kernel!(
+    tuple6_find_first_of_device_expr_flags_kernel,
+    (TyA: InputAExpr / NeedleAExpr:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets /
+        needle_a_slot0, needle_a_slot1, needle_a_slot2, needle_a_slot3, needle_a_offsets,
+     TyB: InputBExpr / NeedleBExpr:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets /
+        needle_b_slot0, needle_b_slot1, needle_b_slot2, needle_b_slot3, needle_b_offsets,
+     TyC: InputCExpr / NeedleCExpr:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets /
+        needle_c_slot0, needle_c_slot1, needle_c_slot2, needle_c_slot3, needle_c_offsets,
+     TyD: InputDExpr / NeedleDExpr:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets /
+        needle_d_slot0, needle_d_slot1, needle_d_slot2, needle_d_slot3, needle_d_offsets,
+     TyE: InputEExpr / NeedleEExpr:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets /
+        needle_e_slot0, needle_e_slot1, needle_e_slot2, needle_e_slot3, needle_e_offsets,
+     TyF: InputFExpr / NeedleFExpr:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets /
+        needle_f_slot0, needle_f_slot1, needle_f_slot2, needle_f_slot3, needle_f_offsets)
+);
+define_tuple_find_first_of_device_expr_flags_kernel!(
+    tuple7_find_first_of_device_expr_flags_kernel,
+    (TyA: InputAExpr / NeedleAExpr:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets /
+        needle_a_slot0, needle_a_slot1, needle_a_slot2, needle_a_slot3, needle_a_offsets,
+     TyB: InputBExpr / NeedleBExpr:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets /
+        needle_b_slot0, needle_b_slot1, needle_b_slot2, needle_b_slot3, needle_b_offsets,
+     TyC: InputCExpr / NeedleCExpr:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets /
+        needle_c_slot0, needle_c_slot1, needle_c_slot2, needle_c_slot3, needle_c_offsets,
+     TyD: InputDExpr / NeedleDExpr:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets /
+        needle_d_slot0, needle_d_slot1, needle_d_slot2, needle_d_slot3, needle_d_offsets,
+     TyE: InputEExpr / NeedleEExpr:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets /
+        needle_e_slot0, needle_e_slot1, needle_e_slot2, needle_e_slot3, needle_e_offsets,
+     TyF: InputFExpr / NeedleFExpr:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets /
+        needle_f_slot0, needle_f_slot1, needle_f_slot2, needle_f_slot3, needle_f_offsets,
+     TyG: InputGExpr / NeedleGExpr:
+        input_g_slot0, input_g_slot1, input_g_slot2, input_g_slot3, input_g_offsets /
+        needle_g_slot0, needle_g_slot1, needle_g_slot2, needle_g_slot3, needle_g_offsets)
 );
 
 macro_rules! define_tuple_search_device_expr_kernels {
@@ -1095,6 +1959,74 @@ define_tuple_search_device_expr_kernels!(
      TyC: ExprC:
         input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c)
 );
+define_tuple_search_device_expr_kernels!(
+    tuple4_adjacent_device_expr_flags_kernel,
+    tuple4_sorted_break_device_expr_flags_kernel,
+    tuple4_lower_bound_device_expr_flags_kernel,
+    tuple4_upper_bound_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets / value_a,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets / value_b,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets / value_d)
+);
+define_tuple_search_device_expr_kernels!(
+    tuple5_adjacent_device_expr_flags_kernel,
+    tuple5_sorted_break_device_expr_flags_kernel,
+    tuple5_lower_bound_device_expr_flags_kernel,
+    tuple5_upper_bound_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets / value_a,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets / value_b,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets / value_d,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets / value_e)
+);
+define_tuple_search_device_expr_kernels!(
+    tuple6_adjacent_device_expr_flags_kernel,
+    tuple6_sorted_break_device_expr_flags_kernel,
+    tuple6_lower_bound_device_expr_flags_kernel,
+    tuple6_upper_bound_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets / value_a,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets / value_b,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets / value_d,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets / value_e,
+     TyF: ExprF:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets / value_f)
+);
+define_tuple_search_device_expr_kernels!(
+    tuple7_adjacent_device_expr_flags_kernel,
+    tuple7_sorted_break_device_expr_flags_kernel,
+    tuple7_lower_bound_device_expr_flags_kernel,
+    tuple7_upper_bound_device_expr_flags_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets / value_a,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets / value_b,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets / value_c,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets / value_d,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets / value_e,
+     TyF: ExprF:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets / value_f,
+     TyG: ExprG:
+        input_g_slot0, input_g_slot1, input_g_slot2, input_g_slot3, input_g_offsets / value_g)
+);
 
 macro_rules! define_tuple_bound_many_device_expr_kernels {
     (
@@ -1324,6 +2256,88 @@ define_tuple_bound_many_device_expr_kernels!(
      TyC: SourceExprC / ValueExprC:
         source_c_slot0, source_c_slot1, source_c_slot2, source_c_slot3, source_c_offsets /
         value_c_slot0, value_c_slot1, value_c_slot2, value_c_slot3, value_c_offsets)
+);
+define_tuple_bound_many_device_expr_kernels!(
+    tuple4_lower_bound_device_expr_many_kernel,
+    tuple4_upper_bound_device_expr_many_kernel,
+    (TyA: SourceExprA / ValueExprA:
+        source_a_slot0, source_a_slot1, source_a_slot2, source_a_slot3, source_a_offsets /
+        value_a_slot0, value_a_slot1, value_a_slot2, value_a_slot3, value_a_offsets,
+     TyB: SourceExprB / ValueExprB:
+        source_b_slot0, source_b_slot1, source_b_slot2, source_b_slot3, source_b_offsets /
+        value_b_slot0, value_b_slot1, value_b_slot2, value_b_slot3, value_b_offsets,
+     TyC: SourceExprC / ValueExprC:
+        source_c_slot0, source_c_slot1, source_c_slot2, source_c_slot3, source_c_offsets /
+        value_c_slot0, value_c_slot1, value_c_slot2, value_c_slot3, value_c_offsets,
+     TyD: SourceExprD / ValueExprD:
+        source_d_slot0, source_d_slot1, source_d_slot2, source_d_slot3, source_d_offsets /
+        value_d_slot0, value_d_slot1, value_d_slot2, value_d_slot3, value_d_offsets)
+);
+define_tuple_bound_many_device_expr_kernels!(
+    tuple5_lower_bound_device_expr_many_kernel,
+    tuple5_upper_bound_device_expr_many_kernel,
+    (TyA: SourceExprA / ValueExprA:
+        source_a_slot0, source_a_slot1, source_a_slot2, source_a_slot3, source_a_offsets /
+        value_a_slot0, value_a_slot1, value_a_slot2, value_a_slot3, value_a_offsets,
+     TyB: SourceExprB / ValueExprB:
+        source_b_slot0, source_b_slot1, source_b_slot2, source_b_slot3, source_b_offsets /
+        value_b_slot0, value_b_slot1, value_b_slot2, value_b_slot3, value_b_offsets,
+     TyC: SourceExprC / ValueExprC:
+        source_c_slot0, source_c_slot1, source_c_slot2, source_c_slot3, source_c_offsets /
+        value_c_slot0, value_c_slot1, value_c_slot2, value_c_slot3, value_c_offsets,
+     TyD: SourceExprD / ValueExprD:
+        source_d_slot0, source_d_slot1, source_d_slot2, source_d_slot3, source_d_offsets /
+        value_d_slot0, value_d_slot1, value_d_slot2, value_d_slot3, value_d_offsets,
+     TyE: SourceExprE / ValueExprE:
+        source_e_slot0, source_e_slot1, source_e_slot2, source_e_slot3, source_e_offsets /
+        value_e_slot0, value_e_slot1, value_e_slot2, value_e_slot3, value_e_offsets)
+);
+define_tuple_bound_many_device_expr_kernels!(
+    tuple6_lower_bound_device_expr_many_kernel,
+    tuple6_upper_bound_device_expr_many_kernel,
+    (TyA: SourceExprA / ValueExprA:
+        source_a_slot0, source_a_slot1, source_a_slot2, source_a_slot3, source_a_offsets /
+        value_a_slot0, value_a_slot1, value_a_slot2, value_a_slot3, value_a_offsets,
+     TyB: SourceExprB / ValueExprB:
+        source_b_slot0, source_b_slot1, source_b_slot2, source_b_slot3, source_b_offsets /
+        value_b_slot0, value_b_slot1, value_b_slot2, value_b_slot3, value_b_offsets,
+     TyC: SourceExprC / ValueExprC:
+        source_c_slot0, source_c_slot1, source_c_slot2, source_c_slot3, source_c_offsets /
+        value_c_slot0, value_c_slot1, value_c_slot2, value_c_slot3, value_c_offsets,
+     TyD: SourceExprD / ValueExprD:
+        source_d_slot0, source_d_slot1, source_d_slot2, source_d_slot3, source_d_offsets /
+        value_d_slot0, value_d_slot1, value_d_slot2, value_d_slot3, value_d_offsets,
+     TyE: SourceExprE / ValueExprE:
+        source_e_slot0, source_e_slot1, source_e_slot2, source_e_slot3, source_e_offsets /
+        value_e_slot0, value_e_slot1, value_e_slot2, value_e_slot3, value_e_offsets,
+     TyF: SourceExprF / ValueExprF:
+        source_f_slot0, source_f_slot1, source_f_slot2, source_f_slot3, source_f_offsets /
+        value_f_slot0, value_f_slot1, value_f_slot2, value_f_slot3, value_f_offsets)
+);
+define_tuple_bound_many_device_expr_kernels!(
+    tuple7_lower_bound_device_expr_many_kernel,
+    tuple7_upper_bound_device_expr_many_kernel,
+    (TyA: SourceExprA / ValueExprA:
+        source_a_slot0, source_a_slot1, source_a_slot2, source_a_slot3, source_a_offsets /
+        value_a_slot0, value_a_slot1, value_a_slot2, value_a_slot3, value_a_offsets,
+     TyB: SourceExprB / ValueExprB:
+        source_b_slot0, source_b_slot1, source_b_slot2, source_b_slot3, source_b_offsets /
+        value_b_slot0, value_b_slot1, value_b_slot2, value_b_slot3, value_b_offsets,
+     TyC: SourceExprC / ValueExprC:
+        source_c_slot0, source_c_slot1, source_c_slot2, source_c_slot3, source_c_offsets /
+        value_c_slot0, value_c_slot1, value_c_slot2, value_c_slot3, value_c_offsets,
+     TyD: SourceExprD / ValueExprD:
+        source_d_slot0, source_d_slot1, source_d_slot2, source_d_slot3, source_d_offsets /
+        value_d_slot0, value_d_slot1, value_d_slot2, value_d_slot3, value_d_offsets,
+     TyE: SourceExprE / ValueExprE:
+        source_e_slot0, source_e_slot1, source_e_slot2, source_e_slot3, source_e_offsets /
+        value_e_slot0, value_e_slot1, value_e_slot2, value_e_slot3, value_e_offsets,
+     TyF: SourceExprF / ValueExprF:
+        source_f_slot0, source_f_slot1, source_f_slot2, source_f_slot3, source_f_offsets /
+        value_f_slot0, value_f_slot1, value_f_slot2, value_f_slot3, value_f_offsets,
+     TyG: SourceExprG / ValueExprG:
+        source_g_slot0, source_g_slot1, source_g_slot2, source_g_slot3, source_g_offsets /
+        value_g_slot0, value_g_slot1, value_g_slot2, value_g_slot3, value_g_offsets)
 );
 
 macro_rules! define_tuple_membership_device_expr_flags_kernel {
@@ -2000,6 +3014,66 @@ define_tuple_minmax_device_expr_kernels!(
      TyC: ExprC:
         input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets)
 );
+define_tuple_minmax_device_expr_kernels!(
+    tuple4_minmax_element_device_expr_partials_kernel,
+    tuple4_minmax_index_device_expr_partials_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets)
+);
+define_tuple_minmax_device_expr_kernels!(
+    tuple5_minmax_element_device_expr_partials_kernel,
+    tuple5_minmax_index_device_expr_partials_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets)
+);
+define_tuple_minmax_device_expr_kernels!(
+    tuple6_minmax_element_device_expr_partials_kernel,
+    tuple6_minmax_index_device_expr_partials_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets,
+     TyF: ExprF:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets)
+);
+define_tuple_minmax_device_expr_kernels!(
+    tuple7_minmax_element_device_expr_partials_kernel,
+    tuple7_minmax_index_device_expr_partials_kernel,
+    (TyA: ExprA:
+        input_a_slot0, input_a_slot1, input_a_slot2, input_a_slot3, input_a_offsets,
+     TyB: ExprB:
+        input_b_slot0, input_b_slot1, input_b_slot2, input_b_slot3, input_b_offsets,
+     TyC: ExprC:
+        input_c_slot0, input_c_slot1, input_c_slot2, input_c_slot3, input_c_offsets,
+     TyD: ExprD:
+        input_d_slot0, input_d_slot1, input_d_slot2, input_d_slot3, input_d_offsets,
+     TyE: ExprE:
+        input_e_slot0, input_e_slot1, input_e_slot2, input_e_slot3, input_e_offsets,
+     TyF: ExprF:
+        input_f_slot0, input_f_slot1, input_f_slot2, input_f_slot3, input_f_offsets,
+     TyG: ExprG:
+        input_g_slot0, input_g_slot1, input_g_slot2, input_g_slot3, input_g_offsets)
+);
 
 macro_rules! define_tuple_lexicographical_device_expr_kernels {
     (
@@ -2211,6 +3285,88 @@ define_tuple_lexicographical_device_expr_kernels!(
      TyC: LeftCExpr / RightCExpr:
         left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
         right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets)
+);
+define_tuple_lexicographical_device_expr_kernels!(
+    tuple4_lexicographical_diff_device_expr_flags_kernel,
+    tuple4_lexicographical_compare_at_device_expr_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets)
+);
+define_tuple_lexicographical_device_expr_kernels!(
+    tuple5_lexicographical_diff_device_expr_flags_kernel,
+    tuple5_lexicographical_compare_at_device_expr_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets,
+     TyE: LeftEExpr / RightEExpr:
+        left_e_slot0, left_e_slot1, left_e_slot2, left_e_slot3, left_e_offsets /
+        right_e_slot0, right_e_slot1, right_e_slot2, right_e_slot3, right_e_offsets)
+);
+define_tuple_lexicographical_device_expr_kernels!(
+    tuple6_lexicographical_diff_device_expr_flags_kernel,
+    tuple6_lexicographical_compare_at_device_expr_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets,
+     TyE: LeftEExpr / RightEExpr:
+        left_e_slot0, left_e_slot1, left_e_slot2, left_e_slot3, left_e_offsets /
+        right_e_slot0, right_e_slot1, right_e_slot2, right_e_slot3, right_e_offsets,
+     TyF: LeftFExpr / RightFExpr:
+        left_f_slot0, left_f_slot1, left_f_slot2, left_f_slot3, left_f_offsets /
+        right_f_slot0, right_f_slot1, right_f_slot2, right_f_slot3, right_f_offsets)
+);
+define_tuple_lexicographical_device_expr_kernels!(
+    tuple7_lexicographical_diff_device_expr_flags_kernel,
+    tuple7_lexicographical_compare_at_device_expr_kernel,
+    (TyA: LeftAExpr / RightAExpr:
+        left_a_slot0, left_a_slot1, left_a_slot2, left_a_slot3, left_a_offsets /
+        right_a_slot0, right_a_slot1, right_a_slot2, right_a_slot3, right_a_offsets,
+     TyB: LeftBExpr / RightBExpr:
+        left_b_slot0, left_b_slot1, left_b_slot2, left_b_slot3, left_b_offsets /
+        right_b_slot0, right_b_slot1, right_b_slot2, right_b_slot3, right_b_offsets,
+     TyC: LeftCExpr / RightCExpr:
+        left_c_slot0, left_c_slot1, left_c_slot2, left_c_slot3, left_c_offsets /
+        right_c_slot0, right_c_slot1, right_c_slot2, right_c_slot3, right_c_offsets,
+     TyD: LeftDExpr / RightDExpr:
+        left_d_slot0, left_d_slot1, left_d_slot2, left_d_slot3, left_d_offsets /
+        right_d_slot0, right_d_slot1, right_d_slot2, right_d_slot3, right_d_offsets,
+     TyE: LeftEExpr / RightEExpr:
+        left_e_slot0, left_e_slot1, left_e_slot2, left_e_slot3, left_e_offsets /
+        right_e_slot0, right_e_slot1, right_e_slot2, right_e_slot3, right_e_offsets,
+     TyF: LeftFExpr / RightFExpr:
+        left_f_slot0, left_f_slot1, left_f_slot2, left_f_slot3, left_f_offsets /
+        right_f_slot0, right_f_slot1, right_f_slot2, right_f_slot3, right_f_offsets,
+     TyG: LeftGExpr / RightGExpr:
+        left_g_slot0, left_g_slot1, left_g_slot2, left_g_slot3, left_g_offsets /
+        right_g_slot0, right_g_slot1, right_g_slot2, right_g_slot3, right_g_offsets)
 );
 
 #[cube(launch_unchecked, explicit_define)]
@@ -4240,6 +5396,73 @@ pub(crate) fn tuple3_adjacent_difference_expr_kernel<
         output_a[global] = output.0;
         output_b[global] = output.1;
         output_c[global] = output.2;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn tuple7_view_adjacent_difference_kernel<
+    A: CubePrimitive,
+    B: CubePrimitive,
+    C: CubePrimitive,
+    D: CubePrimitive,
+    E: CubePrimitive,
+    F: CubePrimitive,
+    G: CubePrimitive,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+>(
+    input_a: &[A],
+    input_b: &[B],
+    input_c: &[C],
+    input_d: &[D],
+    input_e: &[E],
+    input_f: &[F],
+    input_g: &[G],
+    offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [A],
+    output_b: &mut [B],
+    output_c: &mut [C],
+    output_d: &mut [D],
+    output_e: &mut [E],
+    output_f: &mut [F],
+    output_g: &mut [G],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let current = (
+            input_a[offsets[0] as usize + global],
+            input_b[offsets[1] as usize + global],
+            input_c[offsets[2] as usize + global],
+            input_d[offsets[3] as usize + global],
+            input_e[offsets[4] as usize + global],
+            input_f[offsets[5] as usize + global],
+            input_g[offsets[6] as usize + global],
+        );
+        let output = if global == 0usize {
+            current
+        } else {
+            Op::apply(
+                current,
+                (
+                    input_a[offsets[0] as usize + global - 1usize],
+                    input_b[offsets[1] as usize + global - 1usize],
+                    input_c[offsets[2] as usize + global - 1usize],
+                    input_d[offsets[3] as usize + global - 1usize],
+                    input_e[offsets[4] as usize + global - 1usize],
+                    input_f[offsets[5] as usize + global - 1usize],
+                    input_g[offsets[6] as usize + global - 1usize],
+                ),
+            )
+        };
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+        output_f[global] = output.5;
+        output_g[global] = output.6;
     }
 }
 

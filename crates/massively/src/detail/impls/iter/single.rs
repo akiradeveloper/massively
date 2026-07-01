@@ -216,13 +216,14 @@ where
         KeyOutput: MVec<R, Item = (K1, K2)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let _ = _less;
-        let values = self.into_inner_with_policy(policy)?.0;
-        let (key_a,) = crate::detail::reverse(policy, (first_key,))?;
-        let (key_b,) = crate::detail::reverse(policy, (second_key,))?;
-        let value_inner = crate::detail::reverse(policy, (values,))?;
+        let (key_inner, value_inner) = crate::detail::sort_by_key(
+            policy,
+            (first_key, second_key),
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok((
-            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
         ))
     }
@@ -318,13 +319,14 @@ where
         KeyOutput: MVec<R, Item = (K1, K2)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let _ = _eq;
-        let values = self.into_inner_with_policy(policy)?.0;
-        let (key_a,) = crate::detail::reverse(policy, (first_key,))?;
-        let (key_b,) = crate::detail::reverse(policy, (second_key,))?;
-        let value_inner = crate::detail::reverse(policy, (values,))?;
+        let (key_inner, value_inner) = crate::detail::unique_by_key(
+            policy,
+            (first_key, second_key),
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Eq>::new(),
+        )?;
         Ok((
-            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
         ))
     }
@@ -400,8 +402,8 @@ where
     fn inclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        _first_key: crate::detail::device::DeviceColumnView<R, K1>,
-        _second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
         _key_eq: KeyEq,
         _op: Op,
     ) -> Result<Output, Error>
@@ -413,8 +415,29 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::reverse(policy, (values,))?;
-        Ok(array_from_inner::<R, (T,), Output>(inner))
+        ensure_same_len(values.len, first_key.len)?;
+        let head_flags = crate::detail::read::unique_tuple2_flags_read::<_, _, KernelOp<R, KeyEq>>(
+            policy,
+            &first_key,
+            &second_key,
+        )?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let control = crate::detail::control::ScanByKeyControl {
+            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+            head_flags,
+            len: first_key.len,
+            len_u32,
+            _marker: std::marker::PhantomData,
+        };
+        let inner = crate::detail::read::inclusive_scan_by_flags_one::<
+            _,
+            (K1, K2),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >(policy, &values, &control)?;
+        Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
     fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -511,10 +534,10 @@ where
     fn exclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        _first_key: crate::detail::device::DeviceColumnView<R, K1>,
-        _second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
         _key_eq: KeyEq,
-        _init: <Self as MIter<R>>::Item,
+        init: <Self as MIter<R>>::Item,
         _op: Op,
     ) -> Result<Output, Error>
     where
@@ -525,8 +548,29 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::reverse(policy, (values,))?;
-        Ok(array_from_inner::<R, (T,), Output>(inner))
+        ensure_same_len(values.len, first_key.len)?;
+        let head_flags = crate::detail::read::unique_tuple2_flags_read::<_, _, KernelOp<R, KeyEq>>(
+            policy,
+            &first_key,
+            &second_key,
+        )?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let control = crate::detail::control::ScanByKeyControl {
+            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+            head_flags,
+            len: first_key.len,
+            len_u32,
+            _marker: std::marker::PhantomData,
+        };
+        let inner = crate::detail::read::exclusive_scan_by_flags_one::<
+            _,
+            (K1, K2),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >(policy, &values, &control, init.0)?;
+        Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
     fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -607,7 +651,7 @@ where
         first_key: crate::detail::device::DeviceColumnView<R, K1>,
         second_key: crate::detail::device::DeviceColumnView<R, K2>,
         _key_eq: KeyEq,
-        _init: <Self as MIter<R>>::Item,
+        init: <Self as MIter<R>>::Item,
         _op: Op,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
@@ -619,11 +663,89 @@ where
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let (key_a,) = crate::detail::reverse(policy, (first_key,))?;
-        let (key_b,) = crate::detail::reverse(policy, (second_key,))?;
-        let value_inner = crate::detail::reverse(policy, (values,))?;
+        ensure_same_len(values.len, first_key.len)?;
+        if first_key.len == 0 {
+            let key_inner = (policy.empty_device_vec(), policy.empty_device_vec());
+            let value_inner = (policy.empty_device_vec(),);
+            return Ok((
+                array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                array_from_inner::<R, (T,), ValueOutput>(value_inner),
+            ));
+        }
+        let head_flags = crate::detail::read::unique_tuple2_flags_read::<_, _, KernelOp<R, KeyEq>>(
+            policy,
+            &first_key,
+            &second_key,
+        )?;
+        let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let control: crate::detail::control::ScanByKeyControl<R, (K1, K2), (), KernelOp<R, KeyEq>> =
+            crate::detail::control::ScanByKeyControl {
+                key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                head_flags,
+                len: first_key.len,
+                len_u32,
+                _marker: std::marker::PhantomData,
+            };
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<
+            _,
+            (K1, K2),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >(policy, &values, &control)?;
+
+        let client = policy.client();
+        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+        let init_handle = client.create_from_slice(T::as_bytes(&[init.0]));
+        let reduced_handle = client.empty(first_key.len * std::mem::size_of::<T>());
+        let num_blocks = first_key
+            .len
+            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        unsafe {
+            crate::kernels::reduce_by_key_apply_init_kernel::launch_unchecked::<
+                T,
+                KernelOp<R, Op>,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.handle.clone(), first_key.len),
+                BufferArg::from_raw_parts(init_handle.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_handle.clone(), first_key.len),
+            );
+        }
+
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_flags_with_policy(
+                policy,
+                &first_key,
+                end_flags.clone(),
+            )?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy(
+                policy,
+                &second_key,
+                end_flags.clone(),
+            )?,
+        );
+        let value_handles = crate::detail::primitives::select::handles_from_flags(
+            policy,
+            first_key.len,
+            len_u32,
+            end_flags,
+            reduced_handle,
+        )?;
+        let value_inner = (crate::detail::primitives::select::compact::<R, T>(
+            policy,
+            value_handles,
+        )?,);
         Ok((
-            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
         ))
     }
@@ -705,9 +827,9 @@ where
         policy: &crate::detail::CubePolicy<R>,
         left_first_key: crate::detail::device::DeviceColumnView<R, K1>,
         left_second_key: crate::detail::device::DeviceColumnView<R, K2>,
-        _right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
-        _right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
-        _right_values: RightValues,
+        right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        right_values: RightValues,
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
@@ -718,12 +840,20 @@ where
         KeyOutput: MVec<R, Item = (K1, K2)>,
         ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let values = self.into_inner_with_policy(policy)?.0;
-        let (key_a,) = crate::detail::reverse(policy, (left_first_key,))?;
-        let (key_b,) = crate::detail::reverse(policy, (left_second_key,))?;
-        let value_inner = crate::detail::reverse(policy, (values,))?;
+        let left_value = self.into_view_with_policy(policy)?.0;
+        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let (key_inner, value_inner) = crate::detail::merge_by_key(
+            policy,
+            (left_first_key, left_second_key),
+            crate::detail::device::SoAView1 { source: left_value },
+            (right_first_key, right_second_key),
+            crate::detail::device::SoAView1 {
+                source: right_value,
+            },
+            KernelOp::<R, Less>::new(),
+        )?;
         Ok((
-            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
         ))
     }
