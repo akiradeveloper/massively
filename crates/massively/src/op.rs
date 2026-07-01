@@ -82,6 +82,43 @@ pub fn compose<First, Second>(_first: First, _second: Second) -> Compose<First, 
     Compose::new()
 }
 
+/// Unary operator that ignores its input and returns the captured environment.
+///
+/// This is useful with [`map`](crate::map) or [`transform`](crate::transform)
+/// when an algorithm needs a constant item stream without defining a custom
+/// operation marker.
+///
+/// ```no_run
+/// # use cubecl::prelude::*;
+/// # use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// # let exec = massively::Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+/// # let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+/// let massively::SoA1(output) = massively::map(
+///     &exec,
+///     massively::SoA1(input.slice(..)),
+///     massively::op::Const::<(u32,)>::new(),
+///     (42_u32,),
+/// )
+/// .unwrap();
+/// # let _ = output;
+/// ```
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Const<Out> {
+    _out: PhantomData<fn() -> Out>,
+}
+
+impl<Out> Const<Out> {
+    /// Creates a constant operator marker.
+    pub const fn new() -> Self {
+        Self { _out: PhantomData }
+    }
+}
+
+/// Creates a marker for a unary operator that always returns its environment.
+pub fn constant<Out>() -> Const<Out> {
+    Const::new()
+}
+
 #[cube]
 impl<R, Input, First, Second> UnaryOp<R, Input> for Compose<First, Second>
 where
@@ -95,6 +132,21 @@ where
 
     fn apply(env: Self::Env, input: Input) -> Self::Output {
         Second::apply(env.1, First::apply(env.0, input))
+    }
+}
+
+#[cube]
+impl<R, Input, Out> UnaryOp<R, Input> for Const<Out>
+where
+    R: cubecl::prelude::Runtime,
+    Input: crate::MItem<R>,
+    Out: crate::MItem<R> + LaunchArg + CubeType<ExpandType: Clone>,
+{
+    type Env = Out;
+    type Output = Out;
+
+    fn apply(env: Self::Env, _input: Input) -> Self::Output {
+        env
     }
 }
 

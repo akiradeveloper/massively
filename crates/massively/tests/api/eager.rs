@@ -104,6 +104,39 @@ fn composed_unary_op_uses_paired_env() {
 }
 
 #[test]
+fn const_unary_op_returns_env_for_single_column() {
+    let exec = exec();
+    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+
+    let massively::SoA1(output) = map(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        massively::op::constant::<(u32,)>(),
+        (42_u32,),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![42, 42, 42]);
+}
+
+#[test]
+fn const_unary_op_returns_env_for_multi_column() {
+    let exec = exec();
+    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+
+    let massively::SoA2(values, tags) = map(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        massively::op::Const::<(f32, u32)>::new(),
+        (1.5_f32, 9_u32),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&values).unwrap(), vec![1.5, 1.5, 1.5]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![9, 9, 9]);
+}
+
+#[test]
 fn stateful_predicate_op_carries_value() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 3, 5, 7]).unwrap();
