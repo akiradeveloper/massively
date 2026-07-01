@@ -64,7 +64,9 @@ where
     T: CubePrimitive + CubeElement,
     Op: PredicateOp<(T,)>,
 {
-    fn apply(input: T) -> bool {
-        Op::apply((input,))
+    type Env = Op::Env;
+
+    fn apply(env: Self::Env, input: T) -> bool {
+        Op::apply(env, (input,))
     }
 }

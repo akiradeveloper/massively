@@ -953,6 +953,7 @@ pub(crate) fn remove_value_flags_kernel<T: CubePrimitive, Pred: BinaryPredicateO
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn replace_if_value_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+    env: Pred::Env,
     input: &[T],
     replacement: &[T],
     output: &mut [T],
@@ -961,7 +962,7 @@ pub(crate) fn replace_if_value_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < input.len() {
-        if Pred::apply(input[global]) {
+        if Pred::apply(env, input[global]) {
             output[global] = replacement[0];
         } else {
             output[global] = input[global];
@@ -1129,6 +1130,7 @@ pub(crate) fn sorted_membership_device_expr_flags_kernel<
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn gather_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+    env: Pred::Env,
     input: &[T],
     indices: &[u32],
     output: &mut [T],
@@ -1136,7 +1138,7 @@ pub(crate) fn gather_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < indices.len() {
         let value = input[indices[unit] as usize];
-        if Pred::apply(value) {
+        if Pred::apply(env, value) {
             output[unit] = value;
         }
     }

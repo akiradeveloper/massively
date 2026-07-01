@@ -112,6 +112,7 @@ pub(in crate::detail) fn device_expr_copy_where_with_policy<ExprSource, Pred>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -121,7 +122,7 @@ where
     Pred: PredicateOp<ExprSource::Item>,
 {
     let handles =
-        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
+        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
     let count = select::selected_count(policy, &handles)?;
     device_expr_compact_with_selection_with_policy(policy, expr, &handles, count)
 }
@@ -290,6 +291,7 @@ pub(in crate::detail) fn device_expr_count_if_with_policy<ExprSource, Pred>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<usize, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -299,7 +301,7 @@ where
     Pred: PredicateOp<ExprSource::Item>,
 {
     let handles =
-        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
+        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
     if handles.len == 0 {
         return Ok(0);
     }
@@ -311,6 +313,7 @@ pub(in crate::detail) fn device_expr_find_if_with_policy<ExprSource, Pred>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<Option<usize>, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -320,7 +323,7 @@ where
     Pred: PredicateOp<ExprSource::Item>,
 {
     let handles =
-        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
+        device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
     primitive_search::first_flag(policy, handles.flag, handles.len, expr.len())
 }
 
@@ -328,6 +331,7 @@ pub(in crate::detail) fn device_expr_selection_handles_with_policy<ExprSource, P
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<select::SelectionHandles, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -373,6 +377,7 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            env,
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
@@ -391,6 +396,7 @@ pub(in crate::detail) fn device_expr_selection_flags_with_policy<ExprSource, Pre
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<select::SelectionHandles, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -429,6 +435,7 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            env,
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },

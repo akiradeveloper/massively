@@ -26,9 +26,10 @@ impl<B> UnaryOp<B, (u32, u32)> for InventoryUrgency
 where
     B: cubecl::prelude::Runtime,
 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32, u32)) -> (u32,) {
+    fn apply(_env: (), input: (u32, u32)) -> (u32,) {
         let stock = input.0;
         let daily_sales = input.1;
         let target = daily_sales * 3_u32;
@@ -59,6 +60,7 @@ where
         exec,
         SoA2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
+        (),
         SoA1(urgency.slice_mut(..)),
     )?;
     let SoA2(sku, urgency) = copy_where(

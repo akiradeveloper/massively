@@ -10,7 +10,7 @@ fn main() -> common::Result {
     let indices = exec.to_device(&[2_u32, 0, 1])?;
 
     let permuted: SoA1<_> = permute(&exec, SoA1(values.slice(..)), indices.slice(..))?;
-    let SoA1(output) = map(&exec, permuted.slice(..), common::AddOne)?;
+    let SoA1(output) = map(&exec, permuted.slice(..), common::AddOne, ())?;
 
     assert_eq!(exec.to_host(&output)?, vec![31.0, 11.0, 21.0]);
     Ok(())

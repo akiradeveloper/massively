@@ -261,9 +261,10 @@ pub(crate) struct Double;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32,)> for Double {
+    type Env = ();
     type Output = (f32,);
 
-    fn apply(input: (f32,)) -> (f32,) {
+    fn apply(_env: (), input: (f32,)) -> (f32,) {
         (input.0 * 2.0,)
     }
 }
@@ -272,9 +273,10 @@ pub(crate) struct ScalarToTuple5Mixed;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32,)> for ScalarToTuple5Mixed {
+    type Env = ();
     type Output = (f32, u32, f32, u32, f32);
 
-    fn apply(input: (f32,)) -> (f32, u32, f32, u32, f32) {
+    fn apply(_env: (), input: (f32,)) -> (f32, u32, f32, u32, f32) {
         (
             input.0 + 1.0,
             input.0 as u32 + 2,
@@ -289,9 +291,10 @@ pub(crate) struct ScalarToTuple7Mixed;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (u32,)> for ScalarToTuple7Mixed {
+    type Env = ();
     type Output = (u32, f32, u32, f32, u32, f32, u32);
 
-    fn apply(input: (u32,)) -> (u32, f32, u32, f32, u32, f32, u32) {
+    fn apply(_env: (), input: (u32,)) -> (u32, f32, u32, f32, u32, f32, u32) {
         (
             input.0 + 1,
             input.0 as f32 + 2.0,
@@ -308,7 +311,9 @@ pub(crate) struct GreaterThanFour;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32,)> for GreaterThanFour {
-    fn apply(input: (f32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32,)) -> bool {
         input.0 > 4.0
     }
 }
@@ -317,7 +322,9 @@ pub(crate) struct F32GreaterThanOne;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32,)> for F32GreaterThanOne {
-    fn apply(input: (f32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32,)) -> bool {
         input.0 > 1.0
     }
 }
@@ -326,7 +333,9 @@ pub(crate) struct NonZero;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (u32,)> for NonZero {
-    fn apply(input: (u32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (u32,)) -> bool {
         input.0 != 0
     }
 }
@@ -335,7 +344,9 @@ pub(crate) struct U32IsTwenty;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (u32,)> for U32IsTwenty {
-    fn apply(input: (u32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (u32,)) -> bool {
         input.0 == 20
     }
 }
@@ -344,7 +355,9 @@ pub(crate) struct MixedStencilKeep;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32, u32)> for MixedStencilKeep {
-    fn apply(input: (f32, u32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32, u32)) -> bool {
         input.0 > 1.0 && input.1 != 0
     }
 }
@@ -353,9 +366,10 @@ pub(crate) struct PairMixedSplit;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32, u32)> for PairMixedSplit {
+    type Env = ();
     type Output = (f32, u32);
 
-    fn apply(input: (f32, u32)) -> (f32, u32) {
+    fn apply(_env: (), input: (f32, u32)) -> (f32, u32) {
         (input.0 + 10.0, input.1 + 1)
     }
 }
@@ -364,9 +378,10 @@ pub(crate) struct PairScaleAndTag;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32, u32)> for PairScaleAndTag {
+    type Env = ();
     type Output = (f32, u32);
 
-    fn apply(input: (f32, u32)) -> (f32, u32) {
+    fn apply(_env: (), input: (f32, u32)) -> (f32, u32) {
         (input.0 * 2.0, input.1 + 1)
     }
 }
@@ -375,9 +390,10 @@ pub(crate) struct Tuple3MixedSplit;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedSplit {
+    type Env = ();
     type Output = (f32, u32, f32);
 
-    fn apply(input: (f32, u32, f32)) -> (f32, u32, f32) {
+    fn apply(_env: (), input: (f32, u32, f32)) -> (f32, u32, f32) {
         (input.0 + input.2, input.1 + 1, input.2 + input.0)
     }
 }
@@ -386,9 +402,10 @@ pub(crate) struct Tuple4MixedSplit;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32)> for Tuple4MixedSplit {
+    type Env = ();
     type Output = (f32, u32, f32, u32);
 
-    fn apply(input: (f32, u32, f32, u32)) -> (f32, u32, f32, u32) {
+    fn apply(_env: (), input: (f32, u32, f32, u32)) -> (f32, u32, f32, u32) {
         (
             input.0 + input.2,
             input.1 + 2,
@@ -402,9 +419,10 @@ pub(crate) struct Tuple3To5MixedSplit;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32, u32, f32)> for Tuple3To5MixedSplit {
+    type Env = ();
     type Output = (f32, u32, f32, u32, f32);
 
-    fn apply(input: (f32, u32, f32)) -> (f32, u32, f32, u32, f32) {
+    fn apply(_env: (), input: (f32, u32, f32)) -> (f32, u32, f32, u32, f32) {
         (
             input.0 + input.2,
             input.1 + 10,
@@ -419,9 +437,10 @@ pub(crate) struct Tuple5To3MixedSplit;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (f32, u32, f32, u32, f32)> for Tuple5To3MixedSplit {
+    type Env = ();
     type Output = (f32, u32, f32);
 
-    fn apply(input: (f32, u32, f32, u32, f32)) -> (f32, u32, f32) {
+    fn apply(_env: (), input: (f32, u32, f32, u32, f32)) -> (f32, u32, f32) {
         (
             input.0 + input.2 + input.4,
             input.1 + input.3,
@@ -440,9 +459,10 @@ macro_rules! impl_tuple_wide_mixed_split {
     ) => {
         #[cubecl::cube]
         impl UnaryOp<WgpuRuntime, ($($ty), +)> for TupleWideMixedSplit {
+            type Env = ();
             type Output = ($($ty),+);
 
-            fn apply($input: ($($ty),+)) -> ($($ty),+) {
+            fn apply(_env: (), $input: ($($ty),+)) -> ($($ty),+) {
                 ($($out),+)
             }
         }
@@ -490,7 +510,9 @@ pub(crate) struct PairMixedFirstPositive;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32, u32)> for PairMixedFirstPositive {
-    fn apply(input: (f32, u32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32, u32)) -> bool {
         input.0 > 0.0
     }
 }
@@ -499,7 +521,9 @@ pub(crate) struct PairMixedTagIsTwenty;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32, u32)> for PairMixedTagIsTwenty {
-    fn apply(input: (f32, u32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32, u32)) -> bool {
         input.1 == 20
     }
 }
@@ -508,7 +532,9 @@ pub(crate) struct Tuple3MixedTagIsTwenty;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedTagIsTwenty {
-    fn apply(input: (f32, u32, f32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32, u32, f32)) -> bool {
         input.1 == 20 && input.2 > 0.0
     }
 }
@@ -517,7 +543,9 @@ pub(crate) struct Tuple3MixedFirstPositive;
 
 #[cubecl::cube]
 impl PredicateOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedFirstPositive {
-    fn apply(input: (f32, u32, f32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (f32, u32, f32)) -> bool {
         input.0 > 0.0
     }
 }

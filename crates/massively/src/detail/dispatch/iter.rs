@@ -15,6 +15,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -22,7 +23,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Output: MIterMut<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
-        let _ = (policy, op, output);
+        let _ = (policy, op, env, output);
         unsupported("transform")
     }
 
@@ -30,13 +31,14 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
         Output: MVec<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
-        let _ = (policy, op);
+        let _ = (policy, op, env);
         unsupported("map")
     }
 
@@ -44,6 +46,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -52,7 +55,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Output: MIterMut<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
-        let _ = (policy, op, stencil, output);
+        let _ = (policy, op, env, stencil, output);
         unsupported("transform_where")
     }
 
@@ -744,13 +747,14 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("remove_if")
     }
 
@@ -771,12 +775,13 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<usize, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("count_if")
     }
 
@@ -784,12 +789,13 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("all_of")
     }
 
@@ -797,12 +803,13 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("any_of")
     }
 
@@ -810,12 +817,13 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("none_of")
     }
 
@@ -823,12 +831,13 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<usize>, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("find_if")
     }
 
@@ -836,13 +845,14 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<(Output, Output), Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("partition")
     }
 
@@ -850,12 +860,13 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
-        let _ = (policy, pred);
+        let _ = (policy, pred, env);
         unsupported("is_partitioned")
     }
 

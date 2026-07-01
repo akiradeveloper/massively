@@ -56,6 +56,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -63,7 +64,8 @@ where
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
-        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
+        let inner =
+            <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op, env)?;
         output.write_from_inner(policy, inner)
     }
 
@@ -71,13 +73,15 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Output, Error>
     where
         Output: MVec<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
-        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
+        let inner =
+            <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op, env)?;
         Ok(array_from_inner::<R, Output::Item, Output>(inner))
     }
 
@@ -85,6 +89,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -93,7 +98,8 @@ where
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
-        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op)?;
+        let inner =
+            <Output::Item as sealed::MItemDispatch<R>>::transform_unary(policy, input, op, env)?;
         output.write_where_from_inner(policy, inner, stencil)
     }
 
@@ -999,6 +1005,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Output, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1008,6 +1015,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
     }
@@ -1033,6 +1041,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<usize, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1041,6 +1050,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )
     }
 
@@ -1048,6 +1058,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1056,6 +1067,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )
     }
 
@@ -1063,6 +1075,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1071,6 +1084,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )
     }
 
@@ -1078,6 +1092,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1086,6 +1101,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )
     }
 
@@ -1093,6 +1109,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<usize>, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1101,6 +1118,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )
     }
 
@@ -1108,6 +1126,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<(Output, Output), Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1117,6 +1136,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )?;
         Ok((
             array_from_inner::<R, (T,), Output>(matching),
@@ -1128,6 +1148,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1136,6 +1157,7 @@ where
             policy,
             self.into_inner_with_policy(policy)?,
             KernelOp::<R, Pred>::new(),
+            env,
         )
     }
 

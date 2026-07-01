@@ -61,12 +61,13 @@ pub(crate) fn indices_u32_kernel(output: &mut [u32]) {
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn device_map_kernel<T: CubePrimitive, Op: UnaryOp<T, Output = T>>(
+    env: Op::Env,
     input: &[T],
     output: &mut [T],
 ) {
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {
-        output[unit] = Op::apply(input[unit]);
+        output[unit] = Op::apply(env, input[unit]);
     }
 }
 
@@ -105,6 +106,7 @@ pub(crate) fn scatter_kernel<T: CubePrimitive>(input: &[T], indices: &[u32], out
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn scatter_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
+    env: Pred::Env,
     input: &[T],
     indices: &[u32],
     output: &mut [T],
@@ -112,7 +114,7 @@ pub(crate) fn scatter_if_kernel<T: CubePrimitive, Pred: PredicateOp<T>>(
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < input.len() {
         let value = input[unit];
-        if Pred::apply(value) {
+        if Pred::apply(env, value) {
             let index = indices[unit] as usize;
             output[index] = value;
         }

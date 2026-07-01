@@ -30,9 +30,10 @@ impl<R> UnaryOp<R, (u32,)> for AddOne
 where
     R: Runtime,
 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32,)) -> (u32,) {
+    fn apply(_env: (), input: (u32,)) -> (u32,) {
         (input.0 + 1,)
     }
 }
@@ -44,9 +45,10 @@ impl<R> UnaryOp<R, (u32,)> for Split
 where
     R: Runtime,
 {
+    type Env = ();
     type Output = (u32, u32);
 
-    fn apply(input: (u32,)) -> (u32, u32) {
+    fn apply(_env: (), input: (u32,)) -> (u32, u32) {
         (input.0, input.0 + 10)
     }
 }
@@ -58,9 +60,10 @@ impl<R> UnaryOp<R, (u32, u32)> for PairShift
 where
     R: Runtime,
 {
+    type Env = ();
     type Output = (u32, u32);
 
-    fn apply(input: (u32, u32)) -> (u32, u32) {
+    fn apply(_env: (), input: (u32, u32)) -> (u32, u32) {
         (input.0 + input.1, input.1 + 100)
     }
 }
@@ -72,9 +75,10 @@ impl<R> UnaryOp<R, (u32, u32, u32)> for TripleShift
 where
     R: Runtime,
 {
+    type Env = ();
     type Output = (u32, u32, u32);
 
-    fn apply(input: (u32, u32, u32)) -> (u32, u32, u32) {
+    fn apply(_env: (), input: (u32, u32, u32)) -> (u32, u32, u32) {
         (input.0 + input.1, input.1 + input.2, input.2 + 1000)
     }
 }
@@ -146,7 +150,9 @@ impl<R> PredicateOp<R, (u32, u32)> for PairFirstOdd
 where
     R: Runtime,
 {
-    fn apply(input: (u32, u32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (u32, u32)) -> bool {
         input.0 % 2 == 1
     }
 }
@@ -161,9 +167,9 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R>,
-    Op: UnaryOp<R, S1::Item, Output = S2::Item>,
+    Op: UnaryOp<R, S1::Item, Output = S2::Item, Env = ()>,
 {
-    massively::transform(exec, source, op, out)
+    massively::transform(exec, source, op, (), out)
 }
 
 fn transform3<R, S1, S2, Op>(
@@ -176,9 +182,9 @@ where
     R: Runtime,
     S1: MIter<R, Item = (u32,)>,
     S2: MIterMut<R, Item = (u32,)>,
-    Op: UnaryOp<R, (u32,), Output = (u32,)>,
+    Op: UnaryOp<R, (u32,), Output = (u32,), Env = ()>,
 {
-    massively::transform(exec, source, op, out)
+    massively::transform(exec, source, op, (), out)
 }
 
 fn transform4<R, S1, S2, Op>(
@@ -191,9 +197,9 @@ where
     R: Runtime,
     S1: MIter<R, Item = (u32, u32)>,
     S2: MIterMut<R, Item = (u32, u32)>,
-    Op: UnaryOp<R, (u32, u32), Output = (u32, u32)>,
+    Op: UnaryOp<R, (u32, u32), Output = (u32, u32), Env = ()>,
 {
-    massively::transform(exec, source, op, out)
+    massively::transform(exec, source, op, (), out)
 }
 
 fn transform5<R, S1, S2, Op>(
@@ -206,9 +212,9 @@ where
     R: Runtime,
     S1: MIter<R, Item = (u32, u32, u32)>,
     S2: MIterMut<R, Item = (u32, u32, u32)>,
-    Op: UnaryOp<R, (u32, u32, u32), Output = (u32, u32, u32)>,
+    Op: UnaryOp<R, (u32, u32, u32), Output = (u32, u32, u32), Env = ()>,
 {
-    massively::transform(exec, source, op, out)
+    massively::transform(exec, source, op, (), out)
 }
 
 fn transform_without_op<R, S1, S2>(
@@ -221,7 +227,7 @@ where
     S1: MIter<R, Item = (u32,)>,
     S2: MIterMut<R, Item = (u32,)>,
 {
-    massively::transform(exec, source, AddOne, out)
+    massively::transform(exec, source, AddOne, (), out)
 }
 
 fn reverse2<R, S1>(
@@ -349,9 +355,9 @@ fn count_if2<R, S1, Pred>(
 where
     R: Runtime,
     S1: MIter<R>,
-    Pred: PredicateOp<R, S1::Item>,
+    Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
-    massively::count_if(exec, source, pred)
+    massively::count_if(exec, source, pred, ())
 }
 
 fn find_if2<R, S1, Pred>(
@@ -362,9 +368,9 @@ fn find_if2<R, S1, Pred>(
 where
     R: Runtime,
     S1: MIter<R>,
-    Pred: PredicateOp<R, S1::Item>,
+    Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
-    massively::find_if(exec, source, pred)
+    massively::find_if(exec, source, pred, ())
 }
 
 fn remove_where2<'a, R, S1>(
@@ -387,9 +393,9 @@ fn partition2<R, S1, Pred>(
 where
     R: Runtime,
     S1: MIter<R>,
-    Pred: PredicateOp<R, S1::Item>,
+    Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
-    massively::partition(exec, source, pred)
+    massively::partition(exec, source, pred, ())
 }
 
 fn is_partitioned2<R, S1, Pred>(
@@ -400,9 +406,9 @@ fn is_partitioned2<R, S1, Pred>(
 where
     R: Runtime,
     S1: MIter<R>,
-    Pred: PredicateOp<R, S1::Item>,
+    Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
-    massively::is_partitioned(exec, source, pred)
+    massively::is_partitioned(exec, source, pred, ())
 }
 
 fn unique2<R, S1, Pred>(

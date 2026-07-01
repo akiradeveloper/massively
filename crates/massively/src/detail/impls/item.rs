@@ -141,6 +141,7 @@ macro_rules! impl_mitem_tuple {
                     Input,
                 >,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 Input: Scalar,
@@ -165,7 +166,7 @@ macro_rules! impl_mitem_tuple {
                         R,
                         Input,
                         KernelOp<R, Op>,
-                    >>::run(policy, input)?;
+                    >>::run(policy, input, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -180,6 +181,7 @@ macro_rules! impl_mitem_tuple {
                     Right,
                 >,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 Left: Scalar,
@@ -207,7 +209,7 @@ macro_rules! impl_mitem_tuple {
                         Left,
                         Right,
                         KernelOp<R, Op>,
-                    >>::run(policy, left, right)?;
+                    >>::run(policy, left, right, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -226,6 +228,7 @@ macro_rules! impl_mitem_tuple {
                     Third,
                 >,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
@@ -261,6 +264,7 @@ macro_rules! impl_mitem_tuple {
                         first,
                         second,
                         third,
+                        env,
                 )?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
@@ -272,6 +276,7 @@ macro_rules! impl_mitem_tuple {
                 third: crate::detail::device::DeviceColumnView<R, Third>,
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
@@ -305,7 +310,7 @@ macro_rules! impl_mitem_tuple {
                         Third,
                         Fourth,
                         KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth)?;
+                    >>::run(policy, first, second, third, fourth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -317,6 +322,7 @@ macro_rules! impl_mitem_tuple {
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
@@ -353,7 +359,7 @@ macro_rules! impl_mitem_tuple {
                         Fourth,
                         Fifth,
                         KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, fifth)?;
+                    >>::run(policy, first, second, third, fourth, fifth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -367,6 +373,7 @@ macro_rules! impl_mitem_tuple {
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
@@ -406,7 +413,7 @@ macro_rules! impl_mitem_tuple {
                         Fifth,
                         Sixth,
                         KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, fifth, sixth)?;
+                    >>::run(policy, first, second, third, fourth, fifth, sixth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -421,6 +428,7 @@ macro_rules! impl_mitem_tuple {
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
@@ -476,6 +484,7 @@ macro_rules! impl_mitem_tuple {
                         fifth,
                         sixth,
                         seventh,
+                        env,
                 )?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
@@ -574,6 +583,7 @@ macro_rules! impl_wide_mitem_tuple {
                     Input,
                 >,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 Input: Scalar,
@@ -598,7 +608,7 @@ macro_rules! impl_wide_mitem_tuple {
                         R,
                         Input,
                         KernelOp<R, Op>,
-                    >>::run(policy, input)?;
+                    >>::run(policy, input, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -613,6 +623,7 @@ macro_rules! impl_wide_mitem_tuple {
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItem<R>>::Inner, Error>
             where
                 First: Scalar,
@@ -668,6 +679,7 @@ macro_rules! impl_wide_mitem_tuple {
                         fifth,
                         sixth,
                         seventh,
+                        env,
                 )?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
