@@ -265,6 +265,151 @@ macro_rules! impl_mitem_tuple {
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
+            fn transform_quaternary<First, Second, Third, Fourth, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                first: crate::detail::device::DeviceColumnView<R, First>,
+                second: crate::detail::device::DeviceColumnView<R, Second>,
+                third: crate::detail::device::DeviceColumnView<R, Third>,
+                fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+                op: Op,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
+                Fourth: Scalar,
+                Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
+                Self: crate::detail::TransformSoA4Output<
+                    R,
+                    First,
+                    Second,
+                    Third,
+                    Fourth,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA4Output<
+                        R,
+                        First,
+                        Second,
+                        Third,
+                        Fourth,
+                        KernelOp<R, Op>,
+                    >>::run(policy, first, second, third, fourth)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
+            fn transform_quinary<First, Second, Third, Fourth, Fifth, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                first: crate::detail::device::DeviceColumnView<R, First>,
+                second: crate::detail::device::DeviceColumnView<R, Second>,
+                third: crate::detail::device::DeviceColumnView<R, Third>,
+                fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+                fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+                op: Op,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
+                Fourth: Scalar,
+                Fifth: Scalar,
+                Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
+                Self: crate::detail::TransformSoA5Output<
+                    R,
+                    First,
+                    Second,
+                    Third,
+                    Fourth,
+                    Fifth,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA5Output<
+                        R,
+                        First,
+                        Second,
+                        Third,
+                        Fourth,
+                        Fifth,
+                        KernelOp<R, Op>,
+                    >>::run(policy, first, second, third, fourth, fifth)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
+            #[allow(clippy::too_many_arguments)]
+            fn transform_senary<First, Second, Third, Fourth, Fifth, Sixth, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                first: crate::detail::device::DeviceColumnView<R, First>,
+                second: crate::detail::device::DeviceColumnView<R, Second>,
+                third: crate::detail::device::DeviceColumnView<R, Third>,
+                fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+                fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+                sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
+                op: Op,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
+                Fourth: Scalar,
+                Fifth: Scalar,
+                Sixth: Scalar,
+                Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
+                Self: crate::detail::TransformSoA6Output<
+                    R,
+                    First,
+                    Second,
+                    Third,
+                    Fourth,
+                    Fifth,
+                    Sixth,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA6Output<
+                        R,
+                        First,
+                        Second,
+                        Third,
+                        Fourth,
+                        Fifth,
+                        Sixth,
+                        KernelOp<R, Op>,
+                    >>::run(policy, first, second, third, fourth, fifth, sixth)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
             #[allow(clippy::too_many_arguments)]
             fn transform_septenary<First, Second, Third, Fourth, Fifth, Sixth, Seventh, Op>(
                 policy: &crate::detail::CubePolicy<R>,
