@@ -727,6 +727,74 @@ impl_transform_tuple_outputs!(
     1 => transform_tuple6_to_tuple1_kernel,
 );
 
+macro_rules! impl_transform_soa_empty_output2 {
+    ($trait_name:ident < $first_in:ident : $first_arg:ident $(, $in_ty:ident : $arg:ident )+ >) => {
+        impl<R, $first_in, $( $in_ty, )+ OutA, OutB, Op>
+            $trait_name<R, $first_in, $( $in_ty, )+ Op> for (OutA, OutB)
+        where
+            R: Runtime,
+            $first_in: CubePrimitive + CubeElement,
+            $( $in_ty: CubePrimitive + CubeElement, )+
+            OutA: CubePrimitive + CubeElement,
+            OutB: CubePrimitive + CubeElement,
+            Op: UnaryOp<($first_in, $( $in_ty, )+), Output = (OutA, OutB)>,
+        {
+            fn run(
+                policy: &CubePolicy<R>,
+                $first_arg: DeviceColumnView<R, $first_in>,
+                $( $arg: DeviceColumnView<R, $in_ty>, )+
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let len = $first_arg.len();
+                $( let _ = $arg; )+
+                let client = policy.client();
+                Ok(SoA2 {
+                    left: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutA>()), len),
+                    right: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutB>()), len),
+                })
+            }
+        }
+    };
+}
+
+macro_rules! impl_transform_soa_empty_output3 {
+    ($trait_name:ident < $first_in:ident : $first_arg:ident $(, $in_ty:ident : $arg:ident )+ >) => {
+        impl<R, $first_in, $( $in_ty, )+ OutA, OutB, OutC, Op>
+            $trait_name<R, $first_in, $( $in_ty, )+ Op> for (OutA, OutB, OutC)
+        where
+            R: Runtime,
+            $first_in: CubePrimitive + CubeElement,
+            $( $in_ty: CubePrimitive + CubeElement, )+
+            OutA: CubePrimitive + CubeElement,
+            OutB: CubePrimitive + CubeElement,
+            OutC: CubePrimitive + CubeElement,
+            Op: UnaryOp<($first_in, $( $in_ty, )+), Output = (OutA, OutB, OutC)>,
+        {
+            fn run(
+                policy: &CubePolicy<R>,
+                $first_arg: DeviceColumnView<R, $first_in>,
+                $( $arg: DeviceColumnView<R, $in_ty>, )+
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let len = $first_arg.len();
+                $( let _ = $arg; )+
+                let client = policy.client();
+                Ok(SoA3 {
+                    first: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutA>()), len),
+                    second: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutB>()), len),
+                    third: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutC>()), len),
+                })
+            }
+        }
+    };
+}
+
+impl_transform_soa_empty_output2!(TransformSoA4Output<A: a, B: b, C: c, D: d>);
+impl_transform_soa_empty_output3!(TransformSoA4Output<A: a, B: b, C: c, D: d>);
+impl_transform_soa_empty_output2!(TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>);
+impl_transform_soa_empty_output3!(TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>);
+impl_transform_soa_empty_output2!(TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>);
+impl_transform_soa_empty_output3!(TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>);
+
+
 define_transform_soa_output_trait!(
     TransformSoA7Output<InA: a, InB: b, InC: c, InD: d, InE: e, InF: f, InG: g>
 );

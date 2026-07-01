@@ -55,6 +55,79 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         })
     }
 
+    fn transform_quaternary<First, Second, Third, Fourth, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        first: crate::detail::device::DeviceColumnView<R, First>,
+        second: crate::detail::device::DeviceColumnView<R, Second>,
+        third: crate::detail::device::DeviceColumnView<R, Third>,
+        fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+        op: Op,
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    where
+        Self: MItem<R>,
+        First: Scalar,
+        Second: Scalar,
+        Third: Scalar,
+        Fourth: Scalar,
+        Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
+    {
+        let _ = (policy, first, second, third, fourth, op);
+        Err(Error::Launch {
+            message: "transform is not supported for this output item shape".to_string(),
+        })
+    }
+
+    fn transform_quinary<First, Second, Third, Fourth, Fifth, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        first: crate::detail::device::DeviceColumnView<R, First>,
+        second: crate::detail::device::DeviceColumnView<R, Second>,
+        third: crate::detail::device::DeviceColumnView<R, Third>,
+        fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+        fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+        op: Op,
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    where
+        Self: MItem<R>,
+        First: Scalar,
+        Second: Scalar,
+        Third: Scalar,
+        Fourth: Scalar,
+        Fifth: Scalar,
+        Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
+    {
+        let _ = (policy, first, second, third, fourth, fifth, op);
+        Err(Error::Launch {
+            message: "transform is not supported for this output item shape".to_string(),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn transform_senary<First, Second, Third, Fourth, Fifth, Sixth, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        first: crate::detail::device::DeviceColumnView<R, First>,
+        second: crate::detail::device::DeviceColumnView<R, Second>,
+        third: crate::detail::device::DeviceColumnView<R, Third>,
+        fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
+        fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
+        sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
+        op: Op,
+    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    where
+        Self: MItem<R>,
+        First: Scalar,
+        Second: Scalar,
+        Third: Scalar,
+        Fourth: Scalar,
+        Fifth: Scalar,
+        Sixth: Scalar,
+        Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
+    {
+        let _ = (policy, first, second, third, fourth, fifth, sixth, op);
+        Err(Error::Launch {
+            message: "transform is not supported for this output item shape".to_string(),
+        })
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn transform_septenary<First, Second, Third, Fourth, Fifth, Sixth, Seventh, Op>(
         policy: &crate::detail::CubePolicy<R>,

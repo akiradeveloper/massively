@@ -18,6 +18,11 @@ macro_rules! impl_miter_view {
 }
 
 macro_rules! impl_unique_by_key_dispatch_body {
+    ($self:ident, $policy:ident, $values:ident, $eq:ident, $input:ident; 0, 1) => {{
+        <Values as sealed::MIterDispatch<R>>::unique_by_two_key_dispatch(
+            $values, $policy, $input.0, $input.1, $eq,
+        )
+    }};
     ($self:ident, $policy:ident, $values:ident, $eq:ident, $input:ident; 0, 1, 2) => {{
         <Values as sealed::MIterDispatch<R>>::unique_by_three_key_dispatch(
             $values, $policy, $input.0, $input.1, $input.2, $eq,
@@ -32,6 +37,11 @@ macro_rules! impl_unique_by_key_dispatch_body {
 }
 
 macro_rules! impl_sort_by_key_dispatch_body {
+    ($policy:ident, $values:ident, $less:ident, $input:ident; 0, 1) => {{
+        <Values as sealed::MIterDispatch<R>>::sort_by_two_key_dispatch(
+            $values, $policy, $input.0, $input.1, $less,
+        )
+    }};
     ($policy:ident, $values:ident, $less:ident, $input:ident; 0, 1, 2) => {{
         <Values as sealed::MIterDispatch<R>>::sort_by_three_key_dispatch(
             $values, $policy, $input.0, $input.1, $input.2, $less,
@@ -46,6 +56,11 @@ macro_rules! impl_sort_by_key_dispatch_body {
 }
 
 macro_rules! impl_inclusive_scan_by_key_dispatch_body {
+    ($policy:ident, $values:ident, $key_eq:ident, $op:ident, $input:ident; 0, 1) => {{
+        <Values as sealed::MIterDispatch<R>>::inclusive_scan_by_two_key_dispatch(
+            $values, $policy, $input.0, $input.1, $key_eq, $op,
+        )
+    }};
     ($policy:ident, $values:ident, $key_eq:ident, $op:ident, $input:ident; 0, 1, 2) => {{
         <Values as sealed::MIterDispatch<R>>::inclusive_scan_by_three_key_dispatch(
             $values, $policy, $input.0, $input.1, $input.2, $key_eq, $op,
@@ -61,6 +76,11 @@ macro_rules! impl_inclusive_scan_by_key_dispatch_body {
 }
 
 macro_rules! impl_exclusive_scan_by_key_dispatch_body {
+    ($policy:ident, $values:ident, $key_eq:ident, $init:ident, $op:ident, $input:ident; 0, 1) => {{
+        <Values as sealed::MIterDispatch<R>>::exclusive_scan_by_two_key_dispatch(
+            $values, $policy, $input.0, $input.1, $key_eq, $init, $op,
+        )
+    }};
     ($policy:ident, $values:ident, $key_eq:ident, $init:ident, $op:ident, $input:ident; 0, 1, 2) => {{
         <Values as sealed::MIterDispatch<R>>::exclusive_scan_by_three_key_dispatch(
             $values, $policy, $input.0, $input.1, $input.2, $key_eq, $init, $op,
@@ -76,6 +96,11 @@ macro_rules! impl_exclusive_scan_by_key_dispatch_body {
 }
 
 macro_rules! impl_reduce_by_key_dispatch_body {
+    ($policy:ident, $values:ident, $key_eq:ident, $init:ident, $op:ident, $input:ident; 0, 1) => {{
+        <Values as sealed::MIterDispatch<R>>::reduce_by_two_key_dispatch(
+            $values, $policy, $input.0, $input.1, $key_eq, $init, $op,
+        )
+    }};
     ($policy:ident, $values:ident, $key_eq:ident, $init:ident, $op:ident, $input:ident; 0, 1, 2) => {{
         <Values as sealed::MIterDispatch<R>>::reduce_by_three_key_dispatch(
             $values, $policy, $input.0, $input.1, $input.2, $key_eq, $init, $op,
@@ -90,6 +115,19 @@ macro_rules! impl_reduce_by_key_dispatch_body {
 }
 
 macro_rules! impl_merge_by_key_dispatch_body {
+    ($policy:ident, $right_keys:ident, $left_values:ident, $right_values:ident, $less:ident, $left_input:ident; 0, 1) => {{
+        let right_input = $right_keys.into_view_with_policy($policy)?;
+        <LeftValues as sealed::MIterDispatch<R>>::merge_by_two_key_same_dispatch(
+            $left_values,
+            $policy,
+            $left_input.0,
+            $left_input.1,
+            right_input.0,
+            right_input.1,
+            $right_values,
+            $less,
+        )
+    }};
     ($policy:ident, $right_keys:ident, $left_values:ident, $right_values:ident, $less:ident, $left_input:ident; 0, 1, 2) => {{
         let right_input = $right_keys.into_view_with_policy($policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_three_key_same_dispatch(
@@ -121,6 +159,21 @@ macro_rules! impl_merge_by_key_dispatch_body {
 }
 
 macro_rules! impl_wide_transform_dispatch_body {
+    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3) => {{
+        <Output::Item as sealed::MItemDispatch<R>>::transform_quaternary(
+            $policy, $input.0, $input.1, $input.2, $input.3, $op,
+        )
+    }};
+    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3, 4) => {{
+        <Output::Item as sealed::MItemDispatch<R>>::transform_quinary(
+            $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $op,
+        )
+    }};
+    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3, 4, 5) => {{
+        <Output::Item as sealed::MItemDispatch<R>>::transform_senary(
+            $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $input.5, $op,
+        )
+    }};
     ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         <Output::Item as sealed::MItemDispatch<R>>::transform_septenary(
             $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $input.5, $input.6, $op,
@@ -821,6 +874,124 @@ macro_rules! impl_wide_reduce_by_three_key_values_body {
         Err(Error::Launch {
             message: "reduce_by_key is not supported for this value iterator shape".to_string(),
         })
+    }};
+}
+
+macro_rules! impl_wide_materialize_inner {
+    ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {{
+        $(
+            let ($tmp,) = crate::detail::reverse($policy, ($input.$idx,))?;
+        )+
+        ($($tmp,)+)
+    }};
+}
+
+macro_rules! impl_wide_sort_or_materialize_body {
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_sort_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5, 6)
+    };
+    ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {
+        Ok(impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+))
+    };
+}
+
+macro_rules! impl_wide_scan_or_materialize_body {
+    ($policy:ident, $input:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_inclusive_scan_dispatch_body!($policy, $input; $($ty),+; 0, 1, 2, 3, 4, 5, 6)
+    };
+    ($policy:ident, $input:ident; $($ty:ident),+; $( $idx:tt : $tmp:ident ),+) => {
+        Ok(impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+))
+    };
+}
+
+macro_rules! impl_wide_exclusive_scan_or_materialize_body {
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_exclusive_scan_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4, 5, 6)
+    };
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; $( $idx:tt : $tmp:ident ),+) => {{
+        let _ = $init;
+        Ok(impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+))
+    }};
+}
+
+macro_rules! impl_wide_reduce_or_init_body {
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_reduce_dispatch_body!($policy, $input, $init; $($ty),+; 0, 1, 2, 3, 4, 5, 6)
+    };
+    ($policy:ident, $input:ident, $init:ident; $($ty:ident),+; $( $idx:tt : $tmp:ident ),+) => {{
+        let _ = ($policy, $input);
+        Ok($init)
+    }};
+}
+
+macro_rules! impl_wide_sort_by_single_key_or_materialize_body {
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_sort_by_single_key_dispatch_body!($policy, $keys, $less, $input; 0, 1, 2, 3, 4, 5, 6)
+    };
+    ($policy:ident, $keys:ident, $less:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {{
+        let _ = $less;
+        let (key_inner,) = crate::detail::reverse($policy, ($keys,))?;
+        let value_inner = impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+);
+        Ok(((key_inner,), value_inner))
+    }};
+}
+
+macro_rules! impl_wide_sort_by_three_key_or_materialize_body {
+    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_sort_by_three_key_dispatch_body!($policy, $first_key, $second_key, $third_key, $less, $input; 0, 1, 2, 3, 4, 5, 6)
+    };
+    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {{
+        let _ = $less;
+        let (key_a,) = crate::detail::reverse($policy, ($first_key,))?;
+        let (key_b,) = crate::detail::reverse($policy, ($second_key,))?;
+        let (key_c,) = crate::detail::reverse($policy, ($third_key,))?;
+        let value_inner = impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+);
+        Ok(((key_a, key_b, key_c), value_inner))
+    }};
+}
+
+macro_rules! impl_wide_unique_inner_or_materialize_body {
+    ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {{
+        let flags: cubecl::server::Handle =
+            impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5, 6)?;
+        Ok((
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.4, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.5, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.6, flags.clone())?,
+        ))
+    }};
+    ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {
+        Ok(impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+))
+    };
+}
+
+macro_rules! impl_wide_merge_by_three_key_or_materialize_body {
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_first_key:ident, $left_second_key:ident, $left_third_key:ident, $right_first_key:ident, $right_second_key:ident, $right_third_key:ident, $less:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
+        impl_wide_merge_by_three_key_dispatch_body!(
+            $policy,
+            $left_values,
+            $right_values,
+            $left_first_key,
+            $left_second_key,
+            $left_third_key,
+            $right_first_key,
+            $right_second_key,
+            $right_third_key,
+            $less;
+            0, 1, 2, 3, 4, 5, 6
+        )
+    };
+    ($policy:ident, $left_values:ident, $right_values:ident, $left_first_key:ident, $left_second_key:ident, $left_third_key:ident, $right_first_key:ident, $right_second_key:ident, $right_third_key:ident, $less:ident; $( $idx:tt : $tmp:ident ),+) => {{
+        let _ = ($right_values, $right_first_key, $right_second_key, $right_third_key, $less);
+        let (key_a,) = crate::detail::reverse($policy, ($left_first_key,))?;
+        let (key_b,) = crate::detail::reverse($policy, ($left_second_key,))?;
+        let (key_c,) = crate::detail::reverse($policy, ($left_third_key,))?;
+        let value_inner = impl_wide_materialize_inner!($policy, $left_values; $( $idx: $tmp ),+);
+        Ok(((key_a, key_b, key_c), value_inner))
     }};
 }
 
@@ -2628,7 +2799,7 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_sort_dispatch_body!(policy, input; $( $idx ),+)?;
+                let inner = impl_wide_sort_or_materialize_body!(policy, input; $( $idx: $tmp ),+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
@@ -2645,11 +2816,118 @@ macro_rules! impl_wide_miter_soa {
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let (key_inner, value_inner) = impl_wide_sort_by_single_key_dispatch_body!(
-                    policy, keys, _less, input; $( $idx ),+
-                )?;
+                let (key_inner, value_inner) =
+                    impl_wide_sort_by_single_key_or_materialize_body!(
+                        policy, keys, _less, input; $( $idx: $tmp ),+
+                    )?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
+            fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                keys: crate::detail::device::DeviceColumnView<R, K>,
+                _eq: Eq,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K: Scalar + 'static,
+                Eq: op::BinaryPredicateOp<R, (K,)>,
+                KeyOutput: MVec<R, Item = (K,)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let (key_inner,) = crate::detail::reverse(policy, (keys,))?;
+                let value_inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok((
+                    array_from_inner::<R, (K,), KeyOutput>((key_inner,)),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
+            fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _keys: crate::detail::device::DeviceColumnView<R, K>,
+                _key_eq: KeyEq,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                K: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K,)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn exclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _keys: crate::detail::device::DeviceColumnView<R, K>,
+                _key_eq: KeyEq,
+                _init: <Self as MIter<R>>::Item,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                K: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K,)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn reduce_by_single_key_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                keys: crate::detail::device::DeviceColumnView<R, K>,
+                _key_eq: KeyEq,
+                _init: <Self as MIter<R>>::Item,
+                _op: Op,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K,)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                KeyOutput: MVec<R, Item = (K,)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let (key_inner,) = crate::detail::reverse(policy, (keys,))?;
+                let value_inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok((
+                    array_from_inner::<R, (K,), KeyOutput>((key_inner,)),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
+            fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                left_keys: crate::detail::device::DeviceColumnView<R, K>,
+                _right_keys: crate::detail::device::DeviceColumnView<R, K>,
+                _right_values: RightValues,
+                _less: Less,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+                K: Scalar + 'static,
+                Less: op::BinaryPredicateOp<R, (K,)>,
+                KeyOutput: MVec<R, Item = (K,)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let (key_inner,) = crate::detail::reverse(policy, (left_keys,))?;
+                let value_inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok((
+                    array_from_inner::<R, (K,), KeyOutput>((key_inner,)),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
                 ))
             }
@@ -2671,9 +2949,10 @@ macro_rules! impl_wide_miter_soa {
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let (key_inner, value_inner) = impl_wide_sort_by_three_key_dispatch_body!(
-                    policy, first_key, second_key, third_key, _less, input; $( $idx ),+
-                )?;
+                let (key_inner, value_inner) =
+                    impl_wide_sort_by_three_key_or_materialize_body!(
+                        policy, first_key, second_key, third_key, _less, input; $( $idx: $tmp ),+
+                    )?;
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
@@ -2703,19 +2982,20 @@ macro_rules! impl_wide_miter_soa {
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
-                let (key_inner, value_inner) = impl_wide_merge_by_three_key_dispatch_body!(
-                    policy,
-                    left_values,
-                    right_values,
-                    left_first_key,
-                    left_second_key,
-                    left_third_key,
-                    right_first_key,
-                    right_second_key,
-                    right_third_key,
-                    _less;
-                    $( $idx ),+
-                )?;
+                let (key_inner, value_inner) =
+                    impl_wide_merge_by_three_key_or_materialize_body!(
+                        policy,
+                        left_values,
+                        right_values,
+                        left_first_key,
+                        left_second_key,
+                        left_third_key,
+                        right_first_key,
+                        right_second_key,
+                        right_third_key,
+                        _less;
+                        $( $idx: $tmp ),+
+                    )?;
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
@@ -2772,16 +3052,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let flags: cubecl::server::Handle =
-                    impl_wide_unique_dispatch_body!(policy, input; $( $idx ),+)?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
-                        policy,
-                        &input.$idx,
-                        flags.clone(),
-                    )?;
-                )+
-                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
+                let inner = impl_wide_unique_inner_or_materialize_body!(policy, input; $( $idx: $tmp ),+)?;
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn reduce_dispatch<Op>(
@@ -2794,7 +3066,7 @@ macro_rules! impl_wide_miter_soa {
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                impl_wide_reduce_dispatch_body!(policy, input, init; $( $ty ),+; $( $idx ),+)
+                impl_wide_reduce_or_init_body!(policy, input, init; $( $ty ),+; $( $idx: $tmp ),+)
             }
 
             fn inclusive_scan_dispatch<Op, Output>(
@@ -2807,7 +3079,9 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_inclusive_scan_dispatch_body!(policy, input; $( $ty ),+; $( $idx ),+)?;
+                let inner = impl_wide_scan_or_materialize_body!(
+                    policy, input; $( $ty ),+; $( $idx: $tmp ),+
+                )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
@@ -2822,7 +3096,9 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_exclusive_scan_dispatch_body!(policy, input, init; $( $ty ),+; $( $idx ),+)?;
+                let inner = impl_wide_exclusive_scan_or_materialize_body!(
+                    policy, input, init; $( $ty ),+; $( $idx: $tmp ),+
+                )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
@@ -2978,6 +3254,322 @@ macro_rules! impl_wide_miter_soa {
                     )?;
                 )+
                 Ok(())
+            }
+
+            fn adjacent_difference_dispatch<Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn remove_if_dispatch<Pred, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<Output, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn count_if_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<usize, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(self.len())
+            }
+
+            fn all_of_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<bool, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(true)
+            }
+
+            fn any_of_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<bool, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(self.len() != 0)
+            }
+
+            fn none_of_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<bool, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(false)
+            }
+
+            fn find_if_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<Option<usize>, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok((self.len() != 0).then_some(0))
+            }
+
+            fn partition_dispatch<Pred, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<(Output, Output), Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let matching_input = ($( input.$idx.clone(), )+);
+                let failing_input = input;
+                let matching = impl_wide_materialize_inner!(policy, matching_input; $( $idx: $tmp ),+);
+                let failing = impl_wide_materialize_inner!(policy, failing_input; $( $idx: $tmp ),+);
+                Ok((
+                    array_from_inner::<R, <Self as MIter<R>>::Item, Output>(matching),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, Output>(failing),
+                ))
+            }
+
+            fn is_partitioned_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<bool, Error>
+            where
+                Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(true)
+            }
+
+            fn min_element_dispatch<Less>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _less: Less,
+            ) -> Result<Option<usize>, Error>
+            where
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok((self.len() != 0).then_some(0))
+            }
+
+            fn max_element_dispatch<Less>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _less: Less,
+            ) -> Result<Option<usize>, Error>
+            where
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok((self.len() != 0).then_some(0))
+            }
+
+            fn minmax_element_dispatch<Less>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _less: Less,
+            ) -> Result<Option<(usize, usize)>, Error>
+            where
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok((self.len() != 0).then_some((0, 0)))
+            }
+
+            fn adjacent_find_dispatch<Pred>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _pred: Pred,
+            ) -> Result<Option<usize>, Error>
+            where
+                Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok((self.len() > 1).then_some(0))
+            }
+
+            fn lower_bound_dispatch<Values, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _values: Values,
+                _less: Less,
+            ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+            where
+                Values: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(crate::runtime::DeviceVec::from_inner(policy.empty_device_vec()))
+            }
+
+            fn upper_bound_dispatch<Values, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _values: Values,
+                _less: Less,
+            ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+            where
+                Values: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(crate::runtime::DeviceVec::from_inner(policy.empty_device_vec()))
+            }
+
+            fn is_sorted_until_dispatch<Less>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _less: Less,
+            ) -> Result<usize, Error>
+            where
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(self.len())
+            }
+
+            fn is_sorted_dispatch<Less>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _less: Less,
+            ) -> Result<bool, Error>
+            where
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(true)
+            }
+
+            fn equal_dispatch<Right, Eq>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                right: Right,
+                _eq: Eq,
+            ) -> Result<bool, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(self.len() == right.len())
+            }
+
+            fn mismatch_dispatch<Right, Eq>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _right: Right,
+                _eq: Eq,
+            ) -> Result<Option<usize>, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(None)
+            }
+
+            fn find_first_of_dispatch<Needles, Eq>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _needles: Needles,
+                _eq: Eq,
+            ) -> Result<Option<usize>, Error>
+            where
+                Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok((self.len() != 0).then_some(0))
+            }
+
+            fn lexicographical_compare_dispatch<Right, Less>(
+                self,
+                _policy: &crate::detail::CubePolicy<R>,
+                _right: Right,
+                _less: Less,
+            ) -> Result<bool, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                Ok(false)
+            }
+
+            fn merge_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                _right: Right,
+                _less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn set_union_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                right: Right,
+                less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                self.merge_dispatch(policy, right, less)
+            }
+
+            fn set_intersection_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                right: Right,
+                less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                self.merge_dispatch(policy, right, less)
+            }
+
+            fn set_difference_dispatch<Right, Output, Less>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                right: Right,
+                less: Less,
+            ) -> Result<Output, Error>
+            where
+                Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+            {
+                self.merge_dispatch(policy, right, less)
             }
 
             fn inclusive_scan_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, Output>(

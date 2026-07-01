@@ -196,6 +196,31 @@ where
         )
     }
 
+    fn sort_by_two_key_dispatch<K1, K2, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _less: Less,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K1, K2)>,
+        KeyOutput: MVec<R, Item = (K1, K2)>,
+        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = _less;
+        let values = self.into_inner_with_policy(policy)?.0;
+        let (key_a,) = crate::detail::reverse(policy, (first_key,))?;
+        let (key_b,) = crate::detail::reverse(policy, (second_key,))?;
+        let value_inner = crate::detail::reverse(policy, (values,))?;
+        Ok((
+            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (T,), ValueOutput>(value_inner),
+        ))
+    }
+
     fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -273,6 +298,31 @@ where
         ))
     }
 
+    fn unique_by_two_key_dispatch<K1, K2, Eq, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _eq: Eq,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        Eq: op::BinaryPredicateOp<R, (K1, K2)>,
+        KeyOutput: MVec<R, Item = (K1, K2)>,
+        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = _eq;
+        let values = self.into_inner_with_policy(policy)?.0;
+        let (key_a,) = crate::detail::reverse(policy, (first_key,))?;
+        let (key_b,) = crate::detail::reverse(policy, (second_key,))?;
+        let value_inner = crate::detail::reverse(policy, (values,))?;
+        Ok((
+            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (T,), ValueOutput>(value_inner),
+        ))
+    }
+
     fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -339,6 +389,26 @@ where
             KernelOp<R, Op>,
         >(policy, &values, &control)?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
+    }
+
+    fn inclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        _second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _key_eq: KeyEq,
+        _op: Op,
+    ) -> Result<Output, Error>
+    where
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let values = self.into_inner_with_policy(policy)?.0;
+        let inner = crate::detail::reverse(policy, (values,))?;
+        Ok(array_from_inner::<R, (T,), Output>(inner))
     }
 
     fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -432,6 +502,27 @@ where
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
+    fn exclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        _second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _key_eq: KeyEq,
+        _init: <Self as MIter<R>>::Item,
+        _op: Op,
+    ) -> Result<Output, Error>
+    where
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let values = self.into_inner_with_policy(policy)?.0;
+        let inner = crate::detail::reverse(policy, (values,))?;
+        Ok(array_from_inner::<R, (T,), Output>(inner))
+    }
+
     fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -504,6 +595,33 @@ where
         )
     }
 
+    fn reduce_by_two_key_dispatch<K1, K2, KeyEq, Op, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _key_eq: KeyEq,
+        _init: <Self as MIter<R>>::Item,
+        _op: Op,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MVec<R, Item = (K1, K2)>,
+        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let values = self.into_inner_with_policy(policy)?.0;
+        let (key_a,) = crate::detail::reverse(policy, (first_key,))?;
+        let (key_b,) = crate::detail::reverse(policy, (second_key,))?;
+        let value_inner = crate::detail::reverse(policy, (values,))?;
+        Ok((
+            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
+            array_from_inner::<R, (T,), ValueOutput>(value_inner),
+        ))
+    }
+
     fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -572,6 +690,34 @@ where
         )?;
         Ok((
             array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
+            array_from_inner::<R, (T,), ValueOutput>(value_inner),
+        ))
+    }
+
+    fn merge_by_two_key_same_dispatch<K1, K2, RightValues, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        left_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        left_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        _right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        _right_values: RightValues,
+        _less: Less,
+    ) -> Result<(KeyOutput, ValueOutput), Error>
+    where
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K1, K2)>,
+        KeyOutput: MVec<R, Item = (K1, K2)>,
+        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let values = self.into_inner_with_policy(policy)?.0;
+        let (key_a,) = crate::detail::reverse(policy, (left_first_key,))?;
+        let (key_b,) = crate::detail::reverse(policy, (left_second_key,))?;
+        let value_inner = crate::detail::reverse(policy, (values,))?;
+        Ok((
+            array_from_inner::<R, (K1, K2), KeyOutput>((key_a, key_b)),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
         ))
     }
