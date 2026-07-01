@@ -1,9 +1,10 @@
+use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 /// Compile-time unary operator used by transform-style algorithms.
 ///
-/// Implement this trait on a unit-like marker type and pass the marker value to
-/// [`transform`](crate::transform).
+/// Implement this trait on a unit-like marker type and pass both the marker
+/// value and its captured environment to [`transform`](crate::transform).
 ///
 /// ```no_run
 /// use cubecl::prelude::*;
@@ -15,9 +16,10 @@ use cubecl::prelude::*;
 /// where
 ///     R: cubecl::prelude::Runtime,
 /// {
+///     type Env = ();
 ///     type Output = (f32,);
 ///
-///     fn apply(input: (f32,)) -> (f32,) {
+///     fn apply(_env: (), input: (f32,)) -> (f32,) {
 ///         (input.0 + 1.0,)
 ///     }
 /// }
@@ -28,11 +30,72 @@ where
     R: cubecl::prelude::Runtime,
     Input: crate::MItem<R>,
 {
+    /// Captured environment passed to the operation.
+    type Env: LaunchArg + Copy + CubeType<ExpandType: Clone>;
+
     /// Output value produced for one logical input element.
     type Output: crate::MItem<R>;
 
     /// Maps one logical input element.
-    fn apply(input: Input) -> Self::Output;
+    fn apply(env: Self::Env, input: Input) -> Self::Output;
+}
+
+/// Composition of two unary operators.
+///
+/// `Compose<First, Second>` applies `First` and then feeds the result into
+/// `Second`. The composed environment is the pair `(First::Env, Second::Env)`.
+///
+/// ```no_run
+/// # use cubecl::prelude::*;
+/// # struct AddOffset;
+/// # struct Square;
+/// # #[cubecl::cube]
+/// # impl<R: Runtime> massively::op::UnaryOp<R, (u32,)> for AddOffset {
+/// #     type Env = u32;
+/// #     type Output = (u32,);
+/// #     fn apply(offset: u32, input: (u32,)) -> (u32,) { (input.0 + offset,) }
+/// # }
+/// # #[cubecl::cube]
+/// # impl<R: Runtime> massively::op::UnaryOp<R, (u32,)> for Square {
+/// #     type Env = ();
+/// #     type Output = (u32,);
+/// #     fn apply(_env: (), input: (u32,)) -> (u32,) { (input.0 * input.0,) }
+/// # }
+/// let op = massively::op::compose(AddOffset, Square);
+/// # let _ = op;
+/// // map(&exec, input, op, (3_u32, ()))
+/// ```
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Compose<First, Second> {
+    _ops: PhantomData<fn() -> (First, Second)>,
+}
+
+impl<First, Second> Compose<First, Second> {
+    /// Creates a composed operator marker.
+    pub const fn new() -> Self {
+        Self { _ops: PhantomData }
+    }
+}
+
+/// Creates a marker for the composition `second(first(input))`.
+pub fn compose<First, Second>(_first: First, _second: Second) -> Compose<First, Second> {
+    Compose::new()
+}
+
+#[cube]
+impl<R, Input, First, Second> UnaryOp<R, Input> for Compose<First, Second>
+where
+    R: cubecl::prelude::Runtime,
+    Input: crate::MItem<R>,
+    First: UnaryOp<R, Input>,
+    Second: UnaryOp<R, First::Output>,
+{
+    type Env = (First::Env, Second::Env);
+    type Output = Second::Output;
+
+    fn apply(env: Self::Env, input: Input) -> Self::Output {
+        Second::apply(env.1, First::apply(env.0, input))
+    }
 }
 
 /// Compile-time binary transform.
@@ -93,7 +156,9 @@ where
 /// where
 ///     R: cubecl::prelude::Runtime,
 /// {
-///     fn apply(input: (f32,)) -> bool {
+///     type Env = ();
+///
+///     fn apply(_env: (), input: (f32,)) -> bool {
 ///         input.0 > 0.0
 ///     }
 /// }
@@ -104,8 +169,11 @@ where
     R: cubecl::prelude::Runtime,
     T: crate::MItem<R>,
 {
+    /// Captured environment passed to the predicate.
+    type Env: LaunchArg + Copy + CubeType<ExpandType: Clone>;
+
     /// Returns whether the element should be processed.
-    fn apply(input: T) -> bool;
+    fn apply(env: Self::Env, input: T) -> bool;
 }
 
 /// Compile-time binary predicate used by search and ordering algorithms.
@@ -184,9 +252,10 @@ pub(crate) mod kernel {
 
     #[cube]
     pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
+        type Env: LaunchArg + Copy + CubeType<ExpandType: Clone>;
         type Output: CubeType;
 
-        fn apply(input: Input) -> Self::Output;
+        fn apply(env: Self::Env, input: Input) -> Self::Output;
     }
 
     #[cube]
@@ -196,7 +265,9 @@ pub(crate) mod kernel {
 
     #[cube]
     pub trait PredicateOp<T: CubeType>: 'static + Send + Sync {
-        fn apply(input: T) -> bool;
+        type Env: LaunchArg + Copy + CubeType<ExpandType: Clone>;
+
+        fn apply(env: Self::Env, input: T) -> bool;
     }
 
     #[cube]

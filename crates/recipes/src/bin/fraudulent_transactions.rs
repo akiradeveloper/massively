@@ -27,9 +27,10 @@ impl<B> UnaryOp<B, (u32, f32, u32)> for SuspiciousTransaction
 where
     B: cubecl::prelude::Runtime,
 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32, f32, u32)) -> (u32,) {
+    fn apply(_env: (), input: (u32, f32, u32)) -> (u32,) {
         if input.1 >= 100.0 || input.2 >= 80_u32 {
             (1_u32,)
         } else {
@@ -45,7 +46,9 @@ impl<B> PredicateOp<B, (u32, f32, u32)> for HighRiskTransaction
 where
     B: cubecl::prelude::Runtime,
 {
-    fn apply(input: (u32, f32, u32)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (u32, f32, u32)) -> bool {
         input.1 >= 200.0 || input.2 >= 90_u32
     }
 }
@@ -75,6 +78,7 @@ where
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         SuspiciousTransaction,
+        (),
         SoA1(flag.slice_mut(..)),
     )?;
     let SoA3(account_id, amount, risk_score) = copy_where(
@@ -89,6 +93,7 @@ where
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         HighRiskTransaction,
+        (),
     )?;
     Ok(Output {
         high_risk: Group {

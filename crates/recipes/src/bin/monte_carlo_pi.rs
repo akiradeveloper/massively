@@ -29,9 +29,10 @@ impl<B> UnaryOp<B, (u32, u32)> for InsideQuarterCircle
 where
     B: cubecl::prelude::Runtime,
 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32, u32)) -> (u32,) {
+    fn apply(_env: (), input: (u32, u32)) -> (u32,) {
         let x = (input.0 as f32) / SCALE as f32;
         let y = (input.1 as f32) / SCALE as f32;
         if x * x + y * y <= 1.0 {
@@ -53,6 +54,7 @@ where
         exec,
         SoA2(x.slice(..), y.slice(..)),
         InsideQuarterCircle,
+        (),
         SoA1(inside.slice_mut(..)),
     )?;
     let (hits,) = reduce(exec, SoA1(inside.slice(..)), (0_u32,), common::SumU32)?;

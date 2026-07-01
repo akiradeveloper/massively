@@ -84,6 +84,7 @@ pub(crate) fn transform_unary_tuple1_kernel<
     A: CubePrimitive,
     Op: UnaryOp<(T,), Output = (A,)>,
 >(
+    env: Op::Env,
     input: &[T],
     input_offset: &[u32],
     len: &[u32],
@@ -93,7 +94,7 @@ pub(crate) fn transform_unary_tuple1_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let output = Op::apply((input[input_offset[0] as usize + global],));
+        let output = Op::apply(env, (input[input_offset[0] as usize + global],));
         output_a[global] = output.0;
     }
 }
@@ -105,6 +106,7 @@ pub(crate) fn transform_unary_tuple2_kernel<
     B: CubePrimitive,
     Op: UnaryOp<(T,), Output = (A, B)>,
 >(
+    env: Op::Env,
     input: &[T],
     input_offset: &[u32],
     len: &[u32],
@@ -115,7 +117,7 @@ pub(crate) fn transform_unary_tuple2_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let output = Op::apply((input[input_offset[0] as usize + global],));
+        let output = Op::apply(env, (input[input_offset[0] as usize + global],));
         output_a[global] = output.0;
         output_b[global] = output.1;
     }
@@ -129,6 +131,7 @@ pub(crate) fn transform_unary_tuple3_kernel<
     C: CubePrimitive,
     Op: UnaryOp<(T,), Output = (A, B, C)>,
 >(
+    env: Op::Env,
     input: &[T],
     input_offset: &[u32],
     len: &[u32],
@@ -140,7 +143,7 @@ pub(crate) fn transform_unary_tuple3_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let output = Op::apply((input[input_offset[0] as usize + global],));
+        let output = Op::apply(env, (input[input_offset[0] as usize + global],));
         output_a[global] = output.0;
         output_b[global] = output.1;
         output_c[global] = output.2;
@@ -160,6 +163,7 @@ macro_rules! define_transform_tuple_to_tuple_kernel {
             $( $out_ty: CubePrimitive, )+
             Op: UnaryOp<($( $in_ty, )+), Output = ($( $out_ty, )+)>,
         >(
+            env: Op::Env,
             $( $input: &[$in_ty], )+
             $( $input_offset: &[u32], )+
             len: &[u32],
@@ -169,7 +173,7 @@ macro_rules! define_transform_tuple_to_tuple_kernel {
             let cube_dim = 256usize;
             let global = (CUBE_POS as usize) * cube_dim + unit;
             if global < (len[0] as usize) {
-                let output = Op::apply((
+                let output = Op::apply(env, (
                     $( $input[$input_offset[0] as usize + global], )+
                 ));
                 $(
@@ -328,6 +332,7 @@ pub(crate) fn tuple2_predicate_device_expr_flags_kernel<
     ExprB: DeviceGpuExpr<TyB>,
     Pred: PredicateOp<(TyA, TyB)>,
 >(
+    env: Pred::Env,
     input_a_slot0: &[TyA],
     input_a_slot1: &[TyA],
     input_a_slot2: &[TyA],
@@ -346,24 +351,27 @@ pub(crate) fn tuple2_predicate_device_expr_flags_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let selected = Pred::apply((
-            ExprA::eval(
-                input_a_slot0,
-                input_a_slot1,
-                input_a_slot2,
-                input_a_slot3,
-                input_a_slot_offsets,
-                global,
+        let selected = Pred::apply(
+            env,
+            (
+                ExprA::eval(
+                    input_a_slot0,
+                    input_a_slot1,
+                    input_a_slot2,
+                    input_a_slot3,
+                    input_a_slot_offsets,
+                    global,
+                ),
+                ExprB::eval(
+                    input_b_slot0,
+                    input_b_slot1,
+                    input_b_slot2,
+                    input_b_slot3,
+                    input_b_slot_offsets,
+                    global,
+                ),
             ),
-            ExprB::eval(
-                input_b_slot0,
-                input_b_slot1,
-                input_b_slot2,
-                input_b_slot3,
-                input_b_slot_offsets,
-                global,
-            ),
-        ));
+        );
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
             flags[global] = 1u32;
         } else {
@@ -382,6 +390,7 @@ pub(crate) fn tuple3_predicate_device_expr_flags_kernel<
     ExprC: DeviceGpuExpr<TyC>,
     Pred: PredicateOp<(TyA, TyB, TyC)>,
 >(
+    env: Pred::Env,
     input_a_slot0: &[TyA],
     input_a_slot1: &[TyA],
     input_a_slot2: &[TyA],
@@ -405,32 +414,35 @@ pub(crate) fn tuple3_predicate_device_expr_flags_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let selected = Pred::apply((
-            ExprA::eval(
-                input_a_slot0,
-                input_a_slot1,
-                input_a_slot2,
-                input_a_slot3,
-                input_a_slot_offsets,
-                global,
+        let selected = Pred::apply(
+            env,
+            (
+                ExprA::eval(
+                    input_a_slot0,
+                    input_a_slot1,
+                    input_a_slot2,
+                    input_a_slot3,
+                    input_a_slot_offsets,
+                    global,
+                ),
+                ExprB::eval(
+                    input_b_slot0,
+                    input_b_slot1,
+                    input_b_slot2,
+                    input_b_slot3,
+                    input_b_slot_offsets,
+                    global,
+                ),
+                ExprC::eval(
+                    input_c_slot0,
+                    input_c_slot1,
+                    input_c_slot2,
+                    input_c_slot3,
+                    input_c_slot_offsets,
+                    global,
+                ),
             ),
-            ExprB::eval(
-                input_b_slot0,
-                input_b_slot1,
-                input_b_slot2,
-                input_b_slot3,
-                input_b_slot_offsets,
-                global,
-            ),
-            ExprC::eval(
-                input_c_slot0,
-                input_c_slot1,
-                input_c_slot2,
-                input_c_slot3,
-                input_c_slot_offsets,
-                global,
-            ),
-        ));
+        );
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
             flags[global] = 1u32;
         } else {
@@ -2207,6 +2219,7 @@ pub(crate) fn copy_if_expr_flag_only_kernel<
     Expr: GpuExpr<T>,
     Pred: PredicateOp<T>,
 >(
+    env: Pred::Env,
     input: &[T],
     indices: &[u32],
     rhs: &[T],
@@ -2219,7 +2232,7 @@ pub(crate) fn copy_if_expr_flag_only_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let selected = Pred::apply(Expr::eval(input, indices, rhs, rhs_indices, global));
+        let selected = Pred::apply(env, Expr::eval(input, indices, rhs, rhs_indices, global));
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
             flags[global] = 1u32;
         } else {
@@ -2234,6 +2247,7 @@ pub(crate) fn copy_if_device_expr_flag_only_kernel<
     Expr: DeviceGpuExpr<T>,
     Pred: PredicateOp<T>,
 >(
+    env: Pred::Env,
     slot0: &[T],
     slot1: &[T],
     slot2: &[T],
@@ -2247,7 +2261,10 @@ pub(crate) fn copy_if_device_expr_flag_only_kernel<
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < (len[0] as usize) {
-        let selected = Pred::apply(Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global));
+        let selected = Pred::apply(
+            env,
+            Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global),
+        );
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
             flags[global] = 1u32;
         } else {
@@ -2264,6 +2281,7 @@ pub(crate) fn copy_if_stencil_expr_flags_kernel<
     StencilExpr: GpuExpr<S>,
     Pred: PredicateOp<S>,
 >(
+    env: Pred::Env,
     value_input: &[T],
     value_indices: &[u32],
     value_rhs: &[T],
@@ -2296,7 +2314,7 @@ pub(crate) fn copy_if_stencil_expr_flags_kernel<
             global,
         );
         values[global] = value;
-        let selected = Pred::apply(stencil);
+        let selected = Pred::apply(env, stencil);
         if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
             flags[global] = 1u32;
         } else {
@@ -2314,6 +2332,8 @@ pub(crate) fn transform_if_stencil_expr_kernel<
     Op: UnaryOp<T, Output = T>,
     Pred: PredicateOp<S>,
 >(
+    op_env: Op::Env,
+    pred_env: Pred::Env,
     value_input: &[T],
     value_indices: &[u32],
     value_rhs: &[T],
@@ -2336,7 +2356,7 @@ pub(crate) fn transform_if_stencil_expr_kernel<
             stencil_rhs_indices,
             global,
         );
-        if Pred::apply(stencil) {
+        if Pred::apply(pred_env, stencil) {
             let value = ValueExpr::eval(
                 value_input,
                 value_indices,
@@ -2344,7 +2364,7 @@ pub(crate) fn transform_if_stencil_expr_kernel<
                 value_rhs_indices,
                 global,
             );
-            output[global] = Op::apply(value);
+            output[global] = Op::apply(op_env, value);
         }
     }
 }
@@ -2535,6 +2555,7 @@ pub(crate) fn scatter_if_expr_kernel<
     IndexExpr: GpuExpr<u32>,
     Pred: PredicateOp<T>,
 >(
+    env: Pred::Env,
     value_input: &[T],
     value_indices: &[u32],
     value_rhs: &[T],
@@ -2557,7 +2578,7 @@ pub(crate) fn scatter_if_expr_kernel<
             value_rhs_indices,
             global,
         );
-        if Pred::apply(value) {
+        if Pred::apply(env, value) {
             let index = IndexExpr::eval(
                 index_input,
                 index_indices,
@@ -5212,6 +5233,7 @@ pub(crate) fn count_if_expr_partials_kernel<
     Expr: GpuExpr<T>,
     Pred: PredicateOp<T>,
 >(
+    env: Pred::Env,
     input: &[T],
     indices: &[u32],
     rhs: &[T],
@@ -5229,7 +5251,10 @@ pub(crate) fn count_if_expr_partials_kernel<
     let count = RuntimeCell::<u32>::new(0u32);
 
     while i.read() < logical_len {
-        if Pred::apply(Expr::eval(input, indices, rhs, rhs_indices, i.read())) {
+        if Pred::apply(
+            env.clone(),
+            Expr::eval(input, indices, rhs, rhs_indices, i.read()),
+        ) {
             count.store(count.read() + 1u32);
         }
         i.store(i.read() + step);
@@ -5290,6 +5315,7 @@ pub(crate) fn find_if_expr_partials_kernel<
     Expr: GpuExpr<T>,
     Pred: PredicateOp<T>,
 >(
+    env: Pred::Env,
     input: &[T],
     indices: &[u32],
     rhs: &[T],
@@ -5308,7 +5334,10 @@ pub(crate) fn find_if_expr_partials_kernel<
     let best = RuntimeCell::<u32>::new(len[0]);
 
     while i.read() < logical_len {
-        let matches = Pred::apply(Expr::eval(input, indices, rhs, rhs_indices, i.read()));
+        let matches = Pred::apply(
+            env.clone(),
+            Expr::eval(input, indices, rhs, rhs_indices, i.read()),
+        );
         if (invert[0] == 0u32 && matches) || (invert[0] != 0u32 && !matches) {
             if (i.read() as u32) < best.read() {
                 best.store(i.read() as u32);

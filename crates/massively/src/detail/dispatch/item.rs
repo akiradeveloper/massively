@@ -5,13 +5,14 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         input: crate::detail::device::DeviceColumnView<R, Input>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
         Input: Scalar,
         Op: op::UnaryOp<R, (Input,), Output = Self>,
     {
-        let _ = (policy, input, op);
+        let _ = (policy, input, op, env);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -22,6 +23,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         left: crate::detail::device::DeviceColumnView<R, Left>,
         right: crate::detail::device::DeviceColumnView<R, Right>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
@@ -29,7 +31,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Right: Scalar,
         Op: op::UnaryOp<R, (Left, Right), Output = Self>,
     {
-        let _ = (policy, left, right, op);
+        let _ = (policy, left, right, op, env);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -41,6 +43,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         second: crate::detail::device::DeviceColumnView<R, Second>,
         third: crate::detail::device::DeviceColumnView<R, Third>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
@@ -49,7 +52,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Third: Scalar,
         Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
     {
-        let _ = (policy, first, second, third, op);
+        let _ = (policy, first, second, third, op, env);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -62,6 +65,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         third: crate::detail::device::DeviceColumnView<R, Third>,
         fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
@@ -71,7 +75,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Fourth: Scalar,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
     {
-        let _ = (policy, first, second, third, fourth, op);
+        let _ = (policy, first, second, third, fourth, op, env);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -85,6 +89,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
         fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
@@ -95,7 +100,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Fifth: Scalar,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
     {
-        let _ = (policy, first, second, third, fourth, fifth, op);
+        let _ = (policy, first, second, third, fourth, fifth, op, env);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -111,6 +116,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
         sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
@@ -122,7 +128,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Sixth: Scalar,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
     {
-        let _ = (policy, first, second, third, fourth, fifth, sixth, op);
+        let _ = (policy, first, second, third, fourth, fifth, sixth, op, env);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -139,6 +145,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
         seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
         op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItem<R>>::Inner, Error>
     where
         Self: MItem<R>,
@@ -152,7 +159,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth, Seventh), Output = Self>,
     {
         let _ = (
-            policy, first, second, third, fourth, fifth, sixth, seventh, op,
+            policy, first, second, third, fourth, fifth, sixth, seventh, op, env,
         );
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),

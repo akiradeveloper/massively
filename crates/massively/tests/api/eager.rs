@@ -4,9 +4,10 @@ struct AddOneU32;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (u32,)> for AddOneU32 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32,)) -> (u32,) {
+    fn apply(_env: (), input: (u32,)) -> (u32,) {
         (input.0 + 1,)
     }
 }
@@ -15,10 +16,46 @@ struct PairToU32;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (u32, u32)> for PairToU32 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32, u32)) -> (u32,) {
+    fn apply(_env: (), input: (u32, u32)) -> (u32,) {
         (input.0 + input.1 * 10,)
+    }
+}
+
+struct AddOffset;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32,)> for AddOffset {
+    type Env = u32;
+    type Output = (u32,);
+
+    fn apply(offset: u32, input: (u32,)) -> (u32,) {
+        (input.0 + offset,)
+    }
+}
+
+struct Square;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32,)> for Square {
+    type Env = ();
+    type Output = (u32,);
+
+    fn apply(_env: (), input: (u32,)) -> (u32,) {
+        (input.0 * input.0,)
+    }
+}
+
+struct LessThan;
+
+#[cubecl::cube]
+impl PredicateOp<WgpuRuntime, (u32,)> for LessThan {
+    type Env = u32;
+
+    fn apply(limit: u32, input: (u32,)) -> bool {
+        input.0 < limit
     }
 }
 
@@ -27,9 +64,59 @@ fn map_returns_owned_single_column_output() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let massively::SoA1(output) = map(&exec, massively::SoA1(input.slice(..)), AddOneU32).unwrap();
+    let massively::SoA1(output) =
+        map(&exec, massively::SoA1(input.slice(..)), AddOneU32, ()).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
+}
+
+#[test]
+fn stateful_unary_op_carries_value() {
+    let exec = exec();
+    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+
+    let massively::SoA1(output) =
+        map(&exec, massively::SoA1(input.slice(..)), AddOffset, 10_u32).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![11, 12, 13]);
+}
+
+#[test]
+fn stateless_unary_op_uses_unit_env() {
+    let exec = exec();
+    let input = exec.to_device(&[2_u32, 3, 4]).unwrap();
+
+    let massively::SoA1(output) = map(&exec, massively::SoA1(input.slice(..)), Square, ()).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![4, 9, 16]);
+}
+
+#[test]
+fn composed_unary_op_uses_paired_env() {
+    let exec = exec();
+    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+    let op = massively::op::compose(AddOffset, Square);
+
+    let massively::SoA1(output) =
+        map(&exec, massively::SoA1(input.slice(..)), op, (2_u32, ())).unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![9, 16, 25]);
+}
+
+#[test]
+fn stateful_predicate_op_carries_value() {
+    let exec = exec();
+    let input = exec.to_device(&[1_u32, 3, 5, 7]).unwrap();
+
+    assert!(!massively::all_of(&exec, massively::SoA1(input.slice(..)), LessThan, 5_u32,).unwrap());
+    assert_eq!(
+        count_if(&exec, massively::SoA1(input.slice(..)), LessThan, 5_u32).unwrap(),
+        2
+    );
+    assert_eq!(
+        find_if(&exec, massively::SoA1(input.slice(..)), LessThan, 4_u32).unwrap(),
+        Some(0)
+    );
 }
 
 #[test]
@@ -42,6 +129,7 @@ fn map_returns_owned_output_from_multi_column_input() {
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
         PairToU32,
+        (),
     )
     .unwrap();
 
@@ -113,6 +201,7 @@ fn where_algorithms_accept_device_slice_stencil() {
         &exec,
         massively::SoA1(input.slice(..)),
         AddOneU32,
+        (),
         stencil.slice(..),
         massively::SoA1(transformed.slice_mut(..)),
     )
@@ -126,7 +215,7 @@ fn owned_soa_result_can_feed_next_algorithm() {
     let input = exec.to_device(&[4_u32, 1, 3, 2]).unwrap();
 
     let sorted = sort(&exec, massively::SoA1(input.slice(..)), LessU32).unwrap();
-    let massively::SoA1(output) = map(&exec, sorted.slice(..), AddOneU32).unwrap();
+    let massively::SoA1(output) = map(&exec, sorted.slice(..), AddOneU32, ()).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4, 5]);
 }
@@ -137,7 +226,7 @@ fn owned_soa_result_can_be_sliced_before_next_algorithm() {
     let input = exec.to_device(&[4_u32, 1, 3, 2]).unwrap();
 
     let sorted = sort(&exec, massively::SoA1(input.slice(..)), LessU32).unwrap();
-    let massively::SoA1(output) = map(&exec, sorted.slice(1..3), AddOneU32).unwrap();
+    let massively::SoA1(output) = map(&exec, sorted.slice(1..3), AddOneU32, ()).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![3, 4]);
 }
@@ -173,6 +262,7 @@ fn owned_soa_slice_mut_can_be_used_as_output() {
         &exec,
         massively::SoA1(input.slice(..)),
         AddOneU32,
+        (),
         output.slice_mut(1..4),
     )
     .unwrap();

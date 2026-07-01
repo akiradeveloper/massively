@@ -28,9 +28,10 @@ struct TransformMap;
 
 #[cubecl::cube]
 impl UnaryOp<ApiRuntime, (u32,)> for TransformMap {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (u32,)) -> (u32,) {
+    fn apply(_env: (), input: (u32,)) -> (u32,) {
         (input.0 / 3 + 17,)
     }
 }
@@ -48,7 +49,9 @@ struct TupleKeep;
 
 #[cubecl::cube]
 impl PredicateOp<ApiRuntime, (u32,)> for TupleKeep {
-    fn apply(input: (u32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (u32,)) -> bool {
         input.0 % 2 == 0
     }
 }
@@ -141,7 +144,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_transform(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TransformMap, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_transform(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TransformMap, (), massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), transform_map(&input));
     }
 
@@ -207,7 +210,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let (massively::SoA1(matching_g), massively::SoA1(failing_g)) = api_partition(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap();
+        let (massively::SoA1(matching_g), massively::SoA1(failing_g)) = api_partition(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap();
         let (matching, failing) = oracle::partition(&input);
         prop_assert_eq!(exec.to_host(&matching_g).unwrap(), matching);
         prop_assert_eq!(exec.to_host(&failing_g).unwrap(), failing);
@@ -218,7 +221,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_count_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle::count_if(&input));
+        prop_assert_eq!(api_count_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle::count_if(&input));
     }
 
     #[test]
@@ -226,7 +229,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_all_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle::all_of(&input));
+        prop_assert_eq!(api_all_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle::all_of(&input));
     }
 
     #[test]
@@ -234,7 +237,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_any_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle::any_of(&input));
+        prop_assert_eq!(api_any_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle::any_of(&input));
     }
 
     #[test]
@@ -242,7 +245,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_none_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle::none_of(&input));
+        prop_assert_eq!(api_none_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle::none_of(&input));
     }
 
     #[test]
@@ -250,7 +253,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_find_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle::find_if(&input));
+        prop_assert_eq!(api_find_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle::find_if(&input));
     }
 
     #[test]
@@ -258,7 +261,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_is_partitioned(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle::is_partitioned(&input));
+        prop_assert_eq!(api_is_partitioned(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle::is_partitioned(&input));
     }
 
     #[test]

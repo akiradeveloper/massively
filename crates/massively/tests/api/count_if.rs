@@ -10,6 +10,7 @@ fn count_if_accepts_heterogeneous_tuple_predicates() {
         &exec,
         massively::SoA2(values.slice(..), tags.slice(..)),
         PairMixedTagIsTwenty,
+        (),
     )
     .unwrap();
     assert_eq!(count, 2);

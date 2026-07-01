@@ -13,6 +13,7 @@ fn main() -> common::Result {
         &exec,
         SoA1(values.slice(..)),
         common::AddOne,
+        (),
         SoA1(output.slice_mut(..)),
     )?;
 

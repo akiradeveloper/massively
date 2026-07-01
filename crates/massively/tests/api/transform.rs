@@ -12,6 +12,7 @@ fn transform_zip_output_returns_storage() {
         &exec,
         massively::SoA2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
+        (),
         massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
@@ -31,6 +32,7 @@ fn transform_returns_device_storage() {
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
         PairMixedSplit,
+        (),
         massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
@@ -53,6 +55,7 @@ fn transform_tuple_output_maps_to_mitem_storage() {
         &exec,
         massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
+        (),
         massively::SoA3(
             values_out.slice_mut(..),
             flags.slice_mut(..),
@@ -78,6 +81,7 @@ fn tuple1_transform_returns_soa1_storage() {
         &exec,
         massively::SoA1(input.slice(..)),
         Double,
+        (),
         massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
@@ -94,6 +98,7 @@ fn transform_can_write_in_place_for_single_column() {
         &exec,
         massively::SoA1(values.slice(..)),
         Double,
+        (),
         massively::SoA1(values.slice_mut(..)),
     )
     .unwrap();
@@ -111,6 +116,7 @@ fn transform_can_write_in_place_for_multi_column() {
         &exec,
         massively::SoA2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
+        (),
         massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
@@ -135,6 +141,7 @@ fn unary_transform_accepts_seven_tuple_output() {
         &exec,
         massively::SoA1(input.slice(..)),
         ScalarToTuple7Mixed,
+        (),
         massively::SoA7(
             a.slice_mut(..),
             b.slice_mut(..),
@@ -173,6 +180,7 @@ fn transform_where_accepts_seven_tuple_output() {
         &exec,
         massively::SoA1(input.slice(..)),
         ScalarToTuple7Mixed,
+        (),
         stencil.slice(..),
         massively::SoA7(
             a.slice_mut(..),
@@ -225,6 +233,7 @@ fn transform_accepts_seven_tuple_input_and_output() {
             g.slice(..),
         ),
         TupleWideMixedSplit,
+        (),
         massively::SoA7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -279,6 +288,7 @@ fn transform_where_accepts_seven_tuple_input_and_output() {
             g.slice(..),
         ),
         TupleWideMixedSplit,
+        (),
         stencil.slice(..),
         massively::SoA7(
             out_a.slice_mut(..),
@@ -362,6 +372,7 @@ fn tuple_transform_uses_flat_soa_input() {
         &exec,
         massively::SoA3(lhs.slice(..), rhs.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
+        (),
         massively::SoA3(
             values.slice_mut(..),
             tags.slice_mut(..),
@@ -390,6 +401,7 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
         &exec,
         massively::SoA2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
+        (),
         massively::SoA2(pair_values.slice_mut(..), pair_tags.slice_mut(..)),
     )
     .unwrap();
@@ -403,6 +415,7 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
         &exec,
         massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
+        (),
         massively::SoA3(
             tuple_values.slice_mut(..),
             tuple_tags.slice_mut(..),
@@ -838,6 +851,7 @@ fn transform_zip_flattens_soa1_columns() {
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
         PairMixedSplit,
+        (),
         massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();

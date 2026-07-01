@@ -159,28 +159,29 @@ macro_rules! impl_merge_by_key_dispatch_body {
 }
 
 macro_rules! impl_wide_transform_dispatch_body {
-    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3) => {{
+    ($policy:ident, $input:ident, $op:ident, $env:ident; 0, 1, 2, 3) => {{
         <Output::Item as sealed::MItemDispatch<R>>::transform_quaternary(
-            $policy, $input.0, $input.1, $input.2, $input.3, $op,
+            $policy, $input.0, $input.1, $input.2, $input.3, $op, $env,
         )
     }};
-    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3, 4) => {{
+    ($policy:ident, $input:ident, $op:ident, $env:ident; 0, 1, 2, 3, 4) => {{
         <Output::Item as sealed::MItemDispatch<R>>::transform_quinary(
-            $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $op,
+            $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $op, $env,
         )
     }};
-    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3, 4, 5) => {{
+    ($policy:ident, $input:ident, $op:ident, $env:ident; 0, 1, 2, 3, 4, 5) => {{
         <Output::Item as sealed::MItemDispatch<R>>::transform_senary(
-            $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $input.5, $op,
+            $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $input.5, $op, $env,
         )
     }};
-    ($policy:ident, $input:ident, $op:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+    ($policy:ident, $input:ident, $op:ident, $env:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         <Output::Item as sealed::MItemDispatch<R>>::transform_septenary(
             $policy, $input.0, $input.1, $input.2, $input.3, $input.4, $input.5, $input.6, $op,
+            $env,
         )
     }};
-    ($policy:ident, $input:ident, $op:ident; $( $idx:tt ),+) => {{
-        let _ = ($policy, $input, $op);
+    ($policy:ident, $input:ident, $op:ident, $env:ident; $( $idx:tt ),+) => {{
+        let _ = ($policy, $input, $op, $env);
         Err(Error::Launch {
             message: "transform is not supported for this iterator shape".to_string(),
         })
@@ -1057,6 +1058,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
@@ -1068,6 +1070,7 @@ macro_rules! impl_miter_soa {
                     policy,
                     $( input.$idx, )+
                     op,
+                    env,
                 )?;
                 output.write_from_inner(policy, inner)
             }
@@ -1076,6 +1079,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Output, Error>
             where
                 Output: MVec<R>,
@@ -1086,6 +1090,7 @@ macro_rules! impl_miter_soa {
                     policy,
                     $( input.$idx, )+
                     op,
+                    env,
                 )?;
                 Ok(array_from_inner::<R, Output::Item, Output>(inner))
             }
@@ -1094,6 +1099,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
@@ -1106,6 +1112,7 @@ macro_rules! impl_miter_soa {
                     policy,
                     $( input.$idx, )+
                     op,
+                    env,
                 )?;
                 output.write_where_from_inner(policy, inner, stencil)
             }
@@ -1798,6 +1805,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Output, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1808,6 +1816,7 @@ macro_rules! impl_miter_soa {
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Pred>::new(),
+                    env,
                 )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
@@ -1834,66 +1843,72 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<usize, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                crate::detail::count_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
+                crate::detail::count_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new(), env)
             }
 
             fn all_of_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                crate::detail::all_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
+                crate::detail::all_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new(), env)
             }
 
             fn any_of_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                crate::detail::any_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
+                crate::detail::any_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new(), env)
             }
 
             fn none_of_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                crate::detail::none_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
+                crate::detail::none_of(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new(), env)
             }
 
             fn find_if_dispatch<Pred>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<usize>, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                crate::detail::find_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
+                crate::detail::find_if(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new(), env)
             }
 
             fn partition_dispatch<Pred, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<(Output, Output), Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1904,6 +1919,7 @@ macro_rules! impl_miter_soa {
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
                     KernelOp::<R, Pred>::new(),
+                    env,
                 )?;
                 Ok((
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(matching),
@@ -1915,12 +1931,13 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                crate::detail::is_partitioned(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new())
+                crate::detail::is_partitioned(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Pred>::new(), env)
             }
 
             fn replace_where_dispatch<Output>(
@@ -2729,6 +2746,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
@@ -2736,7 +2754,8 @@ macro_rules! impl_wide_miter_soa {
                 Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_transform_dispatch_body!(policy, input, op; $( $idx ),+)?;
+                let inner =
+                    impl_wide_transform_dispatch_body!(policy, input, op, env; $( $idx ),+)?;
                 output.write_from_inner(policy, inner)
             }
 
@@ -2744,6 +2763,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Output, Error>
             where
                 Output: MVec<R>,
@@ -2753,7 +2773,8 @@ macro_rules! impl_wide_miter_soa {
                 let inner = impl_wide_transform_dispatch_body!(
                     policy,
                     input,
-                    op;
+                    op,
+                    env;
                     $( $idx ),+
                 )?;
                 Ok(array_from_inner::<R, Output::Item, Output>(inner))
@@ -2763,6 +2784,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
@@ -2771,7 +2793,8 @@ macro_rules! impl_wide_miter_soa {
                 Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let inner = impl_wide_transform_dispatch_body!(policy, input, op; $( $idx ),+)?;
+                let inner =
+                    impl_wide_transform_dispatch_body!(policy, input, op, env; $( $idx ),+)?;
                 output.write_where_from_inner(policy, inner, stencil)
             }
 
@@ -3274,6 +3297,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Output, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3288,6 +3312,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 _policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<usize, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3299,6 +3324,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 _policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3310,6 +3336,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 _policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3321,6 +3348,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 _policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3332,6 +3360,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 _policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<usize>, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3343,6 +3372,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<(Output, Output), Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -3363,6 +3393,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 _policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
+                _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,

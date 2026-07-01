@@ -29,24 +29,33 @@ pub(crate) trait KernelReplaceWhereInput<Stencil, Pred>: Sized {
 pub(crate) trait KernelSelectInput<Pred>: Sized {
     type Runtime: Runtime;
     type Output;
+    type Env: cubecl::prelude::LaunchArg + Copy;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error>;
 }
 
 #[allow(dead_code)]
 pub(crate) trait KernelPredicateQueryInput<Pred>: Sized {
     type Runtime: Runtime;
+    type Env: cubecl::prelude::LaunchArg + Copy;
 
-    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<usize, Error>;
+    fn count_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<usize, Error>;
 
     fn find_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<usize>, Error>;
 }
 
@@ -55,12 +64,18 @@ pub(crate) trait KernelPartitionInput<Pred>: Sized {
     type Runtime: Runtime;
     type Output;
     type SplitOutput;
+    type Env: cubecl::prelude::LaunchArg + Copy;
 
-    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error>;
+    fn is_partitioned_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<bool, Error>;
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error>;
 }
 
@@ -652,6 +667,7 @@ fn tuple2_selection_handles_read<Left, Right, Pred>(
     left: &Left,
     right: &Right,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Left::Runtime>,
 ) -> Result<select::SelectionControl, Error>
 where
     Left: KernelColumn + KernelColumnAt<S0>,
@@ -695,6 +711,7 @@ where
                 client,
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(256),
+                env,
                 BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1),
                 BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1),
                 BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1),
@@ -720,6 +737,7 @@ fn tuple3_selection_handles_read<First, Second, Third, Pred>(
     second: &Second,
     third: &Third,
     invert: bool,
+    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<First::Runtime>,
 ) -> Result<select::SelectionControl, Error>
 where
     First: KernelColumn + KernelColumnAt<S0>,
@@ -774,6 +792,7 @@ where
                 client,
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(256),
+                env,
                 BufferArg::from_raw_parts(first_slot0.0.clone(), first_slot0.1),
                 BufferArg::from_raw_parts(first_slot1.0.clone(), first_slot1.1),
                 BufferArg::from_raw_parts(first_slot2.0.clone(), first_slot2.1),
@@ -807,16 +826,18 @@ where
 {
     type Runtime = Source::Runtime;
     type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Env = Pred::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <Source as KernelColumn>::validate(&self)?;
         Ok(DeviceSoA1 {
             source: crate::detail::api::device_expr_copy_where_with_policy::<Source, Pred>(
-                policy, &self, invert,
+                policy, &self, invert, env,
             )?,
         })
     }
@@ -833,11 +854,13 @@ macro_rules! impl_kernel_select_tuple1 {
         {
             type Runtime = Source::Runtime;
             type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Env = Pred::Env;
 
             fn select_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 Ok(DeviceSoA1 {
@@ -845,6 +868,7 @@ macro_rules! impl_kernel_select_tuple1 {
                         policy,
                         &self.$field,
                         invert,
+                        env,
                     )?,
                 })
             }
@@ -864,14 +888,16 @@ where
         <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Runtime;
     type Output =
         <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Output;
+    type Env = <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::select_read(
-            self.0, policy, invert,
+            self.0, policy, invert, env,
         )
     }
 }
@@ -891,17 +917,20 @@ macro_rules! impl_kernel_select_tuple2 {
             type Runtime = Left::Runtime;
             type Output =
                 $out<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
+            type Env = Pred::Env;
 
             fn select_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
+                    env,
                 )?;
                 let count = select::selected_count(policy, &handles)?;
                 Ok($out {
@@ -932,11 +961,13 @@ where
 {
     type Runtime = <SoAView2<Left, Right> as KernelSelectInput<Pred>>::Runtime;
     type Output = <SoAView2<Left, Right> as KernelSelectInput<Pred>>::Output;
+    type Env = <SoAView2<Left, Right> as KernelSelectInput<Pred>>::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <SoAView2<Left, Right> as KernelSelectInput<Pred>>::select_read(
             SoAView2 {
@@ -945,6 +976,7 @@ where
             },
             policy,
             invert,
+            env,
         )
     }
 }
@@ -970,11 +1002,13 @@ macro_rules! impl_kernel_select_tuple3 {
                 DeviceVec<First::Runtime, Second::Item>,
                 DeviceVec<First::Runtime, Third::Item>,
             >;
+            type Env = Pred::Env;
 
             fn select_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
@@ -982,6 +1016,7 @@ macro_rules! impl_kernel_select_tuple3 {
                     &self.$second,
                     &self.$third,
                     invert,
+                    env,
                 )?;
                 let count = select::selected_count(policy, &handles)?;
                 Ok($out {
@@ -1030,11 +1065,13 @@ where
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::Runtime;
     type Output = <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::Output;
+    type Env = <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::select_read(
             SoAView3 {
@@ -1044,6 +1081,7 @@ where
             },
             policy,
             invert,
+            env,
         )
     }
 }
@@ -1056,19 +1094,30 @@ where
     Pred: PredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
+    type Env = Pred::Env;
 
-    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<usize, Error> {
+    fn count_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<usize, Error> {
         <Source as KernelColumn>::validate(&self)?;
-        crate::detail::api::device_expr_count_if_with_policy::<Source, Pred>(policy, &self, invert)
+        crate::detail::api::device_expr_count_if_with_policy::<Source, Pred>(
+            policy, &self, invert, env,
+        )
     }
 
     fn find_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<usize>, Error> {
         <Source as KernelColumn>::validate(&self)?;
-        crate::detail::api::device_expr_find_if_with_policy::<Source, Pred>(policy, &self, invert)
+        crate::detail::api::device_expr_find_if_with_policy::<Source, Pred>(
+            policy, &self, invert, env,
+        )
     }
 }
 
@@ -1082,17 +1131,20 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
             Pred: PredicateOp<Source::Item>,
         {
             type Runtime = Source::Runtime;
+            type Env = Pred::Env;
 
             fn count_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<usize, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 crate::detail::api::device_expr_count_if_with_policy::<Source, Pred>(
                     policy,
                     &self.$field,
                     invert,
+                    env,
                 )
             }
 
@@ -1100,12 +1152,14 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<usize>, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 crate::detail::api::device_expr_find_if_with_policy::<Source, Pred>(
                     policy,
                     &self.$field,
                     invert,
+                    env,
                 )
             }
         }
@@ -1121,10 +1175,17 @@ where
 {
     type Runtime =
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Runtime;
+    type Env =
+        <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Env;
 
-    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<usize, Error> {
+    fn count_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<usize, Error> {
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::count_read(
-            self.0, policy, invert,
+            self.0, policy, invert, env,
         )
     }
 
@@ -1132,9 +1193,10 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<usize>, Error> {
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::find_read(
-            self.0, policy, invert,
+            self.0, policy, invert, env,
         )
     }
 }
@@ -1152,17 +1214,20 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
             Pred: PredicateOp<(Left::Item, Right::Item)>,
         {
             type Runtime = Left::Runtime;
+            type Env = Pred::Env;
 
             fn count_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<usize, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
+                    env,
                 )?;
                 select::selected_count(policy, &handles)
             }
@@ -1171,12 +1236,14 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<usize>, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
+                    env,
                 )?;
                 primitive_search::first_flag(policy, handles.flag, handles.len, handles.len)
             }
@@ -1192,8 +1259,14 @@ where
     SoAView2<Left, Right>: KernelPredicateQueryInput<Pred>,
 {
     type Runtime = <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Runtime;
+    type Env = <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Env;
 
-    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<usize, Error> {
+    fn count_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<usize, Error> {
         <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::count_read(
             SoAView2 {
                 left: self.0,
@@ -1201,6 +1274,7 @@ where
             },
             policy,
             invert,
+            env,
         )
     }
 
@@ -1208,6 +1282,7 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<usize>, Error> {
         <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::find_read(
             SoAView2 {
@@ -1216,6 +1291,7 @@ where
             },
             policy,
             invert,
+            env,
         )
     }
 }
@@ -1236,11 +1312,13 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
             Pred: PredicateOp<(First::Item, Second::Item, Third::Item)>,
         {
             type Runtime = First::Runtime;
+            type Env = Pred::Env;
 
             fn count_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<usize, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
@@ -1248,6 +1326,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     &self.$second,
                     &self.$third,
                     invert,
+                    env,
                 )?;
                 select::selected_count(policy, &handles)
             }
@@ -1256,6 +1335,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<usize>, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
@@ -1263,6 +1343,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     &self.$second,
                     &self.$third,
                     invert,
+                    env,
                 )?;
                 primitive_search::first_flag(policy, handles.flag, handles.len, handles.len)
             }
@@ -1278,8 +1359,14 @@ where
     SoAView3<First, Second, Third>: KernelPredicateQueryInput<Pred>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Runtime;
+    type Env = <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Env;
 
-    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<usize, Error> {
+    fn count_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<usize, Error> {
         <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::count_read(
             SoAView3 {
                 first: self.0,
@@ -1288,6 +1375,7 @@ where
             },
             policy,
             invert,
+            env,
         )
     }
 
@@ -1295,6 +1383,7 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<usize>, Error> {
         <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::find_read(
             SoAView3 {
@@ -1304,6 +1393,7 @@ where
             },
             policy,
             invert,
+            env,
         )
     }
 }
@@ -1361,11 +1451,16 @@ where
     type Runtime = Source::Runtime;
     type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
     type SplitOutput = (Self::Output, Self::Output);
+    type Env = Pred::Env;
 
-    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
+    fn is_partitioned_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<bool, Error> {
         <Source as KernelColumn>::validate(&self)?;
         let handles = crate::detail::api::device_expr_selection_handles_with_policy::<Source, Pred>(
-            policy, &self, false,
+            policy, &self, false, env,
         )?;
         is_partitioned_single_read(policy, handles)
     }
@@ -1373,10 +1468,11 @@ where
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <Source as KernelColumn>::validate(&self)?;
         let handles = crate::detail::api::device_expr_selection_handles_with_policy::<Source, Pred>(
-            policy, &self, false,
+            policy, &self, false, env,
         )?;
         let matching_count = select::selected_count(policy, &handles)?;
         let failing_count = handles.len - matching_count;
@@ -1411,28 +1507,31 @@ macro_rules! impl_kernel_partition_tuple1 {
             type Runtime = Source::Runtime;
             type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
             type SplitOutput = (Self::Output, Self::Output);
+            type Env = Pred::Env;
 
             fn is_partitioned_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 let handles = crate::detail::api::device_expr_selection_handles_with_policy::<
                     Source,
                     Pred,
-                >(policy, &self.$field, false)?;
+                >(policy, &self.$field, false, env)?;
                 is_partitioned_single_read(policy, handles)
             }
 
             fn partition_copy_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::SplitOutput, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 let handles = crate::detail::api::device_expr_selection_handles_with_policy::<
                     Source,
                     Pred,
-                >(policy, &self.$field, false)?;
+                >(policy, &self.$field, false, env)?;
                 let matching_count = select::selected_count(policy, &handles)?;
                 let failing_count = handles.len - matching_count;
                 let matching = crate::detail::api::device_expr_compact_with_selection_with_policy(
@@ -1470,19 +1569,25 @@ where
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Output;
     type SplitOutput =
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::SplitOutput;
+    type Env = <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Env;
 
-    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
+    fn is_partitioned_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<bool, Error> {
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::is_partitioned_read(
-            self.0, policy,
+            self.0, policy, env,
         )
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::partition_copy_read(
-            self.0, policy,
+            self.0, policy, env,
         )
     }
 }
@@ -1503,16 +1608,19 @@ macro_rules! impl_kernel_partition_tuple2 {
             type Output =
                 $out<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
             type SplitOutput = (Self::Output, Self::Output);
+            type Env = Pred::Env;
 
             fn is_partitioned_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     false,
+                    env,
                 )?;
                 is_partitioned_from_flags_read(policy, &handles)
             }
@@ -1520,12 +1628,14 @@ macro_rules! impl_kernel_partition_tuple2 {
             fn partition_copy_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::SplitOutput, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     false,
+                    env,
                 )?;
                 let selected_count = select::selected_count(policy, &handles)?;
                 let rejected_count = handles.len - selected_count;
@@ -1576,20 +1686,27 @@ where
     type Runtime = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::Runtime;
     type Output = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::Output;
     type SplitOutput = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::SplitOutput;
+    type Env = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::Env;
 
-    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
+    fn is_partitioned_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<bool, Error> {
         <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::is_partitioned_read(
             SoAView2 {
                 left: self.0,
                 right: self.1,
             },
             policy,
+            env,
         )
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::partition_copy_read(
             SoAView2 {
@@ -1597,6 +1714,7 @@ where
                 right: self.1,
             },
             policy,
+            env,
         )
     }
 }
@@ -1623,10 +1741,12 @@ macro_rules! impl_kernel_partition_tuple3 {
                 DeviceVec<First::Runtime, Third::Item>,
             >;
             type SplitOutput = (Self::Output, Self::Output);
+            type Env = Pred::Env;
 
             fn is_partitioned_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
@@ -1634,6 +1754,7 @@ macro_rules! impl_kernel_partition_tuple3 {
                     &self.$second,
                     &self.$third,
                     false,
+                    env,
                 )?;
                 is_partitioned_from_flags_read(policy, &handles)
             }
@@ -1641,6 +1762,7 @@ macro_rules! impl_kernel_partition_tuple3 {
             fn partition_copy_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
+                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::SplitOutput, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
@@ -1648,6 +1770,7 @@ macro_rules! impl_kernel_partition_tuple3 {
                     &self.$second,
                     &self.$third,
                     false,
+                    env,
                 )?;
                 let selected_count = select::selected_count(policy, &handles)?;
                 let rejected_count = handles.len - selected_count;
@@ -1723,8 +1846,13 @@ where
     type Runtime = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::Runtime;
     type Output = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::Output;
     type SplitOutput = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::SplitOutput;
+    type Env = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::Env;
 
-    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
+    fn is_partitioned_read(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
+    ) -> Result<bool, Error> {
         <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::is_partitioned_read(
             SoAView3 {
                 first: self.0,
@@ -1732,12 +1860,14 @@ where
                 third: self.2,
             },
             policy,
+            env,
         )
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
+        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::partition_copy_read(
             SoAView3 {
@@ -1746,6 +1876,7 @@ where
                 third: self.2,
             },
             policy,
+            env,
         )
     }
 }

@@ -11,13 +11,13 @@ fn count_reduced_values_after_mvec_slice<Values, Op, Pred>(
 where
     Values: massively::MIter<WgpuRuntime>,
     Op: ReductionOp<WgpuRuntime, Values::Item>,
-    Pred: PredicateOp<WgpuRuntime, Values::Item>,
+    Pred: PredicateOp<WgpuRuntime, Values::Item, Env = ()>,
 {
     use massively::MVec as _;
 
     let (_, values) = reduce_by_key(exec, keys, values, EqualU32, init, op).unwrap();
     let values = values.slice(..);
-    count_if(exec, values, pred).unwrap()
+    count_if(exec, values, pred, ()).unwrap()
 }
 
 #[test]

@@ -26,9 +26,10 @@ impl<B> UnaryOp<B, (f32, f32, f32)> for AdvanceParticle
 where
     B: cubecl::prelude::Runtime,
 {
+    type Env = ();
     type Output = (f32, f32, f32);
 
-    fn apply(input: (f32, f32, f32)) -> (f32, f32, f32) {
+    fn apply(_env: (), input: (f32, f32, f32)) -> (f32, f32, f32) {
         let x = input.0 + input.2;
         let y = input.1 + 0.5;
         (x, y, input.2)
@@ -42,9 +43,10 @@ impl<B> UnaryOp<B, (f32, f32, f32)> for OutsideParticleBox
 where
     B: cubecl::prelude::Runtime,
 {
+    type Env = ();
     type Output = (u32,);
 
-    fn apply(input: (f32, f32, f32)) -> (u32,) {
+    fn apply(_env: (), input: (f32, f32, f32)) -> (u32,) {
         if input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0 {
             (1_u32,)
         } else {
@@ -75,6 +77,7 @@ where
         exec,
         SoA3(x.slice(..), y.slice(..), vx.slice(..)),
         AdvanceParticle,
+        (),
         SoA3(
             next_x.slice_mut(..),
             next_y.slice_mut(..),
@@ -86,6 +89,7 @@ where
         exec,
         SoA3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         OutsideParticleBox,
+        (),
         SoA1(stencil.slice_mut(..)),
     )?;
     let SoA3(x, y, vx) = remove_where(

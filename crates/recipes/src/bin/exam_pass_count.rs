@@ -23,7 +23,9 @@ impl<B> PredicateOp<B, (u32,)> for PassingScore
 where
     B: cubecl::prelude::Runtime,
 {
-    fn apply(input: (u32,)) -> bool {
+    type Env = ();
+
+    fn apply(_env: (), input: (u32,)) -> bool {
         input.0 >= 60_u32
     }
 }
@@ -32,7 +34,7 @@ fn solve<B>(exec: &Executor<B>, score: DeviceVec<B, u32>) -> common::Result<usiz
 where
     B: cubecl::prelude::Runtime,
 {
-    count_if(exec, SoA1(score.slice(..)), PassingScore)
+    count_if(exec, SoA1(score.slice(..)), PassingScore, ())
 }
 
 fn main() -> common::Result {

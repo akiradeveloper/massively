@@ -177,6 +177,7 @@ fn algorithms_reject_other_executor_data() {
         &other_exec,
         massively::SoA1(input.slice(..)),
         Double,
+        (),
         massively::SoA1(output.slice_mut(..)),
     );
 
@@ -193,6 +194,7 @@ fn transform_accepts_device_slice() {
         &exec,
         massively::SoA1(input.slice(1..3)),
         Double,
+        (),
         massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
@@ -239,6 +241,7 @@ fn transform_accepts_multi_column_device_slices() {
         &exec,
         massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         PairMixedSplit,
+        (),
         massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
@@ -708,6 +711,7 @@ fn transform_accepts_three_column_device_slices() {
         &exec,
         massively::SoA3(a.slice(1..4), b.slice(1..4), c.slice(1..4)),
         Tuple3MixedSplit,
+        (),
         massively::SoA3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -732,6 +736,7 @@ fn empty_device_slice_is_valid_input() {
         &exec,
         massively::SoA1(slice),
         Double,
+        (),
         massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
