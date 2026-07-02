@@ -7,7 +7,7 @@ use crate::{
 };
 use cubecl::prelude::*;
 
-pub(crate) use crate::detail::control::SelectionControl;
+pub(crate) use crate::detail::control::{SelectionControl, SelectionHandles};
 
 const BLOCK_SELECT_SIZE: u32 = 256;
 
@@ -16,20 +16,18 @@ fn select_block_count(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
-pub(crate) type SelectionHandles = crate::detail::control::SelectionHandles;
-
 pub(crate) fn handles_from_flags<R>(
     policy: &CubePolicy<R>,
     len: usize,
     len_u32: u32,
     flag_handle: cubecl::server::Handle,
     value_handle: cubecl::server::Handle,
-) -> Result<SelectionControl, Error>
+) -> Result<SelectionHandles, Error>
 where
     R: Runtime,
 {
     if len == 0 {
-        return Ok(SelectionControl::empty(policy.client()));
+        return Ok(SelectionHandles::empty(policy.client()));
     }
 
     let client = policy.client();
@@ -49,16 +47,16 @@ where
     Ok(SelectionControl {
         flag: flag_handle,
         position: position_handle,
-        value: value_handle,
         count: count_handle,
         len,
         len_u32,
-    })
+    }
+    .for_value(value_handle))
 }
 
 pub(crate) fn compact<R, T>(
     policy: &CubePolicy<R>,
-    handles: SelectionControl,
+    handles: SelectionHandles,
 ) -> Result<DeviceVec<R, T>, Error>
 where
     R: Runtime,
@@ -83,7 +81,7 @@ where
 
 pub(crate) fn compact_with_count<R, T>(
     policy: &CubePolicy<R>,
-    handles: SelectionControl,
+    handles: SelectionHandles,
     count: usize,
 ) -> Result<DeviceVec<R, T>, Error>
 where
@@ -120,6 +118,6 @@ where
 pub(crate) fn handles_for_value(
     control: &SelectionControl,
     value_handle: cubecl::server::Handle,
-) -> SelectionControl {
+) -> SelectionHandles {
     control.for_value(value_handle)
 }

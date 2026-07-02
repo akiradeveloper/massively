@@ -9,8 +9,8 @@ mod segment;
 mod selection;
 
 #[allow(unused_imports)]
-pub(crate) use ordering::{MergeControl, PermutationControl};
+pub(crate) use ordering::{MergeByKeyControl, MergeControl, PermutationControl};
 #[allow(unused_imports)]
 pub(crate) use segment::{ReduceByKeyControl, ScanByKeyControl, SegmentControl};
 #[allow(unused_imports)]
-pub(crate) use selection::{SelectionControl, SelectionHandles};
+pub(crate) use selection::{SelectionControl, SelectionHandles, UniqueByKeyControl};

@@ -5,20 +5,36 @@ use cubecl::prelude::*;
 pub(crate) struct SelectionControl {
     pub(crate) flag: cubecl::server::Handle,
     pub(crate) position: cubecl::server::Handle,
-    pub(crate) value: cubecl::server::Handle,
     pub(crate) count: cubecl::server::Handle,
     pub(crate) len: usize,
     pub(crate) len_u32: u32,
 }
 
-pub(crate) type SelectionHandles = SelectionControl;
+#[derive(Clone)]
+pub(crate) struct SelectionHandles {
+    pub(crate) control: SelectionControl,
+    pub(crate) value: cubecl::server::Handle,
+}
+
+#[derive(Clone)]
+pub(crate) struct UniqueByKeyControl {
+    pub(crate) selection: SelectionControl,
+    pub(crate) count: usize,
+}
+
+impl std::ops::Deref for SelectionHandles {
+    type Target = SelectionControl;
+
+    fn deref(&self) -> &Self::Target {
+        &self.control
+    }
+}
 
 impl SelectionControl {
     pub(crate) fn empty<R: Runtime>(client: &ComputeClient<R>) -> Self {
         Self {
             flag: crate::policy::empty_handle(client),
             position: crate::policy::empty_handle(client),
-            value: crate::policy::empty_handle(client),
             count: client.empty(std::mem::size_of::<u32>()),
             len: 0,
             len_u32: 0,
@@ -34,7 +50,6 @@ impl SelectionControl {
         Self {
             flag,
             position: crate::policy::empty_handle(client),
-            value: crate::policy::empty_handle(client),
             count: crate::policy::empty_handle(client),
             len,
             len_u32,
@@ -42,14 +57,16 @@ impl SelectionControl {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn for_value(&self, value_handle: cubecl::server::Handle) -> Self {
-        Self {
-            flag: self.flag.clone(),
-            position: self.position.clone(),
-            value: value_handle,
-            count: self.count.clone(),
-            len: self.len,
-            len_u32: self.len_u32,
+    pub(crate) fn for_value(&self, value: cubecl::server::Handle) -> SelectionHandles {
+        SelectionHandles {
+            control: self.clone(),
+            value,
         }
+    }
+}
+
+impl SelectionHandles {
+    pub(crate) fn empty<R: Runtime>(client: &ComputeClient<R>) -> Self {
+        SelectionControl::empty(client).for_value(crate::policy::empty_handle(client))
     }
 }

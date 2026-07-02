@@ -383,19 +383,14 @@ where
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
         let control = crate::detail::control::ScanByKeyControl {
-            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
             head_flags,
             len: first_key.len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         };
-        let inner = crate::detail::read::inclusive_scan_by_flags_one::<
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(policy, &values, &control)?;
+        let inner = crate::detail::read::inclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
+            policy, &values, &control,
+        )?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
@@ -424,19 +419,14 @@ where
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
         let control = crate::detail::control::ScanByKeyControl {
-            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
             head_flags,
             len: first_key.len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         };
-        let inner = crate::detail::read::inclusive_scan_by_flags_one::<
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(policy, &values, &control)?;
+        let inner = crate::detail::read::inclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
+            policy, &values, &control,
+        )?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
@@ -515,19 +505,14 @@ where
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
         let control = crate::detail::control::ScanByKeyControl {
-            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
             head_flags,
             len: first_key.len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         };
-        let inner = crate::detail::read::exclusive_scan_by_flags_one::<
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(policy, &values, &control, init.0)?;
+        let inner = crate::detail::read::exclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
+            policy, &values, &control, init.0,
+        )?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
@@ -557,19 +542,14 @@ where
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
         let control = crate::detail::control::ScanByKeyControl {
-            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
             head_flags,
             len: first_key.len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         };
-        let inner = crate::detail::read::exclusive_scan_by_flags_one::<
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(policy, &values, &control, init.0)?;
+        let inner = crate::detail::read::exclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
+            policy, &values, &control, init.0,
+        )?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
@@ -680,21 +660,16 @@ where
         let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-        let control: crate::detail::control::ScanByKeyControl<R, (K1, K2), (), KernelOp<R, KeyEq>> =
+        let control: crate::detail::control::ScanByKeyControl<R> =
             crate::detail::control::ScanByKeyControl {
-                key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
                 head_flags,
                 len: first_key.len,
                 len_u32,
-                _marker: std::marker::PhantomData,
+                _runtime: std::marker::PhantomData,
             };
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(policy, &values, &control)?;
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
+            policy, &values, &control,
+        )?;
 
         let client = policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
@@ -900,25 +875,16 @@ where
         let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-        let control: crate::detail::control::ScanByKeyControl<
-            R,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-        > = crate::detail::control::ScanByKeyControl {
-            key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
-            head_flags,
-            len: first_key.len,
-            len_u32,
-            _marker: std::marker::PhantomData,
-        };
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(policy, &values, &control)?;
+        let control: crate::detail::control::ScanByKeyControl<R> =
+            crate::detail::control::ScanByKeyControl {
+                head_flags,
+                len: first_key.len,
+                len_u32,
+                _runtime: std::marker::PhantomData,
+            };
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
+            policy, &values, &control,
+        )?;
 
         let client = policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));

@@ -125,10 +125,10 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn inclusive_scan_by_flags_one<Source, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn inclusive_scan_by_flags_one<Source, Op>(
     policy: &CubePolicy<Source::Runtime>,
     source: &Source,
-    control: &ScanByKeyControl<Source::Runtime, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<Source::Runtime>,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -182,10 +182,10 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn exclusive_scan_by_flags_one<Source, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn exclusive_scan_by_flags_one<Source, Op>(
     policy: &CubePolicy<Source::Runtime>,
     source: &Source,
-    control: &ScanByKeyControl<Source::Runtime, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<Source::Runtime>,
     init: Source::Item,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
@@ -242,11 +242,11 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn inclusive_scan_by_flags_two<A, C, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn inclusive_scan_by_flags_two<A, C, Op>(
     policy: &CubePolicy<A::Runtime>,
     left: &A,
     right: &C,
-    control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<A::Runtime>,
 ) -> Result<DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>, Error>
 where
     A: KernelColumn + KernelColumnAt<S0>,
@@ -324,11 +324,11 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn exclusive_scan_by_flags_two<A, C, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn exclusive_scan_by_flags_two<A, C, Op>(
     policy: &CubePolicy<A::Runtime>,
     left: &A,
     right: &C,
-    control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<A::Runtime>,
     init: (A::Item, C::Item),
 ) -> Result<DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>, Error>
 where
@@ -411,12 +411,12 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn inclusive_scan_by_flags_three<A, C, D, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn inclusive_scan_by_flags_three<A, C, D, Op>(
     policy: &CubePolicy<A::Runtime>,
     first: &A,
     second: &C,
     third: &D,
-    control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<A::Runtime>,
 ) -> Result<
     DeviceSoA3<
         DeviceVec<A::Runtime, A::Item>,
@@ -521,12 +521,12 @@ where
 }
 
 #[allow(dead_code)]
-pub(crate) fn exclusive_scan_by_flags_three<A, C, D, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn exclusive_scan_by_flags_three<A, C, D, Op>(
     policy: &CubePolicy<A::Runtime>,
     first: &A,
     second: &C,
     third: &D,
-    control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<A::Runtime>,
     init: (A::Item, C::Item, D::Item),
 ) -> Result<
     DeviceSoA3<
@@ -638,7 +638,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub(crate) fn inclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn inclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, Op>(
     policy: &CubePolicy<R>,
     a: &DeviceColumnView<R, A>,
     b: &DeviceColumnView<R, B>,
@@ -647,7 +647,7 @@ pub(crate) fn inclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, K, Key
     e: &DeviceColumnView<R, E>,
     f: &DeviceColumnView<R, F>,
     g: &DeviceColumnView<R, G>,
-    control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<R>,
 ) -> Result<
     (
         DeviceVec<R, A>,
@@ -752,7 +752,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
-pub(crate) fn exclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op>(
+pub(crate) fn exclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, Op>(
     policy: &CubePolicy<R>,
     a: &DeviceColumnView<R, A>,
     b: &DeviceColumnView<R, B>,
@@ -761,7 +761,7 @@ pub(crate) fn exclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, K, Key
     e: &DeviceColumnView<R, E>,
     f: &DeviceColumnView<R, F>,
     g: &DeviceColumnView<R, G>,
-    control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+    control: &ScanByKeyControl<R>,
     init: (A, B, C, D, E, F, G),
 ) -> Result<
     (
@@ -888,7 +888,7 @@ where
     KeyEq: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type Control = ScanByKeyControl<KeySource::Runtime, KeySource::Item, KeySource::Expr, KeyEq>;
+    type Control = ScanByKeyControl<KeySource::Runtime>;
 
     fn scan_by_key_control(
         self,
@@ -898,13 +898,11 @@ where
         let len = <KeySource as KernelColumn>::len(&self);
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let head_flags = scan_by_key_head_flags_read::<KeySource, KeyEq>(policy, &self)?;
-        let key_bindings = <KeySource as KernelColumn>::stage(&self, policy)?;
         Ok(ScanByKeyControl {
-            key_bindings,
             head_flags,
             len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         })
     }
 }
@@ -919,8 +917,7 @@ macro_rules! impl_kernel_scan_by_key_keys_tuple1 {
             KeyEq: BinaryPredicateOp<KeySource::Item>,
         {
             type Runtime = KeySource::Runtime;
-            type Control =
-                ScanByKeyControl<KeySource::Runtime, KeySource::Item, KeySource::Expr, KeyEq>;
+            type Control = ScanByKeyControl<KeySource::Runtime>;
 
             fn scan_by_key_control(
                 self,
@@ -944,12 +941,7 @@ where
     crate::detail::api::Tuple1Less<KeyEq>: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type Control = ScanByKeyControl<
-        KeySource::Runtime,
-        KeySource::Item,
-        KeySource::Expr,
-        crate::detail::api::Tuple1Less<KeyEq>,
-    >;
+    type Control = ScanByKeyControl<KeySource::Runtime>;
 
     fn scan_by_key_control(
         self,
@@ -973,7 +965,7 @@ where
     KeyEq: BinaryPredicateOp<(First::Item, Second::Item)>,
 {
     type Runtime = First::Runtime;
-    type Control = ScanByKeyControl<First::Runtime, (First::Item, Second::Item), (), KeyEq>;
+    type Control = ScanByKeyControl<First::Runtime>;
 
     fn scan_by_key_control(
         self,
@@ -993,11 +985,10 @@ where
             policy, &self.0, &self.1,
         )?;
         Ok(ScanByKeyControl {
-            key_bindings: KernelColumnBindings::empty(policy.client()),
             head_flags,
             len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         })
     }
 }
@@ -1016,8 +1007,7 @@ where
     KeyEq: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
-    type Control =
-        ScanByKeyControl<First::Runtime, (First::Item, Second::Item, Third::Item), (), KeyEq>;
+    type Control = ScanByKeyControl<First::Runtime>;
 
     fn scan_by_key_control(
         self,
@@ -1047,30 +1037,22 @@ where
                 policy, &self.0, &self.1, &self.2,
             )?;
         Ok(ScanByKeyControl {
-            key_bindings: KernelColumnBindings::empty(policy.client()),
             head_flags,
             len,
             len_u32,
-            _marker: std::marker::PhantomData,
+            _runtime: std::marker::PhantomData,
         })
     }
 }
 
 macro_rules! impl_kernel_scan_by_key_tuple1 {
     ($target:ty, $field:tt) => {
-        impl<S, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<
-                ScanByKeyControl<S::Runtime, K, KeyExpr, KeyPred>,
-                KeyEq,
-                Op,
-            > for $target
+        impl<S, KeyEq, Op> KernelInclusiveScanByKeyValues<ScanByKeyControl<S::Runtime>, KeyEq, Op>
+            for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
             S::Item: Scalar + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
-            K: Scalar + 'static,
-            KeyExpr: DeviceGpuExpr<K>,
-            KeyPred: BinaryPredicateOp<K>,
             Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
@@ -1079,40 +1061,20 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                control: &ScanByKeyControl<S::Runtime, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<S::Runtime>,
             ) -> Result<Self::Output, Error> {
-                S::validate(&self.$field)?;
-                ensure_same_len(S::len(&self.$field), control.len)?;
-                let value_bindings = S::stage(&self.$field, policy)?;
                 Ok(DeviceSoA1 {
-                    source: primitive_scan::inclusive_scan_by_key_device_expr::<
-                        S::Runtime,
-                        K,
-                        S::Item,
-                        KeyExpr,
-                        S::Expr,
-                        KeyPred,
-                        crate::detail::api::Tuple1BinaryOp<Op>,
-                    >(
-                        policy, &control.key_bindings, &value_bindings, control.len
-                    )?,
+                    source: inclusive_scan_by_flags_one::<S, Op>(policy, &self.$field, control)?,
                 })
             }
         }
 
-        impl<S, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<
-                ScanByKeyControl<S::Runtime, K, KeyExpr, KeyPred>,
-                KeyEq,
-                Op,
-            > for $target
+        impl<S, KeyEq, Op> KernelExclusiveScanByKeyValues<ScanByKeyControl<S::Runtime>, KeyEq, Op>
+            for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
             S::Item: Scalar + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
-            K: Scalar + 'static,
-            KeyExpr: DeviceGpuExpr<K>,
-            KeyPred: BinaryPredicateOp<K>,
             Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
@@ -1122,26 +1084,14 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                control: &ScanByKeyControl<S::Runtime, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<S::Runtime>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                S::validate(&self.$field)?;
-                ensure_same_len(S::len(&self.$field), control.len)?;
-                let value_bindings = S::stage(&self.$field, policy)?;
                 Ok(DeviceSoA1 {
-                    source: primitive_scan::exclusive_scan_by_key_device_expr::<
-                        S::Runtime,
-                        K,
-                        S::Item,
-                        KeyExpr,
-                        S::Expr,
-                        KeyPred,
-                        crate::detail::api::Tuple1BinaryOp<Op>,
-                    >(
+                    source: exclusive_scan_by_flags_one::<S, Op>(
                         policy,
-                        &control.key_bindings,
-                        &value_bindings,
-                        control.len,
+                        &self.$field,
+                        control,
                         init,
                     )?,
                 })
@@ -1156,12 +1106,8 @@ impl_kernel_scan_by_key_tuple1!(DeviceSoA1<S>, source);
 
 macro_rules! impl_kernel_scan_by_key_tuple2 {
     ($target:ty, $left:tt, $right:tt) => {
-        impl<A, C, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<
-                ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
-                KeyEq,
-                Op,
-            > for $target
+        impl<A, C, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<A::Runtime>, KeyEq, Op> for $target
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -1169,9 +1115,6 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
             C::Item: Scalar + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
-            K: Scalar + 'static,
-            KeyExpr: DeviceGpuExpr<K>,
-            KeyPred: BinaryPredicateOp<K>,
             (A::Item, C::Item): MItem<A::Runtime>,
             Op: BinaryOp<(A::Item, C::Item)>,
         {
@@ -1182,38 +1125,14 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<A::Runtime>,
             ) -> Result<Self::Output, Error> {
-                validate_columns2(&self.$left, &self.$right)?;
-                ensure_same_len(A::len(&self.$left), control.len)?;
-                let left_bindings = A::stage(&self.$left, policy)?;
-                let right_bindings = C::stage(&self.$right, policy)?;
-                primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr::<
-                    A::Runtime,
-                    K,
-                    A::Item,
-                    C::Item,
-                    KeyExpr,
-                    A::Expr,
-                    C::Expr,
-                    KeyPred,
-                    Op,
-                >(
-                    policy,
-                    &control.key_bindings,
-                    &left_bindings,
-                    &right_bindings,
-                    control.len,
-                )
+                inclusive_scan_by_flags_two::<A, C, Op>(policy, &self.$left, &self.$right, control)
             }
         }
 
-        impl<A, C, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<
-                ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
-                KeyEq,
-                Op,
-            > for $target
+        impl<A, C, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<A::Runtime>, KeyEq, Op> for $target
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -1221,9 +1140,6 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
             C::Item: Scalar + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
-            K: Scalar + 'static,
-            KeyExpr: DeviceGpuExpr<K>,
-            KeyPred: BinaryPredicateOp<K>,
             (A::Item, C::Item): MItem<A::Runtime>,
             Op: BinaryOp<(A::Item, C::Item)>,
         {
@@ -1235,29 +1151,14 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<A::Runtime>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                validate_columns2(&self.$left, &self.$right)?;
-                ensure_same_len(A::len(&self.$left), control.len)?;
-                let left_bindings = A::stage(&self.$left, policy)?;
-                let right_bindings = C::stage(&self.$right, policy)?;
-                primitive_scan::exclusive_scan_tuple2_by_key_values_device_expr::<
-                    A::Runtime,
-                    K,
-                    A::Item,
-                    C::Item,
-                    KeyExpr,
-                    A::Expr,
-                    C::Expr,
-                    KeyPred,
-                    Op,
-                >(
+                exclusive_scan_by_flags_two::<A, C, Op>(
                     policy,
-                    &control.key_bindings,
-                    &left_bindings,
-                    &right_bindings,
-                    control.len,
+                    &self.$left,
+                    &self.$right,
+                    control,
                     init,
                 )
             }
@@ -1270,12 +1171,8 @@ impl_kernel_scan_by_key_tuple2!(DeviceSoA2<A, C>, left, right);
 
 macro_rules! impl_kernel_scan_by_key_tuple3 {
     ($target:ty, $first:tt, $second:tt, $third:tt) => {
-        impl<A, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<
-                ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
-                KeyEq,
-                Op,
-            > for $target
+        impl<A, C, D, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<A::Runtime>, KeyEq, Op> for $target
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -1286,9 +1183,6 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
-            K: Scalar + 'static,
-            KeyExpr: DeviceGpuExpr<K>,
-            KeyPred: BinaryPredicateOp<K>,
             (A::Item, C::Item, D::Item): MItem<A::Runtime>,
             Op: BinaryOp<(A::Item, C::Item, D::Item)>,
         {
@@ -1302,42 +1196,20 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<A::Runtime>,
             ) -> Result<Self::Output, Error> {
-                validate_columns3(&self.$first, &self.$second, &self.$third)?;
-                ensure_same_len(A::len(&self.$first), control.len)?;
-                let first_bindings = A::stage(&self.$first, policy)?;
-                let second_bindings = C::stage(&self.$second, policy)?;
-                let third_bindings = D::stage(&self.$third, policy)?;
-                primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr::<
-                    A::Runtime,
-                    K,
-                    A::Item,
-                    C::Item,
-                    D::Item,
-                    KeyExpr,
-                    A::Expr,
-                    C::Expr,
-                    D::Expr,
-                    KeyPred,
-                    Op,
-                >(
+                inclusive_scan_by_flags_three::<A, C, D, Op>(
                     policy,
-                    &control.key_bindings,
-                    &first_bindings,
-                    &second_bindings,
-                    &third_bindings,
-                    control.len,
+                    &self.$first,
+                    &self.$second,
+                    &self.$third,
+                    control,
                 )
             }
         }
 
-        impl<A, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<
-                ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
-                KeyEq,
-                Op,
-            > for $target
+        impl<A, C, D, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<A::Runtime>, KeyEq, Op> for $target
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -1348,9 +1220,6 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
-            K: Scalar + 'static,
-            KeyExpr: DeviceGpuExpr<K>,
-            KeyPred: BinaryPredicateOp<K>,
             (A::Item, C::Item, D::Item): MItem<A::Runtime>,
             Op: BinaryOp<(A::Item, C::Item, D::Item)>,
         {
@@ -1365,33 +1234,15 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                control: &ScanByKeyControl<A::Runtime, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<A::Runtime>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                validate_columns3(&self.$first, &self.$second, &self.$third)?;
-                ensure_same_len(A::len(&self.$first), control.len)?;
-                let first_bindings = A::stage(&self.$first, policy)?;
-                let second_bindings = C::stage(&self.$second, policy)?;
-                let third_bindings = D::stage(&self.$third, policy)?;
-                primitive_scan::exclusive_scan_tuple3_by_key_values_device_expr::<
-                    A::Runtime,
-                    K,
-                    A::Item,
-                    C::Item,
-                    D::Item,
-                    KeyExpr,
-                    A::Expr,
-                    C::Expr,
-                    D::Expr,
-                    KeyPred,
-                    Op,
-                >(
+                exclusive_scan_by_flags_three::<A, C, D, Op>(
                     policy,
-                    &control.key_bindings,
-                    &first_bindings,
-                    &second_bindings,
-                    &third_bindings,
-                    control.len,
+                    &self.$first,
+                    &self.$second,
+                    &self.$third,
+                    control,
                     init,
                 )
             }
@@ -1404,8 +1255,8 @@ impl_kernel_scan_by_key_tuple3!(DeviceSoA3<A, C, D>, first, second, third);
 
 macro_rules! impl_kernel_scan_by_key_tuple4_views {
     () => {
-        impl<R, A, B, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1431,7 +1282,7 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
                 let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
                 let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
@@ -1448,9 +1299,6 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
                     u32,
                     u32,
                     u32,
-                    K,
-                    KeyExpr,
-                    KeyPred,
                     crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
                 >(
                     policy, &self.0, &self.1, &self.2, &self.3, &dummy4, &dummy5, &dummy6, control,
@@ -1459,8 +1307,8 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
             }
         }
 
-        impl<R, A, B, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1487,7 +1335,7 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
                 let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
@@ -1505,9 +1353,6 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
                     u32,
                     u32,
                     u32,
-                    K,
-                    KeyExpr,
-                    KeyPred,
                     crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
                 >(
                     policy,
@@ -1529,8 +1374,8 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
 
 macro_rules! impl_kernel_scan_by_key_tuple5_views {
     () => {
-        impl<R, A, B, C, D, E, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1559,7 +1404,7 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
                 let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
                 let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
@@ -1574,9 +1419,6 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
                     E,
                     u32,
                     u32,
-                    K,
-                    KeyExpr,
-                    KeyPred,
                     crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
                 >(
                     policy, &self.0, &self.1, &self.2, &self.3, &self.4, &dummy5, &dummy6, control,
@@ -1585,8 +1427,8 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
             }
         }
 
-        impl<R, A, B, C, D, E, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1616,7 +1458,7 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
                 let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
@@ -1632,9 +1474,6 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
                     E,
                     u32,
                     u32,
-                    K,
-                    KeyExpr,
-                    KeyPred,
                     crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
                 >(
                     policy,
@@ -1656,8 +1495,8 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
 
 macro_rules! impl_kernel_scan_by_key_tuple6_views {
     () => {
-        impl<R, A, B, C, D, E, F, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, F, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1689,7 +1528,7 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
                 let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
@@ -1702,9 +1541,6 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
                     E,
                     F,
                     u32,
-                    K,
-                    KeyExpr,
-                    KeyPred,
                     crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
                 >(
                     policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &dummy6, control,
@@ -1713,8 +1549,8 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
             }
         }
 
-        impl<R, A, B, C, D, E, F, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, F, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1747,7 +1583,7 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
                 let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
@@ -1761,9 +1597,6 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
                     E,
                     F,
                     u32,
-                    K,
-                    KeyExpr,
-                    KeyPred,
                     crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
                 >(
                     policy,
@@ -1785,8 +1618,8 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
 
 macro_rules! impl_kernel_scan_by_key_tuple7_views {
     () => {
-        impl<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, F, G, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1821,17 +1654,16 @@ macro_rules! impl_kernel_scan_by_key_tuple7_views {
             fn inclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op>(
-                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
-                    control,
+                inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6, control,
                 )
             }
         }
 
-        impl<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, F, G, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -1867,12 +1699,12 @@ macro_rules! impl_kernel_scan_by_key_tuple7_views {
             fn exclusive_scan_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op>(
-                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
-                    control, init,
+                exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6, control,
+                    init,
                 )
             }
         }
@@ -1884,21 +1716,19 @@ impl_kernel_scan_by_key_tuple5_views!();
 impl_kernel_scan_by_key_tuple6_views!();
 impl_kernel_scan_by_key_tuple7_views!();
 
-impl<Left, Right, R, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+impl<Left, Right, R, KeyEq, Op> KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
     for (Left, Right)
 where
     R: Runtime,
-    SoAView2<Left, Right>:
-        KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>,
+    SoAView2<Left, Right>: KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
     type Runtime = <SoAView2<Left, Right> as KernelInclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
     type Output = <SoAView2<Left, Right> as KernelInclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Output;
@@ -1906,10 +1736,10 @@ where
     fn inclusive_scan_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        control: &ScanByKeyControl<R>,
     ) -> Result<Self::Output, Error> {
         <SoAView2<Left, Right> as KernelInclusiveScanByKeyValues<
-            ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::inclusive_scan_by_key_values(
@@ -1923,21 +1753,19 @@ where
     }
 }
 
-impl<First, Second, Third, R, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
-    for (First, Second, Third)
+impl<First, Second, Third, R, KeyEq, Op>
+    KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op> for (First, Second, Third)
 where
     R: Runtime,
-    SoAView3<First, Second, Third>:
-        KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>,
+    SoAView3<First, Second, Third>: KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
     type Output = <SoAView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Output;
@@ -1945,10 +1773,10 @@ where
     fn inclusive_scan_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        control: &ScanByKeyControl<R>,
     ) -> Result<Self::Output, Error> {
         <SoAView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
-            ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::inclusive_scan_by_key_values(
@@ -1963,26 +1791,24 @@ where
     }
 }
 
-impl<Left, Right, R, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+impl<Left, Right, R, KeyEq, Op> KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>
     for (Left, Right)
 where
     R: Runtime,
-    SoAView2<Left, Right>:
-        KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>,
+    SoAView2<Left, Right>: KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
     type Runtime = <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
     type Init = <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Init;
     type Output = <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Output;
@@ -1990,11 +1816,11 @@ where
     fn exclusive_scan_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        control: &ScanByKeyControl<R>,
         init: Self::Init,
     ) -> Result<Self::Output, Error> {
         <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
-            ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::exclusive_scan_by_key_values(
@@ -2009,26 +1835,24 @@ where
     }
 }
 
-impl<First, Second, Third, R, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
-    for (First, Second, Third)
+impl<First, Second, Third, R, KeyEq, Op>
+    KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op> for (First, Second, Third)
 where
     R: Runtime,
-    SoAView3<First, Second, Third>:
-        KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>,
+    SoAView3<First, Second, Third>: KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
     type Init = <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Init;
     type Output = <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
-        ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Output;
@@ -2036,11 +1860,11 @@ where
     fn exclusive_scan_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+        control: &ScanByKeyControl<R>,
         init: Self::Init,
     ) -> Result<Self::Output, Error> {
         <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
-            ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::exclusive_scan_by_key_values(

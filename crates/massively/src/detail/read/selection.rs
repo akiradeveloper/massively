@@ -728,7 +728,7 @@ where
             );
         }
     }
-    select::handles_from_flags(policy, len, len_u32, flag, policy.empty_handle())
+    Ok(select::handles_from_flags(policy, len, len_u32, flag, policy.empty_handle())?.control)
 }
 
 fn tuple3_selection_handles_read<First, Second, Third, Pred>(
@@ -814,7 +814,7 @@ where
             );
         }
     }
-    select::handles_from_flags(policy, len, len_u32, flag, policy.empty_handle())
+    Ok(select::handles_from_flags(policy, len, len_u32, flag, policy.empty_handle())?.control)
 }
 
 impl<Source, Pred> KernelSelectInput<Pred> for Source
@@ -1462,7 +1462,7 @@ where
         let handles = crate::detail::api::device_expr_selection_handles_with_policy::<Source, Pred>(
             policy, &self, false, env,
         )?;
-        is_partitioned_single_read(policy, handles)
+        is_partitioned_single_read(policy, handles.control)
     }
 
     fn partition_copy_read(
@@ -1519,7 +1519,7 @@ macro_rules! impl_kernel_partition_tuple1 {
                     Source,
                     Pred,
                 >(policy, &self.$field, false, env)?;
-                is_partitioned_single_read(policy, handles)
+                is_partitioned_single_read(policy, handles.control)
             }
 
             fn partition_copy_read(
