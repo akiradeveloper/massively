@@ -306,7 +306,7 @@ where
         return Ok(0);
     }
 
-    Ok(read_u32_scalar::<ExprSource::Runtime>(policy.client(), handles.count)? as usize)
+    Ok(read_u32_scalar::<ExprSource::Runtime>(policy.client(), handles.count.clone())? as usize)
 }
 
 pub(in crate::detail) fn device_expr_find_if_with_policy<ExprSource, Pred>(
@@ -324,7 +324,7 @@ where
 {
     let handles =
         device_expr_selection_handles_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
-    primitive_search::first_flag(policy, handles.flag, handles.len, expr.len())
+    primitive_search::first_flag(policy, handles.flag.clone(), handles.len, expr.len())
 }
 
 pub(in crate::detail) fn device_expr_selection_handles_with_policy<ExprSource, Pred>(
@@ -410,7 +410,7 @@ where
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let client = policy.client();
     if len == 0 {
-        return Ok(select::SelectionControl::empty(client));
+        return Ok(select::SelectionHandles::empty(client));
     }
 
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
@@ -447,10 +447,8 @@ where
         );
     }
 
-    Ok(select::SelectionControl::flags_only(
-        client,
-        flag_handle,
-        len,
-        len_u32,
-    ))
+    Ok(
+        select::SelectionControl::flags_only(client, flag_handle, len, len_u32)
+            .for_value(policy.empty_handle()),
+    )
 }

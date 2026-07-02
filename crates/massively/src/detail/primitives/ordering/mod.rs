@@ -1,8 +1,7 @@
-mod merge;
 mod radix;
 mod sort;
 
-pub(crate) use merge::MergeByKeyControl;
+pub(crate) use crate::detail::control::MergeByKeyControl;
 #[allow(unused_imports)]
 pub(crate) use radix::{radix_sort_by_key_u32, radix_sort_u32};
 pub(crate) use sort::{

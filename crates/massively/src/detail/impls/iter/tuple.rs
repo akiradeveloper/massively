@@ -1252,7 +1252,7 @@ macro_rules! impl_wide_predicate_selection_body {
         let len = $a.len;
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         if len == 0 {
-            Ok(crate::detail::primitives::select::SelectionControl::empty($policy.client()))
+            Ok(crate::detail::primitives::select::SelectionHandles::empty($policy.client()))
         } else {
             let client = $policy.client();
             let flag = client.empty(len * std::mem::size_of::<u32>());
@@ -1935,118 +1935,69 @@ macro_rules! impl_wide_set_intersection_flags_from_views {
 
 macro_rules! impl_tuple_inclusive_scan_by_three_key_values_body {
     ($policy:ident, $input:ident, $control:ident; 0, 1) => {{
-        crate::detail::read::inclusive_scan_by_flags_two::<
-            _,
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$control)
+        crate::detail::read::inclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$control,
+        )
         .map(|inner| (inner.left, inner.right))
     }};
     ($policy:ident, $input:ident, $control:ident; 0, 1, 2) => {{
-        crate::detail::read::inclusive_scan_by_flags_three::<
-            _,
-            _,
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$input.2, &$control)
+        crate::detail::read::inclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$input.2, &$control,
+        )
         .map(|inner| (inner.first, inner.second, inner.third))
     }};
 }
 
 macro_rules! impl_tuple_inclusive_scan_by_two_key_values_body {
     ($policy:ident, $input:ident, $control:ident; 0, 1) => {{
-        crate::detail::read::inclusive_scan_by_flags_two::<
-            _,
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$control)
+        crate::detail::read::inclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$control,
+        )
         .map(|inner| (inner.left, inner.right))
     }};
     ($policy:ident, $input:ident, $control:ident; 0, 1, 2) => {{
-        crate::detail::read::inclusive_scan_by_flags_three::<
-            _,
-            _,
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$input.2, &$control)
+        crate::detail::read::inclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$input.2, &$control,
+        )
         .map(|inner| (inner.first, inner.second, inner.third))
     }};
 }
 
 macro_rules! impl_tuple_exclusive_scan_by_three_key_values_body {
     ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1) => {{
-        crate::detail::read::exclusive_scan_by_flags_two::<
-            _,
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$control, $init)
+        crate::detail::read::exclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$control, $init,
+        )
         .map(|inner| (inner.left, inner.right))
     }};
     ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1, 2) => {{
-        crate::detail::read::exclusive_scan_by_flags_three::<
-            _,
-            _,
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$input.2, &$control, $init)
+        crate::detail::read::exclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$input.2, &$control, $init,
+        )
         .map(|inner| (inner.first, inner.second, inner.third))
     }};
 }
 
 macro_rules! impl_tuple_exclusive_scan_by_two_key_values_body {
     ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1) => {{
-        crate::detail::read::exclusive_scan_by_flags_two::<
-            _,
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$control, $init)
+        crate::detail::read::exclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$control, $init,
+        )
         .map(|inner| (inner.left, inner.right))
     }};
     ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1, 2) => {{
-        crate::detail::read::exclusive_scan_by_flags_three::<
-            _,
-            _,
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$input.2, &$control, $init)
+        crate::detail::read::exclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$input.2, &$control, $init,
+        )
         .map(|inner| (inner.first, inner.second, inner.third))
     }};
 }
 
 macro_rules! impl_tuple_reduce_by_three_key_values_body {
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $head_flags:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident; 0, 1) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<
-            _,
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$control)?;
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$control,
+        )?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
         let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
@@ -2117,15 +2068,10 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         ))
     }};
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $head_flags:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident; 0, 1, 2) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_three::<
-            _,
-            _,
-            _,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$input.2, &$control)?;
+        let inclusive =
+            crate::detail::read::inclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
+                $policy, &$input.0, &$input.1, &$input.2, &$control,
+            )?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
         let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
@@ -2213,14 +2159,9 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
 
 macro_rules! impl_tuple_reduce_by_two_key_values_body {
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident; 0, 1) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<
-            _,
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$control)?;
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$control,
+        )?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
         let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
@@ -2286,15 +2227,10 @@ macro_rules! impl_tuple_reduce_by_two_key_values_body {
         ))
     }};
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident; 0, 1, 2) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_three::<
-            _,
-            _,
-            _,
-            (K1, K2),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >($policy, &$input.0, &$input.1, &$input.2, &$control)?;
+        let inclusive =
+            crate::detail::read::inclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
+                $policy, &$input.0, &$input.1, &$input.2, &$control,
+            )?;
         let client = $policy.client();
         let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
         let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
@@ -2397,9 +2333,6 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
                 u32,
                 u32,
                 u32,
-                K,
-                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
                 crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
             >(
                 $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
@@ -2426,9 +2359,6 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
                 $ty4,
                 u32,
                 u32,
-                K,
-                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
                 crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
             >(
                 $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
@@ -2453,9 +2383,6 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
                 $ty4,
                 $ty5,
                 u32,
-                K,
-                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
                 crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
             >(
                 $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
@@ -2477,9 +2404,6 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
             $ty4,
             $ty5,
             $ty6,
-            K,
-            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
             KernelOp<R, Op>,
         >(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
@@ -2502,9 +2426,7 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
             >>::scan_by_key_control(($keys,), $policy)?;
         let (a, b, c, d, _, _, _) =
             crate::detail::read::exclusive_scan_by_flags_seven_views::<
-                R, $ty0, $ty1, $ty2, $ty3, u32, u32, u32, K,
-                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                R, $ty0, $ty1, $ty2, $ty3, u32, u32, u32,
                 crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
             >(
                 $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
@@ -2523,9 +2445,7 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
             >>::scan_by_key_control(($keys,), $policy)?;
         let (a, b, c, d, e, _, _) =
             crate::detail::read::exclusive_scan_by_flags_seven_views::<
-                R, $ty0, $ty1, $ty2, $ty3, $ty4, u32, u32, K,
-                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                R, $ty0, $ty1, $ty2, $ty3, $ty4, u32, u32,
                 crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
             >(
                 $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
@@ -2542,9 +2462,7 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
             >>::scan_by_key_control(($keys,), $policy)?;
         let (a, b, c, d, e, f, _) =
             crate::detail::read::exclusive_scan_by_flags_seven_views::<
-                R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32, K,
-                <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-                crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+                R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32,
                 crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
             >(
                 $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
@@ -2558,9 +2476,7 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
                 KernelOp<R, KeyEq>,
             >>::scan_by_key_control(($keys,), $policy)?;
         crate::detail::read::exclusive_scan_by_flags_seven_views::<
-            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, K,
-            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6,
             KernelOp<R, Op>,
         >(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
@@ -2670,17 +2586,9 @@ macro_rules! impl_wide_reduce_by_single_key_values_body {
 
 macro_rules! impl_wide_reduce_by_single_key_tuple7_values_body {
     ($policy:ident, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $init:expr, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; $op:ty) => {{
-        let scan_control: crate::detail::control::ScanByKeyControl<
-            R,
-            K,
-            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
-        > = (&$control).into();
+        let scan_control: crate::detail::control::ScanByKeyControl<R> = (&$control).into();
         let inclusive = crate::detail::read::inclusive_scan_by_flags_seven_views::<
-            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, K,
-            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::device::KernelColumn>::Expr,
-            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
-            $op,
+            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, $op,
         >(
             $policy, &$a, &$b, &$c, &$d, &$e, &$f, &$g, &scan_control,
         )?;
@@ -3385,17 +3293,11 @@ macro_rules! impl_miter_soa {
                 >(policy, &first_key, &second_key)?;
                 let len_u32 = u32::try_from(first_key.len)
                     .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                let control: crate::detail::control::ScanByKeyControl<R> = crate::detail::control::ScanByKeyControl {
                     head_flags,
                     len: first_key.len,
                     len_u32,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 };
                 let inner = impl_tuple_inclusive_scan_by_two_key_values_body!(
                     policy, input, control; $( $idx ),+
@@ -3449,17 +3351,11 @@ macro_rules! impl_miter_soa {
                 >(policy, &first_key, &second_key)?;
                 let len_u32 = u32::try_from(first_key.len)
                     .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                let control: crate::detail::control::ScanByKeyControl<R> = crate::detail::control::ScanByKeyControl {
                     head_flags,
                     len: first_key.len,
                     len_u32,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 };
                 let inner = impl_tuple_exclusive_scan_by_two_key_values_body!(
                     policy, input, control, init; $( $idx ),+
@@ -3499,17 +3395,11 @@ macro_rules! impl_miter_soa {
                 )?;
                 let len_u32 = u32::try_from(first_key.len)
                     .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2, K3),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                let control: crate::detail::control::ScanByKeyControl<R> = crate::detail::control::ScanByKeyControl {
                     head_flags,
                     len: first_key.len,
                     len_u32,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 };
                 let inner = impl_tuple_inclusive_scan_by_three_key_values_body!(
                     policy, input, control; $( $idx ),+
@@ -3550,17 +3440,11 @@ macro_rules! impl_miter_soa {
                 )?;
                 let len_u32 = u32::try_from(first_key.len)
                     .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2, K3),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                let control: crate::detail::control::ScanByKeyControl<R> = crate::detail::control::ScanByKeyControl {
                     head_flags,
                     len: first_key.len,
                     len_u32,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 };
                 let inner = impl_tuple_exclusive_scan_by_three_key_values_body!(
                     policy, input, control, init; $( $idx ),+
@@ -3701,17 +3585,11 @@ macro_rules! impl_miter_soa {
                     crate::detail::impls::end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
                 let len_u32 = u32::try_from(first_key.len)
                     .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2, K3),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                let control: crate::detail::control::ScanByKeyControl<R> = crate::detail::control::ScanByKeyControl {
                     head_flags,
                     len: first_key.len,
                     len_u32,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 };
                 let (key_inner, value_inner) = impl_tuple_reduce_by_three_key_values_body!(
                     policy, input, init, first_key, second_key, third_key, head_flags, end_flags, len_u32, control; $( $ty ),+; $( $idx ),+
@@ -3783,17 +3661,11 @@ macro_rules! impl_miter_soa {
                     crate::detail::impls::end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
                 let len_u32 = u32::try_from(first_key.len)
                     .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                let control: crate::detail::control::ScanByKeyControl<R> = crate::detail::control::ScanByKeyControl {
                     head_flags,
                     len: first_key.len,
                     len_u32,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 };
                 let (key_inner, value_inner) = impl_tuple_reduce_by_two_key_values_body!(
                     policy, input, init, first_key, second_key, end_flags, len_u32, control; $( $ty ),+; $( $idx ),+
@@ -5136,10 +5008,11 @@ macro_rules! impl_wide_miter_soa {
                         KernelOp<R, Eq>,
                     >>::unique_by_key_control((keys,), policy)?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &input.$idx,
-                        control.flags.clone(),
+                        &control.selection,
+                        control.count,
                     )?;
                 )+
                 let value_inner = ($($tmp,)+);
@@ -5860,7 +5733,7 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 crate::detail::primitives::search::first_flag(
                     policy,
-                    handles.flag,
+                    handles.flag.clone(),
                     handles.len,
                     handles.len,
                 )

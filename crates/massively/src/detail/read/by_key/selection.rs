@@ -1,10 +1,19 @@
 use super::super::selection::unique_one_flags_read;
 use super::super::*;
+use crate::detail::control::UniqueByKeyControl;
 
-#[allow(dead_code)]
-pub(crate) struct UniqueByKeyControl {
-    pub(crate) flags: cubecl::server::Handle,
-    pub(crate) len: usize,
+fn unique_by_key_control_from_flags<R: Runtime>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    flags: cubecl::server::Handle,
+) -> Result<UniqueByKeyControl, Error> {
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let handles = select::handles_from_flags(policy, len, len_u32, flags, policy.empty_handle())?;
+    let count = select::selected_count(policy, &handles)?;
+    Ok(UniqueByKeyControl {
+        selection: handles.control,
+        count,
+    })
 }
 
 #[allow(dead_code)]
@@ -60,15 +69,14 @@ where
         <KeySource as KernelColumn>::validate(&self)?;
         let len = <KeySource as KernelColumn>::len(&self);
         let flags = unique_one_flags_read::<KeySource, Eq>(policy, &self)?;
-        let out_keys = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let control = unique_by_key_control_from_flags(policy, len, flags)?;
+        let out_keys = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self,
-            flags.clone(),
+            &control.selection,
+            control.count,
         )?;
-        Ok((
-            DeviceSoA1 { source: out_keys },
-            UniqueByKeyControl { flags, len },
-        ))
+        Ok((DeviceSoA1 { source: out_keys }, control))
     }
 }
 
@@ -146,17 +154,20 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple2 {
                     &self.$left,
                     &self.$right,
                 )?;
-                let left = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let control = unique_by_key_control_from_flags(policy, len, flags)?;
+                let left = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$left,
-                    flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                let right = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let right = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$right,
-                    flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                Ok(($out { left, right }, UniqueByKeyControl { flags, len }))
+                Ok(($out { left, right }, control))
             }
         }
     };
@@ -220,20 +231,24 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
                     Third,
                     Eq,
                 >(policy, &self.$first, &self.$second, &self.$third)?;
-                let first = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let control = unique_by_key_control_from_flags(policy, len, flags)?;
+                let first = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$first,
-                    flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                let second = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let second = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$second,
-                    flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                let third = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let third = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$third,
-                    flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
                 Ok((
                     $out {
@@ -241,7 +256,7 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
                         second,
                         third,
                     },
-                    UniqueByKeyControl { flags, len },
+                    control,
                 ))
             }
         }
@@ -300,12 +315,16 @@ where
         control: &UniqueByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
         <ValueSource as KernelColumn>::validate(&self)?;
-        ensure_same_len(<ValueSource as KernelColumn>::len(&self), control.len)?;
+        ensure_same_len(
+            <ValueSource as KernelColumn>::len(&self),
+            control.selection.len,
+        )?;
         Ok(DeviceSoA1 {
-            source: crate::detail::api::device_expr_compact_with_flags_with_policy(
+            source: crate::detail::api::device_expr_compact_with_selection_with_policy(
                 policy,
                 &self,
-                control.flags.clone(),
+                &control.selection,
+                control.count,
             )?,
         })
     }
@@ -373,16 +392,21 @@ macro_rules! impl_kernel_unique_by_key_values_tuple2 {
                 control: &UniqueByKeyControl,
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
-                ensure_same_len(<Left as KernelColumn>::len(&self.$left), control.len)?;
-                let left = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                ensure_same_len(
+                    <Left as KernelColumn>::len(&self.$left),
+                    control.selection.len,
+                )?;
+                let left = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$left,
-                    control.flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                let right = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let right = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$right,
-                    control.flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
                 Ok($out { left, right })
             }
@@ -443,21 +467,27 @@ macro_rules! impl_kernel_unique_by_key_values_tuple3 {
                 control: &UniqueByKeyControl,
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
-                ensure_same_len(<First as KernelColumn>::len(&self.$first), control.len)?;
-                let first = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                ensure_same_len(
+                    <First as KernelColumn>::len(&self.$first),
+                    control.selection.len,
+                )?;
+                let first = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$first,
-                    control.flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                let second = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let second = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$second,
-                    control.flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
-                let third = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                let third = crate::detail::api::device_expr_compact_with_selection_with_policy(
                     policy,
                     &self.$third,
-                    control.flags.clone(),
+                    &control.selection,
+                    control.count,
                 )?;
                 Ok($out {
                     first,

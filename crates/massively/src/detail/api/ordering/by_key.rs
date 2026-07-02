@@ -22,6 +22,8 @@ where
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         let (keys, indices) = self.sort_by_key_control(policy)?;
+        let control = crate::detail::control::PermutationControl::from_indices(&indices)?;
+        let indices = control.indices(policy);
         let values = values.sort_by_key_values(policy, &indices)?;
         Ok((keys, values))
     }

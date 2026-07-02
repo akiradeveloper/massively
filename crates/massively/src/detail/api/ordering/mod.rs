@@ -173,6 +173,21 @@ where
     super::device_expr_compact_with_selection_with_policy(policy, candidates, &handles, count)
 }
 
+fn selected_rank_from_flags_with_policy<R>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    flag_handle: cubecl::server::Handle,
+) -> Result<(select::SelectionControl, usize), Error>
+where
+    R: Runtime,
+{
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let handles =
+        select::handles_from_flags(policy, len, len_u32, flag_handle, policy.empty_handle())?;
+    let count = select::selected_count(policy, &handles)?;
+    Ok((handles.control, count))
+}
+
 fn tuple2_membership_expr_flags_with_policy<CandidateA, CandidateB, SortedA, SortedB, Less>(
     policy: &CubePolicy<CandidateA::Runtime>,
     candidate_a: &CandidateA,
@@ -1299,11 +1314,23 @@ macro_rules! impl_tuple_pair_ordering {
                     $( &self.$field, )+
                     false,
                 )?;
+                let (selection, count) =
+                    selected_rank_from_flags_with_policy(policy, other.$first_field.len(), flags)?;
                 let $right_first_var =
-                    super::device_expr_compact_with_flags_with_policy(policy, &other.$first_field, flags.clone())?;
+                    super::device_expr_compact_with_selection_with_policy(
+                        policy,
+                        &other.$first_field,
+                        &selection,
+                        count,
+                    )?;
                 $(
                     let $right_var =
-                        super::device_expr_compact_with_flags_with_policy(policy, &other.$field, flags.clone())?;
+                        super::device_expr_compact_with_selection_with_policy(
+                            policy,
+                            &other.$field,
+                            &selection,
+                            count,
+                        )?;
                 )+
                 let (output, _) = $merge_control_fn::<
                     $first,
@@ -1343,11 +1370,23 @@ macro_rules! impl_tuple_pair_ordering {
                     $( &other.$field, )+
                     true,
                 )?;
+                let (selection, count) =
+                    selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
                 let $first_field =
-                    super::device_expr_compact_with_flags_with_policy(policy, &self.$first_field, flags.clone())?;
+                    super::device_expr_compact_with_selection_with_policy(
+                        policy,
+                        &self.$first_field,
+                        &selection,
+                        count,
+                    )?;
                 $(
                     let $field =
-                        super::device_expr_compact_with_flags_with_policy(policy, &self.$field, flags.clone())?;
+                        super::device_expr_compact_with_selection_with_policy(
+                            policy,
+                            &self.$field,
+                            &selection,
+                            count,
+                        )?;
                 )+
                 Ok($output { $first_field, $( $field ),+ })
             }
@@ -1374,11 +1413,23 @@ macro_rules! impl_tuple_pair_ordering {
                     $( &other.$field, )+
                     false,
                 )?;
+                let (selection, count) =
+                    selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
                 let $first_field =
-                    super::device_expr_compact_with_flags_with_policy(policy, &self.$first_field, flags.clone())?;
+                    super::device_expr_compact_with_selection_with_policy(
+                        policy,
+                        &self.$first_field,
+                        &selection,
+                        count,
+                    )?;
                 $(
                     let $field =
-                        super::device_expr_compact_with_flags_with_policy(policy, &self.$field, flags.clone())?;
+                        super::device_expr_compact_with_selection_with_policy(
+                            policy,
+                            &self.$field,
+                            &selection,
+                            count,
+                        )?;
                 )+
                 Ok($output { $first_field, $( $field ),+ })
             }

@@ -4,6 +4,18 @@ use crate::detail::{
     device::DeviceColumnView,
 };
 
+fn reduce_output_selection_from_end_flags<R: Runtime>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    len_u32: u32,
+    end_flags: cubecl::server::Handle,
+) -> Result<(select::SelectionControl, usize), Error> {
+    let handles =
+        select::handles_from_flags(policy, len, len_u32, end_flags, policy.empty_handle())?;
+    let count = select::selected_count(policy, &handles)?;
+    Ok((handles.control, count))
+}
+
 pub(crate) trait KernelReduceByKeyKeys<KeyEq>: Sized {
     type Runtime: Runtime;
     type OutputKeys;
@@ -55,7 +67,7 @@ where
 {
     type Runtime = KeySource::Runtime;
     type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
-    type Control = ReduceByKeyControl<KeySource::Runtime, KeySource::Item, KeySource::Expr, KeyEq>;
+    type Control = ReduceByKeyControl<KeySource::Runtime>;
 
     fn reduce_by_key_control(
         self,
@@ -69,12 +81,15 @@ where
                     source: policy.empty_device_vec(),
                 },
                 ReduceByKeyControl {
-                    key_bindings: KernelColumnBindings::empty(policy.client()),
                     head_flags: policy.empty_handle(),
                     end_flags: policy.empty_handle(),
+                    output_selection: crate::detail::control::SelectionControl::empty(
+                        policy.client(),
+                    ),
+                    output_count: 0,
                     len,
                     len_u32: 0,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 },
             ));
         }
@@ -115,20 +130,24 @@ where
             );
         }
 
-        let out_keys = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let (output_selection, output_count) =
+            reduce_output_selection_from_end_flags(policy, len, len_u32, end_flags.clone())?;
+        let out_keys = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self,
-            end_flags.clone(),
+            &output_selection,
+            output_count,
         )?;
         Ok((
             DeviceSoA1 { source: out_keys },
             ReduceByKeyControl {
-                key_bindings,
                 head_flags,
                 end_flags,
+                output_selection,
+                output_count,
                 len,
                 len_u32,
-                _marker: std::marker::PhantomData,
+                _runtime: std::marker::PhantomData,
             },
         ))
     }
@@ -144,12 +163,7 @@ where
 {
     type Runtime = KeySource::Runtime;
     type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
-    type Control = ReduceByKeyControl<
-        KeySource::Runtime,
-        KeySource::Item,
-        KeySource::Expr,
-        crate::detail::api::Tuple1Less<KeyEq>,
-    >;
+    type Control = ReduceByKeyControl<KeySource::Runtime>;
 
     fn reduce_by_key_control(
         self,
@@ -175,7 +189,7 @@ where
     type Runtime = First::Runtime;
     type OutputKeys =
         DeviceSoA2<DeviceVec<First::Runtime, First::Item>, DeviceVec<First::Runtime, Second::Item>>;
-    type Control = ReduceByKeyControl<First::Runtime, (First::Item, Second::Item), (), KeyEq>;
+    type Control = ReduceByKeyControl<First::Runtime>;
 
     fn reduce_by_key_control(
         self,
@@ -198,12 +212,15 @@ where
                     right: policy.empty_device_vec(),
                 },
                 ReduceByKeyControl {
-                    key_bindings: KernelColumnBindings::empty(policy.client()),
                     head_flags: policy.empty_handle(),
                     end_flags: policy.empty_handle(),
+                    output_selection: crate::detail::control::SelectionControl::empty(
+                        policy.client(),
+                    ),
+                    output_count: 0,
                     len,
                     len_u32: 0,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 },
             ));
         }
@@ -214,25 +231,30 @@ where
         let end_flags =
             crate::detail::impls::end_flags_from_head_flags(policy, head_flags.clone(), len)?;
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-        let left = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let (output_selection, output_count) =
+            reduce_output_selection_from_end_flags(policy, len, len_u32, end_flags.clone())?;
+        let left = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self.0,
-            end_flags.clone(),
+            &output_selection,
+            output_count,
         )?;
-        let right = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let right = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self.1,
-            end_flags.clone(),
+            &output_selection,
+            output_count,
         )?;
         Ok((
             DeviceSoA2 { left, right },
             ReduceByKeyControl {
-                key_bindings: KernelColumnBindings::empty(policy.client()),
                 head_flags,
                 end_flags,
+                output_selection,
+                output_count,
                 len,
                 len_u32,
-                _marker: std::marker::PhantomData,
+                _runtime: std::marker::PhantomData,
             },
         ))
     }
@@ -257,8 +279,7 @@ where
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
     >;
-    type Control =
-        ReduceByKeyControl<First::Runtime, (First::Item, Second::Item, Third::Item), (), KeyEq>;
+    type Control = ReduceByKeyControl<First::Runtime>;
 
     fn reduce_by_key_control(
         self,
@@ -290,12 +311,15 @@ where
                     third: policy.empty_device_vec(),
                 },
                 ReduceByKeyControl {
-                    key_bindings: KernelColumnBindings::empty(policy.client()),
                     head_flags: policy.empty_handle(),
                     end_flags: policy.empty_handle(),
+                    output_selection: crate::detail::control::SelectionControl::empty(
+                        policy.client(),
+                    ),
+                    output_count: 0,
                     len,
                     len_u32: 0,
-                    _marker: std::marker::PhantomData,
+                    _runtime: std::marker::PhantomData,
                 },
             ));
         }
@@ -307,20 +331,25 @@ where
         let end_flags =
             crate::detail::impls::end_flags_from_head_flags(policy, head_flags.clone(), len)?;
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-        let first = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let (output_selection, output_count) =
+            reduce_output_selection_from_end_flags(policy, len, len_u32, end_flags.clone())?;
+        let first = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self.0,
-            end_flags.clone(),
+            &output_selection,
+            output_count,
         )?;
-        let second = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let second = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self.1,
-            end_flags.clone(),
+            &output_selection,
+            output_count,
         )?;
-        let third = crate::detail::api::device_expr_compact_with_flags_with_policy(
+        let third = crate::detail::api::device_expr_compact_with_selection_with_policy(
             policy,
             &self.2,
-            end_flags.clone(),
+            &output_selection,
+            output_count,
         )?;
         Ok((
             DeviceSoA3 {
@@ -329,30 +358,24 @@ where
                 third,
             },
             ReduceByKeyControl {
-                key_bindings: KernelColumnBindings::empty(policy.client()),
                 head_flags,
                 end_flags,
+                output_selection,
+                output_count,
                 len,
                 len_u32,
-                _marker: std::marker::PhantomData,
+                _runtime: std::marker::PhantomData,
             },
         ))
     }
 }
 
-impl<ValueSource, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelReduceByKeyValues<
-        ReduceByKeyControl<ValueSource::Runtime, K, KeyExpr, KeyPred>,
-        KeyEq,
-        Op,
-    > for (ValueSource,)
+impl<ValueSource, KeyEq, Op>
+    KernelReduceByKeyValues<ReduceByKeyControl<ValueSource::Runtime>, KeyEq, Op> for (ValueSource,)
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    K: Scalar + 'static,
-    KeyExpr: DeviceGpuExpr<K>,
-    KeyPred: BinaryPredicateOp<K>,
     Op: BinaryOp<(ValueSource::Item,)>,
 {
     type Runtime = ValueSource::Runtime;
@@ -362,7 +385,7 @@ where
     fn reduce_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ReduceByKeyControl<ValueSource::Runtime, K, KeyExpr, KeyPred>,
+        control: &ReduceByKeyControl<ValueSource::Runtime>,
         init: Self::Init,
     ) -> Result<Self::OutputValues, Error> {
         <ValueSource as KernelColumn>::validate(&self.0)?;
@@ -374,16 +397,12 @@ where
         }
 
         let client = policy.client();
-        let value_bindings = ValueSource::stage(&self.0, policy)?;
-        let inclusive = primitive_scan::inclusive_scan_by_key_device_expr::<
-            ValueSource::Runtime,
-            K,
-            ValueSource::Item,
-            KeyExpr,
-            ValueSource::Expr,
-            KeyPred,
-            crate::detail::api::Tuple1BinaryOp<Op>,
-        >(policy, &control.key_bindings, &value_bindings, control.len)?;
+        let scan_control: ScanByKeyControl<ValueSource::Runtime> = control.into();
+        let inclusive = super::scan::inclusive_scan_by_flags_one::<ValueSource, Op>(
+            policy,
+            &self.0,
+            &scan_control,
+        )?;
 
         let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
         let init_handle = client.create_from_slice(ValueSource::Item::as_bytes(&[init.0]));
@@ -411,22 +430,19 @@ where
             );
         }
 
-        let handles = select::handles_from_flags(
-            policy,
-            control.len,
-            control.len_u32,
-            control.end_flags.clone(),
-            reduced_value_handle,
-        )?;
+        let handles = control.output_selection.for_value(reduced_value_handle);
         Ok(DeviceSoA1 {
-            source: select::compact::<ValueSource::Runtime, ValueSource::Item>(policy, handles)?,
+            source: select::compact_with_count::<ValueSource::Runtime, ValueSource::Item>(
+                policy,
+                handles,
+                control.output_count,
+            )?,
         })
     }
 }
 
-impl<ValueA, ValueB, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelReduceByKeyValues<ReduceByKeyControl<ValueA::Runtime, K, KeyExpr, KeyPred>, KeyEq, Op>
-    for (ValueA, ValueB)
+impl<ValueA, ValueB, KeyEq, Op>
+    KernelReduceByKeyValues<ReduceByKeyControl<ValueA::Runtime>, KeyEq, Op> for (ValueA, ValueB)
 where
     ValueA: KernelColumn + KernelColumnAt<S0>,
     ValueB: KernelColumn<Runtime = ValueA::Runtime> + KernelColumnAt<S0>,
@@ -434,9 +450,6 @@ where
     ValueB::Item: Scalar + 'static,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
-    K: Scalar + 'static,
-    KeyExpr: DeviceGpuExpr<K>,
-    KeyPred: BinaryPredicateOp<K>,
     Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
 {
     type Runtime = ValueA::Runtime;
@@ -449,7 +462,7 @@ where
     fn reduce_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ReduceByKeyControl<ValueA::Runtime, K, KeyExpr, KeyPred>,
+        control: &ReduceByKeyControl<ValueA::Runtime>,
         init: Self::Init,
     ) -> Result<Self::OutputValues, Error> {
         validate_columns2(&self.0, &self.1)?;
@@ -462,24 +475,12 @@ where
         }
 
         let client = policy.client();
-        let left_bindings = ValueA::stage(&self.0, policy)?;
-        let right_bindings = ValueB::stage(&self.1, policy)?;
-        let inclusive = primitive_scan::inclusive_scan_tuple2_by_key_values_device_expr::<
-            ValueA::Runtime,
-            K,
-            ValueA::Item,
-            ValueB::Item,
-            KeyExpr,
-            ValueA::Expr,
-            ValueB::Expr,
-            KeyPred,
-            Op,
-        >(
+        let scan_control: ScanByKeyControl<ValueA::Runtime> = control.into();
+        let inclusive = super::scan::inclusive_scan_by_flags_two::<ValueA, ValueB, Op>(
             policy,
-            &control.key_bindings,
-            &left_bindings,
-            &right_bindings,
-            control.len,
+            &self.0,
+            &self.1,
+            &scan_control,
         )?;
 
         let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
@@ -513,29 +514,25 @@ where
             );
         }
 
-        let left_handles = select::handles_from_flags(
-            policy,
-            control.len,
-            control.len_u32,
-            control.end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let right_handles = select::handles_from_flags(
-            policy,
-            control.len,
-            control.len_u32,
-            control.end_flags.clone(),
-            reduced_b_handle,
-        )?;
+        let left_handles = control.output_selection.for_value(reduced_a_handle);
+        let right_handles = control.output_selection.for_value(reduced_b_handle);
         Ok(DeviceSoA2 {
-            left: select::compact::<ValueA::Runtime, ValueA::Item>(policy, left_handles)?,
-            right: select::compact::<ValueA::Runtime, ValueB::Item>(policy, right_handles)?,
+            left: select::compact_with_count::<ValueA::Runtime, ValueA::Item>(
+                policy,
+                left_handles,
+                control.output_count,
+            )?,
+            right: select::compact_with_count::<ValueA::Runtime, ValueB::Item>(
+                policy,
+                right_handles,
+                control.output_count,
+            )?,
         })
     }
 }
 
-impl<ValueA, ValueB, ValueC, K, KeyExpr, KeyPred, KeyEq, Op>
-    KernelReduceByKeyValues<ReduceByKeyControl<ValueA::Runtime, K, KeyExpr, KeyPred>, KeyEq, Op>
+impl<ValueA, ValueB, ValueC, KeyEq, Op>
+    KernelReduceByKeyValues<ReduceByKeyControl<ValueA::Runtime>, KeyEq, Op>
     for (ValueA, ValueB, ValueC)
 where
     ValueA: KernelColumn + KernelColumnAt<S0>,
@@ -547,9 +544,6 @@ where
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
-    K: Scalar + 'static,
-    KeyExpr: DeviceGpuExpr<K>,
-    KeyPred: BinaryPredicateOp<K>,
     Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
 {
     type Runtime = ValueA::Runtime;
@@ -563,7 +557,7 @@ where
     fn reduce_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        control: &ReduceByKeyControl<ValueA::Runtime, K, KeyExpr, KeyPred>,
+        control: &ReduceByKeyControl<ValueA::Runtime>,
         init: Self::Init,
     ) -> Result<Self::OutputValues, Error> {
         validate_columns3(&self.0, &self.1, &self.2)?;
@@ -577,28 +571,13 @@ where
         }
 
         let client = policy.client();
-        let first_bindings = ValueA::stage(&self.0, policy)?;
-        let second_bindings = ValueB::stage(&self.1, policy)?;
-        let third_bindings = ValueC::stage(&self.2, policy)?;
-        let inclusive = primitive_scan::inclusive_scan_tuple3_by_key_values_device_expr::<
-            ValueA::Runtime,
-            K,
-            ValueA::Item,
-            ValueB::Item,
-            ValueC::Item,
-            KeyExpr,
-            ValueA::Expr,
-            ValueB::Expr,
-            ValueC::Expr,
-            KeyPred,
-            Op,
-        >(
+        let scan_control: ScanByKeyControl<ValueA::Runtime> = control.into();
+        let inclusive = super::scan::inclusive_scan_by_flags_three::<ValueA, ValueB, ValueC, Op>(
             policy,
-            &control.key_bindings,
-            &first_bindings,
-            &second_bindings,
-            &third_bindings,
-            control.len,
+            &self.0,
+            &self.1,
+            &self.2,
+            &scan_control,
         )?;
 
         let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
@@ -638,31 +617,25 @@ where
             );
         }
 
-        let first_handles = select::handles_from_flags(
-            policy,
-            control.len,
-            control.len_u32,
-            control.end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let second_handles = select::handles_from_flags(
-            policy,
-            control.len,
-            control.len_u32,
-            control.end_flags.clone(),
-            reduced_b_handle,
-        )?;
-        let third_handles = select::handles_from_flags(
-            policy,
-            control.len,
-            control.len_u32,
-            control.end_flags.clone(),
-            reduced_c_handle,
-        )?;
+        let first_handles = control.output_selection.for_value(reduced_a_handle);
+        let second_handles = control.output_selection.for_value(reduced_b_handle);
+        let third_handles = control.output_selection.for_value(reduced_c_handle);
         Ok(DeviceSoA3 {
-            first: select::compact::<ValueA::Runtime, ValueA::Item>(policy, first_handles)?,
-            second: select::compact::<ValueA::Runtime, ValueB::Item>(policy, second_handles)?,
-            third: select::compact::<ValueA::Runtime, ValueC::Item>(policy, third_handles)?,
+            first: select::compact_with_count::<ValueA::Runtime, ValueA::Item>(
+                policy,
+                first_handles,
+                control.output_count,
+            )?,
+            second: select::compact_with_count::<ValueA::Runtime, ValueB::Item>(
+                policy,
+                second_handles,
+                control.output_count,
+            )?,
+            third: select::compact_with_count::<ValueA::Runtime, ValueC::Item>(
+                policy,
+                third_handles,
+                control.output_count,
+            )?,
         })
     }
 }
@@ -729,71 +702,29 @@ macro_rules! reduce_by_key_tuple7_scanned_values {
                 BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
             );
         }
-        let value_a_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_b_handle,
-        )?;
-        let value_c_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_c_handle,
-        )?;
-        let value_d_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_d_handle,
-        )?;
-        let value_e_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_e_handle,
-        )?;
-        let value_f_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_f_handle,
-        )?;
-        let value_g_handles = select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_g_handle,
-        )?;
+        let value_a_handles = $control.output_selection.for_value(reduced_a_handle);
+        let value_b_handles = $control.output_selection.for_value(reduced_b_handle);
+        let value_c_handles = $control.output_selection.for_value(reduced_c_handle);
+        let value_d_handles = $control.output_selection.for_value(reduced_d_handle);
+        let value_e_handles = $control.output_selection.for_value(reduced_e_handle);
+        let value_f_handles = $control.output_selection.for_value(reduced_f_handle);
+        let value_g_handles = $control.output_selection.for_value(reduced_g_handle);
         Ok::<_, Error>((
-            select::compact::<R, $ty0>($policy, value_a_handles)?,
-            select::compact::<R, $ty1>($policy, value_b_handles)?,
-            select::compact::<R, $ty2>($policy, value_c_handles)?,
-            select::compact::<R, $ty3>($policy, value_d_handles)?,
-            select::compact::<R, $ty4>($policy, value_e_handles)?,
-            select::compact::<R, $ty5>($policy, value_f_handles)?,
-            select::compact::<R, $ty6>($policy, value_g_handles)?,
+            select::compact_with_count::<R, $ty0>($policy, value_a_handles, $control.output_count)?,
+            select::compact_with_count::<R, $ty1>($policy, value_b_handles, $control.output_count)?,
+            select::compact_with_count::<R, $ty2>($policy, value_c_handles, $control.output_count)?,
+            select::compact_with_count::<R, $ty3>($policy, value_d_handles, $control.output_count)?,
+            select::compact_with_count::<R, $ty4>($policy, value_e_handles, $control.output_count)?,
+            select::compact_with_count::<R, $ty5>($policy, value_f_handles, $control.output_count)?,
+            select::compact_with_count::<R, $ty6>($policy, value_g_handles, $control.output_count)?,
         ))
     }};
 }
 
 macro_rules! impl_kernel_reduce_by_key_tuple4_views {
     () => {
-        impl<R, A, B, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelReduceByKeyValues<ReduceByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, KeyEq, Op>
+            KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -815,7 +746,7 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
             fn reduce_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ReduceByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ReduceByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
@@ -827,9 +758,9 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
                 let dummy4 = DeviceColumnView::from_column(&dummy4);
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let scan_control: ScanByKeyControl<R, K, KeyExpr, KeyPred> = control.into();
+                let scan_control: ScanByKeyControl<R> = control.into();
                 let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, u32, u32, u32, K, KeyExpr, KeyPred,
+                    R, A, B, C, D, u32, u32, u32,
                     crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
                 >(policy, &self.0, &self.1, &self.2, &self.3, &dummy4, &dummy5, &dummy6, &scan_control)?;
                 let (a, b, c, d, _, _, _) = reduce_by_key_tuple7_scanned_values!(
@@ -845,8 +776,8 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
 
 macro_rules! impl_kernel_reduce_by_key_tuple5_views {
     () => {
-        impl<R, A, B, C, D, E, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelReduceByKeyValues<ReduceByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, KeyEq, Op>
+            KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -870,7 +801,7 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
             fn reduce_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ReduceByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ReduceByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
@@ -880,9 +811,9 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
                 let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let scan_control: ScanByKeyControl<R, K, KeyExpr, KeyPred> = control.into();
+                let scan_control: ScanByKeyControl<R> = control.into();
                 let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, E, u32, u32, K, KeyExpr, KeyPred,
+                    R, A, B, C, D, E, u32, u32,
                     crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
                 >(policy, &self.0, &self.1, &self.2, &self.3, &self.4, &dummy5, &dummy6, &scan_control)?;
                 let (a, b, c, d, e, _, _) = reduce_by_key_tuple7_scanned_values!(
@@ -898,8 +829,8 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
 
 macro_rules! impl_kernel_reduce_by_key_tuple6_views {
     () => {
-        impl<R, A, B, C, D, E, F, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelReduceByKeyValues<ReduceByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, F, KeyEq, Op>
+            KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -925,7 +856,7 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
             fn reduce_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ReduceByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ReduceByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
@@ -933,9 +864,9 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
                 }
                 let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let scan_control: ScanByKeyControl<R, K, KeyExpr, KeyPred> = control.into();
+                let scan_control: ScanByKeyControl<R> = control.into();
                 let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, E, F, u32, K, KeyExpr, KeyPred,
+                    R, A, B, C, D, E, F, u32,
                     crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
                 >(policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &dummy6, &scan_control)?;
                 let (a, b, c, d, e, f, _) = reduce_by_key_tuple7_scanned_values!(
@@ -951,8 +882,8 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
 
 macro_rules! impl_kernel_reduce_by_key_tuple7_views {
     () => {
-        impl<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, KeyEq, Op>
-            KernelReduceByKeyValues<ReduceByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+        impl<R, A, B, C, D, E, F, G, KeyEq, Op>
+            KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -980,15 +911,15 @@ macro_rules! impl_kernel_reduce_by_key_tuple7_views {
             fn reduce_by_key_values(
                 self,
                 policy: &CubePolicy<R>,
-                control: &ReduceByKeyControl<R, K, KeyExpr, KeyPred>,
+                control: &ReduceByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
                     return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
                 }
-                let scan_control: ScanByKeyControl<R, K, KeyExpr, KeyPred> = control.into();
+                let scan_control: ScanByKeyControl<R> = control.into();
                 let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op,
+                    R, A, B, C, D, E, F, G, Op,
                 >(policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6, &scan_control)?;
                 reduce_by_key_tuple7_scanned_values!(
                     policy, control, inclusive, init;

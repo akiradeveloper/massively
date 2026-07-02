@@ -1,9 +1,9 @@
 //! Transitional internal algorithm/lowering traits.
 //!
-//! Public `MIter` values still lower through these traits, but v0.20 moves the
-//! long-term architecture toward explicit algorithm modules and `detail::control`
-//! streams. New code should keep this module as a compatibility/lowering seam
-//! rather than adding new control-stream ownership here.
+//! Public `MIter` values still lower through these traits, but v0.32 keeps
+//! control construction and payload movement in `detail::api` and
+//! `detail::control`. New code should keep this module as a compatibility
+//! adapter instead of adding new control-stream ownership here.
 
 use cubecl::prelude::*;
 
