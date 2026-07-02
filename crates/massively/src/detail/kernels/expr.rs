@@ -220,6 +220,26 @@ define_transform_tuple_to_tuple_kernel!(
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 define_transform_tuple_to_tuple_kernel!(
+    transform_tuple2_to_tuple4_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple2_to_tuple5_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple2_to_tuple6_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple2_to_tuple7_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+define_transform_tuple_to_tuple_kernel!(
     transform_tuple3_to_tuple1_kernel,
     (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
     (OutA: output_a: 0)
@@ -235,12 +255,48 @@ define_transform_tuple_to_tuple_kernel!(
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 define_transform_tuple_to_tuple_kernel!(
+    transform_tuple3_to_tuple4_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple3_to_tuple5_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple3_to_tuple6_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple3_to_tuple7_kernel,
+    (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+define_transform_tuple_to_tuple_kernel!(
     transform_tuple4_to_tuple1_kernel,
     (
         TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
         TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
     ),
     (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple2_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple4_to_tuple3_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple4_to_tuple4_kernel,
@@ -282,6 +338,24 @@ define_transform_tuple_to_tuple_kernel!(
         TyE: input_e: input_e_offset
     ),
     (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple2_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple5_to_tuple3_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple5_to_tuple5_kernel,
@@ -327,6 +401,24 @@ define_transform_tuple_to_tuple_kernel!(
         TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
     ),
     (OutA: output_a: 0)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple2_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1)
+);
+define_transform_tuple_to_tuple_kernel!(
+    transform_tuple6_to_tuple3_kernel,
+    (
+        TyA: input_a: input_a_offset, TyB: input_b: input_b_offset,
+        TyC: input_c: input_c_offset, TyD: input_d: input_d_offset,
+        TyE: input_e: input_e_offset, TyF: input_f: input_f_offset
+    ),
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2)
 );
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple6_to_tuple6_kernel,

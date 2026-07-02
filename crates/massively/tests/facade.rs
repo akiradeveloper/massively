@@ -439,7 +439,7 @@ where
 
 #[test]
 fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
@@ -456,7 +456,7 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
 
 #[test]
 fn reverse2_wraps_reverse_with_slice_array_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let massively::SoA1(output) = reverse2(&exec, SoA1(input.slice(..))).unwrap();
@@ -466,7 +466,7 @@ fn reverse2_wraps_reverse_with_slice_array_signature() {
 
 #[test]
 fn sort2_wraps_sort_with_slice_array_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[3_u32, 1, 2]).unwrap();
 
     let massively::SoA1(output) = sort2(&exec, SoA1(input.slice(..)), TupleU32Less).unwrap();
@@ -476,7 +476,7 @@ fn sort2_wraps_sort_with_slice_array_signature() {
 
 #[test]
 fn gather2_wraps_gather_with_slice_array_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
 
@@ -494,7 +494,7 @@ fn gather2_wraps_gather_with_slice_array_signature() {
 
 #[test]
 fn transform3_can_fix_concrete_input_and_output_types() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
@@ -511,7 +511,7 @@ fn transform3_can_fix_concrete_input_and_output_types() {
 
 #[test]
 fn transform_can_hide_op_inside_wrapper() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
@@ -522,7 +522,7 @@ fn transform_can_hide_op_inside_wrapper() {
 
 #[test]
 fn transform4_can_fix_concrete_two_column_input_and_output_types() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
 
@@ -542,7 +542,7 @@ fn transform4_can_fix_concrete_two_column_input_and_output_types() {
 
 #[test]
 fn sort2_wraps_two_column_sort_with_slice_array_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[3_u32, 1, 2]).unwrap();
     let right = exec.to_device(&[30_u32, 10, 20]).unwrap();
 
@@ -555,7 +555,7 @@ fn sort2_wraps_two_column_sort_with_slice_array_signature() {
 
 #[test]
 fn transform5_can_fix_concrete_three_column_input_and_output_types() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let first = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let second = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let third = exec.to_device(&[100_u32, 200, 300]).unwrap();
@@ -582,7 +582,7 @@ fn transform5_can_fix_concrete_three_column_input_and_output_types() {
 
 #[test]
 fn sort2_wraps_three_column_sort_with_slice_array_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let first = exec.to_device(&[3_u32, 1, 2]).unwrap();
     let second = exec.to_device(&[30_u32, 10, 20]).unwrap();
     let third = exec.to_device(&[300_u32, 100, 200]).unwrap();
@@ -601,7 +601,7 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
 
 #[test]
 fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let values = exec.to_device(&[2_u32, 1, 2, 3]).unwrap();
     let tags = exec.to_device(&[20_u32, 30, 10, 40]).unwrap();
 
@@ -627,7 +627,7 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
 
 #[test]
 fn search_queries_wrap_two_column_tuple_inputs() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[1_u32, 2, 2, 4]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 20, 40]).unwrap();
     let query_left = exec.to_device(&[2_u32, 5]).unwrap();
@@ -650,7 +650,7 @@ fn search_queries_wrap_two_column_tuple_inputs() {
 
 #[test]
 fn gather2_wraps_three_column_gather_with_slice_array_signature() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let first = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let second = exec.to_device(&[100_u32, 200, 300]).unwrap();
     let third = exec.to_device(&[1000_u32, 2000, 3000]).unwrap();
@@ -678,7 +678,7 @@ fn gather2_wraps_three_column_gather_with_slice_array_signature() {
 
 #[test]
 fn transform2_wraps_tuple_output() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let left = exec.to_device(&[0_u32; 3]).unwrap();
@@ -697,7 +697,7 @@ fn transform2_wraps_tuple_output() {
 
 #[test]
 fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
@@ -715,7 +715,7 @@ fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
 
 #[test]
 fn replace_where2_wraps_two_column_replace_where_with_tuple_replacement() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
@@ -734,7 +734,7 @@ fn replace_where2_wraps_two_column_replace_where_with_tuple_replacement() {
 
 #[test]
 fn predicate_queries_wrap_two_column_tuple_predicates() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
@@ -747,7 +747,7 @@ fn predicate_queries_wrap_two_column_tuple_predicates() {
 
 #[test]
 fn remove_where2_wraps_two_column_remove_where_with_stencil() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
@@ -765,7 +765,7 @@ fn remove_where2_wraps_two_column_remove_where_with_stencil() {
 
 #[test]
 fn partition2_wraps_two_column_partition_with_tuple_predicate() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
@@ -780,7 +780,7 @@ fn partition2_wraps_two_column_partition_with_tuple_predicate() {
 
 #[test]
 fn is_partitioned2_wraps_two_column_partition_query() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let partitioned_left = exec.to_device(&[21_u32, 43, 10, 30]).unwrap();
     let partitioned_right = exec.to_device(&[200_u32, 400, 100, 300]).unwrap();
     let mixed_left = exec.to_device(&[21_u32, 10, 43, 30]).unwrap();
@@ -806,7 +806,7 @@ fn is_partitioned2_wraps_two_column_partition_query() {
 
 #[test]
 fn unique2_wraps_two_column_unique_with_tuple_predicate() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[1_u32, 1, 2, 2, 2, 3]).unwrap();
     let right = exec.to_device(&[10_u32, 10, 20, 21, 21, 30]).unwrap();
 
@@ -819,7 +819,7 @@ fn unique2_wraps_two_column_unique_with_tuple_predicate() {
 
 #[test]
 fn adjacent_difference2_wraps_two_column_tuple_op() {
-    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 13, 20]).unwrap();
     let right = exec.to_device(&[100_u32, 107, 120]).unwrap();
 

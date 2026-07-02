@@ -24,44 +24,6 @@ where
     merge_by_key(exec, left_keys, left_values, right_keys, right_values, less)
 }
 
-#[allow(unused_macros)]
-macro_rules! soa12_rows {
-    ($exec:expr; [$( $x:expr ),+ $(,)?]) => {{
-        let a = $exec.to_device(&[$(($x as f32)),+]).unwrap();
-        let b = $exec.to_device(&[$(($x as u32) * 10),+]).unwrap();
-        let c = $exec.to_device(&[$(($x as f32) * 100.0),+]).unwrap();
-        let d = $exec.to_device(&[$(($x as u32) * 1000),+]).unwrap();
-        let e = $exec.to_device(&[$(($x as f32) + 10.0),+]).unwrap();
-        let f = $exec.to_device(&[$(($x as u32) + 100),+]).unwrap();
-        let g = $exec.to_device(&[$(($x as f32) + 1000.0),+]).unwrap();
-        let h = $exec.to_device(&[$(($x as u32) + 10000),+]).unwrap();
-        let i = $exec.to_device(&[$(($x as f32) + 20.0),+]).unwrap();
-        let j = $exec.to_device(&[$(($x as u32) + 200),+]).unwrap();
-        let k = $exec.to_device(&[$(($x as f32) + 2000.0),+]).unwrap();
-        let l = $exec.to_device(&[$(($x as u32) + 20000),+]).unwrap();
-        (a, b, c, d, e, f, g, h, i, j, k, l)
-    }};
-}
-
-#[allow(unused_macros)]
-macro_rules! assert_soa12_rows {
-    ($output:expr; [$( $x:expr ),* $(,)?]) => {{
-        let (a, b, c, d, e, f, g, h, i, j, k, l) = $output;
-        assert_eq!(exec.to_host(&a).unwrap(), vec![$(($x as f32)),*]);
-        assert_eq!(exec.to_host(&b).unwrap(), vec![$(($x as u32) * 10),*]);
-        assert_eq!(exec.to_host(&c).unwrap(), vec![$(($x as f32) * 100.0),*]);
-        assert_eq!(exec.to_host(&d).unwrap(), vec![$(($x as u32) * 1000),*]);
-        assert_eq!(exec.to_host(&e).unwrap(), vec![$(($x as f32) + 10.0),*]);
-        assert_eq!(exec.to_host(&f).unwrap(), vec![$(($x as u32) + 100),*]);
-        assert_eq!(exec.to_host(&g).unwrap(), vec![$(($x as f32) + 1000.0),*]);
-        assert_eq!(exec.to_host(&h).unwrap(), vec![$(($x as u32) + 10000),*]);
-        assert_eq!(exec.to_host(&i).unwrap(), vec![$(($x as f32) + 20.0),*]);
-        assert_eq!(exec.to_host(&j).unwrap(), vec![$(($x as u32) + 200),*]);
-        assert_eq!(exec.to_host(&k).unwrap(), vec![$(($x as f32) + 2000.0),*]);
-        assert_eq!(exec.to_host(&l).unwrap(), vec![$(($x as u32) + 20000),*]);
-    }};
-}
-
 #[test]
 fn merge_by_key_accepts_generic_right_without_inner_equality_bound() {
     let exec = exec();

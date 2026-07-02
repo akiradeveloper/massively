@@ -612,6 +612,105 @@ macro_rules! impl_wide_mitem_tuple {
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
+            fn transform_binary<Left, Right, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: crate::detail::device::DeviceColumnView<
+                    R,
+                    Left,
+                >,
+                right: crate::detail::device::DeviceColumnView<
+                    R,
+                    Right,
+                >,
+                op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                Left: Scalar,
+                Right: Scalar,
+                Op: op::UnaryOp<R, (Left, Right), Output = Self>,
+                Self: crate::detail::TransformSoA2Output<
+                    R,
+                    Left,
+                    Right,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA2Output<
+                        R,
+                        Left,
+                        Right,
+                        KernelOp<R, Op>,
+                    >>::run(policy, left, right, env)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
+            fn transform_ternary<First, Second, Third, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                first: crate::detail::device::DeviceColumnView<
+                    R,
+                    First,
+                >,
+                second: crate::detail::device::DeviceColumnView<
+                    R,
+                    Second,
+                >,
+                third: crate::detail::device::DeviceColumnView<
+                    R,
+                    Third,
+                >,
+                op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            where
+                First: Scalar,
+                Second: Scalar,
+                Third: Scalar,
+                Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
+                Self: crate::detail::TransformSoA3Output<
+                    R,
+                    First,
+                    Second,
+                    Third,
+                    KernelOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage =
+                    <Self as crate::detail::TransformSoA3Output<
+                        R,
+                        First,
+                        Second,
+                        Third,
+                        KernelOp<R, Op>,
+                    >>::run(
+                        policy,
+                        first,
+                        second,
+                        third,
+                        env,
+                )?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
             fn transform_quaternary<First, Second, Third, Fourth, Op>(
                 policy: &crate::detail::CubePolicy<R>,
                 first: crate::detail::device::DeviceColumnView<R, First>,

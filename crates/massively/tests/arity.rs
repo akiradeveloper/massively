@@ -9,7 +9,7 @@ type F32Vec = DeviceVec<WgpuRuntime, f32>;
 type U32Vec = DeviceVec<WgpuRuntime, u32>;
 
 fn exec() -> Executor<WgpuRuntime> {
-    Executor::<WgpuRuntime>::new(WgpuDevice::Cpu)
+    Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice)
 }
 
 fn column_f32(exec: &Executor<WgpuRuntime>) -> F32Vec {
