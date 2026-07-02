@@ -94,7 +94,7 @@ mod zip;
 
 #[test]
 fn public_api_is_available_from_massively() {
-    let exec = massively::Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+    let exec = massively::Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let _: massively::runtime::DeviceSlice<'_, WgpuRuntime, u32> = input.slice(..);
 

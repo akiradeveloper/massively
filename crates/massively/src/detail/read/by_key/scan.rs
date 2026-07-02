@@ -962,6 +962,100 @@ where
     }
 }
 
+impl<First, Second, KeyEq> KernelScanByKeyKeys<KeyEq> for (First, Second)
+where
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Item: Scalar + 'static,
+    Second::Item: Scalar + 'static,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    KeyEq: BinaryPredicateOp<(First::Item, Second::Item)>,
+{
+    type Runtime = First::Runtime;
+    type Control = ScanByKeyControl<First::Runtime, (First::Item, Second::Item), (), KeyEq>;
+
+    fn scan_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<Self::Control, Error> {
+        <First as KernelColumn>::validate(&self.0)?;
+        <Second as KernelColumn>::validate(&self.1)?;
+        let len = <First as KernelColumn>::len(&self.0);
+        if len != <Second as KernelColumn>::len(&self.1) {
+            return Err(Error::LengthMismatch {
+                input: len,
+                output: <Second as KernelColumn>::len(&self.1),
+            });
+        }
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let head_flags = super::super::selection::unique_tuple2_flags_read::<First, Second, KeyEq>(
+            policy, &self.0, &self.1,
+        )?;
+        Ok(ScanByKeyControl {
+            key_bindings: KernelColumnBindings::empty(policy.client()),
+            head_flags,
+            len,
+            len_u32,
+            _marker: std::marker::PhantomData,
+        })
+    }
+}
+
+impl<First, Second, Third, KeyEq> KernelScanByKeyKeys<KeyEq> for (First, Second, Third)
+where
+    First: KernelColumn + KernelColumnAt<S0>,
+    Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+    First::Item: Scalar + 'static,
+    Second::Item: Scalar + 'static,
+    Third::Item: Scalar + 'static,
+    First::Expr: DeviceGpuExpr<First::Item>,
+    Second::Expr: DeviceGpuExpr<Second::Item>,
+    Third::Expr: DeviceGpuExpr<Third::Item>,
+    KeyEq: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+{
+    type Runtime = First::Runtime;
+    type Control =
+        ScanByKeyControl<First::Runtime, (First::Item, Second::Item, Third::Item), (), KeyEq>;
+
+    fn scan_by_key_control(
+        self,
+        policy: &CubePolicy<Self::Runtime>,
+    ) -> Result<Self::Control, Error> {
+        <First as KernelColumn>::validate(&self.0)?;
+        <Second as KernelColumn>::validate(&self.1)?;
+        <Third as KernelColumn>::validate(&self.2)?;
+        let len = <First as KernelColumn>::len(&self.0);
+        let second_len = <Second as KernelColumn>::len(&self.1);
+        if len != second_len {
+            return Err(Error::LengthMismatch {
+                input: len,
+                output: second_len,
+            });
+        }
+        let third_len = <Third as KernelColumn>::len(&self.2);
+        if len != third_len {
+            return Err(Error::LengthMismatch {
+                input: len,
+                output: third_len,
+            });
+        }
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let head_flags =
+            super::super::selection::unique_tuple3_flags_read::<First, Second, Third, KeyEq>(
+                policy, &self.0, &self.1, &self.2,
+            )?;
+        Ok(ScanByKeyControl {
+            key_bindings: KernelColumnBindings::empty(policy.client()),
+            head_flags,
+            len,
+            len_u32,
+            _marker: std::marker::PhantomData,
+        })
+    }
+}
+
 macro_rules! impl_kernel_scan_by_key_tuple1 {
     ($target:ty, $field:tt) => {
         impl<S, K, KeyExpr, KeyPred, KeyEq, Op>
@@ -1307,6 +1401,488 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
 
 impl_kernel_scan_by_key_tuple3!(SoAView3<A, C, D>, first, second, third);
 impl_kernel_scan_by_key_tuple3!(DeviceSoA3<A, C, D>, first, second, third);
+
+macro_rules! impl_kernel_scan_by_key_tuple4_views {
+    () => {
+        impl<R, A, B, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D)>,
+        {
+            type Runtime = R;
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+            );
+
+            fn inclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ) -> Result<Self::Output, Error> {
+                let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy4 = DeviceColumnView::from_column(&dummy4);
+                let dummy5 = DeviceColumnView::from_column(&dummy5);
+                let dummy6 = DeviceColumnView::from_column(&dummy6);
+                let (a, b, c, d, _, _, _) = inclusive_scan_by_flags_seven_views::<
+                    R,
+                    A,
+                    B,
+                    C,
+                    D,
+                    u32,
+                    u32,
+                    u32,
+                    K,
+                    KeyExpr,
+                    KeyPred,
+                    crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
+                >(
+                    policy, &self.0, &self.1, &self.2, &self.3, &dummy4, &dummy5, &dummy6, control,
+                )?;
+                Ok((a, b, c, d))
+            }
+        }
+
+        impl<R, A, B, C, D, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D)>,
+        {
+            type Runtime = R;
+            type Init = (A, B, C, D);
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+            );
+
+            fn exclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                init: Self::Init,
+            ) -> Result<Self::Output, Error> {
+                let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy4 = DeviceColumnView::from_column(&dummy4);
+                let dummy5 = DeviceColumnView::from_column(&dummy5);
+                let dummy6 = DeviceColumnView::from_column(&dummy6);
+                let (a, b, c, d, _, _, _) = exclusive_scan_by_flags_seven_views::<
+                    R,
+                    A,
+                    B,
+                    C,
+                    D,
+                    u32,
+                    u32,
+                    u32,
+                    K,
+                    KeyExpr,
+                    KeyPred,
+                    crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
+                >(
+                    policy,
+                    &self.0,
+                    &self.1,
+                    &self.2,
+                    &self.3,
+                    &dummy4,
+                    &dummy5,
+                    &dummy6,
+                    control,
+                    (init.0, init.1, init.2, init.3, 0, 0, 0),
+                )?;
+                Ok((a, b, c, d))
+            }
+        }
+    };
+}
+
+macro_rules! impl_kernel_scan_by_key_tuple5_views {
+    () => {
+        impl<R, A, B, C, D, E, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+                DeviceColumnView<R, E>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            E: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D, E)>,
+        {
+            type Runtime = R;
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+            );
+
+            fn inclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ) -> Result<Self::Output, Error> {
+                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = DeviceColumnView::from_column(&dummy5);
+                let dummy6 = DeviceColumnView::from_column(&dummy6);
+                let (a, b, c, d, e, _, _) = inclusive_scan_by_flags_seven_views::<
+                    R,
+                    A,
+                    B,
+                    C,
+                    D,
+                    E,
+                    u32,
+                    u32,
+                    K,
+                    KeyExpr,
+                    KeyPred,
+                    crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
+                >(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &dummy5, &dummy6, control,
+                )?;
+                Ok((a, b, c, d, e))
+            }
+        }
+
+        impl<R, A, B, C, D, E, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+                DeviceColumnView<R, E>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            E: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D, E)>,
+        {
+            type Runtime = R;
+            type Init = (A, B, C, D, E);
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+            );
+
+            fn exclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                init: Self::Init,
+            ) -> Result<Self::Output, Error> {
+                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = DeviceColumnView::from_column(&dummy5);
+                let dummy6 = DeviceColumnView::from_column(&dummy6);
+                let (a, b, c, d, e, _, _) = exclusive_scan_by_flags_seven_views::<
+                    R,
+                    A,
+                    B,
+                    C,
+                    D,
+                    E,
+                    u32,
+                    u32,
+                    K,
+                    KeyExpr,
+                    KeyPred,
+                    crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
+                >(
+                    policy,
+                    &self.0,
+                    &self.1,
+                    &self.2,
+                    &self.3,
+                    &self.4,
+                    &dummy5,
+                    &dummy6,
+                    control,
+                    (init.0, init.1, init.2, init.3, init.4, 0, 0),
+                )?;
+                Ok((a, b, c, d, e))
+            }
+        }
+    };
+}
+
+macro_rules! impl_kernel_scan_by_key_tuple6_views {
+    () => {
+        impl<R, A, B, C, D, E, F, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+                DeviceColumnView<R, E>,
+                DeviceColumnView<R, F>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            E: Scalar + 'static,
+            F: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D, E, F)>,
+        {
+            type Runtime = R;
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+                DeviceVec<R, F>,
+            );
+
+            fn inclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ) -> Result<Self::Output, Error> {
+                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = DeviceColumnView::from_column(&dummy6);
+                let (a, b, c, d, e, f, _) = inclusive_scan_by_flags_seven_views::<
+                    R,
+                    A,
+                    B,
+                    C,
+                    D,
+                    E,
+                    F,
+                    u32,
+                    K,
+                    KeyExpr,
+                    KeyPred,
+                    crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
+                >(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &dummy6, control,
+                )?;
+                Ok((a, b, c, d, e, f))
+            }
+        }
+
+        impl<R, A, B, C, D, E, F, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+                DeviceColumnView<R, E>,
+                DeviceColumnView<R, F>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            E: Scalar + 'static,
+            F: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D, E, F)>,
+        {
+            type Runtime = R;
+            type Init = (A, B, C, D, E, F);
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+                DeviceVec<R, F>,
+            );
+
+            fn exclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                init: Self::Init,
+            ) -> Result<Self::Output, Error> {
+                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = DeviceColumnView::from_column(&dummy6);
+                let (a, b, c, d, e, f, _) = exclusive_scan_by_flags_seven_views::<
+                    R,
+                    A,
+                    B,
+                    C,
+                    D,
+                    E,
+                    F,
+                    u32,
+                    K,
+                    KeyExpr,
+                    KeyPred,
+                    crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
+                >(
+                    policy,
+                    &self.0,
+                    &self.1,
+                    &self.2,
+                    &self.3,
+                    &self.4,
+                    &self.5,
+                    &dummy6,
+                    control,
+                    (init.0, init.1, init.2, init.3, init.4, init.5, 0),
+                )?;
+                Ok((a, b, c, d, e, f))
+            }
+        }
+    };
+}
+
+macro_rules! impl_kernel_scan_by_key_tuple7_views {
+    () => {
+        impl<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+                DeviceColumnView<R, E>,
+                DeviceColumnView<R, F>,
+                DeviceColumnView<R, G>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            E: Scalar + 'static,
+            F: Scalar + 'static,
+            G: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D, E, F, G)>,
+        {
+            type Runtime = R;
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+                DeviceVec<R, F>,
+                DeviceVec<R, G>,
+            );
+
+            fn inclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+            ) -> Result<Self::Output, Error> {
+                inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
+                    control,
+                )
+            }
+        }
+
+        impl<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, KeyEq, Op>
+            KernelExclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>
+            for (
+                DeviceColumnView<R, A>,
+                DeviceColumnView<R, B>,
+                DeviceColumnView<R, C>,
+                DeviceColumnView<R, D>,
+                DeviceColumnView<R, E>,
+                DeviceColumnView<R, F>,
+                DeviceColumnView<R, G>,
+            )
+        where
+            R: Runtime,
+            A: Scalar + 'static,
+            B: Scalar + 'static,
+            C: Scalar + 'static,
+            D: Scalar + 'static,
+            E: Scalar + 'static,
+            F: Scalar + 'static,
+            G: Scalar + 'static,
+            Op: BinaryOp<(A, B, C, D, E, F, G)>,
+        {
+            type Runtime = R;
+            type Init = (A, B, C, D, E, F, G);
+            type Output = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+                DeviceVec<R, F>,
+                DeviceVec<R, G>,
+            );
+
+            fn exclusive_scan_by_key_values(
+                self,
+                policy: &CubePolicy<R>,
+                control: &ScanByKeyControl<R, K, KeyExpr, KeyPred>,
+                init: Self::Init,
+            ) -> Result<Self::Output, Error> {
+                exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, K, KeyExpr, KeyPred, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
+                    control, init,
+                )
+            }
+        }
+    };
+}
+
+impl_kernel_scan_by_key_tuple4_views!();
+impl_kernel_scan_by_key_tuple5_views!();
+impl_kernel_scan_by_key_tuple6_views!();
+impl_kernel_scan_by_key_tuple7_views!();
 
 impl<Left, Right, R, K, KeyExpr, KeyPred, KeyEq, Op>
     KernelInclusiveScanByKeyValues<ScanByKeyControl<R, K, KeyExpr, KeyPred>, KeyEq, Op>

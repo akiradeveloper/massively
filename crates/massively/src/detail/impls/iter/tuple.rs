@@ -419,6 +419,30 @@ macro_rules! impl_wide_sort_dispatch_body {
 }
 
 macro_rules! impl_wide_sort_by_three_key_dispatch_body {
+    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; 0, 1, 2, 3) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($first_key, $second_key, $third_key),
+            ($input.0, $input.1, $input.2, $input.3),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($first_key, $second_key, $third_key),
+            ($input.0, $input.1, $input.2, $input.3, $input.4),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($first_key, $second_key, $third_key),
+            ($input.0, $input.1, $input.2, $input.3, $input.4, $input.5),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
     ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         crate::detail::sort_by_key(
             $policy,
@@ -437,48 +461,45 @@ macro_rules! impl_wide_sort_by_three_key_dispatch_body {
     }};
 }
 
-macro_rules! impl_wide_merge_by_three_key_dispatch_body {
-    ($policy:ident, $left_values:ident, $right_values:ident, $left_first_key:ident, $left_second_key:ident, $left_third_key:ident, $right_first_key:ident, $right_second_key:ident, $right_third_key:ident, $less:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        crate::detail::merge_by_key(
+macro_rules! impl_wide_sort_by_two_key_dispatch_body {
+    ($policy:ident, $first_key:ident, $second_key:ident, $less:ident, $input:ident; 0, 1, 2, 3) => {{
+        crate::detail::sort_by_key(
             $policy,
-            ($left_first_key, $left_second_key, $left_third_key),
+            ($first_key, $second_key),
+            ($input.0, $input.1, $input.2, $input.3),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $first_key:ident, $second_key:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($first_key, $second_key),
+            ($input.0, $input.1, $input.2, $input.3, $input.4),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $first_key:ident, $second_key:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($first_key, $second_key),
+            ($input.0, $input.1, $input.2, $input.3, $input.4, $input.5),
+            KernelOp::<R, Less>::new(),
+        )
+    }};
+    ($policy:ident, $first_key:ident, $second_key:ident, $less:ident, $input:ident; 0, 1, 2, 3, 4, 5, 6) => {{
+        crate::detail::sort_by_key(
+            $policy,
+            ($first_key, $second_key),
             (
-                $left_values.0,
-                $left_values.1,
-                $left_values.2,
-                $left_values.3,
-                $left_values.4,
-                $left_values.5,
-                $left_values.6,
-            ),
-            ($right_first_key, $right_second_key, $right_third_key),
-            (
-                $right_values.0,
-                $right_values.1,
-                $right_values.2,
-                $right_values.3,
-                $right_values.4,
-                $right_values.5,
-                $right_values.6,
+                $input.0, $input.1, $input.2, $input.3, $input.4, $input.5, $input.6,
             ),
             KernelOp::<R, Less>::new(),
         )
     }};
-    ($policy:ident, $left_values:ident, $right_values:ident, $left_first_key:ident, $left_second_key:ident, $left_third_key:ident, $right_first_key:ident, $right_second_key:ident, $right_third_key:ident, $less:ident; $( $idx:tt ),+) => {{
-        let _ = (
-            $policy,
-            $left_values,
-            $right_values,
-            $left_first_key,
-            $left_second_key,
-            $left_third_key,
-            $right_first_key,
-            $right_second_key,
-            $right_third_key,
-            $less,
-        );
+    ($policy:ident, $first_key:ident, $second_key:ident, $less:ident, $input:ident; $( $idx:tt ),+) => {{
+        let _ = ($policy, $first_key, $second_key, $less, $input);
         Err(Error::Launch {
-            message: "merge_by_key is not supported for this value iterator shape".to_string(),
+            message: "sort_by_key is not supported for this value iterator shape".to_string(),
         })
     }};
 }
@@ -1938,6 +1959,32 @@ macro_rules! impl_tuple_inclusive_scan_by_three_key_values_body {
     }};
 }
 
+macro_rules! impl_tuple_inclusive_scan_by_two_key_values_body {
+    ($policy:ident, $input:ident, $control:ident; 0, 1) => {{
+        crate::detail::read::inclusive_scan_by_flags_two::<
+            _,
+            _,
+            (K1, K2),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$control)
+        .map(|inner| (inner.left, inner.right))
+    }};
+    ($policy:ident, $input:ident, $control:ident; 0, 1, 2) => {{
+        crate::detail::read::inclusive_scan_by_flags_three::<
+            _,
+            _,
+            _,
+            (K1, K2),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$input.2, &$control)
+        .map(|inner| (inner.first, inner.second, inner.third))
+    }};
+}
+
 macro_rules! impl_tuple_exclusive_scan_by_three_key_values_body {
     ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1) => {{
         crate::detail::read::exclusive_scan_by_flags_two::<
@@ -1956,6 +2003,32 @@ macro_rules! impl_tuple_exclusive_scan_by_three_key_values_body {
             _,
             _,
             (K1, K2, K3),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$input.2, &$control, $init)
+        .map(|inner| (inner.first, inner.second, inner.third))
+    }};
+}
+
+macro_rules! impl_tuple_exclusive_scan_by_two_key_values_body {
+    ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1) => {{
+        crate::detail::read::exclusive_scan_by_flags_two::<
+            _,
+            _,
+            (K1, K2),
+            (),
+            KernelOp<R, KeyEq>,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$control, $init)
+        .map(|inner| (inner.left, inner.right))
+    }};
+    ($policy:ident, $input:ident, $control:ident, $init:ident; 0, 1, 2) => {{
+        crate::detail::read::exclusive_scan_by_flags_three::<
+            _,
+            _,
+            _,
+            (K1, K2),
             (),
             KernelOp<R, KeyEq>,
             KernelOp<R, Op>,
@@ -2138,63 +2211,167 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
     }};
 }
 
-macro_rules! impl_wide_inclusive_scan_by_three_key_values_body {
-    ($policy:ident, $input:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        crate::detail::read::inclusive_scan_by_flags_seven_views::<
-            R,
-            $ty0,
-            $ty1,
-            $ty2,
-            $ty3,
-            $ty4,
-            $ty5,
-            $ty6,
-            (K1, K2, K3),
+macro_rules! impl_tuple_reduce_by_two_key_values_body {
+    ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident; 0, 1) => {{
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<
+            _,
+            _,
+            (K1, K2),
             (),
             KernelOp<R, KeyEq>,
             KernelOp<R, Op>,
-        >(
-            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
-            &$control,
-        )
+        >($policy, &$input.0, &$input.1, &$control)?;
+        let client = $policy.client();
+        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
+        let num_blocks = $first_key
+            .len
+            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        unsafe {
+            crate::kernels::reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
+                $ty0,
+                $ty1,
+                KernelOp<R, Op>,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.left.handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(inclusive.right.handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
+            );
+        }
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_flags_with_policy(
+                $policy,
+                &$first_key,
+                $end_flags.clone(),
+            )?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy(
+                $policy,
+                &$second_key,
+                $end_flags.clone(),
+            )?,
+        );
+        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $first_key.len,
+            $len_u32,
+            $end_flags.clone(),
+            reduced_a_handle,
+        )?;
+        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $first_key.len,
+            $len_u32,
+            $end_flags,
+            reduced_b_handle,
+        )?;
+        Ok((
+            key_inner,
+            (
+                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+            ),
+        ))
     }};
-    ($policy:ident, $input:ident, $control:ident; $( $ty:ident ),+; $( $idx:tt ),+) => {{
-        let _ = ($policy, $control);
-        let _ = &$input;
-        Err(Error::Launch {
-            message: "inclusive_scan_by_key is not supported for this value iterator shape"
-                .to_string(),
-        })
-    }};
-}
-
-macro_rules! impl_wide_exclusive_scan_by_three_key_values_body {
-    ($policy:ident, $input:ident, $control:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        crate::detail::read::exclusive_scan_by_flags_seven_views::<
-            R,
-            $ty0,
-            $ty1,
-            $ty2,
-            $ty3,
-            $ty4,
-            $ty5,
-            $ty6,
-            (K1, K2, K3),
+    ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident; 0, 1, 2) => {{
+        let inclusive = crate::detail::read::inclusive_scan_by_flags_three::<
+            _,
+            _,
+            _,
+            (K1, K2),
             (),
             KernelOp<R, KeyEq>,
             KernelOp<R, Op>,
-        >(
-            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
-            &$control, $init,
-        )
-    }};
-    ($policy:ident, $input:ident, $control:ident, $init:ident; $( $ty:ident ),+; $( $idx:tt ),+) => {{
-        let _ = ($policy, $control, $init);
-        let _ = &$input;
-        Err(Error::Launch {
-            message: "exclusive_scan_by_key is not supported for this value iterator shape"
-                .to_string(),
-        })
+        >($policy, &$input.0, &$input.1, &$input.2, &$control)?;
+        let client = $policy.client();
+        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
+        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
+        let reduced_c_handle = client.empty($first_key.len * std::mem::size_of::<$ty2>());
+        let num_blocks = $first_key
+            .len
+            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        unsafe {
+            crate::kernels::reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
+                $ty0,
+                $ty1,
+                $ty2,
+                KernelOp<R, Op>,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.first.handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(inclusive.second.handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(inclusive.third.handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(init_c.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
+                BufferArg::from_raw_parts(reduced_c_handle.clone(), $first_key.len),
+            );
+        }
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_flags_with_policy(
+                $policy,
+                &$first_key,
+                $end_flags.clone(),
+            )?,
+            crate::detail::api::device_expr_compact_with_flags_with_policy(
+                $policy,
+                &$second_key,
+                $end_flags.clone(),
+            )?,
+        );
+        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $first_key.len,
+            $len_u32,
+            $end_flags.clone(),
+            reduced_a_handle,
+        )?;
+        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $first_key.len,
+            $len_u32,
+            $end_flags.clone(),
+            reduced_b_handle,
+        )?;
+        let value_c_handles = crate::detail::primitives::select::handles_from_flags(
+            $policy,
+            $first_key.len,
+            $len_u32,
+            $end_flags,
+            reduced_c_handle,
+        )?;
+        Ok((
+            key_inner,
+            (
+                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+                crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
+            ),
+        ))
     }};
 }
 
@@ -2620,182 +2797,6 @@ macro_rules! impl_wide_reduce_by_single_key_tuple7_values_body {
     }};
 }
 
-macro_rules! impl_wide_reduce_by_three_key_values_body {
-    ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_seven_views::<
-            R,
-            $ty0,
-            $ty1,
-            $ty2,
-            $ty3,
-            $ty4,
-            $ty5,
-            $ty6,
-            (K1, K2, K3),
-            (),
-            KernelOp<R, KeyEq>,
-            KernelOp<R, Op>,
-        >(
-            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
-            &$control,
-        )?;
-        let client = $policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
-        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
-        let init_d = client.create_from_slice($ty3::as_bytes(&[$init.3]));
-        let init_e = client.create_from_slice($ty4::as_bytes(&[$init.4]));
-        let init_f = client.create_from_slice($ty5::as_bytes(&[$init.5]));
-        let init_g = client.create_from_slice($ty6::as_bytes(&[$init.6]));
-        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
-        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
-        let reduced_c_handle = client.empty($first_key.len * std::mem::size_of::<$ty2>());
-        let reduced_d_handle = client.empty($first_key.len * std::mem::size_of::<$ty3>());
-        let reduced_e_handle = client.empty($first_key.len * std::mem::size_of::<$ty4>());
-        let reduced_f_handle = client.empty($first_key.len * std::mem::size_of::<$ty5>());
-        let reduced_g_handle = client.empty($first_key.len * std::mem::size_of::<$ty6>());
-        let num_blocks = $first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_tuple7_apply_init_kernel::launch_unchecked::<
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                $ty5,
-                $ty6,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.0.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.1.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.2.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.3.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.4.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.5.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.6.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(init_c.clone(), 1),
-                BufferArg::from_raw_parts(init_d.clone(), 1),
-                BufferArg::from_raw_parts(init_e.clone(), 1),
-                BufferArg::from_raw_parts(init_f.clone(), 1),
-                BufferArg::from_raw_parts(init_g.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_c_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_d_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_e_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_f_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_g_handle.clone(), $first_key.len),
-            );
-        }
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$first_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$second_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$third_key,
-                $end_flags.clone(),
-            )?,
-        );
-        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_b_handle,
-        )?;
-        let value_c_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_c_handle,
-        )?;
-        let value_d_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_d_handle,
-        )?;
-        let value_e_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_e_handle,
-        )?;
-        let value_f_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_f_handle,
-        )?;
-        let value_g_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags,
-            reduced_g_handle,
-        )?;
-        Ok((
-            key_inner,
-            (
-                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty3>($policy, value_d_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty4>($policy, value_e_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty5>($policy, value_f_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty6>($policy, value_g_handles)?,
-            ),
-        ))
-    }};
-    ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $( $ty:ident ),+; $( $idx:tt ),+) => {{
-        let _ = (
-            $policy,
-            $input,
-            $init,
-            $first_key,
-            $second_key,
-            $third_key,
-            $end_flags,
-            $len_u32,
-            $control,
-        );
-        Err(Error::Launch {
-            message: "reduce_by_key is not supported for this value iterator shape".to_string(),
-        })
-    }};
-}
-
 macro_rules! impl_wide_materialize_inner {
     ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {{
         $(
@@ -2900,20 +2901,6 @@ macro_rules! impl_wide_sort_by_single_key_or_materialize_body {
     }};
 }
 
-macro_rules! impl_wide_sort_by_three_key_or_materialize_body {
-    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
-        impl_wide_sort_by_three_key_dispatch_body!($policy, $first_key, $second_key, $third_key, $less, $input; 0, 1, 2, 3, 4, 5, 6)
-    };
-    ($policy:ident, $first_key:ident, $second_key:ident, $third_key:ident, $less:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {{
-        let _ = $less;
-        let (key_a,) = crate::detail::reverse($policy, ($first_key,))?;
-        let (key_b,) = crate::detail::reverse($policy, ($second_key,))?;
-        let (key_c,) = crate::detail::reverse($policy, ($third_key,))?;
-        let value_inner = impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+);
-        Ok(((key_a, key_b, key_c), value_inner))
-    }};
-}
-
 macro_rules! impl_wide_unique_inner_or_materialize_body {
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {{
         let flags: cubecl::server::Handle =
@@ -2964,32 +2951,6 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
     ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {
         Ok(impl_wide_materialize_inner!($policy, $input; $( $idx: $tmp ),+))
     };
-}
-
-macro_rules! impl_wide_merge_by_three_key_or_materialize_body {
-    ($policy:ident, $left_values:ident, $right_values:ident, $left_first_key:ident, $left_second_key:ident, $left_third_key:ident, $right_first_key:ident, $right_second_key:ident, $right_third_key:ident, $less:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {
-        impl_wide_merge_by_three_key_dispatch_body!(
-            $policy,
-            $left_values,
-            $right_values,
-            $left_first_key,
-            $left_second_key,
-            $left_third_key,
-            $right_first_key,
-            $right_second_key,
-            $right_third_key,
-            $less;
-            0, 1, 2, 3, 4, 5, 6
-        )
-    };
-    ($policy:ident, $left_values:ident, $right_values:ident, $left_first_key:ident, $left_second_key:ident, $left_third_key:ident, $right_first_key:ident, $right_second_key:ident, $right_third_key:ident, $less:ident; $( $idx:tt : $tmp:ident ),+) => {{
-        let _ = ($right_values, $right_first_key, $right_second_key, $right_third_key, $less);
-        let (key_a,) = crate::detail::reverse($policy, ($left_first_key,))?;
-        let (key_b,) = crate::detail::reverse($policy, ($left_second_key,))?;
-        let (key_c,) = crate::detail::reverse($policy, ($left_third_key,))?;
-        let value_inner = impl_wide_materialize_inner!($policy, $left_values; $( $idx: $tmp ),+);
-        Ok(((key_a, key_b, key_c), value_inner))
-    }};
 }
 
 macro_rules! impl_miter_soa {
@@ -3213,6 +3174,34 @@ macro_rules! impl_miter_soa {
                 ))
             }
 
+            fn sort_by_two_key_dispatch<K1, K2, Less, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _less: Less,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                Less: op::BinaryPredicateOp<R, (K1, K2)>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let values = self.into_inner_with_policy(policy)?;
+                let values = impl_miter_view!(values; $( $idx ),+);
+                let (key_inner, value_inner) = crate::detail::sort_by_key(
+                    policy,
+                    (first_key, second_key),
+                    values,
+                    KernelOp::<R, Less>::new(),
+                )?;
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
             fn sort_by_key_dispatch<Values, Less, KeyOutput, ValueOutput>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
@@ -3247,6 +3236,111 @@ macro_rules! impl_miter_soa {
                 impl_unique_by_key_dispatch_body!(self, policy, values, eq, input; $( $idx ),+)
             }
 
+            fn unique_by_two_key_dispatch<K1, K2, Eq, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _eq: Eq,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                Eq: op::BinaryPredicateOp<R, (K1, K2)>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let values = self.into_inner_with_policy(policy)?;
+                ensure_same_len(values.0.len, first_key.len)?;
+                let flags = crate::detail::read::unique_tuple2_flags_read::<
+                    crate::detail::device::DeviceColumnView<R, K1>,
+                    crate::detail::device::DeviceColumnView<R, K2>,
+                    KernelOp<R, Eq>,
+                >(policy, &first_key, &second_key)?;
+                let key_inner = (
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &first_key,
+                        flags.clone(),
+                    )?,
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &second_key,
+                        flags.clone(),
+                    )?,
+                );
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &values.$idx,
+                        flags.clone(),
+                    )?;
+                )+
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(($($tmp,)+)),
+                ))
+            }
+
+            fn unique_by_three_key_dispatch<K1, K2, K3, Eq, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                third_key: crate::detail::device::DeviceColumnView<R, K3>,
+                _eq: Eq,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                K3: Scalar + 'static,
+                Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let values = self.into_inner_with_policy(policy)?;
+                ensure_same_len(values.0.len, first_key.len)?;
+                let flags = crate::detail::read::unique_tuple3_flags_read::<
+                    crate::detail::device::DeviceColumnView<R, K1>,
+                    crate::detail::device::DeviceColumnView<R, K2>,
+                    crate::detail::device::DeviceColumnView<R, K3>,
+                    KernelOp<R, Eq>,
+                >(
+                    policy,
+                    &first_key,
+                    &second_key,
+                    &third_key,
+                )?;
+                let key_inner = (
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &first_key,
+                        flags.clone(),
+                    )?,
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &second_key,
+                        flags.clone(),
+                    )?,
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &third_key,
+                        flags.clone(),
+                    )?,
+                );
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &values.$idx,
+                        flags.clone(),
+                    )?;
+                )+
+                Ok((
+                    array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(($($tmp,)+)),
+                ))
+            }
+
             fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
@@ -3265,6 +3359,48 @@ macro_rules! impl_miter_soa {
                 impl_inclusive_scan_by_key_dispatch_body!(
                     policy, values, key_eq, op, input; $( $idx ),+
                 )
+            }
+
+            fn inclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _key_eq: KeyEq,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                ensure_same_len(input.0.len, first_key.len)?;
+                let head_flags = crate::detail::read::unique_tuple2_flags_read::<
+                    crate::detail::device::DeviceColumnView<R, K1>,
+                    crate::detail::device::DeviceColumnView<R, K2>,
+                    KernelOp<R, KeyEq>,
+                >(policy, &first_key, &second_key)?;
+                let len_u32 = u32::try_from(first_key.len)
+                    .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+                let control: crate::detail::control::ScanByKeyControl<
+                    R,
+                    (K1, K2),
+                    (),
+                    KernelOp<R, KeyEq>,
+                > = crate::detail::control::ScanByKeyControl {
+                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                    head_flags,
+                    len: first_key.len,
+                    len_u32,
+                    _marker: std::marker::PhantomData,
+                };
+                let inner = impl_tuple_inclusive_scan_by_two_key_values_body!(
+                    policy, input, control; $( $idx ),+
+                )?;
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -3286,6 +3422,49 @@ macro_rules! impl_miter_soa {
                 impl_exclusive_scan_by_key_dispatch_body!(
                     policy, values, key_eq, init, op, input; $( $idx ),+
                 )
+            }
+
+            fn exclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _key_eq: KeyEq,
+                init: <Self as MIter<R>>::Item,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                ensure_same_len(input.0.len, first_key.len)?;
+                let head_flags = crate::detail::read::unique_tuple2_flags_read::<
+                    crate::detail::device::DeviceColumnView<R, K1>,
+                    crate::detail::device::DeviceColumnView<R, K2>,
+                    KernelOp<R, KeyEq>,
+                >(policy, &first_key, &second_key)?;
+                let len_u32 = u32::try_from(first_key.len)
+                    .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+                let control: crate::detail::control::ScanByKeyControl<
+                    R,
+                    (K1, K2),
+                    (),
+                    KernelOp<R, KeyEq>,
+                > = crate::detail::control::ScanByKeyControl {
+                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                    head_flags,
+                    len: first_key.len,
+                    len_u32,
+                    _marker: std::marker::PhantomData,
+                };
+                let inner = impl_tuple_exclusive_scan_by_two_key_values_body!(
+                    policy, input, control, init; $( $idx ),+
+                )?;
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
 
             fn inclusive_scan_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, Output>(
@@ -3565,6 +3744,66 @@ macro_rules! impl_miter_soa {
                 )
             }
 
+            fn reduce_by_two_key_dispatch<K1, K2, KeyEq, Op, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _key_eq: KeyEq,
+                init: <Self as MIter<R>>::Item,
+                _op: Op,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                ensure_same_len(input.0.len, first_key.len)?;
+                if first_key.len == 0 {
+                    let key_inner = (policy.empty_device_vec(), policy.empty_device_vec());
+                    let value_inner = ($( {
+                        let _ = stringify!($ty);
+                        policy.empty_device_vec()
+                    }, )+);
+                    return Ok((
+                        array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                        array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                    ));
+                }
+                let head_flags = crate::detail::read::unique_tuple2_flags_read::<
+                    crate::detail::device::DeviceColumnView<R, K1>,
+                    crate::detail::device::DeviceColumnView<R, K2>,
+                    KernelOp<R, KeyEq>,
+                >(policy, &first_key, &second_key)?;
+                let end_flags =
+                    crate::detail::impls::end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
+                let len_u32 = u32::try_from(first_key.len)
+                    .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+                let control: crate::detail::control::ScanByKeyControl<
+                    R,
+                    (K1, K2),
+                    (),
+                    KernelOp<R, KeyEq>,
+                > = crate::detail::control::ScanByKeyControl {
+                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
+                    head_flags,
+                    len: first_key.len,
+                    len_u32,
+                    _marker: std::marker::PhantomData,
+                };
+                let (key_inner, value_inner) = impl_tuple_reduce_by_two_key_values_body!(
+                    policy, input, init, first_key, second_key, end_flags, len_u32, control; $( $ty ),+; $( $idx ),+
+                )?;
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
             fn merge_by_single_key_same_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
@@ -3596,6 +3835,40 @@ macro_rules! impl_miter_soa {
                 ))
             }
 
+            fn merge_by_two_key_same_dispatch<K1, K2, RightValues, Less, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                left_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                left_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                right_values: RightValues,
+                _less: Less,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                Less: op::BinaryPredicateOp<R, (K1, K2)>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let left_values = self.into_view_with_policy(policy)?;
+                let right_values = right_values.into_view_with_policy(policy)?;
+                let (key_inner, value_inner) = crate::detail::merge_by_key(
+                    policy,
+                    (left_first_key, left_second_key),
+                    left_values,
+                    (right_first_key, right_second_key),
+                    right_values,
+                    KernelOp::<R, Less>::new(),
+                )?;
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
             fn merge_by_three_key_same_dispatch<K1, K2, K3, RightValues, Less, KeyOutput, ValueOutput>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
@@ -3622,9 +3895,9 @@ macro_rules! impl_miter_soa {
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key, left_third_key),
-                    impl_miter_view!(left_values; $( $idx ),+),
+                    left_values,
                     (right_first_key, right_second_key, right_third_key),
-                    impl_miter_view!(right_values; $( $idx ),+),
+                    right_values,
                     KernelOp::<R, Less>::new(),
                 )?;
                 Ok((
@@ -4876,6 +5149,76 @@ macro_rules! impl_wide_miter_soa {
                 ))
             }
 
+            fn sort_by_two_key_dispatch<K1, K2, Less, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _less: Less,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                Less: op::BinaryPredicateOp<R, (K1, K2)>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let (key_inner, value_inner) = impl_wide_sort_by_two_key_dispatch_body!(
+                    policy, first_key, second_key, _less, input; $( $idx ),+
+                )?;
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
+            fn unique_by_two_key_dispatch<K1, K2, Eq, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _eq: Eq,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                Eq: op::BinaryPredicateOp<R, (K1, K2)>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                ensure_same_len(input.0.len, first_key.len)?;
+                let flags = crate::detail::read::unique_tuple2_flags_read::<
+                    crate::detail::device::DeviceColumnView<R, K1>,
+                    crate::detail::device::DeviceColumnView<R, K2>,
+                    KernelOp<R, Eq>,
+                >(policy, &first_key, &second_key)?;
+                let key_inner = (
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &first_key,
+                        flags.clone(),
+                    )?,
+                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &second_key,
+                        flags.clone(),
+                    )?,
+                );
+                $(
+                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        policy,
+                        &input.$idx,
+                        flags.clone(),
+                    )?;
+                )+
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(($($tmp,)+)),
+                ))
+            }
+
             fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
@@ -4968,6 +5311,126 @@ macro_rules! impl_wide_miter_soa {
                 ))
             }
 
+            fn inclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _key_eq: KeyEq,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = crate::detail::inclusive_scan_by_key(
+                    policy,
+                    (first_key, second_key),
+                    input,
+                    KernelOp::<R, KeyEq>::new(),
+                    KernelOp::<R, Op>::new(),
+                )?;
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn exclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _key_eq: KeyEq,
+                init: <Self as MIter<R>>::Item,
+                _op: Op,
+            ) -> Result<Output, Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let inner = crate::detail::exclusive_scan_by_key(
+                    policy,
+                    (first_key, second_key),
+                    input,
+                    KernelOp::<R, KeyEq>::new(),
+                    init,
+                    KernelOp::<R, Op>::new(),
+                )?;
+                Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
+            }
+
+            fn reduce_by_two_key_dispatch<K1, K2, KeyEq, Op, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                _key_eq: KeyEq,
+                init: <Self as MIter<R>>::Item,
+                _op: Op,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+                Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let input = self.into_inner_with_policy(policy)?;
+                let (key_inner, value_inner) = crate::detail::reduce_by_key(
+                    policy,
+                    (first_key, second_key),
+                    input,
+                    KernelOp::<R, KeyEq>::new(),
+                    init,
+                    KernelOp::<R, Op>::new(),
+                )?;
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
+            fn merge_by_two_key_same_dispatch<K1, K2, RightValues, Less, KeyOutput, ValueOutput>(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                left_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                left_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+                right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+                right_values: RightValues,
+                _less: Less,
+            ) -> Result<(KeyOutput, ValueOutput), Error>
+            where
+                RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+                K1: Scalar + 'static,
+                K2: Scalar + 'static,
+                Less: op::BinaryPredicateOp<R, (K1, K2)>,
+                KeyOutput: MVec<R, Item = (K1, K2)>,
+                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+            {
+                let left_values = self.into_view_with_policy(policy)?;
+                let right_values = right_values.into_view_with_policy(policy)?;
+                let (key_inner, value_inner) = crate::detail::merge_by_key(
+                    policy,
+                    (left_first_key, left_second_key),
+                    left_values,
+                    (right_first_key, right_second_key),
+                    right_values,
+                    KernelOp::<R, Less>::new(),
+                )?;
+                Ok((
+                    array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
+                    array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
+                ))
+            }
+
             fn sort_by_three_key_dispatch<K1, K2, K3, Less, KeyOutput, ValueOutput>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
@@ -4986,8 +5449,8 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) =
-                    impl_wide_sort_by_three_key_or_materialize_body!(
-                        policy, first_key, second_key, third_key, _less, input; $( $idx: $tmp ),+
+                    impl_wide_sort_by_three_key_dispatch_body!(
+                        policy, first_key, second_key, third_key, _less, input; $( $idx ),+
                     )?;
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
@@ -5018,20 +5481,14 @@ macro_rules! impl_wide_miter_soa {
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
-                let (key_inner, value_inner) =
-                    impl_wide_merge_by_three_key_or_materialize_body!(
-                        policy,
-                        left_values,
-                        right_values,
-                        left_first_key,
-                        left_second_key,
-                        left_third_key,
-                        right_first_key,
-                        right_second_key,
-                        right_third_key,
-                        _less;
-                        $( $idx: $tmp ),+
-                    )?;
+                let (key_inner, value_inner) = crate::detail::merge_by_key(
+                    policy,
+                    (left_first_key, left_second_key, left_third_key),
+                    left_values,
+                    (right_first_key, right_second_key, right_third_key),
+                    right_values,
+                    KernelOp::<R, Less>::new(),
+                )?;
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
@@ -5880,34 +6337,12 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                ensure_same_len(input.0.len, first_key.len)?;
-                let head_flags = crate::detail::read::unique_tuple3_flags_read::<
-                    crate::detail::device::DeviceColumnView<R, K1>,
-                    crate::detail::device::DeviceColumnView<R, K2>,
-                    crate::detail::device::DeviceColumnView<R, K3>,
-                    KernelOp<R, KeyEq>,
-                >(
+                let inner = crate::detail::inclusive_scan_by_key(
                     policy,
-                    &first_key,
-                    &second_key,
-                    &third_key,
-                )?;
-                let len_u32 = u32::try_from(first_key.len)
-                    .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2, K3),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
-                    head_flags,
-                    len: first_key.len,
-                    len_u32,
-                    _marker: std::marker::PhantomData,
-                };
-                let inner = impl_wide_inclusive_scan_by_three_key_values_body!(
-                    policy, input, control; $( $ty ),+; $( $idx ),+
+                    (first_key, second_key, third_key),
+                    input,
+                    KernelOp::<R, KeyEq>::new(),
+                    KernelOp::<R, Op>::new(),
                 )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
@@ -5931,34 +6366,13 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                ensure_same_len(input.0.len, first_key.len)?;
-                let head_flags = crate::detail::read::unique_tuple3_flags_read::<
-                    crate::detail::device::DeviceColumnView<R, K1>,
-                    crate::detail::device::DeviceColumnView<R, K2>,
-                    crate::detail::device::DeviceColumnView<R, K3>,
-                    KernelOp<R, KeyEq>,
-                >(
+                let inner = crate::detail::exclusive_scan_by_key(
                     policy,
-                    &first_key,
-                    &second_key,
-                    &third_key,
-                )?;
-                let len_u32 = u32::try_from(first_key.len)
-                    .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2, K3),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
-                    head_flags,
-                    len: first_key.len,
-                    len_u32,
-                    _marker: std::marker::PhantomData,
-                };
-                let inner = impl_wide_exclusive_scan_by_three_key_values_body!(
-                    policy, input, control, init; $( $ty ),+; $( $idx ),+
+                    (first_key, second_key, third_key),
+                    input,
+                    KernelOp::<R, KeyEq>::new(),
+                    init,
+                    KernelOp::<R, Op>::new(),
                 )?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(inner))
             }
@@ -5983,51 +6397,13 @@ macro_rules! impl_wide_miter_soa {
                 ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                ensure_same_len(input.0.len, first_key.len)?;
-                if first_key.len == 0 {
-                    let key_inner = (
-                        policy.empty_device_vec(),
-                        policy.empty_device_vec(),
-                        policy.empty_device_vec(),
-                    );
-                    let value_inner = ($( {
-                        let _ = stringify!($ty);
-                        policy.empty_device_vec()
-                    }, )+);
-                    return Ok((
-                        array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
-                        array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
-                    ));
-                }
-                let head_flags = crate::detail::read::unique_tuple3_flags_read::<
-                    crate::detail::device::DeviceColumnView<R, K1>,
-                    crate::detail::device::DeviceColumnView<R, K2>,
-                    crate::detail::device::DeviceColumnView<R, K3>,
-                    KernelOp<R, KeyEq>,
-                >(
+                let (key_inner, value_inner) = crate::detail::reduce_by_key(
                     policy,
-                    &first_key,
-                    &second_key,
-                    &third_key,
-                )?;
-                let end_flags =
-                    crate::detail::impls::end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
-                let len_u32 = u32::try_from(first_key.len)
-                    .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-                let control: crate::detail::control::ScanByKeyControl<
-                    R,
-                    (K1, K2, K3),
-                    (),
-                    KernelOp<R, KeyEq>,
-                > = crate::detail::control::ScanByKeyControl {
-                    key_bindings: crate::detail::device::KernelColumnBindings::empty(policy.client()),
-                    head_flags,
-                    len: first_key.len,
-                    len_u32,
-                    _marker: std::marker::PhantomData,
-                };
-                let (key_inner, value_inner) = impl_wide_reduce_by_three_key_values_body!(
-                    policy, input, init, first_key, second_key, third_key, end_flags, len_u32, control; $( $ty ),+; $( $idx ),+
+                    (first_key, second_key, third_key),
+                    input,
+                    KernelOp::<R, KeyEq>::new(),
+                    init,
+                    KernelOp::<R, Op>::new(),
                 )?;
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),

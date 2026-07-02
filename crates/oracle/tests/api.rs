@@ -20,166 +20,232 @@ struct LessTuple;
 struct LessU32;
 struct Less2;
 struct Less3;
-struct ArityTupleToScalar;
-struct ArityScalarToTuple1;
-struct ArityScalarToTuple2;
-struct ArityScalarToTuple3;
-struct ArityScalarToTuple4;
-struct ArityScalarToTuple5;
-struct ArityScalarToTuple6;
-struct ArityScalarToTuple7;
+struct ArityTupleToTuple1;
+struct ArityTupleToTuple2;
+struct ArityTupleToTuple3;
+struct ArityTupleToTuple4;
+struct ArityTupleToTuple5;
+struct ArityTupleToTuple6;
+struct ArityTupleToTuple7;
 
-macro_rules! impl_tuple_to_scalar {
-    (($($ty:ty),+), $input:ident => $out:expr) => {
+macro_rules! impl_arity_tuple_to_tuple {
+    (($($ty:ty),+), $input:ident => $seed:expr) => {
         #[cubecl::cube]
-        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToScalar {
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple1 {
             type Env = ();
             type Output = (u32,);
 
             fn apply(_env: (), $input: ($($ty,)+)) -> (u32,) {
-                ($out,)
+                let seed = $seed;
+                (seed ^ 0x5a5a_5a5a,)
             }
         }
 
-        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToScalar {
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple1 {
             type Env = ();
             type Output = (u32,);
 
             fn apply(_env: (), $input: ($($ty,)+)) -> (u32,) {
-                ($out,)
+                let seed = $seed;
+                (seed ^ 0x5a5a_5a5a,)
+            }
+        }
+
+        #[cubecl::cube]
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple2 {
+            type Env = ();
+            type Output = (u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32) {
+                let seed = $seed;
+                (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5)
+            }
+        }
+
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple2 {
+            type Env = ();
+            type Output = (u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32) {
+                let seed = $seed;
+                (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5)
+            }
+        }
+
+        #[cubecl::cube]
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple3 {
+            type Env = ();
+            type Output = (u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                )
+            }
+        }
+
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple3 {
+            type Env = ();
+            type Output = (u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                )
+            }
+        }
+
+        #[cubecl::cube]
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple4 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                )
+            }
+        }
+
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple4 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                )
+            }
+        }
+
+        #[cubecl::cube]
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple5 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                )
+            }
+        }
+
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple5 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                )
+            }
+        }
+
+        #[cubecl::cube]
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple6 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                    (seed << 3) ^ 0xf0f0_f0f0,
+                )
+            }
+        }
+
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple6 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                    (seed << 3) ^ 0xf0f0_f0f0,
+                )
+            }
+        }
+
+        #[cubecl::cube]
+        impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple7 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                    (seed << 3) ^ 0xf0f0_f0f0,
+                    (seed >> 3) ^ 0x9696_9696,
+                )
+            }
+        }
+
+        impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple7 {
+            type Env = ();
+            type Output = (u32, u32, u32, u32, u32, u32, u32);
+
+            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32, u32) {
+                let seed = $seed;
+                (
+                    seed ^ 0x5a5a_5a5a,
+                    (seed << 1) ^ 0xa5a5_a5a5,
+                    (seed >> 1) ^ 0x3c3c_3c3c,
+                    (seed << 2) ^ 0xc3c3_c3c3,
+                    (seed >> 2) ^ 0x0f0f_0f0f,
+                    (seed << 3) ^ 0xf0f0_f0f0,
+                    (seed >> 3) ^ 0x9696_9696,
+                )
             }
         }
     };
 }
 
-macro_rules! impl_scalar_to_tuple {
-    ($op:ident, ($($ty:ty),+), $input:ident => ($($out:expr),+)) => {
-        #[cubecl::cube]
-        impl gpu_op::UnaryOp<ApiRuntime, (u32,)> for $op {
-            type Env = ();
-            type Output = ($($ty,)+);
-
-            fn apply(_env: (), $input: (u32,)) -> ($($ty,)+) {
-                ($($out,)+)
-            }
-        }
-
-        impl host_op::UnaryOp<(u32,)> for $op {
-            type Env = ();
-            type Output = ($($ty,)+);
-
-            fn apply(_env: (), $input: (u32,)) -> ($($ty,)+) {
-                ($($out,)+)
-            }
-        }
-    };
-}
-
-impl_tuple_to_scalar!((u32), input => input.0 ^ 0x5a5a_5a5a);
-impl_tuple_to_scalar!((u32, u32), input => (input.0 ^ 0x5a5a_5a5a) ^ (input.1 << 1));
-impl_tuple_to_scalar!(
-    (u32, u32, u32),
-    input =>
-    (input.0 ^ 0x5a5a_5a5a) ^ (input.1 << 1) ^ (input.2 << 2)
-);
-impl_tuple_to_scalar!(
-    (u32, u32, u32, u32),
-    input =>
-    (input.0 ^ 0x5a5a_5a5a) ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3)
-);
-impl_tuple_to_scalar!(
-    (u32, u32, u32, u32, u32),
-    input =>
-    (input.0 ^ 0x5a5a_5a5a) ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4)
-);
-impl_tuple_to_scalar!(
-    (u32, u32, u32, u32, u32, u32),
-    input =>
-    (input.0 ^ 0x5a5a_5a5a)
-        ^ (input.1 << 1)
-        ^ (input.2 << 2)
-        ^ (input.3 << 3)
-        ^ (input.4 << 4)
-        ^ (input.5 << 5)
-);
-impl_tuple_to_scalar!(
-    (u32, u32, u32, u32, u32, u32, u32),
-    input =>
-    (input.0 ^ 0x5a5a_5a5a)
-        ^ (input.1 << 1)
-        ^ (input.2 << 2)
-        ^ (input.3 << 3)
-        ^ (input.4 << 4)
-        ^ (input.5 << 5)
-        ^ (input.6 << 6)
-);
-
-impl_scalar_to_tuple!(ArityScalarToTuple1, (u32), input => (input.0 ^ 0x5a5a_5a5a));
-impl_scalar_to_tuple!(
-    ArityScalarToTuple2,
-    (u32, u32),
-    input => (input.0 ^ 0x5a5a_5a5a, (input.0 << 1) ^ 0xa5a5_a5a5)
-);
-impl_scalar_to_tuple!(
-    ArityScalarToTuple3,
-    (u32, u32, u32),
-    input =>
-    (
-        input.0 ^ 0x5a5a_5a5a,
-        (input.0 << 1) ^ 0xa5a5_a5a5,
-        (input.0 >> 1) ^ 0x3c3c_3c3c
-    )
-);
-impl_scalar_to_tuple!(
-    ArityScalarToTuple4,
-    (u32, u32, u32, u32),
-    input =>
-    (
-        input.0 ^ 0x5a5a_5a5a,
-        (input.0 << 1) ^ 0xa5a5_a5a5,
-        (input.0 >> 1) ^ 0x3c3c_3c3c,
-        (input.0 << 2) ^ 0xc3c3_c3c3
-    )
-);
-impl_scalar_to_tuple!(
-    ArityScalarToTuple5,
-    (u32, u32, u32, u32, u32),
-    input =>
-    (
-        input.0 ^ 0x5a5a_5a5a,
-        (input.0 << 1) ^ 0xa5a5_a5a5,
-        (input.0 >> 1) ^ 0x3c3c_3c3c,
-        (input.0 << 2) ^ 0xc3c3_c3c3,
-        (input.0 >> 2) ^ 0x0f0f_0f0f
-    )
-);
-impl_scalar_to_tuple!(
-    ArityScalarToTuple6,
-    (u32, u32, u32, u32, u32, u32),
-    input =>
-    (
-        input.0 ^ 0x5a5a_5a5a,
-        (input.0 << 1) ^ 0xa5a5_a5a5,
-        (input.0 >> 1) ^ 0x3c3c_3c3c,
-        (input.0 << 2) ^ 0xc3c3_c3c3,
-        (input.0 >> 2) ^ 0x0f0f_0f0f,
-        (input.0 << 3) ^ 0xf0f0_f0f0
-    )
-);
-impl_scalar_to_tuple!(
-    ArityScalarToTuple7,
-    (u32, u32, u32, u32, u32, u32, u32),
-    input =>
-    (
-        input.0 ^ 0x5a5a_5a5a,
-        (input.0 << 1) ^ 0xa5a5_a5a5,
-        (input.0 >> 1) ^ 0x3c3c_3c3c,
-        (input.0 << 2) ^ 0xc3c3_c3c3,
-        (input.0 >> 2) ^ 0x0f0f_0f0f,
-        (input.0 << 3) ^ 0xf0f0_f0f0,
-        (input.0 >> 3) ^ 0x9696_9696
-    )
-);
+impl_arity_tuple_to_tuple!((u32), input => input.0);
+impl_arity_tuple_to_tuple!((u32, u32), input => input.0 ^ (input.1 << 1));
+impl_arity_tuple_to_tuple!((u32, u32, u32), input => input.0 ^ (input.1 << 1) ^ (input.2 << 2));
+impl_arity_tuple_to_tuple!((u32, u32, u32, u32), input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3));
+impl_arity_tuple_to_tuple!((u32, u32, u32, u32, u32), input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4));
+impl_arity_tuple_to_tuple!((u32, u32, u32, u32, u32, u32), input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4) ^ (input.5 << 5));
+impl_arity_tuple_to_tuple!((u32, u32, u32, u32, u32, u32, u32), input => input.0 ^ (input.1 << 1) ^ (input.2 << 2) ^ (input.3 << 3) ^ (input.4 << 4) ^ (input.5 << 5) ^ (input.6 << 6));
 
 macro_rules! impl_tuple_ops {
     (($($ty:ty),+), ($($field:tt),+)) => {
@@ -582,65 +648,29 @@ macro_rules! owned_soa_type {
     };
 }
 
-macro_rules! map_input_case {
-    ($input:expr, $soa:ident, ($($ty:ty),+)) => {{
-        let _guard = gpu_lock();
-        let exec = exec();
-        let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output: massively::SoA1<DeviceVec<ApiRuntime, u32>> =
-            massively::map(&exec, gpu_input.slice(..), ArityTupleToScalar, ()).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), SoA1);
-        let host = oracle::map(&input, ArityTupleToScalar, ());
-        prop_assert_eq!(gpu, host);
-    }};
-}
-
-macro_rules! map_output_case {
-    ($input:expr, $soa:ident, ($($ty:ty),+), $init:expr, $op:ident) => {{
+macro_rules! map_arity_case {
+    ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _ = $init;
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, SoA1, (u32));
-        let gpu_output: owned_soa_type!($soa, ($($ty),+)) =
+        let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
+        let gpu_output: owned_soa_type!($output_soa, ($($output_ty),+)) =
             massively::map(&exec, gpu_input.slice(..), $op, ()).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
         let host = oracle::map(&input, $op, ());
         prop_assert_eq!(gpu, host);
     }};
 }
 
-macro_rules! transform_input_case {
-    ($input:expr, $soa:ident, ($($ty:ty),+)) => {{
-        let _guard = gpu_lock();
-        let exec = exec();
-        let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &vec![(0_u32,); input.len()], SoA1, (u32));
-        massively::transform(
-            &exec,
-            gpu_input.slice(..),
-            ArityTupleToScalar,
-            (),
-            gpu_output.slice_mut(..),
-        )
-        .unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), SoA1);
-        let mut host = vec![(0_u32,); input.len()];
-        oracle::transform(&input, ArityTupleToScalar, (), &mut host);
-        prop_assert_eq!(gpu, host);
-    }};
-}
-
-macro_rules! transform_output_case {
-    ($input:expr, $soa:ident, ($($ty:ty),+), $init:expr, $op:ident) => {{
+macro_rules! transform_arity_case {
+    ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut host = vec![$init; input.len()];
-        let gpu_input = make_soa!(&exec, &input, SoA1, (u32));
-        let gpu_output = make_soa!(&exec, &host, $soa, ($($ty),+));
+        let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
+        let gpu_output = make_soa!(&exec, &host, $output_soa, ($($output_ty),+));
         massively::transform(
             &exec,
             gpu_input.slice(..),
@@ -650,46 +680,21 @@ macro_rules! transform_output_case {
         )
         .unwrap();
         oracle::transform(&input, $op, (), &mut host);
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
         prop_assert_eq!(gpu, host);
     }};
 }
 
-macro_rules! transform_where_input_case {
-    ($input:expr, $soa:ident, ($($ty:ty),+)) => {{
-        let _guard = gpu_lock();
-        let exec = exec();
-        let input = $input;
-        let stencil = stencil_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &vec![(0_u32,); input.len()], SoA1, (u32));
-        massively::transform_where(
-            &exec,
-            gpu_input.slice(..),
-            ArityTupleToScalar,
-            (),
-            gpu_stencil.slice(..),
-            gpu_output.slice_mut(..),
-        )
-        .unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), SoA1);
-        let mut host = vec![(0_u32,); input.len()];
-        oracle::transform_where(&input, ArityTupleToScalar, (), &stencil, &mut host);
-        prop_assert_eq!(gpu, host);
-    }};
-}
-
-macro_rules! transform_where_output_case {
-    ($input:expr, $soa:ident, ($($ty:ty),+), $init:expr, $op:ident) => {{
+macro_rules! transform_where_arity_case {
+    ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
         let mut host = vec![$init; input.len()];
-        let gpu_input = make_soa!(&exec, &input, SoA1, (u32));
+        let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &host, $soa, ($($ty),+));
+        let gpu_output = make_soa!(&exec, &host, $output_soa, ($($output_ty),+));
         massively::transform_where(
             &exec,
             gpu_input.slice(..),
@@ -700,7 +705,7 @@ macro_rules! transform_where_output_case {
         )
         .unwrap();
         oracle::transform_where(&input, $op, (), &stencil, &mut host);
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
         prop_assert_eq!(gpu, host);
     }};
 }
@@ -1753,7 +1758,7 @@ define_ordering_arity_module!(set_union_arity, set_union);
 define_ordering_arity_module!(set_intersection_arity, set_intersection);
 define_ordering_arity_module!(set_difference_arity, set_difference);
 
-macro_rules! define_unary_input_arity_module {
+macro_rules! define_unary_arity_product_module {
     ($module:ident, $case:ident) => {
         mod $module {
             use super::*;
@@ -1762,45 +1767,260 @@ macro_rules! define_unary_input_arity_module {
                 #![proptest_config(ProptestConfig::with_cases(CASES))]
 
                 #[test]
-                fn arity_1(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32));
+                fn input_1_output_1(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
-                fn arity_2(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32));
+                fn input_1_output_2(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
-                fn arity_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32));
+                fn input_1_output_3(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
-                fn arity_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32));
+                fn input_1_output_4(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
-                fn arity_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32));
+                fn input_1_output_5(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
-                fn arity_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32));
+                fn input_1_output_6(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
-                fn arity_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32));
+                fn input_1_output_7(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
+                    $case!(input, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
+
+                #[test]
+                fn input_2_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                }
+
+                #[test]
+                fn input_2_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                }
+
+                #[test]
+                fn input_2_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                }
+
+                #[test]
+                fn input_2_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                }
+
+                #[test]
+                fn input_2_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                }
+
+                #[test]
+                fn input_2_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                }
+
+                #[test]
+                fn input_2_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                }
+
+                #[test]
+                fn input_3_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                }
+
+                #[test]
+                fn input_3_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                }
+
+                #[test]
+                fn input_3_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                }
+
+                #[test]
+                fn input_3_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                }
+
+                #[test]
+                fn input_3_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                }
+
+                #[test]
+                fn input_3_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                }
+
+                #[test]
+                fn input_3_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                }
+
+                #[test]
+                fn input_4_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                }
+
+                #[test]
+                fn input_4_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                }
+
+                #[test]
+                fn input_4_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                }
+
+                #[test]
+                fn input_4_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                }
+
+                #[test]
+                fn input_4_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                }
+
+                #[test]
+                fn input_4_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                }
+
+                #[test]
+                fn input_4_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA4, (u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                }
+
+                #[test]
+                fn input_5_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                }
+
+                #[test]
+                fn input_5_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                }
+
+                #[test]
+                fn input_5_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                }
+
+                #[test]
+                fn input_5_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                }
+
+                #[test]
+                fn input_5_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                }
+
+                #[test]
+                fn input_5_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                }
+
+                #[test]
+                fn input_5_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                }
+
+                #[test]
+                fn input_6_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                }
+
+                #[test]
+                fn input_6_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                }
+
+                #[test]
+                fn input_6_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                }
+
+                #[test]
+                fn input_6_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                }
+
+                #[test]
+                fn input_6_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                }
+
+                #[test]
+                fn input_6_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                }
+
+                #[test]
+                fn input_6_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                }
+
+                #[test]
+                fn input_7_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                }
+
+                #[test]
+                fn input_7_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                }
+
+                #[test]
+                fn input_7_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                }
+
+                #[test]
+                fn input_7_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                }
+
+                #[test]
+                fn input_7_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                }
+
+                #[test]
+                fn input_7_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                }
+
+                #[test]
+                fn input_7_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
+                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                }
+
             }
         }
     };
 }
 
-macro_rules! define_unary_output_arity_module {
+define_unary_arity_product_module!(map_arity, map_arity_case);
+define_unary_arity_product_module!(transform_arity, transform_arity_case);
+define_unary_arity_product_module!(transform_where_arity, transform_where_arity_case);
+
+macro_rules! define_sort_by_key_arity_product_module {
     ($module:ident, $case:ident) => {
         mod $module {
             use super::*;
@@ -1809,184 +2029,116 @@ macro_rules! define_unary_output_arity_module {
                 #![proptest_config(ProptestConfig::with_cases(CASES))]
 
                 #[test]
-                fn arity_1(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), (0_u32,), ArityScalarToTuple1);
+                fn key_1_value_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
                 }
 
                 #[test]
-                fn arity_2(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), (0_u32, 0_u32), ArityScalarToTuple2);
+                fn key_1_value_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
                 }
 
                 #[test]
-                fn arity_3(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityScalarToTuple3);
+                fn key_1_value_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
                 }
 
                 #[test]
-                fn arity_4(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityScalarToTuple4);
+                fn key_1_value_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
-                fn arity_5(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityScalarToTuple5);
+                fn key_1_value_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
-                fn arity_6(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityScalarToTuple6);
+                fn key_1_value_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
-                fn arity_7(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityScalarToTuple7);
+                fn key_1_value_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
                 }
+
+                #[test]
+                fn key_2_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA2, (u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_3_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less3);
+                }
+
             }
         }
     };
 }
 
-define_unary_input_arity_module!(map_input_arity, map_input_case);
-define_unary_output_arity_module!(map_output_arity, map_output_case);
-define_unary_input_arity_module!(transform_input_arity, transform_input_case);
-define_unary_output_arity_module!(transform_output_arity, transform_output_case);
-define_unary_input_arity_module!(transform_where_input_arity, transform_where_input_case);
-define_unary_output_arity_module!(transform_where_output_arity, transform_where_output_case);
-
-mod sort_by_key_key_arity {
-    use super::*;
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-        #[test]
-        fn arity_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
-        }
-
-        #[test]
-        fn arity_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
-        }
-
-        #[test]
-        fn arity_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
-        }
-    }
-}
-
-mod sort_by_key_value_arity {
-    use super::*;
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-        #[test]
-        fn arity_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
-        }
-
-        #[test]
-        fn arity_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            sort_by_key_only_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
-        }
-    }
-}
-
-mod stable_sort_by_key_key_arity {
-    use super::*;
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-        #[test]
-        fn arity_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
-        }
-
-        #[test]
-        fn arity_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
-        }
-
-        #[test]
-        fn arity_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
-        }
-    }
-}
-
-mod stable_sort_by_key_value_arity {
-    use super::*;
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-        #[test]
-        fn arity_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
-        }
-
-        #[test]
-        fn arity_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-            stable_sort_by_key_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
-        }
-    }
-}
-
-macro_rules! define_by_key_key_arity_module {
+macro_rules! define_stable_sort_by_key_arity_product_module {
     ($module:ident, $case:ident) => {
         mod $module {
             use super::*;
@@ -1995,142 +2147,355 @@ macro_rules! define_by_key_key_arity_module {
                 #![proptest_config(ProptestConfig::with_cases(CASES))]
 
                 #[test]
-                fn arity_1(pairs in prop::collection::vec((0_u32..16).prop_map(|k| (k,)).prop_flat_map(|k| Just(k)), 0..MAX_LEN).prop_map(|keys| keys.into_iter().map(|key| (key, (key.0,))).collect::<Vec<_>>())) {
+                fn key_1_value_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_2_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA2, (u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_3_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
+                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less3);
+                }
+
+            }
+        }
+    };
+}
+
+macro_rules! define_scan_by_key_arity_product_module {
+    ($module:ident, $case:ident) => {
+        mod $module {
+            use super::*;
+
+            proptest! {
+                #![proptest_config(ProptestConfig::with_cases(CASES))]
+
+                #[test]
+                fn key_1_value_1(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA1, (u32), (0_u32,));
                 }
 
                 #[test]
-                fn arity_2(pairs in prop::collection::vec((0_u32..16, 0_u32..16), 0..MAX_LEN).prop_map(|keys| keys.into_iter().map(|key| (key, (key.1,))).collect::<Vec<_>>())) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA1, (u32), (0_u32,));
-                }
-
-                #[test]
-                fn arity_3(pairs in prop::collection::vec((0_u32..16, 0_u32..16, 0_u32..16), 0..MAX_LEN).prop_map(|keys| keys.into_iter().map(|key| (key, (key.1,))).collect::<Vec<_>>())) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA1, (u32), (0_u32,));
-                }
-            }
-        }
-    };
-}
-
-macro_rules! define_by_key_value_arity_module {
-    ($module:ident, $case:ident) => {
-        mod $module {
-            use super::*;
-
-            proptest! {
-                #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-                #[test]
-                fn arity_1(pairs in prop::collection::vec((0_u32..16, 0_u32..4096), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), (value,))).collect::<Vec<_>>())) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA1, (u32), (0_u32,));
-                }
-
-                #[test]
-                fn arity_2(pairs in prop::collection::vec((0_u32..16, (0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
+                fn key_1_value_2(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA2, (u32, u32), (0_u32, 0_u32));
                 }
 
                 #[test]
-                fn arity_3(pairs in prop::collection::vec((0_u32..16, (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
+                fn key_1_value_3(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
-                fn arity_4(pairs in prop::collection::vec((0_u32..16, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
+                fn key_1_value_4(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
-                fn arity_5(pairs in prop::collection::vec((0_u32..16, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
+                fn key_1_value_5(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
-                fn arity_6(pairs in prop::collection::vec((0_u32..16, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
+                fn key_1_value_6(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
-                fn arity_7(pairs in prop::collection::vec((0_u32..16, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
+                fn key_1_value_7(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
                     scan_by_key_case!($case, pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
+
+                #[test]
+                fn key_2_value_1(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA1, (u32), (0_u32,));
+                }
+
+                #[test]
+                fn key_2_value_2(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA2, (u32, u32), (0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_2_value_3(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_2_value_4(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_2_value_5(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_2_value_6(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_2_value_7(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_3_value_1(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA1, (u32), (0_u32,));
+                }
+
+                #[test]
+                fn key_3_value_2(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_3_value_3(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_3_value_4(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_3_value_5(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_3_value_6(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
+                #[test]
+                fn key_3_value_7(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                }
+
             }
         }
     };
 }
 
-define_by_key_key_arity_module!(inclusive_scan_by_key_key_arity, inclusive_scan_by_key);
-define_by_key_key_arity_module!(exclusive_scan_by_key_key_arity, exclusive_scan_by_key);
-define_by_key_key_arity_module!(reduce_by_key_key_arity, reduce_by_key);
-define_by_key_key_arity_module!(unique_by_key_key_arity, unique_by_key);
-define_by_key_value_arity_module!(inclusive_scan_by_key_value_arity, inclusive_scan_by_key);
-define_by_key_value_arity_module!(exclusive_scan_by_key_value_arity, exclusive_scan_by_key);
-define_by_key_value_arity_module!(reduce_by_key_value_arity, reduce_by_key);
-define_by_key_value_arity_module!(unique_by_key_value_arity, unique_by_key);
+macro_rules! define_merge_by_key_arity_product_module {
+    ($module:ident, $case:ident) => {
+        mod $module {
+            use super::*;
 
-mod merge_by_key_key_arity {
-    use super::*;
+            proptest! {
+                #![proptest_config(ProptestConfig::with_cases(CASES))]
 
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(CASES))]
+                #[test]
+                fn key_1_value_1(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
+                }
 
-        #[test]
-        fn arity_1(pairs in prop::collection::vec((0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), (value,))).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
+                #[test]
+                fn key_1_value_2(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_3(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_4(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_5(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_6(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_1_value_7(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
+                }
+
+                #[test]
+                fn key_2_value_1(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_2(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA2, (u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_3(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_4(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_5(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_6(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_2_value_7(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less2);
+                }
+
+                #[test]
+                fn key_3_value_1(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_2(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_3(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_4(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_5(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_6(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less3);
+                }
+
+                #[test]
+                fn key_3_value_7(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
+                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less3);
+                }
+
+            }
         }
-
-        #[test]
-        fn arity_2(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), 0_u32..4096), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| (key, (value,))).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
-        }
-
-        #[test]
-        fn arity_3(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), 0_u32..4096), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| (key, (value,))).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
-        }
-    }
+    };
 }
 
-mod merge_by_key_value_arity {
-    use super::*;
-
-    proptest! {
-        #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-        #[test]
-        fn arity_1(pairs in prop::collection::vec((0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), (value,))).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
-        }
-
-        #[test]
-        fn arity_2(pairs in prop::collection::vec((0_u32..4096, (0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_3(pairs in prop::collection::vec((0_u32..4096, (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_4(pairs in prop::collection::vec((0_u32..4096, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_5(pairs in prop::collection::vec((0_u32..4096, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_6(pairs in prop::collection::vec((0_u32..4096, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
-        }
-
-        #[test]
-        fn arity_7(pairs in prop::collection::vec((0_u32..4096, (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN).prop_map(|pairs| pairs.into_iter().map(|(key, value)| ((key,), value)).collect::<Vec<_>>())) {
-            merge_by_key_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
-        }
-    }
-}
+define_sort_by_key_arity_product_module!(sort_by_key_arity, sort_by_key);
+define_stable_sort_by_key_arity_product_module!(stable_sort_by_key_arity, stable_sort_by_key);
+define_scan_by_key_arity_product_module!(inclusive_scan_by_key_arity, inclusive_scan_by_key);
+define_scan_by_key_arity_product_module!(exclusive_scan_by_key_arity, exclusive_scan_by_key);
+define_scan_by_key_arity_product_module!(reduce_by_key_arity, reduce_by_key);
+define_scan_by_key_arity_product_module!(unique_by_key_arity, unique_by_key);
+define_merge_by_key_arity_product_module!(merge_by_key_arity, merge_by_key);

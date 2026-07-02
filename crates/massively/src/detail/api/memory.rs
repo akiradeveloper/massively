@@ -707,10 +707,6 @@ impl_transform_tuple_outputs!(
     TransformSoA2Output<A: a, B: b>,
     3 => transform_tuple2_to_tuple3_kernel,
 );
-impl_transform_tuple_outputs!(
-    TransformSoA3Output<A: a, B: b, C: c>,
-    2 => transform_tuple3_to_tuple2_kernel,
-);
 
 macro_rules! define_transform_soa_output_trait {
     ($trait_name:ident < $( $in_ty:ident : $arg:ident ),+ >) => {
@@ -748,77 +744,21 @@ impl_transform_tuple_outputs!(
     TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     1 => transform_tuple6_to_tuple1_kernel,
 );
-
-macro_rules! impl_transform_soa_empty_output2 {
-    ($trait_name:ident < $first_in:ident : $first_arg:ident $(, $in_ty:ident : $arg:ident )+ >) => {
-        impl<R, $first_in, $( $in_ty, )+ OutA, OutB, Op>
-            $trait_name<R, $first_in, $( $in_ty, )+ Op> for (OutA, OutB)
-        where
-            R: Runtime,
-            $first_in: CubePrimitive + CubeElement,
-            $( $in_ty: CubePrimitive + CubeElement, )+
-            OutA: CubePrimitive + CubeElement,
-            OutB: CubePrimitive + CubeElement,
-            Op: UnaryOp<($first_in, $( $in_ty, )+), Output = (OutA, OutB)>,
-        {
-            fn run(
-                policy: &CubePolicy<R>,
-                $first_arg: DeviceColumnView<R, $first_in>,
-                $( $arg: DeviceColumnView<R, $in_ty>, )+
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
-                let len = $first_arg.len();
-                let _ = env;
-                $( let _ = $arg; )+
-                let client = policy.client();
-                Ok(SoA2 {
-                    left: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutA>()), len),
-                    right: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutB>()), len),
-                })
-            }
-        }
-    };
-}
-
-macro_rules! impl_transform_soa_empty_output3 {
-    ($trait_name:ident < $first_in:ident : $first_arg:ident $(, $in_ty:ident : $arg:ident )+ >) => {
-        impl<R, $first_in, $( $in_ty, )+ OutA, OutB, OutC, Op>
-            $trait_name<R, $first_in, $( $in_ty, )+ Op> for (OutA, OutB, OutC)
-        where
-            R: Runtime,
-            $first_in: CubePrimitive + CubeElement,
-            $( $in_ty: CubePrimitive + CubeElement, )+
-            OutA: CubePrimitive + CubeElement,
-            OutB: CubePrimitive + CubeElement,
-            OutC: CubePrimitive + CubeElement,
-            Op: UnaryOp<($first_in, $( $in_ty, )+), Output = (OutA, OutB, OutC)>,
-        {
-            fn run(
-                policy: &CubePolicy<R>,
-                $first_arg: DeviceColumnView<R, $first_in>,
-                $( $arg: DeviceColumnView<R, $in_ty>, )+
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
-                let len = $first_arg.len();
-                let _ = env;
-                $( let _ = $arg; )+
-                let client = policy.client();
-                Ok(SoA3 {
-                    first: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutA>()), len),
-                    second: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutB>()), len),
-                    third: DeviceVec::from_handle(policy.id(), client.empty(len * std::mem::size_of::<OutC>()), len),
-                })
-            }
-        }
-    };
-}
-
-impl_transform_soa_empty_output2!(TransformSoA4Output<A: a, B: b, C: c, D: d>);
-impl_transform_soa_empty_output3!(TransformSoA4Output<A: a, B: b, C: c, D: d>);
-impl_transform_soa_empty_output2!(TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>);
-impl_transform_soa_empty_output3!(TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>);
-impl_transform_soa_empty_output2!(TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>);
-impl_transform_soa_empty_output3!(TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>);
+impl_transform_tuple_outputs!(
+    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    2 => transform_tuple4_to_tuple2_kernel,
+    3 => transform_tuple4_to_tuple3_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    2 => transform_tuple5_to_tuple2_kernel,
+    3 => transform_tuple5_to_tuple3_kernel,
+);
+impl_transform_tuple_outputs!(
+    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    2 => transform_tuple6_to_tuple2_kernel,
+    3 => transform_tuple6_to_tuple3_kernel,
+);
 
 macro_rules! impl_wide_transform_soa_output {
     (
@@ -884,6 +824,50 @@ macro_rules! impl_wide_transform_soa_output {
     };
 }
 
+impl_wide_transform_soa_output!(
+    TransformSoA2Output<A: a, B: b>,
+    transform_tuple2_to_tuple4_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA2Output<A: a, B: b>,
+    transform_tuple2_to_tuple5_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA2Output<A: a, B: b>,
+    transform_tuple2_to_tuple6_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA2Output<A: a, B: b>,
+    transform_tuple2_to_tuple7_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
+impl_transform_tuple_outputs!(
+    TransformSoA3Output<A: a, B: b, C: c>,
+    2 => transform_tuple3_to_tuple2_kernel,
+);
+impl_wide_transform_soa_output!(
+    TransformSoA3Output<A: a, B: b, C: c>,
+    transform_tuple3_to_tuple4_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA3Output<A: a, B: b, C: c>,
+    transform_tuple3_to_tuple5_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA3Output<A: a, B: b, C: c>,
+    transform_tuple3_to_tuple6_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
+);
+impl_wide_transform_soa_output!(
+    TransformSoA3Output<A: a, B: b, C: c>,
+    transform_tuple3_to_tuple7_kernel,
+    (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
+);
 impl_wide_transform_soa_output!(
     TransformSoA4Output<A: a, B: b, C: c, D: d>,
     transform_tuple4_to_tuple4_kernel,

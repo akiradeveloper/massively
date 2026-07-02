@@ -971,6 +971,74 @@ where
     }
 }
 
+macro_rules! impl_kernel_merge_by_key_values_tuple_wide {
+    ($first_left:ident : $first_right:ident : $first_idx:tt, $($left:ident : $right:ident : $idx:tt),+) => {
+        impl<$first_left, $($left,)+ $first_right, $($right,)+>
+            KernelMergeByKeyValues<($first_right, $($right,)+)>
+            for ($first_left, $($left,)+)
+        where
+            $first_left: KernelColumn + KernelColumnAt<S0>,
+            $first_right: KernelColumn<
+                Runtime = $first_left::Runtime,
+                Item = $first_left::Item,
+            > + KernelColumnAt<S0>,
+            $first_left::Item: Scalar + 'static,
+            $first_left::Expr: DeviceGpuExpr<$first_left::Item>,
+            $first_right::Expr: DeviceGpuExpr<$first_right::Item>,
+            $(
+                $left: KernelColumn<Runtime = $first_left::Runtime> + KernelColumnAt<S0>,
+                $right: KernelColumn<
+                    Runtime = $first_left::Runtime,
+                    Item = $left::Item,
+                > + KernelColumnAt<S0>,
+                $left::Item: Scalar + 'static,
+                $left::Expr: DeviceGpuExpr<$left::Item>,
+                $right::Expr: DeviceGpuExpr<$right::Item>,
+            )+
+        {
+            type Runtime = $first_left::Runtime;
+            type OutputValues = (
+                DeviceVec<Self::Runtime, $first_left::Item>,
+                $(DeviceVec<Self::Runtime, $left::Item>,)+
+            );
+
+            fn merge_by_key_values(
+                self,
+                policy: &CubePolicy<Self::Runtime>,
+                right_values: ($first_right, $($right,)+),
+                control: &primitive_ordering::MergeByKeyControl,
+            ) -> Result<Self::OutputValues, Error> {
+                self.$first_idx.validate()?;
+                right_values.$first_idx.validate()?;
+                $(
+                    self.$idx.validate()?;
+                    right_values.$idx.validate()?;
+                )+
+                Ok((
+                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                        policy,
+                        &self.$first_idx,
+                        &right_values.$first_idx,
+                        control,
+                    )?,
+                    $(
+                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
+                        policy,
+                        &self.$idx,
+                        &right_values.$idx,
+                        control,
+                    )?,
+                    )+
+                ))
+            }
+        }
+    };
+}
+
+impl_kernel_merge_by_key_values_tuple_wide!(LA: RA: 0, LB: RB: 1, LC: RC: 2, LD: RD: 3);
+impl_kernel_merge_by_key_values_tuple_wide!(LA: RA: 0, LB: RB: 1, LC: RC: 2, LD: RD: 3, LE: RE: 4);
+impl_kernel_merge_by_key_values_tuple_wide!(LA: RA: 0, LB: RB: 1, LC: RC: 2, LD: RD: 3, LE: RE: 4, LF: RF: 5);
+
 impl<LA, LB, LC, LD, LE, LF, LG, RA, RB, RC, RD, RE, RF, RG>
     KernelMergeByKeyValues<(RA, RB, RC, RD, RE, RF, RG)> for (LA, LB, LC, LD, LE, LF, LG)
 where
