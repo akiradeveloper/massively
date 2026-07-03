@@ -13,9 +13,12 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, minmax_element};
+use massively::{DeviceVec, Executor, MIndex, SoA1, minmax_element};
 
-fn solve<B>(exec: &Executor<B>, price: DeviceVec<B, f32>) -> common::Result<Option<(usize, usize)>>
+fn solve<B>(
+    exec: &Executor<B>,
+    price: DeviceVec<B, f32>,
+) -> common::Result<Option<(MIndex, MIndex)>>
 where
     B: cubecl::prelude::Runtime,
 {

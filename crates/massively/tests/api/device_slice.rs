@@ -54,8 +54,8 @@ fn executor_alloc_allocates_owned_soa_from_mitem() {
 fn scatter_into_allocated<R, Input>(
     exec: &massively::Executor<R>,
     source: Input,
-    indices: massively::DeviceSlice<'_, R, u32>,
-    len: usize,
+    indices: massively::DeviceSlice<'_, R, massively::MIndex>,
+    len: massively::MIndex,
 ) -> Result<<Input::Item as massively::MItem<R>>::Vec, massively::Error>
 where
     R: Runtime,

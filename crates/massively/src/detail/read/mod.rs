@@ -22,8 +22,9 @@ use crate::{
             scan as primitive_scan, search as primitive_search, select,
         },
     },
-    error::ensure_same_len,
+    error::{LengthForCompare, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr},
+    index::{MIndex, mindex_from_usize},
     kernels::*,
     op::GpuOp,
     runtime::Scalar,
@@ -75,9 +76,10 @@ where
     ensure_same_len(C::len(right), A::len(left))
 }
 
-fn validate_key_column<Key>(keys: &Key, len: usize) -> Result<(), Error>
+fn validate_key_column<Key, Len>(keys: &Key, len: Len) -> Result<(), Error>
 where
     Key: KernelColumn,
+    Len: LengthForCompare,
 {
     Key::validate(keys)?;
     ensure_same_len(Key::len(keys), len)

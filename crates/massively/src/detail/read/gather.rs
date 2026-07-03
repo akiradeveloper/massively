@@ -3,7 +3,7 @@ use super::*;
 #[allow(dead_code)]
 pub(crate) trait KernelGatherInput<IndexSource>: Sized
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime: Runtime;
     type Output;
@@ -18,7 +18,7 @@ where
 #[allow(dead_code)]
 pub(crate) trait KernelGatherWhereInput<IndexSource, Stencil, Pred>: Sized
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime: Runtime;
     type Output;
@@ -36,10 +36,10 @@ where
 impl<InputSource, IndexSource> KernelGatherInput<IndexSource> for InputSource
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     InputSource::Item: Scalar + 'static,
     InputSource::Expr: GpuExpr<InputSource::Item>,
-    IndexSource::Expr: GpuExpr<u32>,
+    IndexSource::Expr: GpuExpr<MIndex>,
 {
     type Runtime = InputSource::Runtime;
     type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
@@ -61,10 +61,10 @@ macro_rules! impl_kernel_gather_tuple1 {
         where
             InputSource: KernelColumn + KernelColumnAt<S0>,
             IndexSource:
-                KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+                KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             InputSource::Item: Scalar + 'static,
             InputSource::Expr: GpuExpr<InputSource::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = InputSource::Runtime;
             type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
@@ -90,7 +90,7 @@ impl_kernel_gather_tuple1!(DeviceSoA1<InputSource>, source);
 impl<InputSource, IndexSource> KernelGatherInput<IndexSource> for (InputSource,)
 where
     InputSource: KernelGatherInput<IndexSource>,
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime = <InputSource as KernelGatherInput<IndexSource>>::Runtime;
     type Output = <InputSource as KernelGatherInput<IndexSource>>::Output;
@@ -110,12 +110,12 @@ macro_rules! impl_kernel_gather_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Left::Item: Scalar + 'static,
             Right::Item: Scalar + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type Output =
@@ -149,7 +149,7 @@ impl_kernel_gather_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
 
 impl<Left, Right, IndexSource> KernelGatherInput<IndexSource> for (Left, Right)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView2<Left, Right>: KernelGatherInput<IndexSource>,
 {
     type Runtime = <SoAView2<Left, Right> as KernelGatherInput<IndexSource>>::Runtime;
@@ -178,14 +178,14 @@ macro_rules! impl_kernel_gather_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = First::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = First::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             First::Item: Scalar + 'static,
             Second::Item: Scalar + 'static,
             Third::Item: Scalar + 'static,
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type Output = $out<
@@ -227,7 +227,7 @@ impl_kernel_gather_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, 
 
 impl<First, Second, Third, IndexSource> KernelGatherInput<IndexSource> for (First, Second, Third)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView3<First, Second, Third>: KernelGatherInput<IndexSource>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelGatherInput<IndexSource>>::Runtime;
@@ -260,11 +260,11 @@ fn gather_where_one_read<InputSource, IndexSource, Stencil, Pred>(
 ) -> Result<DeviceVec<InputSource::Runtime, InputSource::Item>, Error>
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = InputSource::Runtime>,
     InputSource::Item: Scalar + 'static,
     InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
-    IndexSource::Expr: DeviceGpuExpr<u32>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     <InputSource as KernelColumn>::validate(input)?;
     <IndexSource as KernelColumn>::validate(indices)?;
@@ -312,7 +312,7 @@ where
                 BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1),
                 BufferArg::from_raw_parts(index_slot_offsets.clone(), 4),
                 BufferArg::from_raw_parts(flags.flag.clone(), flags.len),
-                BufferArg::from_raw_parts(output.handle.clone(), output.len),
+                BufferArg::from_raw_parts(output.handle.clone(), output.len()),
             );
         }
     }
@@ -324,11 +324,11 @@ impl<InputSource, IndexSource, Stencil, Pred> KernelGatherWhereInput<IndexSource
     for InputSource
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = InputSource::Runtime>,
     InputSource::Item: Scalar + 'static,
     InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
-    IndexSource::Expr: DeviceGpuExpr<u32>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     type Runtime = InputSource::Runtime;
     type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
@@ -356,11 +356,11 @@ macro_rules! impl_kernel_gather_where_tuple1 {
         where
             InputSource: KernelColumn + KernelColumnAt<S0>,
             IndexSource:
-                KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+                KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = InputSource::Runtime>,
             InputSource::Item: Scalar + 'static,
             InputSource::Expr: DeviceGpuExpr<InputSource::Item>,
-            IndexSource::Expr: DeviceGpuExpr<u32>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = InputSource::Runtime;
             type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
@@ -394,7 +394,7 @@ impl<InputSource, IndexSource, Stencil, Pred> KernelGatherWhereInput<IndexSource
     for (InputSource,)
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     SoAView1<InputSource>:
         KernelGatherWhereInput<IndexSource, Stencil, Pred, Runtime = InputSource::Runtime>,
 {
@@ -428,13 +428,13 @@ macro_rules! impl_kernel_gather_where_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = Left::Runtime>,
             Left::Item: Scalar + 'static,
             Right::Item: Scalar + 'static,
             Left::Expr: DeviceGpuExpr<Left::Item>,
             Right::Expr: DeviceGpuExpr<Right::Item>,
-            IndexSource::Expr: DeviceGpuExpr<u32>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type Output =
@@ -475,7 +475,7 @@ impl_kernel_gather_where_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, righ
 impl<Left, Right, IndexSource, Stencil, Pred> KernelGatherWhereInput<IndexSource, Stencil, Pred>
     for (Left, Right)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView2<Left, Right>: KernelGatherWhereInput<IndexSource, Stencil, Pred>,
 {
     type Runtime =
@@ -513,7 +513,7 @@ macro_rules! impl_kernel_gather_where_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = First::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = First::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = First::Runtime>,
             First::Item: Scalar + 'static,
             Second::Item: Scalar + 'static,
@@ -521,7 +521,7 @@ macro_rules! impl_kernel_gather_where_tuple3 {
             First::Expr: DeviceGpuExpr<First::Item>,
             Second::Expr: DeviceGpuExpr<Second::Item>,
             Third::Expr: DeviceGpuExpr<Third::Item>,
-            IndexSource::Expr: DeviceGpuExpr<u32>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type Output = $out<
@@ -576,7 +576,7 @@ impl_kernel_gather_where_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, f
 impl<First, Second, Third, IndexSource, Stencil, Pred>
     KernelGatherWhereInput<IndexSource, Stencil, Pred> for (First, Second, Third)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView3<First, Second, Third>: KernelGatherWhereInput<IndexSource, Stencil, Pred>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelGatherWhereInput<

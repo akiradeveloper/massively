@@ -4,7 +4,7 @@ use super::*;
 pub fn gather<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: DeviceSlice<'_, R, u32>,
+    indices: DeviceSlice<'_, R, MIndex>,
     out: Output,
 ) -> Result<(), Error>
 where
@@ -23,7 +23,7 @@ where
 pub fn permute<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: DeviceSlice<'_, R, u32>,
+    indices: DeviceSlice<'_, R, MIndex>,
 ) -> Result<Output, Error>
 where
     R: Runtime,
@@ -40,7 +40,7 @@ where
 pub fn gather_where<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: DeviceSlice<'_, R, u32>,
+    indices: DeviceSlice<'_, R, MIndex>,
     stencil: DeviceSlice<'_, R, u32>,
     out: Output,
 ) -> Result<(), Error>
@@ -68,7 +68,7 @@ where
 pub fn scatter<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: DeviceSlice<'_, R, u32>,
+    indices: DeviceSlice<'_, R, MIndex>,
     out: Output,
 ) -> Result<(), Error>
 where
@@ -87,7 +87,7 @@ where
 pub fn scatter_where<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
-    indices: DeviceSlice<'_, R, u32>,
+    indices: DeviceSlice<'_, R, MIndex>,
     stencil: DeviceSlice<'_, R, u32>,
     out: Output,
 ) -> Result<(), Error>

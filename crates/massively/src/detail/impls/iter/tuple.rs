@@ -275,9 +275,9 @@ macro_rules! impl_wide_sort_by_single_key_dispatch_body {
 
 macro_rules! impl_wide_sort_dispatch_body {
     ($policy:ident, $input:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -311,8 +311,8 @@ macro_rules! impl_wide_sort_dispatch_body {
         ))
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
@@ -346,7 +346,7 @@ macro_rules! impl_wide_sort_dispatch_body {
         ))
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
             _,
@@ -507,17 +507,17 @@ macro_rules! impl_wide_sort_by_two_key_dispatch_body {
 macro_rules! impl_wide_merge_by_single_key_dispatch_body {
     ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3) => {{
         let left_dummy4 =
-            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $left_values.0.len)?;
         let left_dummy5 =
-            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $left_values.0.len)?;
         let left_dummy6 =
-            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $left_values.0.len)?;
         let right_dummy4 =
-            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $right_values.0.len)?;
         let right_dummy5 =
-            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $right_values.0.len)?;
         let right_dummy6 =
-            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $right_values.0.len)?;
         let left_dummy4 = crate::detail::device::DeviceColumnView::from_column(&left_dummy4);
         let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
         let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
@@ -552,13 +552,13 @@ macro_rules! impl_wide_merge_by_single_key_dispatch_body {
     }};
     ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3, 4) => {{
         let left_dummy5 =
-            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $left_values.0.len)?;
         let left_dummy6 =
-            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $left_values.0.len)?;
         let right_dummy5 =
-            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $right_values.0.len)?;
         let right_dummy6 =
-            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $right_values.0.len)?;
         let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
         let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
         let right_dummy5 = crate::detail::device::DeviceColumnView::from_column(&right_dummy5);
@@ -591,9 +591,9 @@ macro_rules! impl_wide_merge_by_single_key_dispatch_body {
     }};
     ($policy:ident, $left_values:ident, $right_values:ident, $left_key:ident, $right_key:ident, $less:ident; 0, 1, 2, 3, 4, 5) => {{
         let left_dummy6 =
-            crate::detail::primitives::range::indices_u32($policy, $left_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $left_values.0.len)?;
         let right_dummy6 =
-            crate::detail::primitives::range::indices_u32($policy, $right_values.0.len)?;
+            crate::detail::primitives::range::indices_mindex($policy, $right_values.0.len)?;
         let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
         let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
         let (key_inner, (a, b, c, d, e, f, _)) = crate::detail::merge_by_key(
@@ -665,9 +665,9 @@ macro_rules! impl_wide_merge_by_single_key_dispatch_body {
 
 macro_rules! impl_wide_unique_dispatch_body {
     ($policy:ident, $input:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -685,8 +685,8 @@ macro_rules! impl_wide_unique_dispatch_body {
         )
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         crate::detail::read::unique_tuple7_flags_read::<
@@ -703,7 +703,7 @@ macro_rules! impl_wide_unique_dispatch_body {
         )
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         crate::detail::read::unique_tuple7_flags_read::<
             _,
@@ -735,9 +735,9 @@ macro_rules! impl_wide_unique_dispatch_body {
 macro_rules! impl_wide_reduce_dispatch_body {
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
         use crate::detail::device::KernelColumn;
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -781,8 +781,8 @@ macro_rules! impl_wide_reduce_dispatch_body {
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
         use crate::detail::device::KernelColumn;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let a = KernelColumn::stage(&$input.0, $policy)?;
@@ -825,7 +825,7 @@ macro_rules! impl_wide_reduce_dispatch_body {
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
         use crate::detail::device::KernelColumn;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let a = KernelColumn::stage(&$input.0, $policy)?;
         let b = KernelColumn::stage(&$input.1, $policy)?;
@@ -904,9 +904,9 @@ macro_rules! impl_wide_reduce_dispatch_body {
 
 macro_rules! impl_wide_inclusive_scan_dispatch_body {
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -927,8 +927,8 @@ macro_rules! impl_wide_inclusive_scan_dispatch_body {
         Ok((a, b, c, d))
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (a, b, c, d, e, _, _) =
@@ -948,7 +948,7 @@ macro_rules! impl_wide_inclusive_scan_dispatch_body {
         Ok((a, b, c, d, e))
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (a, b, c, d, e, f, _) =
             crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
@@ -992,9 +992,9 @@ macro_rules! impl_wide_inclusive_scan_dispatch_body {
 
 macro_rules! impl_wide_exclusive_scan_dispatch_body {
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -1023,8 +1023,8 @@ macro_rules! impl_wide_exclusive_scan_dispatch_body {
         Ok((a, b, c, d))
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (a, b, c, d, e, _, _) =
@@ -1052,7 +1052,7 @@ macro_rules! impl_wide_exclusive_scan_dispatch_body {
         Ok((a, b, c, d, e))
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (a, b, c, d, e, f, _) =
             crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
@@ -1105,9 +1105,9 @@ macro_rules! impl_wide_exclusive_scan_dispatch_body {
 
 macro_rules! impl_wide_adjacent_difference_dispatch_body {
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -1128,8 +1128,8 @@ macro_rules! impl_wide_adjacent_difference_dispatch_body {
         Ok((a, b, c, d))
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (a, b, c, d, e, _, _) =
@@ -1149,7 +1149,7 @@ macro_rules! impl_wide_adjacent_difference_dispatch_body {
         Ok((a, b, c, d, e))
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (a, b, c, d, e, f, _) =
             crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
@@ -1193,9 +1193,9 @@ macro_rules! impl_wide_adjacent_difference_dispatch_body {
 
 macro_rules! impl_wide_predicate_selection_body {
     ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -1210,8 +1210,8 @@ macro_rules! impl_wide_predicate_selection_body {
         )
     }};
     ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         impl_wide_predicate_selection_body!(
@@ -1225,7 +1225,7 @@ macro_rules! impl_wide_predicate_selection_body {
         )
     }};
     ($policy:ident, $input:ident, $env:ident, $invert:expr; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         impl_wide_predicate_selection_body!(
             @launch
@@ -1315,12 +1315,12 @@ macro_rules! impl_wide_predicate_selection_body {
 
 macro_rules! impl_wide_binary_predicate_views {
     ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let left_dummy4 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
-        let left_dummy5 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
-        let left_dummy6 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
-        let right_dummy4 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
-        let right_dummy5 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
-        let right_dummy6 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let left_dummy4 = crate::detail::primitives::range::indices_mindex($policy, $left.0.len)?;
+        let left_dummy5 = crate::detail::primitives::range::indices_mindex($policy, $left.0.len)?;
+        let left_dummy6 = crate::detail::primitives::range::indices_mindex($policy, $left.0.len)?;
+        let right_dummy4 = crate::detail::primitives::range::indices_mindex($policy, $right.0.len)?;
+        let right_dummy5 = crate::detail::primitives::range::indices_mindex($policy, $right.0.len)?;
+        let right_dummy6 = crate::detail::primitives::range::indices_mindex($policy, $right.0.len)?;
         let left_dummy4 = crate::detail::device::DeviceColumnView::from_column(&left_dummy4);
         let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
         let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
@@ -1336,10 +1336,10 @@ macro_rules! impl_wide_binary_predicate_views {
         )
     }};
     ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let left_dummy5 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
-        let left_dummy6 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
-        let right_dummy5 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
-        let right_dummy6 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let left_dummy5 = crate::detail::primitives::range::indices_mindex($policy, $left.0.len)?;
+        let left_dummy6 = crate::detail::primitives::range::indices_mindex($policy, $left.0.len)?;
+        let right_dummy5 = crate::detail::primitives::range::indices_mindex($policy, $right.0.len)?;
+        let right_dummy6 = crate::detail::primitives::range::indices_mindex($policy, $right.0.len)?;
         let left_dummy5 = crate::detail::device::DeviceColumnView::from_column(&left_dummy5);
         let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
         let right_dummy5 = crate::detail::device::DeviceColumnView::from_column(&right_dummy5);
@@ -1353,8 +1353,8 @@ macro_rules! impl_wide_binary_predicate_views {
         )
     }};
     ($policy:ident, $left:ident, $right:ident, $op:ident, $body:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let left_dummy6 = crate::detail::primitives::range::indices_u32($policy, $left.0.len)?;
-        let right_dummy6 = crate::detail::primitives::range::indices_u32($policy, $right.0.len)?;
+        let left_dummy6 = crate::detail::primitives::range::indices_mindex($policy, $left.0.len)?;
+        let right_dummy6 = crate::detail::primitives::range::indices_mindex($policy, $right.0.len)?;
         let left_dummy6 = crate::detail::device::DeviceColumnView::from_column(&left_dummy6);
         let right_dummy6 = crate::detail::device::DeviceColumnView::from_column(&right_dummy6);
         $body!(
@@ -1457,7 +1457,7 @@ macro_rules! impl_wide_mismatch_from_views {
             } else if $a.len == $ra.len {
                 Ok(None)
             } else {
-                Ok(Some(min_len))
+                Ok(Some(mindex_from_usize(min_len)?))
             }
         }
     }};
@@ -2313,9 +2313,9 @@ macro_rules! impl_tuple_reduce_by_two_key_values_body {
 
 macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
     ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -2341,8 +2341,8 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
         Ok((a, b, c, d))
     }};
     ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let control =
@@ -2367,7 +2367,7 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
         Ok((a, b, c, d, e))
     }};
     ($policy:ident, $keys:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let control =
             <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
@@ -2414,9 +2414,9 @@ macro_rules! impl_wide_inclusive_scan_by_single_key_values_body {
 
 macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
     ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -2435,8 +2435,8 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
         Ok((a, b, c, d))
     }};
     ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let control =
@@ -2454,7 +2454,7 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
         Ok((a, b, c, d, e))
     }};
     ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let control =
             <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelScanByKeyKeys<
@@ -2487,9 +2487,9 @@ macro_rules! impl_wide_exclusive_scan_by_single_key_values_body {
 
 macro_rules! impl_wide_reduce_by_single_key_values_body {
     ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
@@ -2514,8 +2514,8 @@ macro_rules! impl_wide_reduce_by_single_key_values_body {
         Ok(((key_inner.source,), (a, b, c, d)))
     }};
     ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (key_inner, control) =
@@ -2539,7 +2539,7 @@ macro_rules! impl_wide_reduce_by_single_key_values_body {
         Ok(((key_inner.source,), (a, b, c, d, e)))
     }};
     ($policy:ident, $keys:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_u32($policy, $input.0.len)?;
+        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
         let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
         let (key_inner, control) =
             <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelReduceByKeyKeys<
@@ -2876,7 +2876,7 @@ macro_rules! impl_miter_soa {
             type Item = ($( $ty, )+);
             type Inner = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
 
-            fn len(&self) -> usize {
+            fn len(&self) -> MIndex {
                 self.0.len()
             }
 
@@ -3985,7 +3985,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
                 env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<usize, Error>
+            ) -> Result<MIndex, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4037,7 +4037,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
                 env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4123,7 +4123,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4135,7 +4135,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4147,7 +4147,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<Option<(usize, usize)>, Error>
+            ) -> Result<Option<(MIndex, MIndex)>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4159,7 +4159,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4172,7 +4172,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 values: Values,
                 _less: Less,
-            ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+            ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
             where
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -4193,7 +4193,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 values: Values,
                 _less: Less,
-            ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+            ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
             where
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -4213,7 +4213,7 @@ macro_rules! impl_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<usize, Error>
+            ) -> Result<MIndex, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4357,7 +4357,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 right: Right,
                 _eq: Eq,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -4377,7 +4377,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 needles: Needles,
                 _eq: Eq,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -4524,7 +4524,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 right: Self,
                 _eq: Eq,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4543,7 +4543,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 needles: Self,
                 _eq: Eq,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -4679,7 +4679,7 @@ macro_rules! impl_miter_mut_soa {
             type Item = ($( $ty, )+);
             type Inner = ($( crate::detail::device::DeviceColumnMutView<R, $ty>, )+);
 
-            fn len(&self) -> usize {
+            fn len(&self) -> MIndex {
                 self.0.len()
             }
 
@@ -4687,8 +4687,8 @@ macro_rules! impl_miter_mut_soa {
                 ($(
                     crate::detail::device::DeviceColumnMutView::from_slice(
                         &self.$idx.source.inner,
-                        self.$idx.offset,
-                        self.$idx.len,
+                        usize_from_mindex(self.$idx.offset),
+                        usize_from_mindex(self.$idx.len),
                     ),
                 )+)
             }
@@ -4813,8 +4813,8 @@ macro_rules! impl_miter_mut_soa {
                         };
                         return Ok(Some(crate::detail::device::DeviceColumnMutView::from_slice(
                             &source.inner,
-                            self.$idx.offset,
-                            self.$idx.len,
+                            usize_from_mindex(self.$idx.offset),
+                            usize_from_mindex(self.$idx.len),
                         )));
                     }
                 )+
@@ -4840,7 +4840,7 @@ macro_rules! impl_wide_miter_soa {
             type Item = ($( $ty, )+);
             type Inner = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
 
-            fn len(&self) -> usize {
+            fn len(&self) -> MIndex {
                 self.0.len()
             }
 
@@ -5658,7 +5658,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
                 env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<usize, Error>
+            ) -> Result<MIndex, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5666,7 +5666,9 @@ macro_rules! impl_wide_miter_soa {
                 let handles = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
-                crate::detail::primitives::select::selected_count(policy, &handles)
+                mindex_from_usize(crate::detail::primitives::select::selected_count(
+                    policy, &handles,
+                )?)
             }
 
             fn all_of_dispatch<Pred>(
@@ -5683,7 +5685,9 @@ macro_rules! impl_wide_miter_soa {
                 let handles = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
-                Ok(crate::detail::primitives::select::selected_count(policy, &handles)? == len)
+                Ok(mindex_from_usize(crate::detail::primitives::select::selected_count(
+                    policy, &handles,
+                )?)? == len)
             }
 
             fn any_of_dispatch<Pred>(
@@ -5723,7 +5727,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
                 env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5799,17 +5803,17 @@ macro_rules! impl_wide_miter_soa {
                     handles.len,
                     handles.len,
                 )?
-                .unwrap_or(handles.len);
+                .unwrap_or(mindex_from_usize(handles.len)?);
                 let selected_count =
                     crate::detail::primitives::select::selected_count(policy, &handles)?;
-                Ok(selected_count == first_rejected)
+                Ok(mindex_from_usize(selected_count)? == first_rejected)
             }
 
             fn min_element_dispatch<Less>(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5825,7 +5829,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5841,7 +5845,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<Option<(usize, usize)>, Error>
+            ) -> Result<Option<(MIndex, MIndex)>, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5857,7 +5861,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _pred: Pred,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5878,7 +5882,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 values: Values,
                 _less: Less,
-            ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+            ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
             where
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -5903,7 +5907,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 values: Values,
                 _less: Less,
-            ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+            ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
             where
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -5927,7 +5931,7 @@ macro_rules! impl_wide_miter_soa {
                 self,
                 policy: &crate::detail::CubePolicy<R>,
                 _less: Less,
-            ) -> Result<usize, Error>
+            ) -> Result<MIndex, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
@@ -5984,7 +5988,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 right: Right,
                 _eq: Eq,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -6007,7 +6011,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
                 needles: Needles,
                 _eq: Eq,
-            ) -> Result<Option<usize>, Error>
+            ) -> Result<Option<MIndex>, Error>
             where
                 Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,

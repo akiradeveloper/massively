@@ -13,14 +13,14 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, scatter_where};
+use massively::{DeviceVec, Executor, MIndex, SoA1, scatter_where};
 
 fn solve<B>(
     exec: &Executor<B>,
     item_id: DeviceVec<B, u32>,
-    slot: DeviceVec<B, u32>,
+    slot: DeviceVec<B, MIndex>,
     approved: DeviceVec<B, u32>,
-    len: usize,
+    len: MIndex,
 ) -> common::Result<DeviceVec<B, u32>>
 where
     B: cubecl::prelude::Runtime,

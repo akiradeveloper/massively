@@ -1,19 +1,21 @@
 use super::*;
+use crate::MIndex;
 impl<Keys, Values, Less> crate::detail::read::KernelSortByKeyCall<Values, Less> for Keys
 where
     Keys: crate::detail::read::KernelSortByKeyKeys<Less>,
     Values: crate::detail::read::KernelSortByKeyValues<
-            DeviceVec<Keys::Runtime, u32>,
+            DeviceVec<Keys::Runtime, MIndex>,
             Runtime = Keys::Runtime,
         >,
 {
     type Runtime = Keys::Runtime;
-    type Output = (
-        <Keys as crate::detail::read::KernelSortByKeyKeys<Less>>::OutputKeys,
-        <Values as crate::detail::read::KernelSortByKeyValues<
-            DeviceVec<Keys::Runtime, u32>,
-        >>::OutputValues,
-    );
+    type Output =
+        (
+            <Keys as crate::detail::read::KernelSortByKeyKeys<Less>>::OutputKeys,
+            <Values as crate::detail::read::KernelSortByKeyValues<
+                DeviceVec<Keys::Runtime, MIndex>,
+            >>::OutputValues,
+        );
 
     fn sort_by_key_call(
         self,

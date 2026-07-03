@@ -1284,9 +1284,9 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy4 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy4 = DeviceColumnView::from_column(&dummy4);
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
@@ -1338,9 +1338,9 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy4 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy4 = DeviceColumnView::from_column(&dummy4);
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
@@ -1406,8 +1406,8 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
                 let (a, b, c, d, e, _, _) = inclusive_scan_by_flags_seven_views::<
@@ -1461,8 +1461,8 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
                 let (a, b, c, d, e, _, _) = exclusive_scan_by_flags_seven_views::<
@@ -1530,7 +1530,7 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
                 let (a, b, c, d, e, f, _) = inclusive_scan_by_flags_seven_views::<
                     R,
@@ -1586,7 +1586,7 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
                 let (a, b, c, d, e, f, _) = exclusive_scan_by_flags_seven_views::<
                     R,

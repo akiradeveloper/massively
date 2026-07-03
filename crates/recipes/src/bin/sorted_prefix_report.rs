@@ -12,9 +12,9 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, is_sorted_until};
+use massively::{DeviceVec, Executor, MIndex, SoA1, is_sorted_until};
 
-fn solve<B>(exec: &Executor<B>, timestamp: DeviceVec<B, u32>) -> common::Result<usize>
+fn solve<B>(exec: &Executor<B>, timestamp: DeviceVec<B, u32>) -> common::Result<MIndex>
 where
     B: cubecl::prelude::Runtime,
 {

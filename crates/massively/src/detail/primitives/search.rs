@@ -1,6 +1,6 @@
 use crate::{
-    detail::op::kernel::BinaryPredicateOp, device::DeviceVec, error::Error, kernels::*, op::GpuOp,
-    policy::CubePolicy, primitives::scan::read_u32_scalar,
+    detail::op::kernel::BinaryPredicateOp, device::DeviceVec, error::Error, index::MIndex,
+    kernels::*, op::GpuOp, policy::CubePolicy, primitives::scan::read_u32_scalar,
 };
 use cubecl::prelude::*;
 
@@ -11,7 +11,7 @@ pub(crate) fn minmax_element<R, T, Less>(
     policy: &CubePolicy<R>,
     input: &DeviceVec<R, T>,
     _less: GpuOp<Less>,
-) -> Result<Option<(usize, usize)>, Error>
+) -> Result<Option<(MIndex, MIndex)>, Error>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
@@ -71,7 +71,7 @@ where
             message: format!("{err:?}"),
         })?;
     let indices = u32::from_bytes(&bytes);
-    Ok(Some((indices[0] as usize, indices[1] as usize)))
+    Ok(Some((indices[0], indices[1])))
 }
 
 pub(crate) fn first_flag<R>(
@@ -79,7 +79,7 @@ pub(crate) fn first_flag<R>(
     flag_handle: cubecl::server::Handle,
     storage_len: usize,
     logical_len: usize,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
 {
@@ -97,7 +97,7 @@ pub(crate) fn first_unset_flag<R>(
     flag_handle: cubecl::server::Handle,
     storage_len: usize,
     logical_len: usize,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
 {
@@ -122,7 +122,7 @@ fn flag_index<R>(
     storage_len: usize,
     logical_len: usize,
     kind: FlagIndexKind,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
 {
@@ -189,8 +189,8 @@ where
         current_count_u32 = next_count_u32;
     }
 
-    let index = read_u32_scalar::<R>(client, current_handle)? as usize;
-    if index == logical_len {
+    let index = read_u32_scalar::<R>(client, current_handle)?;
+    if index == logical_len_u32 {
         Ok(None)
     } else {
         Ok(Some(index))

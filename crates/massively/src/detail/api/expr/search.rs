@@ -3,7 +3,7 @@ use super::*;
 pub(in crate::detail) fn device_expr_minmax_element_with_policy<ExprSource, Less>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
-) -> Result<Option<(usize, usize)>, Error>
+) -> Result<Option<(MIndex, MIndex)>, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
@@ -90,5 +90,5 @@ where
             message: format!("{err:?}"),
         })?;
     let indices = u32::from_bytes(&bytes);
-    Ok(Some((indices[0] as usize, indices[1] as usize)))
+    Ok(Some((indices[0], indices[1])))
 }

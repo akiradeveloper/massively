@@ -7,12 +7,12 @@ pub(crate) trait KernelSortByKeyKeys<Less>: Sized {
     fn sort_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error>;
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error>;
 }
 
 pub(crate) trait KernelSortByKeyValues<IndexSource>: Sized
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime: Runtime;
     type OutputValues;
@@ -92,9 +92,9 @@ where
     fn sort_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
         let indices =
-            primitive_range::indices_u32(policy, <KeySource as KernelColumn>::len(&self))?;
+            primitive_range::indices_mindex(policy, <KeySource as KernelColumn>::len(&self))?;
         let (keys, indices) = primitive_ordering::sort_by_key_input_with_policy(
             policy,
             &self,
@@ -120,7 +120,7 @@ macro_rules! impl_kernel_sort_by_key_keys_tuple1 {
             fn sort_by_key_control(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-            ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
+            ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
                 <KeySource as KernelSortByKeyKeys<Less>>::sort_by_key_control(self.$field, policy)
             }
         }
@@ -144,7 +144,7 @@ where
     fn sort_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
         <KeySource as KernelSortByKeyKeys<crate::detail::api::Tuple1Less<Less>>>::sort_by_key_control(
             self.0,
             policy,
@@ -171,8 +171,9 @@ where
     fn sort_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
-        let indices = primitive_range::indices_u32(policy, <First as KernelColumn>::len(&self.0))?;
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
+        let indices =
+            primitive_range::indices_mindex(policy, <First as KernelColumn>::len(&self.0))?;
         let (first, second, _stable_tie, indices) =
             primitive_ordering::sort_tuple3_by_key_input_with_policy(
                 policy,
@@ -215,8 +216,9 @@ where
     fn sort_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
-    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, u32>), Error> {
-        let indices = primitive_range::indices_u32(policy, <First as KernelColumn>::len(&self.0))?;
+    ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
+        let indices =
+            primitive_range::indices_mindex(policy, <First as KernelColumn>::len(&self.0))?;
         let (first, second, third, indices) =
             primitive_ordering::sort_tuple3_by_key_input_with_policy(
                 policy,
@@ -240,10 +242,10 @@ where
 impl<ValueSource, IndexSource> KernelSortByKeyValues<IndexSource> for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
-    IndexSource::Expr: GpuExpr<u32>,
+    IndexSource::Expr: GpuExpr<MIndex>,
 {
     type Runtime = ValueSource::Runtime;
     type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
@@ -264,10 +266,10 @@ macro_rules! impl_kernel_sort_by_key_values_tuple1 {
         where
             ValueSource: KernelColumn + KernelColumnAt<S0>,
             IndexSource:
-                KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+                KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             ValueSource::Item: Scalar + 'static,
             ValueSource::Expr: GpuExpr<ValueSource::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = ValueSource::Runtime;
             type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
@@ -289,7 +291,7 @@ impl_kernel_sort_by_key_values_tuple1!(DeviceSoA1<ValueSource>, source);
 impl<ValueSource, IndexSource> KernelSortByKeyValues<IndexSource> for (ValueSource,)
 where
     ValueSource: KernelSortByKeyValues<IndexSource>,
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime = <ValueSource as KernelSortByKeyValues<IndexSource>>::Runtime;
     type OutputValues = <ValueSource as KernelSortByKeyValues<IndexSource>>::OutputValues;
@@ -309,12 +311,12 @@ macro_rules! impl_kernel_sort_by_key_values_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Left::Item: Scalar + 'static,
             Right::Item: Scalar + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type OutputValues =
@@ -338,7 +340,7 @@ impl_kernel_sort_by_key_values_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left
 
 impl<Left, Right, IndexSource> KernelSortByKeyValues<IndexSource> for (Left, Right)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView2<Left, Right>: KernelSortByKeyValues<IndexSource>,
 {
     type Runtime = <SoAView2<Left, Right> as KernelSortByKeyValues<IndexSource>>::Runtime;
@@ -367,14 +369,14 @@ macro_rules! impl_kernel_sort_by_key_values_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = First::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = First::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             First::Item: Scalar + 'static,
             Second::Item: Scalar + 'static,
             Third::Item: Scalar + 'static,
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type OutputValues = $out<
@@ -402,7 +404,7 @@ impl_kernel_sort_by_key_values_tuple3!(DeviceSoA3<First, Second, Third>, DeviceS
 impl<First, Second, Third, IndexSource> KernelSortByKeyValues<IndexSource>
     for (First, Second, Third)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView3<First, Second, Third>: KernelSortByKeyValues<IndexSource>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelSortByKeyValues<IndexSource>>::Runtime;
@@ -435,7 +437,7 @@ macro_rules! impl_kernel_sort_by_key_values_wide_tuple {
             $(
                 $ty: KernelColumn<Runtime = $first_ty::Runtime> + KernelColumnAt<S0>,
             )+
-            IndexSource: KernelColumn<Runtime = $first_ty::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = $first_ty::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             $first_ty::Item: Scalar + 'static,
             $first_ty::Expr: GpuExpr<$first_ty::Item>,
             $(
@@ -480,7 +482,7 @@ where
     E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = A::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = A::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     A::Item: Scalar + 'static,
     B::Item: Scalar + 'static,
     C::Item: Scalar + 'static,
@@ -495,7 +497,7 @@ where
     E::Expr: GpuExpr<E::Item>,
     F::Expr: GpuExpr<F::Item>,
     G::Expr: GpuExpr<G::Item>,
-    IndexSource::Expr: GpuExpr<u32>,
+    IndexSource::Expr: GpuExpr<MIndex>,
 {
     type Runtime = A::Runtime;
     type OutputValues = (

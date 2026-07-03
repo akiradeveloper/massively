@@ -7,7 +7,7 @@ fn count_reduced_values_after_mvec_slice<Values, Op, Pred>(
     init: Values::Item,
     op: Op,
     pred: Pred,
-) -> usize
+) -> massively::MIndex
 where
     Values: massively::MIter<WgpuRuntime>,
     Op: ReductionOp<WgpuRuntime, Values::Item>,

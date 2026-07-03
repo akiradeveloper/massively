@@ -6,6 +6,7 @@ use cubecl::prelude::Runtime;
 
 use crate::Error;
 use crate::detail::dispatch;
+use crate::index::MIndex;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 use crate::value::MItem;
 
@@ -81,9 +82,9 @@ impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for SoA7<A, B, C, D, E, F,
     }
 }
 
-pub(crate) fn normalize_soa_range<Bounds>(len: usize, range: Bounds) -> Range<usize>
+pub(crate) fn normalize_soa_range<Bounds>(len: MIndex, range: Bounds) -> Range<MIndex>
 where
-    Bounds: RangeBounds<usize>,
+    Bounds: RangeBounds<MIndex>,
 {
     let start = match range.start_bound() {
         Bound::Included(&start) => start,
@@ -115,7 +116,7 @@ macro_rules! impl_soa_slice_api {
             /// Returns read-only device slices for the given logical row range.
             pub fn slice<Bounds>(&self, range: Bounds) -> $name<$( DeviceSlice<'_, R, $ty> ),+>
             where
-                Bounds: RangeBounds<usize>,
+                Bounds: RangeBounds<MIndex>,
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
@@ -124,7 +125,7 @@ macro_rules! impl_soa_slice_api {
             /// Returns mutable device slices for the given logical row range.
             pub fn slice_mut<Bounds>(&self, range: Bounds) -> $name<$( DeviceSliceMut<'_, R, $ty> ),+>
             where
-                Bounds: RangeBounds<usize>,
+                Bounds: RangeBounds<MIndex>,
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice_mut(range.clone()) ),+)
@@ -138,7 +139,7 @@ macro_rules! impl_soa_slice_api {
             /// Returns read-only device subslices for the given logical row range.
             pub fn slice<Bounds>(&self, range: Bounds) -> $name<$( DeviceSlice<'_, R, $ty> ),+>
             where
-                Bounds: RangeBounds<usize>,
+                Bounds: RangeBounds<MIndex>,
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
@@ -152,7 +153,7 @@ macro_rules! impl_soa_slice_api {
             /// Returns read-only device subslices for the given logical row range.
             pub fn slice<Bounds>(&self, range: Bounds) -> $name<$( DeviceSlice<'_, R, $ty> ),+>
             where
-                Bounds: RangeBounds<usize>,
+                Bounds: RangeBounds<MIndex>,
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
@@ -161,7 +162,7 @@ macro_rules! impl_soa_slice_api {
             /// Returns mutable device subslices for the given logical row range.
             pub fn slice_mut<Bounds>(&self, range: Bounds) -> $name<$( DeviceSliceMut<'_, R, $ty> ),+>
             where
-                Bounds: RangeBounds<usize>,
+                Bounds: RangeBounds<MIndex>,
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice_mut(range.clone()) ),+)
@@ -227,7 +228,7 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
     ) -> Result<<Self::Item as MItem<R>>::View, Error>;
 
     /// Returns the logical length.
-    fn len(&self) -> usize;
+    fn len(&self) -> MIndex;
 
     /// Returns whether this slice has no elements.
     fn is_empty(&self) -> bool {
@@ -276,7 +277,7 @@ pub trait MIterMut<R: Runtime>: dispatch::MIterMutDispatch<R> + Sized {
     ) -> Result<(), Error>;
 
     /// Returns the logical length.
-    fn len(&self) -> usize;
+    fn len(&self) -> MIndex;
 
     /// Returns whether this output slice has no elements.
     fn is_empty(&self) -> bool {

@@ -7,19 +7,19 @@ pub(crate) trait KernelMinMaxInput<Less>: Sized {
         self,
         policy: &CubePolicy<Self::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error>;
+    ) -> Result<Option<MIndex>, Error>;
 
     fn max_element_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error>;
+    ) -> Result<Option<MIndex>, Error>;
 
     fn minmax_element_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<Option<(usize, usize)>, Error>;
+    ) -> Result<Option<(MIndex, MIndex)>, Error>;
 }
 
 #[allow(dead_code)]
@@ -30,7 +30,7 @@ pub(crate) trait KernelAdjacentFindInput<Pred>: Sized {
         self,
         policy: &CubePolicy<Self::Runtime>,
         pred: GpuOp<Pred>,
-    ) -> Result<Option<usize>, Error>;
+    ) -> Result<Option<MIndex>, Error>;
 }
 
 #[allow(dead_code)]
@@ -43,20 +43,20 @@ pub(crate) trait KernelSortedSearchInput<Less>: Sized {
         policy: &CubePolicy<Self::Runtime>,
         value: Self::Item,
         less: GpuOp<Less>,
-    ) -> Result<usize, Error>;
+    ) -> Result<MIndex, Error>;
 
     fn upper_bound_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         value: Self::Item,
         less: GpuOp<Less>,
-    ) -> Result<usize, Error>;
+    ) -> Result<MIndex, Error>;
 
     fn is_sorted_until_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<usize, Error>;
+    ) -> Result<MIndex, Error>;
 
     fn is_sorted_input(
         self,
@@ -74,14 +74,14 @@ pub(crate) trait KernelSortedSearchManyInput<Values, Less>: Sized {
         policy: &CubePolicy<Self::Runtime>,
         values: Values,
         less: GpuOp<Less>,
-    ) -> Result<crate::detail::DeviceVec<Self::Runtime, u32>, Error>;
+    ) -> Result<crate::detail::DeviceVec<Self::Runtime, MIndex>, Error>;
 
     fn upper_bound_many_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         values: Values,
         less: GpuOp<Less>,
-    ) -> Result<crate::detail::DeviceVec<Self::Runtime, u32>, Error>;
+    ) -> Result<crate::detail::DeviceVec<Self::Runtime, MIndex>, Error>;
 }
 
 #[allow(dead_code)]
@@ -100,14 +100,14 @@ pub(crate) trait KernelPairSearchInput<Other, Op>: Sized {
         policy: &CubePolicy<Self::Runtime>,
         other: Other,
         op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error>;
+    ) -> Result<Option<MIndex>, Error>;
 
     fn find_first_of_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
         other: Other,
         op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error>;
+    ) -> Result<Option<MIndex>, Error>;
 
     fn lexicographical_compare_input(
         self,

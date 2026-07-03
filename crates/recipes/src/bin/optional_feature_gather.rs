@@ -13,12 +13,12 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, gather_where};
+use massively::{DeviceVec, Executor, MIndex, SoA1, gather_where};
 
 fn solve<B>(
     exec: &Executor<B>,
     value: DeviceVec<B, f32>,
-    index: DeviceVec<B, u32>,
+    index: DeviceVec<B, MIndex>,
     available: DeviceVec<B, u32>,
 ) -> common::Result<DeviceVec<B, f32>>
 where

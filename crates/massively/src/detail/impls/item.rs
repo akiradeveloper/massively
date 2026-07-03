@@ -51,16 +51,16 @@ macro_rules! soa_value {
 macro_rules! alloc_inner {
     ($exec:expr, $len:expr; $( $ty:ty ),+) => {{
         let len = $len;
-        u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let policy = $exec.policy();
         if len == 0 {
             Ok(($( policy.empty_device_vec::<$ty>(), )+))
         } else {
             let client = policy.client();
+            let len_usize = usize_from_mindex(len);
             Ok(($(
                 crate::detail::DeviceVec::from_handle(
                     policy.id(),
-                    client.empty(len * std::mem::size_of::<$ty>()),
+                    client.empty(len_usize * std::mem::size_of::<$ty>()),
                     len,
                 ),
             )+))
@@ -84,7 +84,7 @@ macro_rules! impl_mitem_tuple {
                 soa_value!($( DeviceVec::from_inner($var) ),+)
             }
 
-            fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error> {
+            fn alloc_vec(exec: &Executor<R>, len: MIndex) -> Result<Self::Vec, Error> {
                 Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
             }
         }
@@ -110,20 +110,20 @@ macro_rules! impl_mitem_tuple {
                 <Self::Item as MItem<R>>::vec_from_inner(inner)
             }
 
-            fn len(&self) -> usize {
+            fn len(&self) -> MIndex {
                 self.0.len()
             }
 
             fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
             where
-                Bounds: std::ops::RangeBounds<usize>,
+                Bounds: std::ops::RangeBounds<MIndex>,
             {
                 <soa_type!($( DeviceVec<R, $ty> ),+)>::slice(self, range)
             }
 
             fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
             where
-                Bounds: std::ops::RangeBounds<usize>,
+                Bounds: std::ops::RangeBounds<MIndex>,
             {
                 <soa_type!($( DeviceVec<R, $ty> ),+)>::slice_mut(self, range)
             }
@@ -526,7 +526,7 @@ macro_rules! impl_wide_mitem_tuple {
                 soa_value!($( DeviceVec::from_inner($var) ),+)
             }
 
-            fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error> {
+            fn alloc_vec(exec: &Executor<R>, len: MIndex) -> Result<Self::Vec, Error> {
                 Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
             }
         }
@@ -552,20 +552,20 @@ macro_rules! impl_wide_mitem_tuple {
                 <Self::Item as MItem<R>>::vec_from_inner(inner)
             }
 
-            fn len(&self) -> usize {
+            fn len(&self) -> MIndex {
                 self.0.len()
             }
 
             fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
             where
-                Bounds: std::ops::RangeBounds<usize>,
+                Bounds: std::ops::RangeBounds<MIndex>,
             {
                 <soa_type!($( DeviceVec<R, $ty> ),+)>::slice(self, range)
             }
 
             fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
             where
-                Bounds: std::ops::RangeBounds<usize>,
+                Bounds: std::ops::RangeBounds<MIndex>,
             {
                 <soa_type!($( DeviceVec<R, $ty> ),+)>::slice_mut(self, range)
             }

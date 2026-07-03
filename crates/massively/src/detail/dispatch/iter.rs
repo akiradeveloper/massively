@@ -588,10 +588,10 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Self: MIter<R>,
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = MIndex>
             + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
         <Indices as crate::detail::device::KernelColumn>::Expr:
-            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+            crate::expr::GpuExpr<MIndex> + crate::expr::DeviceGpuExpr<MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, indices, output);
@@ -605,10 +605,10 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = MIndex>
             + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
         <Indices as crate::detail::device::KernelColumn>::Expr:
-            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+            crate::expr::GpuExpr<MIndex> + crate::expr::DeviceGpuExpr<MIndex>,
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, indices);
@@ -624,10 +624,10 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Self: MIter<R>,
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = MIndex>
             + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
         <Indices as crate::detail::device::KernelColumn>::Expr:
-            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+            crate::expr::GpuExpr<MIndex> + crate::expr::DeviceGpuExpr<MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -643,9 +643,9 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Self: MIter<R>,
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = MIndex>
             + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-        <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+        <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -662,10 +662,10 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Self: MIter<R>,
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
+        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = MIndex>
             + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
         <Indices as crate::detail::device::KernelColumn>::Expr:
-            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+            crate::expr::GpuExpr<MIndex> + crate::expr::DeviceGpuExpr<MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -776,7 +776,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<usize, Error>
+    ) -> Result<MIndex, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -832,7 +832,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
@@ -917,7 +917,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         less: Less,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -930,7 +930,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         less: Less,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -943,7 +943,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         less: Less,
-    ) -> Result<Option<(usize, usize)>, Error>
+    ) -> Result<Option<(MIndex, MIndex)>, Error>
     where
         Self: MIter<R>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -956,7 +956,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -986,7 +986,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         _policy: &crate::detail::CubePolicy<R>,
         _right: Right,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
@@ -1002,7 +1002,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         _policy: &crate::detail::CubePolicy<R>,
         _needles: Needles,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
@@ -1018,7 +1018,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
         _less: Less,
-    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
     where
         Self: MIter<R>,
         Values: MIter<R, Item = <Self as MIter<R>>::Item>,
@@ -1033,7 +1033,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
         _less: Less,
-    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
     where
         Self: MIter<R>,
         Values: MIter<R, Item = <Self as MIter<R>>::Item>,
@@ -1047,7 +1047,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         less: Less,
-    ) -> Result<usize, Error>
+    ) -> Result<MIndex, Error>
     where
         Self: MIter<R>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1173,7 +1173,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         _policy: &crate::detail::CubePolicy<R>,
         _right: Self,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1188,7 +1188,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         _policy: &crate::detail::CubePolicy<R>,
         _needles: Self,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Self: MIter<R>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,

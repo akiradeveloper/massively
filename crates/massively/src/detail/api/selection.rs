@@ -5,6 +5,7 @@ use crate::{
         StorageKernelColumn,
     },
     error::Error,
+    index::MIndex,
     policy::CubePolicy,
 };
 use cubecl::prelude::*;
@@ -158,7 +159,7 @@ pub fn count_if<Source, Pred>(
     source: Source,
     _pred: Pred,
     env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
@@ -210,7 +211,7 @@ pub fn find_if<Source, Pred>(
     source: Source,
     _pred: Pred,
     env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
@@ -222,7 +223,7 @@ fn find_if_not<Source, Pred>(
     source: Source,
     _pred: Pred,
     env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {

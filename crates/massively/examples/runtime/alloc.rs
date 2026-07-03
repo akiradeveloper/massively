@@ -7,8 +7,8 @@ use massively::{Executor, scatter};
 fn scatter_to_new<R, Input>(
     exec: &Executor<R>,
     source: Input,
-    indices: DeviceSlice<'_, R, u32>,
-    len: usize,
+    indices: DeviceSlice<'_, R, MIndex>,
+    len: MIndex,
 ) -> Result<<Input::Item as MItem<R>>::Vec, massively::Error>
 where
     R: cubecl::prelude::Runtime,

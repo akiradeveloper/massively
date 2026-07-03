@@ -4,6 +4,7 @@ use cubecl::prelude::Runtime;
 
 use crate::detail::dispatch as sealed;
 use crate::detail::op_adapter::{KernelOp, StencilFlag};
+use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
 use crate::runtime::{DeviceSlice, DeviceVec, Executor};

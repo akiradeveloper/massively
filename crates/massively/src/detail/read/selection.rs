@@ -49,14 +49,14 @@ pub(crate) trait KernelPredicateQueryInput<Pred>: Sized {
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<usize, Error>;
+    ) -> Result<MIndex, Error>;
 
     fn find_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<Option<usize>, Error>;
+    ) -> Result<Option<MIndex>, Error>;
 }
 
 #[allow(dead_code)]
@@ -1101,7 +1101,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <Source as KernelColumn>::validate(&self)?;
         crate::detail::api::device_expr_count_if_with_policy::<Source, Pred>(
             policy, &self, invert, env,
@@ -1113,7 +1113,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Source as KernelColumn>::validate(&self)?;
         crate::detail::api::device_expr_find_if_with_policy::<Source, Pred>(
             policy, &self, invert, env,
@@ -1138,7 +1138,7 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 crate::detail::api::device_expr_count_if_with_policy::<Source, Pred>(
                     policy,
@@ -1153,7 +1153,7 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 crate::detail::api::device_expr_find_if_with_policy::<Source, Pred>(
                     policy,
@@ -1183,7 +1183,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::count_read(
             self.0, policy, invert, env,
         )
@@ -1194,7 +1194,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::find_read(
             self.0, policy, invert, env,
         )
@@ -1221,7 +1221,7 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
@@ -1229,7 +1229,7 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                     invert,
                     env,
                 )?;
-                select::selected_count(policy, &handles)
+                mindex_from_usize(select::selected_count(policy, &handles)?)
             }
 
             fn find_read(
@@ -1237,7 +1237,7 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 let handles = tuple2_selection_handles_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
@@ -1266,7 +1266,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::count_read(
             SoAView2 {
                 left: self.0,
@@ -1283,7 +1283,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::find_read(
             SoAView2 {
                 left: self.0,
@@ -1319,7 +1319,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
                     &self.$first,
@@ -1328,7 +1328,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     invert,
                     env,
                 )?;
-                select::selected_count(policy, &handles)
+                mindex_from_usize(select::selected_count(policy, &handles)?)
             }
 
             fn find_read(
@@ -1336,7 +1336,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 let handles = tuple3_selection_handles_read::<First, Second, Third, Pred>(
                     policy,
                     &self.$first,
@@ -1366,7 +1366,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::count_read(
             SoAView3 {
                 first: self.0,
@@ -1384,7 +1384,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::find_read(
             SoAView3 {
                 first: self.0,
@@ -1404,9 +1404,9 @@ fn is_partitioned_from_flags_read<R: Runtime>(
 ) -> Result<bool, Error> {
     let first_rejected =
         primitive_search::first_unset_flag(policy, handles.flag.clone(), handles.len, handles.len)?
-            .unwrap_or(handles.len);
+            .unwrap_or(mindex_from_usize(handles.len)?);
     let selected_count = select::selected_count(policy, handles)?;
-    Ok(selected_count == first_rejected)
+    Ok(mindex_from_usize(selected_count)? == first_rejected)
 }
 
 fn is_partitioned_single_read<R: Runtime>(
@@ -1418,13 +1418,13 @@ fn is_partitioned_single_read<R: Runtime>(
     else {
         return Ok(true);
     };
-    if point + 1 >= handles.len {
+    let point_usize = point as usize;
+    if point_usize + 1 >= handles.len {
         return Ok(true);
     }
 
     let client = policy.client();
-    let point_u32 = u32::try_from(point).map_err(|_| Error::LengthTooLarge { len: point })?;
-    let point_handle = client.create_from_slice(u32::as_bytes(&[point_u32]));
+    let point_handle = client.create_from_slice(u32::as_bytes(&[point]));
     let tail_flags = client.empty(handles.len * std::mem::size_of::<u32>());
     let block_count_u32 = selection_block_count_read(handles.len)?;
     unsafe {
@@ -2309,9 +2309,10 @@ macro_rules! impl_kernel_unique_tuple2 {
                 let len = <Left as KernelColumn>::len(&self.$left);
                 let left = stage_unique_column(policy, &self.$left)?;
                 let right = stage_unique_column(policy, &self.$right)?;
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let len_u32 = mindex_from_usize(len)?;
+                let len_usize = len;
                 let client = policy.client();
-                let flag = client.empty(len * std::mem::size_of::<u32>());
+                let flag = client.empty(len_usize * std::mem::size_of::<u32>());
                 if len != 0 {
                     let block_count_u32 = unique_block_count_read(len)?;
                     unsafe {
@@ -2336,7 +2337,7 @@ macro_rules! impl_kernel_unique_tuple2 {
                             BufferArg::from_raw_parts(right.slot2.0.clone(), right.slot2.1),
                             BufferArg::from_raw_parts(right.slot3.0.clone(), right.slot3.1),
                             BufferArg::from_raw_parts(right.slot_offsets.clone(), 4),
-                            BufferArg::from_raw_parts(flag.clone(), len),
+                            BufferArg::from_raw_parts(flag.clone(), len_usize),
                         );
                     }
                 }
@@ -2414,9 +2415,10 @@ macro_rules! impl_kernel_unique_tuple3 {
                 let first = stage_unique_column(policy, &self.$first)?;
                 let second = stage_unique_column(policy, &self.$second)?;
                 let third = stage_unique_column(policy, &self.$third)?;
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let len_u32 = mindex_from_usize(len)?;
+                let len_usize = len;
                 let client = policy.client();
-                let flag = client.empty(len * std::mem::size_of::<u32>());
+                let flag = client.empty(len_usize * std::mem::size_of::<u32>());
                 if len != 0 {
                     let block_count_u32 = unique_block_count_read(len)?;
                     unsafe {
@@ -2448,7 +2450,7 @@ macro_rules! impl_kernel_unique_tuple3 {
                             BufferArg::from_raw_parts(third.slot2.0.clone(), third.slot2.1),
                             BufferArg::from_raw_parts(third.slot3.0.clone(), third.slot3.1),
                             BufferArg::from_raw_parts(third.slot_offsets.clone(), 4),
-                            BufferArg::from_raw_parts(flag.clone(), len),
+                            BufferArg::from_raw_parts(flag.clone(), len_usize),
                         );
                     }
                 }

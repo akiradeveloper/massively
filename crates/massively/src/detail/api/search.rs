@@ -6,6 +6,7 @@ use crate::{
     },
     error::Error,
     expr::DeviceGpuExpr,
+    index::{MIndex, mindex_from_usize},
     kernels::*,
     op::GpuOp,
     policy::CubePolicy,
@@ -54,7 +55,7 @@ fn device_expr_mismatch<Left, Right, Op>(
     policy: &CubePolicy<Left::Runtime>,
     left: &Left,
     right: &Right,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -122,14 +123,14 @@ where
     if left.len() == right.len() {
         Ok(None)
     } else {
-        Ok(Some(min_len))
+        Ok(Some(mindex_from_usize(min_len)?))
     }
 }
 
 fn device_expr_adjacent_find<Source, Pred>(
     policy: &CubePolicy<Source::Runtime>,
     input: &Source,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -177,7 +178,7 @@ where
 fn device_expr_is_sorted_until<Source, Less>(
     policy: &CubePolicy<Source::Runtime>,
     input: &Source,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -187,7 +188,7 @@ where
     input.validate()?;
     let len = input.len();
     if len <= 1 {
-        return Ok(len);
+        return mindex_from_usize(len);
     }
 
     let client = policy.client();
@@ -219,14 +220,14 @@ where
         );
     }
 
-    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(mindex_from_usize(len)?))
 }
 
 fn device_expr_lower_bound<Source, Less>(
     policy: &CubePolicy<Source::Runtime>,
     input: &Source,
     value: Source::Item,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -270,14 +271,14 @@ where
         );
     }
 
-    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(mindex_from_usize(len)?))
 }
 
 fn device_expr_upper_bound<Source, Less>(
     policy: &CubePolicy<Source::Runtime>,
     input: &Source,
     value: Source::Item,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -321,14 +322,14 @@ where
         );
     }
 
-    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(len))
+    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(mindex_from_usize(len)?))
 }
 
 fn device_expr_lower_bound_many<Source, Values, Less>(
     policy: &CubePolicy<Source::Runtime>,
     input: &Source,
     values: &Values,
-) -> Result<DeviceVec<Source::Runtime, u32>, Error>
+) -> Result<DeviceVec<Source::Runtime, MIndex>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
@@ -349,12 +350,12 @@ where
         return Ok(policy.empty_device_vec());
     }
     if source_len == 0 {
-        return policy.device_filled(value_len, 0u32);
+        return policy.device_filled(value_len, 0 as MIndex);
     }
 
     let client = policy.client();
     let block_count_u32 = search_block_count(value_len)?;
-    let output_handle = client.empty(value_len * std::mem::size_of::<u32>());
+    let output_handle = client.empty(value_len * std::mem::size_of::<MIndex>());
     let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
     let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
     let input = stage_search_column(policy, input)?;
@@ -398,7 +399,7 @@ fn device_expr_upper_bound_many<Source, Values, Less>(
     policy: &CubePolicy<Source::Runtime>,
     input: &Source,
     values: &Values,
-) -> Result<DeviceVec<Source::Runtime, u32>, Error>
+) -> Result<DeviceVec<Source::Runtime, MIndex>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
@@ -419,12 +420,12 @@ where
         return Ok(policy.empty_device_vec());
     }
     if source_len == 0 {
-        return policy.device_filled(value_len, 0u32);
+        return policy.device_filled(value_len, 0 as MIndex);
     }
 
     let client = policy.client();
     let block_count_u32 = search_block_count(value_len)?;
-    let output_handle = client.empty(value_len * std::mem::size_of::<u32>());
+    let output_handle = client.empty(value_len * std::mem::size_of::<MIndex>());
     let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
     let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
     let input = stage_search_column(policy, input)?;
@@ -468,7 +469,7 @@ fn device_expr_find_first_of<Left, Right, Op>(
     policy: &CubePolicy<Left::Runtime>,
     input: &Left,
     needles: &Right,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -642,7 +643,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(
             super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)?
@@ -654,7 +655,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(
             super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)?
@@ -666,7 +667,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<Option<(usize, usize)>, Error> {
+    ) -> Result<Option<(MIndex, MIndex)>, Error> {
         ReadOnlySoA::validate(&self)?;
         super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)
     }
@@ -685,7 +686,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::min_element_input(
             SoAView1 { source: self },
             policy,
@@ -697,7 +698,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::max_element_input(
             SoAView1 { source: self },
             policy,
@@ -709,7 +710,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<Option<(usize, usize)>, Error> {
+    ) -> Result<Option<(MIndex, MIndex)>, Error> {
         <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
             SoAView1 { source: self },
             policy,
@@ -731,7 +732,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Source as crate::detail::read::KernelMinMaxInput<super::Tuple1Less<Less>>>::min_element_input(
             self.0,
             policy,
@@ -743,7 +744,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Source as crate::detail::read::KernelMinMaxInput<super::Tuple1Less<Less>>>::max_element_input(
             self.0,
             policy,
@@ -755,7 +756,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<Option<(usize, usize)>, Error> {
+    ) -> Result<Option<(MIndex, MIndex)>, Error> {
         <Source as crate::detail::read::KernelMinMaxInput<super::Tuple1Less<Less>>>::minmax_element_input(
             self.0,
             policy,
@@ -778,7 +779,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _pred: GpuOp<Pred>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         device_expr_adjacent_find::<Source, Pred>(policy, &self.source)
     }
@@ -797,7 +798,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         pred: GpuOp<Pred>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView1<Source> as crate::detail::read::KernelAdjacentFindInput<Pred>>::adjacent_find_input(
             SoAView1 { source: self },
             policy,
@@ -819,7 +820,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _pred: GpuOp<Pred>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Source as crate::detail::read::KernelAdjacentFindInput<super::Tuple1Less<Pred>>>::adjacent_find_input(
             self.0,
             policy,
@@ -844,7 +845,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         _less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         ReadOnlySoA::validate(&self)?;
         device_expr_lower_bound::<Source, Less>(policy, &self.source, value)
     }
@@ -854,7 +855,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         _less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         ReadOnlySoA::validate(&self)?;
         device_expr_upper_bound::<Source, Less>(policy, &self.source, value)
     }
@@ -863,7 +864,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         ReadOnlySoA::validate(&self)?;
         device_expr_is_sorted_until::<Source, Less>(policy, &self.source)
     }
@@ -877,7 +878,7 @@ where
         Ok(
             <Self as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
                 self, policy, less,
-            )? == len,
+            )? == mindex_from_usize(len)?,
         )
     }
 }
@@ -901,7 +902,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         values: SoAView1<Values>,
         _less: GpuOp<Less>,
-    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
         device_expr_lower_bound_many::<Source, Values, Less>(policy, &self.source, &values.source)
@@ -912,7 +913,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         values: SoAView1<Values>,
         _less: GpuOp<Less>,
-    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
         device_expr_upper_bound_many::<Source, Values, Less>(policy, &self.source, &values.source)
@@ -934,7 +935,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::lower_bound_input(
             SoAView1 { source: self },
             policy,
@@ -948,7 +949,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::upper_bound_input(
             SoAView1 { source: self },
             policy,
@@ -961,7 +962,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
             SoAView1 { source: self },
             policy,
@@ -998,7 +999,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         values: Values,
         less: GpuOp<Less>,
-    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         <SoAView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
             SoAView1<Values>,
             Less,
@@ -1015,7 +1016,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         values: Values,
         less: GpuOp<Less>,
-    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         <SoAView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
             SoAView1<Values>,
             Less,
@@ -1043,7 +1044,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         _less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::lower_bound_input(
             self.0,
             policy,
@@ -1057,7 +1058,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         value: Self::Item,
         _less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::upper_bound_input(
             self.0,
             policy,
@@ -1070,7 +1071,7 @@ where
         self,
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
-    ) -> Result<usize, Error> {
+    ) -> Result<MIndex, Error> {
         <Source as crate::detail::read::KernelSortedSearchInput<super::Tuple1Less<Less>>>::is_sorted_until_input(
             self.0,
             policy,
@@ -1108,7 +1109,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         values: (Values,),
         _less: GpuOp<Less>,
-    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         <Source as crate::detail::read::KernelSortedSearchManyInput<
             Values,
             super::Tuple1Less<Less>,
@@ -1125,7 +1126,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         values: (Values,),
         _less: GpuOp<Less>,
-    ) -> Result<DeviceVec<Source::Runtime, u32>, Error> {
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         <Source as crate::detail::read::KernelSortedSearchManyInput<
             Values,
             super::Tuple1Less<Less>,
@@ -1152,7 +1153,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 policy: &CubePolicy<Self::Runtime>,
                 value: Self::Item,
                 less: GpuOp<Less>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::lower_bound_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
@@ -1166,7 +1167,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 policy: &CubePolicy<Self::Runtime>,
                 value: Self::Item,
                 less: GpuOp<Less>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::upper_bound_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
@@ -1179,7 +1180,7 @@ macro_rules! impl_sorted_search_tuple_input {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 less: GpuOp<Less>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 <$view<$( $ty ),+> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
                     $view { $( $field: self.$index ),+ },
                     policy,
@@ -1236,7 +1237,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         device_expr_mismatch::<Left, Right, Op>(policy, &self.source, &other.source)
     }
 
@@ -1245,7 +1246,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         other: SoAView1<Right>,
         _op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&other)?;
         device_expr_find_first_of::<Left, Right, Op>(policy, &self.source, &other.source)
@@ -1293,7 +1294,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         other: Right,
         op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::mismatch_input(
             SoAView1 { source: self },
             policy,
@@ -1307,7 +1308,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         other: Right,
         op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::find_first_of_input(
             SoAView1 { source: self },
             policy,
@@ -1361,7 +1362,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         other: (Right,),
         _op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Left as crate::detail::read::KernelPairSearchInput<Right, super::Tuple1Less<Op>>>::mismatch_input(
             self.0,
             policy,
@@ -1375,7 +1376,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         other: (Right,),
         _op: GpuOp<Op>,
-    ) -> Result<Option<usize>, Error> {
+    ) -> Result<Option<MIndex>, Error> {
         <Left as crate::detail::read::KernelPairSearchInput<Right, super::Tuple1Less<Op>>>::find_first_of_input(
             self.0,
             policy,
@@ -1433,7 +1434,7 @@ macro_rules! impl_pair_search_tuple_input {
                 policy: &CubePolicy<Self::Runtime>,
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::mismatch_input(
                     $view { $( $field: self.$left_index ),+ },
                     policy,
@@ -1447,7 +1448,7 @@ macro_rules! impl_pair_search_tuple_input {
                 policy: &CubePolicy<Self::Runtime>,
                 other: ($( $right_ty ),+),
                 op: GpuOp<Op>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 <$view<$( $left_ty ),+> as crate::detail::read::KernelPairSearchInput<$view<$( $right_ty ),+>, Op>>::find_first_of_input(
                     $view { $( $field: self.$left_index ),+ },
                     policy,
@@ -1521,7 +1522,7 @@ macro_rules! impl_tuple_search {
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 less: GpuOp<Less>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 Ok(
                     <Self as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
                         self, policy, less,
@@ -1534,7 +1535,7 @@ macro_rules! impl_tuple_search {
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 less: GpuOp<Less>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 Ok(
                     <Self as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
                         self, policy, less,
@@ -1547,7 +1548,7 @@ macro_rules! impl_tuple_search {
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 _less: GpuOp<Less>,
-            ) -> Result<Option<(usize, usize)>, Error> {
+            ) -> Result<Option<(MIndex, MIndex)>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
@@ -1565,7 +1566,7 @@ macro_rules! impl_tuple_search {
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
                 let mut current_handle =
-                    client.empty(current_count * 2 * std::mem::size_of::<u32>());
+                    client.empty(current_count * 2 * std::mem::size_of::<MIndex>());
 
                 unsafe {
                     $minmax_element_kernel::launch_unchecked::<
@@ -1603,7 +1604,7 @@ macro_rules! impl_tuple_search {
                     let candidate_len_handle =
                         client.create_from_slice(u32::as_bytes(&[current_count_u32]));
                     let next_handle =
-                        client.empty(next_count * 2 * std::mem::size_of::<u32>());
+                        client.empty(next_count * 2 * std::mem::size_of::<MIndex>());
 
                     unsafe {
                         $minmax_index_kernel::launch_unchecked::<
@@ -1644,7 +1645,7 @@ macro_rules! impl_tuple_search {
                     message: format!("{err:?}"),
                 })?;
                 let indices = u32::from_bytes(&bytes);
-                Ok(Some((indices[0] as usize, indices[1] as usize)))
+                Ok(Some((indices[0], indices[1])))
             }
         }
 
@@ -1674,7 +1675,7 @@ macro_rules! impl_tuple_search {
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 _pred: GpuOp<Pred>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
@@ -1750,7 +1751,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 value: Self::Item,
                 _less: GpuOp<Less>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 ReadOnlySoA::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
@@ -1806,7 +1807,7 @@ macro_rules! impl_tuple_search {
                     );
                 }
                 Ok(search::first_flag(policy, flag_handle, len, len)?
-                    .unwrap_or(len))
+                    .unwrap_or(mindex_from_usize(len)?))
             }
 
             fn upper_bound_input(
@@ -1814,7 +1815,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 value: Self::Item,
                 _less: GpuOp<Less>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 ReadOnlySoA::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
@@ -1870,14 +1871,14 @@ macro_rules! impl_tuple_search {
                     );
                 }
                 Ok(search::first_flag(policy, flag_handle, len, len)?
-                    .unwrap_or(len))
+                    .unwrap_or(mindex_from_usize(len)?))
             }
 
             fn is_sorted_until_input(
                 self,
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 _less: GpuOp<Less>,
-            ) -> Result<usize, Error> {
+            ) -> Result<MIndex, Error> {
                 ReadOnlySoA::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
@@ -1885,7 +1886,7 @@ macro_rules! impl_tuple_search {
                     let $field = stage_search_column(policy, &self.$field)?;
                 )+
                 if len <= 1 {
-                    return Ok(len);
+                    return mindex_from_usize(len);
                 }
                 let block_count_u32 = search_block_count(len)?;
                 let client = policy.client();
@@ -1918,7 +1919,7 @@ macro_rules! impl_tuple_search {
                     );
                 }
                 Ok(search::first_flag(policy, flag_handle, len, len)?
-                    .unwrap_or(len))
+                    .unwrap_or(mindex_from_usize(len)?))
             }
 
             fn is_sorted_input(
@@ -1931,7 +1932,7 @@ macro_rules! impl_tuple_search {
                     <Self as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
                         self, policy, less,
                     )?
-                    == len,
+                    == mindex_from_usize(len)?,
                 )
             }
         }
@@ -1965,7 +1966,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 values: $name<$first, $( $rest ),+>,
                 _less: GpuOp<Less>,
-            ) -> Result<DeviceVec<<$first as KernelColumn>::Runtime, u32>, Error> {
+            ) -> Result<DeviceVec<<$first as KernelColumn>::Runtime, MIndex>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&values)?;
                 let source_len = self.$first_field.len();
@@ -1978,11 +1979,11 @@ macro_rules! impl_tuple_search {
                     return Ok(policy.empty_device_vec());
                 }
                 if source_len == 0 {
-                    return policy.device_filled(value_len, 0u32);
+                    return policy.device_filled(value_len, 0 as MIndex);
                 }
                 let source_len_handle = policy.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
                 let value_len_handle = policy.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
-                let output_handle = policy.client().empty(value_len * std::mem::size_of::<u32>());
+                let output_handle = policy.client().empty(value_len * std::mem::size_of::<MIndex>());
                 let block_count_u32 = search_block_count(value_len)?;
                 let $first_field = (
                     stage_search_column(policy, &self.$first_field)?,
@@ -2043,7 +2044,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 values: $name<$first, $( $rest ),+>,
                 _less: GpuOp<Less>,
-            ) -> Result<DeviceVec<<$first as KernelColumn>::Runtime, u32>, Error> {
+            ) -> Result<DeviceVec<<$first as KernelColumn>::Runtime, MIndex>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&values)?;
                 let source_len = self.$first_field.len();
@@ -2056,11 +2057,11 @@ macro_rules! impl_tuple_search {
                     return Ok(policy.empty_device_vec());
                 }
                 if source_len == 0 {
-                    return policy.device_filled(value_len, 0u32);
+                    return policy.device_filled(value_len, 0 as MIndex);
                 }
                 let source_len_handle = policy.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
                 let value_len_handle = policy.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
-                let output_handle = policy.client().empty(value_len * std::mem::size_of::<u32>());
+                let output_handle = policy.client().empty(value_len * std::mem::size_of::<MIndex>());
                 let block_count_u32 = search_block_count(value_len)?;
                 let $first_field = (
                     stage_search_column(policy, &self.$first_field)?,
@@ -2191,7 +2192,7 @@ macro_rules! impl_tuple_pair_search {
                 policy: &CubePolicy<Self::Runtime>,
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
                 let left_len = self.$first_field.len();
@@ -2264,7 +2265,7 @@ macro_rules! impl_tuple_pair_search {
                 if left_len == right_len {
                     Ok(None)
                 } else {
-                    Ok(Some(min_len))
+                    Ok(Some(mindex_from_usize(min_len)?))
                 }
             }
 
@@ -2273,7 +2274,7 @@ macro_rules! impl_tuple_pair_search {
                 policy: &CubePolicy<Self::Runtime>,
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
-            ) -> Result<Option<usize>, Error> {
+            ) -> Result<Option<MIndex>, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
                 let input_len = self.$first_field.len();
@@ -2496,7 +2497,7 @@ pub fn min_element<Input, Less>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelMinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Input: crate::detail::read::KernelMinMaxInput<Less>,
 {
@@ -2508,7 +2509,7 @@ pub fn max_element<Input, Less>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelMinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Input: crate::detail::read::KernelMinMaxInput<Less>,
 {
@@ -2520,7 +2521,7 @@ pub fn minmax_element<Input, Less>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelMinMaxInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
-) -> Result<Option<(usize, usize)>, Error>
+) -> Result<Option<(MIndex, MIndex)>, Error>
 where
     Input: crate::detail::read::KernelMinMaxInput<Less>,
 {
@@ -2532,7 +2533,7 @@ pub fn adjacent_find<Input, Pred>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelAdjacentFindInput<Pred>>::Runtime>,
     input: Input,
     _pred: Pred,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Input: crate::detail::read::KernelAdjacentFindInput<Pred>,
 {
@@ -2558,7 +2559,7 @@ pub fn mismatch<Left, Right, Eq>(
     left: Left,
     right: Right,
     _eq: Eq,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Left: crate::detail::read::KernelPairSearchInput<Right, Eq>,
 {
@@ -2573,7 +2574,7 @@ pub fn find_first_of<Input, Needles, Eq>(
     input: Input,
     needles: Needles,
     _eq: Eq,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     Input: crate::detail::read::KernelPairSearchInput<Needles, Eq>,
 {
@@ -2627,7 +2628,7 @@ pub fn is_sorted_until<Input, Less>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelSortedSearchInput<Less>>::Runtime>,
     input: Input,
     _less: Less,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     Input: crate::detail::read::KernelSortedSearchInput<Less>,
 {

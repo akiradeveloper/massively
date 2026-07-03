@@ -13,14 +13,14 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, lower_bound};
+use massively::{DeviceVec, Executor, MIndex, SoA1, lower_bound};
 
 fn solve<B>(
     exec: &Executor<B>,
     timestamp: DeviceVec<B, u32>,
     start: u32,
     end: u32,
-) -> common::Result<(usize, usize)>
+) -> common::Result<(MIndex, MIndex)>
 where
     B: cubecl::prelude::Runtime,
 {
@@ -32,7 +32,7 @@ where
         common::LessU32,
     )?;
     let indices = exec.to_host(&indices)?;
-    Ok((indices[0] as usize, indices[1] as usize))
+    Ok((indices[0], indices[1]))
 }
 
 fn main() -> common::Result {

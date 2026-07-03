@@ -30,7 +30,13 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {}
 
-pub(crate) fn ensure_same_len(actual: usize, expected: usize) -> Result<(), Error> {
+pub(crate) fn ensure_same_len<A, B>(actual: A, expected: B) -> Result<(), Error>
+where
+    A: LengthForCompare,
+    B: LengthForCompare,
+{
+    let actual = actual.to_usize_len();
+    let expected = expected.to_usize_len();
     if actual != expected {
         return Err(Error::LengthMismatch {
             input: actual,
@@ -38,4 +44,20 @@ pub(crate) fn ensure_same_len(actual: usize, expected: usize) -> Result<(), Erro
         });
     }
     Ok(())
+}
+
+pub(crate) trait LengthForCompare {
+    fn to_usize_len(self) -> usize;
+}
+
+impl LengthForCompare for usize {
+    fn to_usize_len(self) -> usize {
+        self
+    }
+}
+
+impl LengthForCompare for u32 {
+    fn to_usize_len(self) -> usize {
+        self as usize
+    }
 }

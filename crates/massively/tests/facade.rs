@@ -258,7 +258,7 @@ fn minmax_element2<R, S1, Less>(
     exec: &Executor<R>,
     source: S1,
     less: Less,
-) -> Result<Option<(usize, usize)>, massively::Error>
+) -> Result<Option<(massively::MIndex, massively::MIndex)>, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
@@ -271,7 +271,7 @@ fn adjacent_find2<R, S1, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<Option<usize>, massively::Error>
+) -> Result<Option<massively::MIndex>, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
@@ -285,7 +285,7 @@ fn lower_bound2<R, S1, Values, Less>(
     source: S1,
     values: Values,
     less: Less,
-) -> Result<massively::DeviceVec<R, u32>, massively::Error>
+) -> Result<massively::DeviceVec<R, massively::MIndex>, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
@@ -311,7 +311,7 @@ where
 fn gather2<R, S1, S2>(
     exec: &Executor<R>,
     source: S1,
-    indices: DeviceSlice<'_, R, u32>,
+    indices: DeviceSlice<'_, R, massively::MIndex>,
     out: S2,
 ) -> Result<(), massively::Error>
 where
@@ -351,7 +351,7 @@ fn count_if2<R, S1, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<usize, massively::Error>
+) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
@@ -364,7 +364,7 @@ fn find_if2<R, S1, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<Option<usize>, massively::Error>
+) -> Result<Option<massively::MIndex>, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,

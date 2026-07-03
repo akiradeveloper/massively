@@ -96,6 +96,7 @@ where
     if count == 0 {
         return Ok(policy.empty_device_vec());
     }
+    let handles_len = handles.len;
     let output_handle = client.empty(count * std::mem::size_of::<T>());
 
     let block_count_u32 = select_block_count(handles.len)?;
@@ -104,9 +105,9 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_SELECT_SIZE),
-            unsafe { BufferArg::from_raw_parts(handles.flag.clone(), handles.len) },
-            unsafe { BufferArg::from_raw_parts(handles.position.clone(), handles.len) },
-            unsafe { BufferArg::from_raw_parts(handles.value.clone(), handles.len) },
+            unsafe { BufferArg::from_raw_parts(handles.flag.clone(), handles_len) },
+            unsafe { BufferArg::from_raw_parts(handles.position.clone(), handles_len) },
+            unsafe { BufferArg::from_raw_parts(handles.value.clone(), handles_len) },
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), count) },
         );
     }

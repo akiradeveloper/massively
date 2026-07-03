@@ -752,9 +752,9 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
                 if control.len == 0 {
                     return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
                 }
-                let dummy4 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy4 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy4 = DeviceColumnView::from_column(&dummy4);
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
@@ -807,8 +807,8 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
                 if control.len == 0 {
                     return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
                 }
-                let dummy5 = primitive_range::indices_u32(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
                 let scan_control: ScanByKeyControl<R> = control.into();
@@ -862,7 +862,7 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
                 if control.len == 0 {
                     return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
                 }
-                let dummy6 = primitive_range::indices_u32(policy, self.0.len)?;
+                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
                 let scan_control: ScanByKeyControl<R> = control.into();
                 let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<

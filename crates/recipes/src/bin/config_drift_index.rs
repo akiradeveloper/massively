@@ -5,7 +5,7 @@
 //!
 //! # Task
 //!
-//! Implement `solve(expected, actual) -> Option<usize>`.
+//! Implement `solve(expected, actual) -> Option<MIndex>`.
 //!
 //! # GPU Algorithm
 //!
@@ -13,13 +13,13 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, mismatch};
+use massively::{DeviceVec, Executor, MIndex, SoA1, mismatch};
 
 fn solve<B>(
     exec: &Executor<B>,
     expected: DeviceVec<B, u32>,
     actual: DeviceVec<B, u32>,
-) -> common::Result<Option<usize>>
+) -> common::Result<Option<MIndex>>
 where
     B: cubecl::prelude::Runtime,
 {

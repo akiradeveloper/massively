@@ -38,7 +38,7 @@ pub fn count_if<R, Input, Pred>(
     source: Input,
     pred: Pred,
     env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -54,7 +54,7 @@ pub fn find_if<R, Input, Pred>(
     source: Input,
     pred: Pred,
     env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
