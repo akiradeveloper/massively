@@ -40,14 +40,16 @@ fn uniform_distribution_u64_is_deterministic_and_bounded() {
 fn uniform_distribution_f32_is_deterministic_and_bounded() {
     let exec = exec();
 
-    let values = massively::util::random::uniform_distribution_f32(&exec, 40, 1234).unwrap();
-    let again = massively::util::random::uniform_distribution_f32(&exec, 40, 1234).unwrap();
+    let values =
+        massively::util::random::uniform_distribution_f32(&exec, 40, -2.5, 7.5, 1234).unwrap();
+    let again =
+        massively::util::random::uniform_distribution_f32(&exec, 40, -2.5, 7.5, 1234).unwrap();
 
     let values = exec.to_host(&values).unwrap();
     let again = exec.to_host(&again).unwrap();
 
     assert_eq!(values.len(), 40);
-    assert!(values.iter().all(|&value| (0.0..=1.0).contains(&value)));
+    assert!(values.iter().all(|&value| (-2.5..=7.5).contains(&value)));
     assert_eq!(values, again);
 }
 
@@ -55,14 +57,16 @@ fn uniform_distribution_f32_is_deterministic_and_bounded() {
 fn uniform_distribution_f64_is_deterministic_and_bounded() {
     let exec = exec();
 
-    let values = massively::util::random::uniform_distribution_f64(&exec, 40, 4321).unwrap();
-    let again = massively::util::random::uniform_distribution_f64(&exec, 40, 4321).unwrap();
+    let values =
+        massively::util::random::uniform_distribution_f64(&exec, 40, -10.0, -3.0, 4321).unwrap();
+    let again =
+        massively::util::random::uniform_distribution_f64(&exec, 40, -10.0, -3.0, 4321).unwrap();
 
     let values = exec.to_host(&values).unwrap();
     let again = exec.to_host(&again).unwrap();
 
     assert_eq!(values.len(), 40);
-    assert!(values.iter().all(|&value| (0.0..=1.0).contains(&value)));
+    assert!(values.iter().all(|&value| (-10.0..=-3.0).contains(&value)));
     assert_eq!(values, again);
 }
 
@@ -102,15 +106,23 @@ fn random_rejects_invalid_integer_uniform_range() {
 
     assert!(massively::util::random::uniform_distribution_u32(&exec, 8, 5, 4, 1).is_err());
     assert!(massively::util::random::uniform_distribution_u64(&exec, 8, 9, 4, 1).is_err());
+    assert!(massively::util::random::uniform_distribution_f32(&exec, 8, 1.0, 0.0, 1).is_err());
+    assert!(massively::util::random::uniform_distribution_f64(&exec, 8, 1.0, 0.0, 1).is_err());
 }
 
 #[test]
-fn integer_uniform_distribution_accepts_singleton_range() {
+fn uniform_distribution_accepts_singleton_range() {
     let exec = exec();
 
     let u32_values = massively::util::random::uniform_distribution_u32(&exec, 8, 4, 4, 1).unwrap();
     let u64_values = massively::util::random::uniform_distribution_u64(&exec, 8, 9, 9, 1).unwrap();
+    let f32_values =
+        massively::util::random::uniform_distribution_f32(&exec, 8, 1.5, 1.5, 1).unwrap();
+    let f64_values =
+        massively::util::random::uniform_distribution_f64(&exec, 8, -2.5, -2.5, 1).unwrap();
 
     assert_eq!(exec.to_host(&u32_values).unwrap(), vec![4_u32; 8]);
     assert_eq!(exec.to_host(&u64_values).unwrap(), vec![9_u64; 8]);
+    assert_eq!(exec.to_host(&f32_values).unwrap(), vec![1.5_f32; 8]);
+    assert_eq!(exec.to_host(&f64_values).unwrap(), vec![-2.5_f64; 8]);
 }
