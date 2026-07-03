@@ -99,22 +99,27 @@ where
     ))
 }
 
-/// Generates `n` uniformly distributed `f32` values in `[0, 1]`.
+/// Generates `n` uniformly distributed `f32` values in `[min, max]`.
 pub fn uniform_distribution_f32<R>(
     exec: &Executor<R>,
     n: MIndex,
+    min: f32,
+    max: f32,
     seed: u64,
 ) -> Result<DeviceVec<R, f32>, Error>
 where
     R: Runtime,
 {
+    validate_inclusive_range(min, max)?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
     let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<f32>());
+    let params = [min, max];
     let seed = [seed];
+    let params = client.create_from_slice(f32::as_bytes(&params));
     let seed = client.create_from_slice(u64::as_bytes(&seed));
 
     unsafe {
@@ -122,6 +127,7 @@ where
             client,
             CubeCount::Static(random_block_count(n)?, 1, 1),
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
+            BufferArg::from_raw_parts(params.clone(), 2),
             BufferArg::from_raw_parts(seed.clone(), 1),
             BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
@@ -132,22 +138,27 @@ where
     ))
 }
 
-/// Generates `n` uniformly distributed `f64` values in `[0, 1]`.
+/// Generates `n` uniformly distributed `f64` values in `[min, max]`.
 pub fn uniform_distribution_f64<R>(
     exec: &Executor<R>,
     n: MIndex,
+    min: f64,
+    max: f64,
     seed: u64,
 ) -> Result<DeviceVec<R, f64>, Error>
 where
     R: Runtime,
 {
+    validate_inclusive_range(min, max)?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
     let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<f64>());
+    let params = [min, max];
     let seed = [seed];
+    let params = client.create_from_slice(f64::as_bytes(&params));
     let seed = client.create_from_slice(u64::as_bytes(&seed));
 
     unsafe {
@@ -155,6 +166,7 @@ where
             client,
             CubeCount::Static(random_block_count(n)?, 1, 1),
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
+            BufferArg::from_raw_parts(params.clone(), 2),
             BufferArg::from_raw_parts(seed.clone(), 1),
             BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
@@ -282,16 +294,16 @@ fn open_unit_f64(seed: u64, index: u32, stream: u64) -> f64 {
         * 0.00000000000000011102230246251567f64
 }
 
-/// Returns a deterministic uniformly distributed `f32` value in `[0, 1]`.
+/// Returns a deterministic uniformly distributed `f32` value in `[min, max]`.
 #[cube]
-fn uniform_f32(seed: u64, i: u32) -> f32 {
-    unit_f32(seed, i, 0u64)
+fn uniform_f32(min: f32, max: f32, seed: u64, i: u32) -> f32 {
+    min + unit_f32(seed, i, 0u64) * (max - min)
 }
 
-/// Returns a deterministic uniformly distributed `f64` value in `[0, 1]`.
+/// Returns a deterministic uniformly distributed `f64` value in `[min, max]`.
 #[cube]
-fn uniform_f64(seed: u64, i: u32) -> f64 {
-    unit_f64(seed, i, 0u64)
+fn uniform_f64(min: f64, max: f64, seed: u64, i: u32) -> f64 {
+    min + unit_f64(seed, i, 0u64) * (max - min)
 }
 
 /// Returns a deterministic uniformly distributed `u32` value in `[min, max]`.
@@ -355,18 +367,18 @@ fn random_uniform_u64_kernel(params: &[u64], output: &mut [u64]) {
 }
 
 #[cube(launch_unchecked, explicit_define)]
-fn random_uniform_f32_kernel(seed: &[u64], output: &mut [f32]) {
+fn random_uniform_f32_kernel(params: &[f32], seed: &[u64], output: &mut [f32]) {
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {
-        output[unit] = uniform_f32(seed[0], unit as u32);
+        output[unit] = uniform_f32(params[0], params[1], seed[0], unit as u32);
     }
 }
 
 #[cube(launch_unchecked, explicit_define)]
-fn random_uniform_f64_kernel(seed: &[u64], output: &mut [f64]) {
+fn random_uniform_f64_kernel(params: &[f64], seed: &[u64], output: &mut [f64]) {
     let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
     if unit < output.len() {
-        output[unit] = uniform_f64(seed[0], unit as u32);
+        output[unit] = uniform_f64(params[0], params[1], seed[0], unit as u32);
     }
 }
 
