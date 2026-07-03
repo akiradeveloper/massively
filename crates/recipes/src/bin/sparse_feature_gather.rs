@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA2, gather};
+use massively::{DeviceVec, Executor, MIndex, SoA2, gather};
 
 struct Output<B: cubecl::prelude::Runtime> {
     age: DeviceVec<B, u32>,
@@ -25,7 +25,7 @@ fn solve<B>(
     exec: &Executor<B>,
     age: DeviceVec<B, u32>,
     score: DeviceVec<B, f32>,
-    row_index: DeviceVec<B, u32>,
+    row_index: DeviceVec<B, MIndex>,
 ) -> common::Result<Output<B>>
 where
     B: cubecl::prelude::Runtime,

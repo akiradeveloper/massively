@@ -22,6 +22,7 @@
 pub mod algorithm;
 mod detail;
 mod error;
+mod index;
 pub mod iter;
 pub mod op;
 pub mod runtime;
@@ -39,6 +40,7 @@ pub use algorithm::{
     unique_by_key, upper_bound,
 };
 pub use error::Error;
+pub use index::MIndex;
 pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
 pub use value::{MItem, MVec};
@@ -49,8 +51,8 @@ pub use value::{MItem, MVec};
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut, MVec, SoA1, SoA2,
-        SoA3, SoA4, SoA5, SoA6, SoA7,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIndex, MItem, MIter, MIterMut, MVec,
+        SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
     };
 }
 

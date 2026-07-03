@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op as gpu_op;
-use massively::{DeviceVec, Executor};
+use massively::{DeviceVec, Executor, MIndex};
 use oracle::op as host_op;
 use proptest::prelude::*;
 use std::sync::{Mutex, MutexGuard};
@@ -12,6 +12,18 @@ type ApiExecutor = Executor<ApiRuntime>;
 const CASES: u32 = 24;
 const MAX_LEN: usize = 64;
 static GPU_LOCK: Mutex<()> = Mutex::new(());
+
+fn mindex(value: usize) -> MIndex {
+    value.try_into().unwrap()
+}
+
+fn opt_mindex(value: Option<usize>) -> Option<MIndex> {
+    value.map(mindex)
+}
+
+fn opt_pair_mindex(value: Option<(usize, usize)>) -> Option<(MIndex, MIndex)> {
+    value.map(|(left, right)| (mindex(left), mindex(right)))
+}
 
 struct MaxTuple;
 struct KeepTuple;
@@ -954,7 +966,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::count_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::count_if(&input, KeepTuple, ())
+            mindex(oracle::count_if(&input, KeepTuple, ()))
         );
     }};
     (all_of, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -994,7 +1006,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::find_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::find_if(&input, KeepTuple, ())
+            opt_mindex(oracle::find_if(&input, KeepTuple, ()))
         );
     }};
     (is_partitioned, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1024,7 +1036,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::count_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::count_if(&input, KeepTuple, ())
+            mindex(oracle::count_if(&input, KeepTuple, ()))
         );
         prop_assert_eq!(
             massively::all_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
@@ -1040,7 +1052,7 @@ macro_rules! value_case {
         );
         prop_assert_eq!(
             massively::find_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::find_if(&input, KeepTuple, ())
+            opt_mindex(oracle::find_if(&input, KeepTuple, ()))
         );
         prop_assert_eq!(
             massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
@@ -1202,15 +1214,15 @@ macro_rules! value_case {
         );
         prop_assert_eq!(
             massively::mismatch(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
-            oracle::mismatch(&input, &other, EqTuple)
+            opt_mindex(oracle::mismatch(&input, &other, EqTuple))
         );
         prop_assert_eq!(
             massively::adjacent_find(&exec, gpu_input.slice(..), EqTuple).unwrap(),
-            oracle::adjacent_find(&input, EqTuple)
+            opt_mindex(oracle::adjacent_find(&input, EqTuple))
         );
         prop_assert_eq!(
             massively::find_first_of(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
-            oracle::find_first_of(&input, &other, EqTuple)
+            opt_mindex(oracle::find_first_of(&input, &other, EqTuple))
         );
     }};
     (equal, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1233,7 +1245,7 @@ macro_rules! value_case {
         let gpu_other = make_soa!(&exec, &other, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::mismatch(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
-            oracle::mismatch(&input, &other, EqTuple)
+            opt_mindex(oracle::mismatch(&input, &other, EqTuple))
         );
     }};
     (adjacent_find, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1243,7 +1255,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::adjacent_find(&exec, gpu_input.slice(..), EqTuple).unwrap(),
-            oracle::adjacent_find(&input, EqTuple)
+            opt_mindex(oracle::adjacent_find(&input, EqTuple))
         );
     }};
     (find_first_of, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1256,7 +1268,7 @@ macro_rules! value_case {
         let gpu_other = make_soa!(&exec, &other, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::find_first_of(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
-            oracle::find_first_of(&input, &other, EqTuple)
+            opt_mindex(oracle::find_first_of(&input, &other, EqTuple))
         );
     }};
     (mutating, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1382,7 +1394,7 @@ macro_rules! value_case {
         );
         prop_assert_eq!(
             massively::is_sorted_until(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::is_sorted_until(&input, LessTuple)
+            mindex(oracle::is_sorted_until(&input, LessTuple))
         );
         prop_assert_eq!(
             massively::lexicographical_compare(&exec, gpu_input.slice(..), gpu_right.slice(..), LessTuple).unwrap(),
@@ -1390,15 +1402,15 @@ macro_rules! value_case {
         );
         prop_assert_eq!(
             massively::min_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::min_element(&input, LessTuple)
+            opt_mindex(oracle::min_element(&input, LessTuple))
         );
         prop_assert_eq!(
             massively::max_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::max_element(&input, LessTuple)
+            opt_mindex(oracle::max_element(&input, LessTuple))
         );
         prop_assert_eq!(
             massively::minmax_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::minmax_element(&input, LessTuple)
+            opt_pair_mindex(oracle::minmax_element(&input, LessTuple))
         );
 
         let gpu_bounds = massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
@@ -1486,7 +1498,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::is_sorted_until(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::is_sorted_until(&input, LessTuple)
+            mindex(oracle::is_sorted_until(&input, LessTuple))
         );
     }};
     (lexicographical_compare, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1511,7 +1523,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::min_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::min_element(&input, LessTuple)
+            opt_mindex(oracle::min_element(&input, LessTuple))
         );
     }};
     (max_element, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1521,7 +1533,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::max_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::max_element(&input, LessTuple)
+            opt_mindex(oracle::max_element(&input, LessTuple))
         );
     }};
     (minmax_element, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1531,7 +1543,7 @@ macro_rules! value_case {
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         prop_assert_eq!(
             massively::minmax_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
-            oracle::minmax_element(&input, LessTuple)
+            opt_pair_mindex(oracle::minmax_element(&input, LessTuple))
         );
     }};
     (lower_bound, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{

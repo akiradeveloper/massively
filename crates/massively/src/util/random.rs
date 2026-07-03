@@ -2,12 +2,12 @@
 
 use cubecl::prelude::*;
 
-use crate::{DeviceVec, Error, Executor};
+use crate::{DeviceVec, Error, Executor, MIndex, index::usize_from_mindex};
 
 const BLOCK_RANDOM_SIZE: u32 = 256;
 
-fn random_block_count(len: usize) -> Result<u32, Error> {
-    let block_count = len.div_ceil(BLOCK_RANDOM_SIZE as usize);
+fn random_block_count(len: MIndex) -> Result<u32, Error> {
+    let block_count = usize_from_mindex(len).div_ceil(BLOCK_RANDOM_SIZE as usize);
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
@@ -27,7 +27,7 @@ where
 /// Generates `n` uniformly distributed `u32` values in `[min, max]`.
 pub fn uniform_distribution_u32<R>(
     exec: &Executor<R>,
-    n: usize,
+    n: MIndex,
     min: u32,
     max: u32,
     seed: u64,
@@ -36,13 +36,12 @@ where
     R: Runtime,
 {
     validate_inclusive_range(min, max)?;
-    u32::try_from(n).map_err(|_| Error::LengthTooLarge { len: n })?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
-    let output = client.empty(n * core::mem::size_of::<u32>());
+    let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<u32>());
     let params = [min, max];
     let seed = [seed];
     let params = client.create_from_slice(u32::as_bytes(&params));
@@ -55,7 +54,7 @@ where
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
             BufferArg::from_raw_parts(params.clone(), 2),
             BufferArg::from_raw_parts(seed.clone(), 1),
-            BufferArg::from_raw_parts(output.clone(), n),
+            BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
     }
 
@@ -67,7 +66,7 @@ where
 /// Generates `n` uniformly distributed `u64` values in `[min, max]`.
 pub fn uniform_distribution_u64<R>(
     exec: &Executor<R>,
-    n: usize,
+    n: MIndex,
     min: u64,
     max: u64,
     seed: u64,
@@ -76,13 +75,12 @@ where
     R: Runtime,
 {
     validate_inclusive_range(min, max)?;
-    u32::try_from(n).map_err(|_| Error::LengthTooLarge { len: n })?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
-    let output = client.empty(n * core::mem::size_of::<u64>());
+    let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<u64>());
     let params = [min, max, seed];
     let params = client.create_from_slice(u64::as_bytes(&params));
 
@@ -92,7 +90,7 @@ where
             CubeCount::Static(random_block_count(n)?, 1, 1),
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
             BufferArg::from_raw_parts(params.clone(), 3),
-            BufferArg::from_raw_parts(output.clone(), n),
+            BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
     }
 
@@ -104,19 +102,18 @@ where
 /// Generates `n` uniformly distributed `f32` values in `[0, 1]`.
 pub fn uniform_distribution_f32<R>(
     exec: &Executor<R>,
-    n: usize,
+    n: MIndex,
     seed: u64,
 ) -> Result<DeviceVec<R, f32>, Error>
 where
     R: Runtime,
 {
-    u32::try_from(n).map_err(|_| Error::LengthTooLarge { len: n })?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
-    let output = client.empty(n * core::mem::size_of::<f32>());
+    let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<f32>());
     let seed = [seed];
     let seed = client.create_from_slice(u64::as_bytes(&seed));
 
@@ -126,7 +123,7 @@ where
             CubeCount::Static(random_block_count(n)?, 1, 1),
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
             BufferArg::from_raw_parts(seed.clone(), 1),
-            BufferArg::from_raw_parts(output.clone(), n),
+            BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
     }
 
@@ -138,19 +135,18 @@ where
 /// Generates `n` uniformly distributed `f64` values in `[0, 1]`.
 pub fn uniform_distribution_f64<R>(
     exec: &Executor<R>,
-    n: usize,
+    n: MIndex,
     seed: u64,
 ) -> Result<DeviceVec<R, f64>, Error>
 where
     R: Runtime,
 {
-    u32::try_from(n).map_err(|_| Error::LengthTooLarge { len: n })?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
-    let output = client.empty(n * core::mem::size_of::<f64>());
+    let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<f64>());
     let seed = [seed];
     let seed = client.create_from_slice(u64::as_bytes(&seed));
 
@@ -160,7 +156,7 @@ where
             CubeCount::Static(random_block_count(n)?, 1, 1),
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
             BufferArg::from_raw_parts(seed.clone(), 1),
-            BufferArg::from_raw_parts(output.clone(), n),
+            BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
     }
 
@@ -172,7 +168,7 @@ where
 /// Generates `n` approximately normally distributed `f32` values.
 pub fn normal_distribution_f32<R>(
     exec: &Executor<R>,
-    n: usize,
+    n: MIndex,
     mean: f32,
     stddev: f32,
     seed: u64,
@@ -180,13 +176,12 @@ pub fn normal_distribution_f32<R>(
 where
     R: Runtime,
 {
-    u32::try_from(n).map_err(|_| Error::LengthTooLarge { len: n })?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
-    let output = client.empty(n * core::mem::size_of::<f32>());
+    let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<f32>());
     let params = [mean, stddev];
     let seed = [seed];
     let params = client.create_from_slice(f32::as_bytes(&params));
@@ -199,7 +194,7 @@ where
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
             BufferArg::from_raw_parts(params.clone(), 2),
             BufferArg::from_raw_parts(seed.clone(), 1),
-            BufferArg::from_raw_parts(output.clone(), n),
+            BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
     }
 
@@ -211,7 +206,7 @@ where
 /// Generates `n` approximately normally distributed `f64` values.
 pub fn normal_distribution_f64<R>(
     exec: &Executor<R>,
-    n: usize,
+    n: MIndex,
     mean: f64,
     stddev: f64,
     seed: u64,
@@ -219,13 +214,12 @@ pub fn normal_distribution_f64<R>(
 where
     R: Runtime,
 {
-    u32::try_from(n).map_err(|_| Error::LengthTooLarge { len: n })?;
     if n == 0 {
         return Ok(DeviceVec::from_inner(exec.policy().empty_device_vec()));
     }
 
     let client = exec.policy().client();
-    let output = client.empty(n * core::mem::size_of::<f64>());
+    let output = client.empty(usize_from_mindex(n) * core::mem::size_of::<f64>());
     let params = [mean, stddev];
     let seed = [seed];
     let params = client.create_from_slice(f64::as_bytes(&params));
@@ -238,7 +232,7 @@ where
             CubeDim::new_1d(BLOCK_RANDOM_SIZE),
             BufferArg::from_raw_parts(params.clone(), 2),
             BufferArg::from_raw_parts(seed.clone(), 1),
-            BufferArg::from_raw_parts(output.clone(), n),
+            BufferArg::from_raw_parts(output.clone(), usize_from_mindex(n)),
         );
     }
 

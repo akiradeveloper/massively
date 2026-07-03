@@ -6,6 +6,7 @@ use cubecl::prelude::{CubeElement, CubePrimitive, Runtime};
 
 use crate::Error;
 use crate::detail::dispatch;
+use crate::index::{MIndex, usize_from_mindex};
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 use crate::value::MItem;
 
@@ -84,7 +85,7 @@ impl<R: Runtime> Executor<R> {
     }
 
     /// Allocates device-resident storage and fills it with `value`.
-    pub fn constant<T>(&self, len: usize, value: T) -> Result<DeviceVec<R, T>, Error>
+    pub fn constant<T>(&self, len: MIndex, value: T) -> Result<DeviceVec<R, T>, Error>
     where
         T: Scalar,
     {
@@ -97,17 +98,17 @@ impl<R: Runtime> Executor<R> {
     /// intended as temporary output buffers for algorithms that write every
     /// element before the data is read. Reading an allocated buffer before
     /// writing it produces unspecified values.
-    pub fn alloc<Item>(&self, len: usize) -> Result<Item::Vec, Error>
+    pub fn alloc<Item>(&self, len: MIndex) -> Result<Item::Vec, Error>
     where
         Item: MItem<R>,
     {
         Item::alloc_vec(self, len)
     }
 
-    /// Allocates a `u32` device vector containing `0..len`.
-    pub fn counting(&self, len: usize) -> Result<DeviceVec<R, u32>, Error> {
+    /// Allocates an `MIndex` device vector containing `0..len`.
+    pub fn counting(&self, len: MIndex) -> Result<DeviceVec<R, MIndex>, Error> {
         Ok(DeviceVec::from_inner(
-            crate::detail::primitives::range::indices_u32(self.policy(), len)?,
+            crate::detail::primitives::range::indices_mindex(self.policy(), len)?,
         ))
     }
 
@@ -132,8 +133,8 @@ impl<R: Runtime> Executor<R> {
     {
         if from.len != to.len {
             return Err(Error::LengthMismatch {
-                input: from.len,
-                output: to.len,
+                input: usize_from_mindex(from.len),
+                output: usize_from_mindex(to.len),
             });
         }
         self.ensure_policy_id(from.source.inner.policy_id())?;
@@ -141,10 +142,10 @@ impl<R: Runtime> Executor<R> {
         crate::detail::primitives::range::copy_slice_to_slice_with_policy(
             self.policy(),
             &from.source.inner,
-            from.offset,
+            usize_from_mindex(from.offset),
             &to.source.inner,
-            to.offset,
-            from.len,
+            usize_from_mindex(to.offset),
+            usize_from_mindex(from.len),
         )
     }
 

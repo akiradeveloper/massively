@@ -3,7 +3,7 @@ use super::*;
 #[allow(dead_code)]
 pub(crate) trait KernelScatterInput<IndexSource>: Sized
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime: Runtime;
     type Default;
@@ -21,7 +21,7 @@ where
 #[allow(dead_code)]
 pub(crate) trait KernelScatterWhereInput<IndexSource, Stencil, Pred>: Sized
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
 {
     type Runtime: Runtime;
     type Default;
@@ -47,10 +47,10 @@ fn scatter_one_read<ValueSource, IndexSource>(
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     ValueSource::Runtime: Runtime,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
-    IndexSource::Expr: GpuExpr<u32>,
+    IndexSource::Expr: GpuExpr<MIndex>,
 {
     let initial = primitive_range::filled(policy, len, default)?;
     let output = DeviceColumnMutView::from_slice(&initial, 0, len);
@@ -69,11 +69,11 @@ fn scatter_where_one_read<ValueSource, IndexSource, Stencil, Pred>(
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     ValueSource::Runtime: Runtime,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    IndexSource::Expr: DeviceGpuExpr<u32>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     let initial = primitive_range::filled(policy, len, default)?;
     <ValueSource as KernelColumn>::validate(values)?;
@@ -122,7 +122,7 @@ where
                 BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1),
                 BufferArg::from_raw_parts(index_slot_offsets.clone(), 4),
                 BufferArg::from_raw_parts(flags.flag.clone(), flags.len),
-                BufferArg::from_raw_parts(initial.handle.clone(), initial.len),
+                BufferArg::from_raw_parts(initial.handle.clone(), initial.len()),
             );
         }
     }
@@ -132,10 +132,10 @@ where
 impl<ValueSource, IndexSource> KernelScatterInput<IndexSource> for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
-    IndexSource::Expr: GpuExpr<u32>,
+    IndexSource::Expr: GpuExpr<MIndex>,
 {
     type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
@@ -162,10 +162,10 @@ macro_rules! impl_kernel_scatter_tuple1 {
         where
             ValueSource: KernelColumn + KernelColumnAt<S0>,
             IndexSource:
-                KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+                KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             ValueSource::Item: Scalar + 'static,
             ValueSource::Expr: GpuExpr<ValueSource::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = ValueSource::Runtime;
             type Default = (ValueSource::Item,);
@@ -198,7 +198,7 @@ impl_kernel_scatter_tuple1!(DeviceSoA1<ValueSource>, source);
 impl<ValueSource, IndexSource> KernelScatterInput<IndexSource> for (ValueSource,)
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     SoAView1<ValueSource>: KernelScatterInput<IndexSource, Runtime = ValueSource::Runtime>,
 {
     type Runtime = ValueSource::Runtime;
@@ -228,12 +228,12 @@ macro_rules! impl_kernel_scatter_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Left::Item: Scalar + 'static,
             Right::Item: Scalar + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type Default = (Left::Item, Right::Item);
@@ -273,7 +273,7 @@ impl_kernel_scatter_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
 
 impl<Left, Right, IndexSource> KernelScatterInput<IndexSource> for (Left, Right)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView2<Left, Right>: KernelScatterInput<IndexSource>,
 {
     type Runtime = <SoAView2<Left, Right> as KernelScatterInput<IndexSource>>::Runtime;
@@ -307,14 +307,14 @@ macro_rules! impl_kernel_scatter_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = First::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = First::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             First::Item: Scalar + 'static,
             Second::Item: Scalar + 'static,
             Third::Item: Scalar + 'static,
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
-            IndexSource::Expr: GpuExpr<u32>,
+            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type Default = (First::Item, Second::Item, Third::Item);
@@ -368,7 +368,7 @@ impl_kernel_scatter_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first,
 
 impl<First, Second, Third, IndexSource> KernelScatterInput<IndexSource> for (First, Second, Third)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView3<First, Second, Third>: KernelScatterInput<IndexSource>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Runtime;
@@ -400,11 +400,11 @@ impl<ValueSource, IndexSource, Stencil, Pred> KernelScatterWhereInput<IndexSourc
     for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-    IndexSource::Expr: DeviceGpuExpr<u32>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
@@ -433,11 +433,11 @@ macro_rules! impl_kernel_scatter_where_tuple1 {
         where
             ValueSource: KernelColumn + KernelColumnAt<S0>,
             IndexSource:
-                KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+                KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = ValueSource::Runtime>,
             ValueSource::Item: Scalar + 'static,
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-            IndexSource::Expr: DeviceGpuExpr<u32>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = ValueSource::Runtime;
             type Default = (ValueSource::Item,);
@@ -473,7 +473,7 @@ impl<ValueSource, IndexSource, Stencil, Pred> KernelScatterWhereInput<IndexSourc
     for (ValueSource,)
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     SoAView1<ValueSource>:
         KernelScatterWhereInput<IndexSource, Stencil, Pred, Runtime = ValueSource::Runtime>,
 {
@@ -509,13 +509,13 @@ macro_rules! impl_kernel_scatter_where_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = Left::Runtime>,
             Left::Item: Scalar + 'static,
             Right::Item: Scalar + 'static,
             Left::Expr: DeviceGpuExpr<Left::Item>,
             Right::Expr: DeviceGpuExpr<Right::Item>,
-            IndexSource::Expr: DeviceGpuExpr<u32>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type Default = (Left::Item, Right::Item);
@@ -559,7 +559,7 @@ impl_kernel_scatter_where_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, rig
 impl<Left, Right, IndexSource, Stencil, Pred> KernelScatterWhereInput<IndexSource, Stencil, Pred>
     for (Left, Right)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView2<Left, Right>: KernelScatterWhereInput<IndexSource, Stencil, Pred>,
 {
     type Runtime =
@@ -599,7 +599,7 @@ macro_rules! impl_kernel_scatter_where_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = First::Runtime, Item = u32> + KernelColumnAt<S0>,
+            IndexSource: KernelColumn<Runtime = First::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Stencil: crate::detail::api::SelectionStencil<Pred, Runtime = First::Runtime>,
             First::Item: Scalar + 'static,
             Second::Item: Scalar + 'static,
@@ -607,7 +607,7 @@ macro_rules! impl_kernel_scatter_where_tuple3 {
             First::Expr: DeviceGpuExpr<First::Item>,
             Second::Expr: DeviceGpuExpr<Second::Item>,
             Third::Expr: DeviceGpuExpr<Third::Item>,
-            IndexSource::Expr: DeviceGpuExpr<u32>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type Default = (First::Item, Second::Item, Third::Item);
@@ -678,7 +678,7 @@ impl_kernel_scatter_where_tuple3!(
 impl<First, Second, Third, IndexSource, Stencil, Pred>
     KernelScatterWhereInput<IndexSource, Stencil, Pred> for (First, Second, Third)
 where
-    IndexSource: KernelColumn<Item = u32> + KernelColumnAt<S0>,
+    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
     SoAView3<First, Second, Third>: KernelScatterWhereInput<IndexSource, Stencil, Pred>,
 {
     type Runtime = <SoAView3<First, Second, Third> as KernelScatterWhereInput<

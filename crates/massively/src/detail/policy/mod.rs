@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use crate::{device::DeviceVec, primitives::range};
+use crate::{device::DeviceVec, index::IntoMIndex, primitives::range};
 
 pub(crate) const EMPTY_HANDLE_BYTES: usize = 16;
 
@@ -63,7 +63,7 @@ impl<R: Runtime> CubePolicy<R> {
     }
 
     pub(crate) fn empty_device_vec<T>(&self) -> DeviceVec<R, T> {
-        DeviceVec::from_handle(self.id(), self.empty_handle(), 0)
+        DeviceVec::from_handle(self.id(), self.empty_handle(), 0_u32)
     }
 
     /// Copies a host slice to device-resident storage.
@@ -80,7 +80,11 @@ impl<R: Runtime> CubePolicy<R> {
     /// Creates a device vector filled with `value`.
     ///
     /// This allocates owned device storage and initializes it on the device.
-    pub fn device_filled<T>(&self, len: usize, value: T) -> Result<DeviceVec<R, T>, crate::Error>
+    pub(crate) fn device_filled<T>(
+        &self,
+        len: impl IntoMIndex,
+        value: T,
+    ) -> Result<DeviceVec<R, T>, crate::Error>
     where
         T: CubePrimitive + CubeElement,
     {

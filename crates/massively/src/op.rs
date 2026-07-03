@@ -295,6 +295,47 @@ where
     }
 }
 
+/// Built-in lexicographical less-than predicate.
+pub struct Less;
+
+#[cube]
+impl<R, T> BinaryPredicateOp<R, (T,)> for Less
+where
+    R: cubecl::prelude::Runtime,
+    T: CubePrimitive + CubeElement + PartialOrd,
+{
+    fn apply(lhs: (T,), rhs: (T,)) -> bool {
+        lhs.0 < rhs.0
+    }
+}
+
+#[cube]
+impl<R, A, C> BinaryPredicateOp<R, (A, C)> for Less
+where
+    R: cubecl::prelude::Runtime,
+    A: CubePrimitive + CubeElement + PartialOrd,
+    C: CubePrimitive + CubeElement + PartialOrd,
+{
+    fn apply(lhs: (A, C), rhs: (A, C)) -> bool {
+        lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
+    }
+}
+
+#[cube]
+impl<R, A, C, D> BinaryPredicateOp<R, (A, C, D)> for Less
+where
+    R: cubecl::prelude::Runtime,
+    A: CubePrimitive + CubeElement + PartialOrd,
+    C: CubePrimitive + CubeElement + PartialOrd,
+    D: CubePrimitive + CubeElement + PartialOrd,
+{
+    fn apply(lhs: (A, C, D), rhs: (A, C, D)) -> bool {
+        lhs.0 < rhs.0
+            || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
+            || (lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 < rhs.2)
+    }
+}
+
 /// Runtime-local operation traits used by generated CubeCL kernels.
 ///
 /// These are intentionally crate-private. They allow the detail layer to keep

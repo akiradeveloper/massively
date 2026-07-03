@@ -5,7 +5,7 @@
 //!
 //! # Task
 //!
-//! Implement `solve(temperature) -> Option<usize>`.
+//! Implement `solve(temperature) -> Option<MIndex>`.
 //!
 //! # GPU Algorithm
 //!
@@ -15,7 +15,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, SoA1, adjacent_find};
+use massively::{DeviceVec, Executor, MIndex, SoA1, adjacent_find};
 
 struct TemperatureSpike;
 
@@ -29,7 +29,7 @@ where
     }
 }
 
-fn solve<B>(exec: &Executor<B>, temperature: DeviceVec<B, f32>) -> common::Result<Option<usize>>
+fn solve<B>(exec: &Executor<B>, temperature: DeviceVec<B, f32>) -> common::Result<Option<MIndex>>
 where
     B: cubecl::prelude::Runtime,
 {

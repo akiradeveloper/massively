@@ -5,7 +5,7 @@ pub fn adjacent_find<R, Input, Pred>(
     exec: &Executor<R>,
     source: Input,
     pred: Pred,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -39,7 +39,7 @@ pub fn find_first_of<R, Input, Needles, Eq>(
     source: Input,
     needles: Needles,
     eq: Eq,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -71,7 +71,7 @@ pub fn is_sorted_until<R, Input, Less>(
     exec: &Executor<R>,
     source: Input,
     less: Less,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -110,7 +110,7 @@ pub fn lower_bound<R, Input, Values, Less>(
     source: Input,
     values: Values,
     less: Less,
-) -> Result<DeviceVec<R, u32>, Error>
+) -> Result<DeviceVec<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -127,7 +127,7 @@ pub fn max_element<R, Input, Less>(
     exec: &Executor<R>,
     source: Input,
     less: Less,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -142,7 +142,7 @@ pub fn min_element<R, Input, Less>(
     exec: &Executor<R>,
     source: Input,
     less: Less,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -157,7 +157,7 @@ pub fn minmax_element<R, Input, Less>(
     exec: &Executor<R>,
     source: Input,
     less: Less,
-) -> Result<Option<(usize, usize)>, Error>
+) -> Result<Option<(MIndex, MIndex)>, Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -173,7 +173,7 @@ pub fn mismatch<R, Left, Right, Eq>(
     left: Left,
     right: Right,
     eq: Eq,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     R: Runtime,
     Left: MIter<R>,
@@ -191,7 +191,7 @@ pub fn upper_bound<R, Input, Values, Less>(
     source: Input,
     values: Values,
     less: Less,
-) -> Result<DeviceVec<R, u32>, Error>
+) -> Result<DeviceVec<R, MIndex>, Error>
 where
     R: Runtime,
     Input: MIter<R>,

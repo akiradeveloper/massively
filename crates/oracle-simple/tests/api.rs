@@ -2,7 +2,7 @@ use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::{
-    DeviceVec, Executor as ApiExecutor, adjacent_difference as api_adjacent_difference,
+    DeviceVec, Executor as ApiExecutor, MIndex, adjacent_difference as api_adjacent_difference,
     adjacent_find, all_of as api_all_of, any_of as api_any_of, copy_where as api_copy_where,
     count_if as api_count_if, equal, exclusive_scan as api_exclusive_scan, exclusive_scan_by_key,
     fill as api_fill, find_first_of, find_if as api_find_if, gather as api_gather, gather_where,
@@ -88,8 +88,20 @@ fn api_exec() -> ApiExecutor<ApiRuntime> {
     exec()
 }
 
-fn slice_range(input: &[u32]) -> std::ops::Range<usize> {
-    1..input.len() + 1
+fn mindex(value: usize) -> MIndex {
+    value.try_into().unwrap()
+}
+
+fn opt_mindex(value: Option<usize>) -> Option<MIndex> {
+    value.map(mindex)
+}
+
+fn opt_pair_mindex(value: Option<(usize, usize)>) -> Option<(MIndex, MIndex)> {
+    value.map(|(left, right)| (mindex(left), mindex(right)))
+}
+
+fn slice_range(input: &[u32]) -> std::ops::Range<MIndex> {
+    1..mindex(input.len() + 1)
 }
 
 fn padded_device(exec: &ApiExecutor<ApiRuntime>, input: &[u32]) -> DeviceVec<ApiRuntime, u32> {
@@ -221,7 +233,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_count_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::count_if(&input));
+        prop_assert_eq!(api_count_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), mindex(oracle_simple::count_if(&input)));
     }
 
     #[test]
@@ -253,7 +265,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_find_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::find_if(&input));
+        prop_assert_eq!(api_find_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), opt_mindex(oracle_simple::find_if(&input)));
     }
 
     #[test]
@@ -425,7 +437,7 @@ proptest! {
         let sorted = oracle_simple::sort(&input);
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
-        prop_assert_eq!(is_sorted_until(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), TupleBucketThenValueLess).unwrap(), oracle_simple::is_sorted_until(&sorted));
+        prop_assert_eq!(is_sorted_until(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), TupleBucketThenValueLess).unwrap(), mindex(oracle_simple::is_sorted_until(&sorted)));
     }
 
     #[test]
@@ -490,7 +502,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(adjacent_find(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleSameLowNibble).unwrap(), oracle_simple::adjacent_find(&input));
+        prop_assert_eq!(adjacent_find(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::adjacent_find(&input)));
     }
 
     #[test]
@@ -510,7 +522,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let right_g = padded_device(&exec, &right);
-        prop_assert_eq!(mismatch(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(right_g.slice(slice_range(&right))), TupleSameLowNibble).unwrap(), oracle_simple::mismatch(&input, &right));
+        prop_assert_eq!(mismatch(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(right_g.slice(slice_range(&right))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::mismatch(&input, &right)));
     }
 
     #[test]
@@ -524,7 +536,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let needles_g = padded_device(&exec, &needles);
-        prop_assert_eq!(find_first_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(needles_g.slice(slice_range(&needles))), TupleSameLowNibble).unwrap(), oracle_simple::find_first_of(&input, &needles));
+        prop_assert_eq!(find_first_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(needles_g.slice(slice_range(&needles))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::find_first_of(&input, &needles)));
     }
 
     #[test]
@@ -532,7 +544,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(min_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), oracle_simple::min_element(&input));
+        prop_assert_eq!(min_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_mindex(oracle_simple::min_element(&input)));
     }
 
     #[test]
@@ -540,7 +552,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(max_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), oracle_simple::max_element(&input));
+        prop_assert_eq!(max_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_mindex(oracle_simple::max_element(&input)));
     }
 
     #[test]
@@ -548,7 +560,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(minmax_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), oracle_simple::minmax_element(&input));
+        prop_assert_eq!(minmax_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_pair_mindex(oracle_simple::minmax_element(&input)));
     }
 
     #[test]

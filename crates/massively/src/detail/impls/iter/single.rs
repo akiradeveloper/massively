@@ -13,7 +13,7 @@ where
     type Item = (T,);
     type Inner = (crate::detail::device::DeviceColumnView<R, T>,);
 
-    fn len(&self) -> usize {
+    fn len(&self) -> MIndex {
         self.0.len()
     }
 
@@ -1138,7 +1138,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<usize, Error>
+    ) -> Result<MIndex, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1206,7 +1206,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1297,7 +1297,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _less: Less,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1312,7 +1312,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _less: Less,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1327,7 +1327,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _less: Less,
-    ) -> Result<Option<(usize, usize)>, Error>
+    ) -> Result<Option<(MIndex, MIndex)>, Error>
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1342,7 +1342,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _pred: Pred,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1358,7 +1358,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
         _less: Less,
-    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
     where
         Values: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1377,7 +1377,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
         _less: Less,
-    ) -> Result<crate::runtime::DeviceVec<R, u32>, Error>
+    ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
     where
         Values: MIter<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1395,7 +1395,7 @@ where
         self,
         policy: &crate::detail::CubePolicy<R>,
         _less: Less,
-    ) -> Result<usize, Error>
+    ) -> Result<MIndex, Error>
     where
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1520,7 +1520,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         right: Right,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1538,7 +1538,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         needles: Needles,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
@@ -1671,7 +1671,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         right: Self,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1688,7 +1688,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
         needles: Self,
         _eq: Eq,
-    ) -> Result<Option<usize>, Error>
+    ) -> Result<Option<MIndex>, Error>
     where
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
@@ -1803,15 +1803,15 @@ where
     type Item = (T,);
     type Inner = (crate::detail::device::DeviceColumnMutView<R, T>,);
 
-    fn len(&self) -> usize {
+    fn len(&self) -> MIndex {
         self.0.len()
     }
 
     fn into_inner(self) -> Self::Inner {
         (crate::detail::device::DeviceColumnMutView::from_slice(
             &self.0.source.inner,
-            self.0.offset,
-            self.0.len,
+            usize_from_mindex(self.0.offset),
+            usize_from_mindex(self.0.len),
         ),)
     }
 
@@ -1891,8 +1891,8 @@ where
         Ok(Some(
             crate::detail::device::DeviceColumnMutView::from_slice(
                 &source.inner,
-                self.0.offset,
-                self.0.len,
+                usize_from_mindex(self.0.offset),
+                usize_from_mindex(self.0.len),
             ),
         ))
     }

@@ -5,6 +5,7 @@ use cubecl::prelude::Runtime;
 
 use crate::Error;
 use crate::detail::dispatch;
+use crate::index::{MIndex, usize_from_mindex};
 use crate::runtime::{Executor, Scalar};
 
 /// Owned device column.
@@ -26,8 +27,8 @@ where
     }
 
     /// Returns the number of elements.
-    pub fn len(&self) -> usize {
-        self.inner.len()
+    pub fn len(&self) -> MIndex {
+        self.inner.mindex_len()
     }
 
     /// Returns whether this column is empty.
@@ -41,7 +42,7 @@ where
     /// bounds or if the start is greater than the end.
     pub fn slice<Range>(&self, range: Range) -> DeviceSlice<'_, R, T>
     where
-        Range: RangeBounds<usize>,
+        Range: RangeBounds<MIndex>,
     {
         let (offset, len) = resolve_slice_range(self.len(), range);
         DeviceSlice {
@@ -57,7 +58,7 @@ where
     /// bounds or if the start is greater than the end.
     pub fn slice_mut<Range>(&self, range: Range) -> DeviceSliceMut<'_, R, T>
     where
-        Range: RangeBounds<usize>,
+        Range: RangeBounds<MIndex>,
     {
         let (offset, len) = resolve_slice_range(self.len(), range);
         DeviceSliceMut {
@@ -85,8 +86,8 @@ where
 #[derive(Debug)]
 pub struct DeviceSlice<'a, R: Runtime, T> {
     pub(crate) source: &'a DeviceVec<R, T>,
-    pub(crate) offset: usize,
-    pub(crate) len: usize,
+    pub(crate) offset: MIndex,
+    pub(crate) len: MIndex,
 }
 
 impl<'a, R, T> Copy for DeviceSlice<'a, R, T> where R: Runtime {}
@@ -105,7 +106,7 @@ where
     R: Runtime,
 {
     /// Returns the number of elements in this slice.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> MIndex {
         self.len
     }
 
@@ -120,12 +121,15 @@ where
     /// `DeviceVec`.
     pub fn slice<Range>(&self, range: Range) -> DeviceSlice<'_, R, T>
     where
-        Range: RangeBounds<usize>,
+        Range: RangeBounds<MIndex>,
     {
         let (relative_offset, len) = resolve_slice_range(self.len, range);
         DeviceSlice {
             source: self.source,
-            offset: self.offset + relative_offset,
+            offset: self
+                .offset
+                .checked_add(relative_offset)
+                .expect("slice offset overflow"),
             len,
         }
     }
@@ -140,8 +144,8 @@ where
     {
         crate::detail::device::DeviceColumnView::from_slice(
             &self.source.inner,
-            self.offset,
-            self.len,
+            usize_from_mindex(self.offset),
+            usize_from_mindex(self.len),
         )
     }
 }
@@ -159,9 +163,13 @@ where
         let end = self
             .offset
             .checked_add(self.len)
-            .ok_or(Error::LengthTooLarge { len: self.len })?;
+            .ok_or(Error::LengthTooLarge {
+                len: usize_from_mindex(self.len),
+            })?;
+        let end = usize_from_mindex(end);
+        let offset = usize_from_mindex(self.offset);
         values.drain(end..);
-        values.drain(..self.offset);
+        values.drain(..offset);
         Ok(values)
     }
 }
@@ -170,8 +178,8 @@ where
 #[derive(Debug)]
 pub struct DeviceSliceMut<'a, R: Runtime, T> {
     pub(crate) source: &'a DeviceVec<R, T>,
-    pub(crate) offset: usize,
-    pub(crate) len: usize,
+    pub(crate) offset: MIndex,
+    pub(crate) len: MIndex,
 }
 
 impl<'a, R, T> DeviceSliceMut<'a, R, T>
@@ -179,7 +187,7 @@ where
     R: Runtime,
 {
     /// Returns the number of elements in this slice.
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> MIndex {
         self.len
     }
 
@@ -194,12 +202,15 @@ where
     /// `DeviceVec`.
     pub fn slice<Range>(&self, range: Range) -> DeviceSlice<'_, R, T>
     where
-        Range: RangeBounds<usize>,
+        Range: RangeBounds<MIndex>,
     {
         let (relative_offset, len) = resolve_slice_range(self.len, range);
         DeviceSlice {
             source: self.source,
-            offset: self.offset + relative_offset,
+            offset: self
+                .offset
+                .checked_add(relative_offset)
+                .expect("slice offset overflow"),
             len,
         }
     }
@@ -210,20 +221,23 @@ where
     /// `DeviceVec`.
     pub fn slice_mut<Range>(&self, range: Range) -> DeviceSliceMut<'_, R, T>
     where
-        Range: RangeBounds<usize>,
+        Range: RangeBounds<MIndex>,
     {
         let (relative_offset, len) = resolve_slice_range(self.len, range);
         DeviceSliceMut {
             source: self.source,
-            offset: self.offset + relative_offset,
+            offset: self
+                .offset
+                .checked_add(relative_offset)
+                .expect("slice offset overflow"),
             len,
         }
     }
 }
 
-fn resolve_slice_range<Range>(len: usize, range: Range) -> (usize, usize)
+fn resolve_slice_range<Range>(len: MIndex, range: Range) -> (MIndex, MIndex)
 where
-    Range: RangeBounds<usize>,
+    Range: RangeBounds<MIndex>,
 {
     let start = match range.start_bound() {
         Bound::Included(&start) => start,

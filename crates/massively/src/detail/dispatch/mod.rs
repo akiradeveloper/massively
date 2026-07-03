@@ -1,6 +1,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::Error;
+use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
 use crate::runtime::{Executor, Scalar};

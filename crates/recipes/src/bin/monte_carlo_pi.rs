@@ -18,7 +18,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{Executor, SoA1, SoA2, reduce, transform, util::random};
+use massively::{Executor, MIndex, SoA1, SoA2, reduce, transform, util::random};
 
 const SCALE: u32 = 1_000_000;
 
@@ -43,7 +43,7 @@ where
     }
 }
 
-fn solve<B>(exec: &Executor<B>, samples: usize) -> common::Result<f32>
+fn solve<B>(exec: &Executor<B>, samples: MIndex) -> common::Result<f32>
 where
     B: cubecl::prelude::Runtime,
 {

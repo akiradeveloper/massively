@@ -1,5 +1,6 @@
 use crate::{
     error::Error,
+    index::{IntoMIndex, MIndex, usize_from_mindex},
     policy::{CubePolicy, CubePolicyId},
 };
 use cubecl::prelude::*;
@@ -17,7 +18,7 @@ use std::marker::PhantomData;
 pub struct DeviceVec<R: Runtime, T> {
     pub(crate) policy_id: CubePolicyId,
     pub(crate) handle: cubecl::server::Handle,
-    pub(crate) len: usize,
+    pub(crate) len: MIndex,
     _element: PhantomData<fn() -> (R, T)>,
 }
 
@@ -40,8 +41,9 @@ where
     pub(crate) fn from_handle(
         policy_id: CubePolicyId,
         handle: cubecl::server::Handle,
-        len: usize,
+        len: impl IntoMIndex,
     ) -> Self {
+        let len = len.into_mindex();
         Self {
             policy_id,
             handle,
@@ -52,6 +54,10 @@ where
 
     /// Returns the number of elements in this device vector.
     pub fn len(&self) -> usize {
+        usize_from_mindex(self.len)
+    }
+
+    pub fn mindex_len(&self) -> MIndex {
         self.len
     }
 
@@ -81,6 +87,6 @@ where
             .map_err(|err| Error::Launch {
                 message: format!("{err:?}"),
             })?;
-        Ok(T::from_bytes(&bytes)[..self.len].to_vec())
+        Ok(T::from_bytes(&bytes)[..usize_from_mindex(self.len)].to_vec())
     }
 }

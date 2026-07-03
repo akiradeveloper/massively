@@ -292,7 +292,7 @@ pub(in crate::detail) fn device_expr_count_if_with_policy<ExprSource, Pred>(
     expr: &ExprSource,
     invert: bool,
     env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
-) -> Result<usize, Error>
+) -> Result<MIndex, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,
@@ -306,7 +306,10 @@ where
         return Ok(0);
     }
 
-    Ok(read_u32_scalar::<ExprSource::Runtime>(policy.client(), handles.count.clone())? as usize)
+    Ok(read_u32_scalar::<ExprSource::Runtime>(
+        policy.client(),
+        handles.count.clone(),
+    )?)
 }
 
 pub(in crate::detail) fn device_expr_find_if_with_policy<ExprSource, Pred>(
@@ -314,7 +317,7 @@ pub(in crate::detail) fn device_expr_find_if_with_policy<ExprSource, Pred>(
     expr: &ExprSource,
     invert: bool,
     env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
-) -> Result<Option<usize>, Error>
+) -> Result<Option<MIndex>, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
     ExprSource::Runtime: Runtime,

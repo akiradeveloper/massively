@@ -14,7 +14,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::PredicateOp;
-use massively::{DeviceVec, Executor, SoA1, count_if};
+use massively::{DeviceVec, Executor, MIndex, SoA1, count_if};
 
 struct PassingScore;
 
@@ -30,7 +30,7 @@ where
     }
 }
 
-fn solve<B>(exec: &Executor<B>, score: DeviceVec<B, u32>) -> common::Result<usize>
+fn solve<B>(exec: &Executor<B>, score: DeviceVec<B, u32>) -> common::Result<MIndex>
 where
     B: cubecl::prelude::Runtime,
 {

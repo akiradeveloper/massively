@@ -6,6 +6,7 @@ use cubecl::prelude::{CubeType, Runtime};
 
 use crate::Error;
 use crate::detail::dispatch;
+use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::runtime::Executor;
 
@@ -30,7 +31,7 @@ pub trait MItem<R: Runtime>:
     fn vec_from_inner(inner: Self::Inner) -> Self::Vec;
 
     #[doc(hidden)]
-    fn alloc_vec(exec: &Executor<R>, len: usize) -> Result<Self::Vec, Error>;
+    fn alloc_vec(exec: &Executor<R>, len: MIndex) -> Result<Self::Vec, Error>;
 }
 
 /// Owned device storage for an [`MItem`].
@@ -49,7 +50,7 @@ pub trait MVec<R: Runtime>: Sized {
 
     fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self;
 
-    fn len(&self) -> usize;
+    fn len(&self) -> MIndex;
 
     fn is_empty(&self) -> bool {
         self.len() == 0
@@ -57,9 +58,9 @@ pub trait MVec<R: Runtime>: Sized {
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
     where
-        Bounds: RangeBounds<usize>;
+        Bounds: RangeBounds<MIndex>;
 
     fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
     where
-        Bounds: RangeBounds<usize>;
+        Bounds: RangeBounds<MIndex>;
 }

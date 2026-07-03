@@ -4,7 +4,7 @@ use super::*;
 pub(crate) trait SelectionStencil<Pred> {
     type Runtime: Runtime;
 
-    fn len(&self) -> usize;
+    fn len(&self) -> MIndex;
     fn selection_handles_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
@@ -22,7 +22,7 @@ pub(crate) trait SelectionStencil<Pred> {
 
 #[doc(hidden)]
 pub struct PrecomputedSelection<R: Runtime> {
-    len: usize,
+    len: MIndex,
     handles: select::SelectionHandles,
     _runtime: std::marker::PhantomData<R>,
 }
@@ -69,7 +69,7 @@ where
 {
     type Runtime = R;
 
-    fn len(&self) -> usize {
+    fn len(&self) -> MIndex {
         self.len
     }
 
@@ -100,8 +100,8 @@ where
 {
     type Runtime = Stencil::Runtime;
 
-    fn len(&self) -> usize {
-        KernelColumn::len(self)
+    fn len(&self) -> MIndex {
+        mindex_from_usize(KernelColumn::len(self)).expect("stencil length exceeds MIndex")
     }
 
     fn selection_handles_with_policy(
@@ -131,8 +131,8 @@ where
 {
     type Runtime = Stencil::Runtime;
 
-    fn len(&self) -> usize {
-        self.0.len()
+    fn len(&self) -> MIndex {
+        mindex_from_usize(self.0.len()).expect("stencil length exceeds MIndex")
     }
 
     fn selection_handles_with_policy(
@@ -175,8 +175,8 @@ where
 {
     type Runtime = A::Runtime;
 
-    fn len(&self) -> usize {
-        self.left.len()
+    fn len(&self) -> MIndex {
+        mindex_from_usize(self.left.len()).expect("stencil length exceeds MIndex")
     }
 
     fn selection_handles_with_policy(
@@ -187,12 +187,13 @@ where
         self.left.validate()?;
         self.right.validate()?;
         ensure_same_len(self.left.len(), self.right.len())?;
-        let len = self.left.len();
-        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let len_usize = self.left.len();
+        let len = mindex_from_usize(len_usize)?;
+        let len_u32 = len;
         let client = policy.client();
-        let flag = client.empty(len * std::mem::size_of::<u32>());
+        let flag = client.empty(len_usize * std::mem::size_of::<u32>());
         if len != 0 {
-            let block_count_u32 = api_expr_block_count(len)?;
+            let block_count_u32 = api_expr_block_count(len_usize)?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
             let invert_values = [if invert { 1_u32 } else { 0_u32 }];
             let invert_handle = client.create_from_slice(u32::as_bytes(&invert_values));
@@ -234,11 +235,11 @@ where
                     unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
-                    unsafe { BufferArg::from_raw_parts(flag.clone(), len) },
+                    unsafe { BufferArg::from_raw_parts(flag.clone(), len_usize) },
                 );
             }
         }
-        select::handles_from_flags(policy, len, len_u32, flag, policy.empty_handle())
+        select::handles_from_flags(policy, len_usize, len_u32, flag, policy.empty_handle())
     }
 }
 
@@ -258,8 +259,8 @@ where
 {
     type Runtime = A::Runtime;
 
-    fn len(&self) -> usize {
-        self.first.len()
+    fn len(&self) -> MIndex {
+        mindex_from_usize(self.first.len()).expect("stencil length exceeds MIndex")
     }
 
     fn selection_handles_with_policy(
@@ -272,12 +273,13 @@ where
         self.third.validate()?;
         ensure_same_len(self.first.len(), self.second.len())?;
         ensure_same_len(self.first.len(), self.third.len())?;
-        let len = self.first.len();
-        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let len_usize = self.first.len();
+        let len = mindex_from_usize(len_usize)?;
+        let len_u32 = len;
         let client = policy.client();
-        let flag = client.empty(len * std::mem::size_of::<u32>());
+        let flag = client.empty(len_usize * std::mem::size_of::<u32>());
         if len != 0 {
-            let block_count_u32 = api_expr_block_count(len)?;
+            let block_count_u32 = api_expr_block_count(len_usize)?;
             let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
             let invert_values = [if invert { 1_u32 } else { 0_u32 }];
             let invert_handle = client.create_from_slice(u32::as_bytes(&invert_values));
@@ -332,11 +334,11 @@ where
                     unsafe { BufferArg::from_raw_parts(third_slot_offsets.clone(), 4) },
                     unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
                     unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
-                    unsafe { BufferArg::from_raw_parts(flag.clone(), len) },
+                    unsafe { BufferArg::from_raw_parts(flag.clone(), len_usize) },
                 );
             }
         }
-        select::handles_from_flags(policy, len, len_u32, flag, policy.empty_handle())
+        select::handles_from_flags(policy, len_usize, len_u32, flag, policy.empty_handle())
     }
 }
 
@@ -348,7 +350,7 @@ where
 {
     type Runtime = <SoAView2<Left, Right> as SelectionStencil<Pred>>::Runtime;
 
-    fn len(&self) -> usize {
+    fn len(&self) -> MIndex {
         <SoAView2<Left, Right> as SelectionStencil<Pred>>::len(&SoAView2 {
             left: self.0,
             right: self.1,
@@ -377,7 +379,7 @@ where
 {
     type Runtime = <SoAView3<First, Second, Third> as SelectionStencil<Pred>>::Runtime;
 
-    fn len(&self) -> usize {
+    fn len(&self) -> MIndex {
         <SoAView3<First, Second, Third> as SelectionStencil<Pred>>::len(&SoAView3 {
             first: self.0,
             second: self.1,

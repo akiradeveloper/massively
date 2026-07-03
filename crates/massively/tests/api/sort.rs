@@ -13,6 +13,36 @@ fn sort_returns_device_storage() {
 }
 
 #[test]
+fn sort_accepts_builtin_less() {
+    let exec = exec();
+    let x = exec.to_device(&[3_u32, 1, 2]).unwrap();
+
+    let massively::SoA1(sorted) =
+        sort(&exec, massively::SoA1(x.slice(..)), massively::op::Less).unwrap();
+
+    assert_eq!(exec.to_host(&sorted).unwrap(), vec![1, 2, 3]);
+}
+
+#[test]
+fn tuple_sort_accepts_builtin_lexicographical_less() {
+    let exec = exec();
+    let a = exec.to_device(&[2_u32, 1, 2, 1]).unwrap();
+    let b = exec.to_device(&[20_u32, 40, 10, 30]).unwrap();
+    let c = exec.to_device(&[200_u32, 400, 100, 300]).unwrap();
+
+    let massively::SoA3(a, b, c) = sort(
+        &exec,
+        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::op::Less,
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&a).unwrap(), vec![1, 1, 2, 2]);
+    assert_eq!(exec.to_host(&b).unwrap(), vec![30, 40, 10, 20]);
+    assert_eq!(exec.to_host(&c).unwrap(), vec![300, 400, 100, 200]);
+}
+
+#[test]
 fn tuple_sort_preserves_soa_components() {
     let exec = exec();
     let x = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();

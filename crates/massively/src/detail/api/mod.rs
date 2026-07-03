@@ -58,6 +58,7 @@ use crate::{
     },
     error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr},
+    index::{MIndex, mindex_from_usize},
     kernels::*,
     primitives::{
         scan as primitive_scan, scan::read_u32_scalar, search as primitive_search, select,

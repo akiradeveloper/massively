@@ -5,7 +5,7 @@ fn find_first_of_with_generic_needles<Input, Needles, Eq>(
     input: Input,
     needles: Needles,
     eq: Eq,
-) -> Option<usize>
+) -> Option<massively::MIndex>
 where
     Input: massively::MIter<WgpuRuntime>,
     Needles: massively::MIter<WgpuRuntime, Item = Input::Item>,

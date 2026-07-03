@@ -3,6 +3,7 @@ use crate::{
     device::{DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0},
     error::Error,
     expr::DeviceGpuExpr,
+    index::MIndex,
     kernels::*,
     op::GpuOp,
     policy::CubePolicy,
@@ -881,7 +882,7 @@ pub(crate) fn sort_tuple7_indices_input<A, B, C, D, E, F, G, Less>(
     f: &F,
     g: &G,
     _less: GpuOp<Less>,
-) -> Result<DeviceVec<A::Runtime, u32>, Error>
+) -> Result<DeviceVec<A::Runtime, MIndex>, Error>
 where
     A: KernelColumn + KernelColumnAt<S0>,
     B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,

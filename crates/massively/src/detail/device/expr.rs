@@ -2,6 +2,7 @@ use super::DeviceVec;
 use crate::{
     error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr, Slot0, Slot1, Slot2, Slot3},
+    index::usize_from_mindex,
     policy::CubePolicy,
 };
 use cubecl::prelude::*;
@@ -637,8 +638,7 @@ impl KernelColumnBindings {
     ) -> Result<cubecl::server::Handle, Error> {
         let mut offsets = [0_u32; 4];
         for (index, offset) in self.slot_offsets.iter().take(4).enumerate() {
-            offsets[index] =
-                u32::try_from(*offset).map_err(|_| Error::LengthTooLarge { len: *offset })?;
+            offsets[index] = crate::index::mindex_from_usize(*offset)?;
         }
         Ok(client.create_from_slice(u32::as_bytes(&offsets)))
     }
@@ -670,7 +670,7 @@ where
     type Expr = Slot0<T>;
 
     fn len(&self) -> usize {
-        self.len
+        usize_from_mindex(self.len)
     }
 
     fn validate(&self) -> Result<(), Error> {
@@ -699,7 +699,7 @@ where
     type Next = S1;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -712,7 +712,7 @@ where
     type Next = S2;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -725,7 +725,7 @@ where
     type Next = S3;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -738,7 +738,7 @@ where
     type Next = S4;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -841,7 +841,7 @@ where
     type Expr = Slot0<T>;
 
     fn len(&self) -> usize {
-        self.len
+        usize_from_mindex(self.len)
     }
 
     fn validate(&self) -> Result<(), Error> {
@@ -864,7 +864,7 @@ where
     type Next = S1;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -877,7 +877,7 @@ where
     type Next = S2;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -890,7 +890,7 @@ where
     type Next = S3;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }
@@ -903,7 +903,7 @@ where
     type Next = S4;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
-        bindings.push(self.handle.clone(), self.len);
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
         Ok(())
     }
 }

@@ -5,7 +5,7 @@ fn mismatch_with_generic_right<Left, Right, Eq>(
     left: Left,
     right: Right,
     eq: Eq,
-) -> Option<usize>
+) -> Option<massively::MIndex>
 where
     Left: massively::MIter<WgpuRuntime>,
     Right: massively::MIter<WgpuRuntime, Item = Left::Item>,

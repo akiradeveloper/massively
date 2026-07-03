@@ -4,7 +4,7 @@
 //!
 //! # Task
 //!
-//! Implement `solve(token_id, blocked_keyword_id) -> Option<usize>`.
+//! Implement `solve(token_id, blocked_keyword_id) -> Option<MIndex>`.
 //!
 //! # GPU Algorithm
 //!
@@ -12,13 +12,13 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, find_first_of};
+use massively::{DeviceVec, Executor, MIndex, SoA1, find_first_of};
 
 fn solve<B>(
     exec: &Executor<B>,
     token_id: DeviceVec<B, u32>,
     blocked_keyword_id: DeviceVec<B, u32>,
-) -> common::Result<Option<usize>>
+) -> common::Result<Option<MIndex>>
 where
     B: cubecl::prelude::Runtime,
 {

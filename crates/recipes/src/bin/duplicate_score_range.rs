@@ -13,13 +13,13 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, lower_bound, upper_bound};
+use massively::{DeviceVec, Executor, MIndex, SoA1, lower_bound, upper_bound};
 
 fn solve<B>(
     exec: &Executor<B>,
     score: DeviceVec<B, u32>,
     target: u32,
-) -> common::Result<(usize, usize)>
+) -> common::Result<(MIndex, MIndex)>
 where
     B: cubecl::prelude::Runtime,
 {
@@ -38,7 +38,7 @@ where
     )?;
     let lower = exec.to_host(&lower)?;
     let upper = exec.to_host(&upper)?;
-    Ok((lower[0] as usize, upper[0] as usize))
+    Ok((lower[0], upper[0]))
 }
 
 fn main() -> common::Result {
