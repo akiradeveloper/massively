@@ -39,7 +39,7 @@ where
     IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     InputSource::Item: Scalar + 'static,
     InputSource::Expr: GpuExpr<InputSource::Item>,
-    IndexSource::Expr: GpuExpr<MIndex>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     type Runtime = InputSource::Runtime;
     type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
@@ -49,8 +49,12 @@ where
         policy: &CubePolicy<Self::Runtime>,
         indices: &IndexSource,
     ) -> Result<Self::Output, Error> {
+        let index_values =
+            crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+        let control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(&control);
         Ok(DeviceSoA1 {
-            source: crate::detail::api::device_expr_gather_with_policy(policy, &self, indices)?,
+            source: apply.apply_expr(policy, &self)?,
         })
     }
 }
@@ -64,7 +68,7 @@ macro_rules! impl_kernel_gather_tuple1 {
                 KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             InputSource::Item: Scalar + 'static,
             InputSource::Expr: GpuExpr<InputSource::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = InputSource::Runtime;
             type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
@@ -115,7 +119,7 @@ macro_rules! impl_kernel_gather_tuple2 {
             Right::Item: Scalar + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type Output =
@@ -127,18 +131,13 @@ macro_rules! impl_kernel_gather_tuple2 {
                 indices: &IndexSource,
             ) -> Result<Self::Output, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
-                Ok($out {
-                    left: crate::detail::api::device_expr_gather_with_policy(
-                        policy,
-                        &self.$left,
-                        indices,
-                    )?,
-                    right: crate::detail::api::device_expr_gather_with_policy(
-                        policy,
-                        &self.$right,
-                        indices,
-                    )?,
-                })
+                let index_values =
+                    crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+                let control =
+                    crate::detail::control::PermutationControl::from_indices(&index_values)?;
+                let apply = crate::detail::api::PermutationPayloadApply::new(&control);
+                let (left, right) = apply.apply_expr2(policy, &self.$left, &self.$right)?;
+                Ok($out { left, right })
             }
         }
     };
@@ -185,7 +184,7 @@ macro_rules! impl_kernel_gather_tuple3 {
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type Output = $out<
@@ -200,22 +199,17 @@ macro_rules! impl_kernel_gather_tuple3 {
                 indices: &IndexSource,
             ) -> Result<Self::Output, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
+                let index_values =
+                    crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+                let control =
+                    crate::detail::control::PermutationControl::from_indices(&index_values)?;
+                let apply = crate::detail::api::PermutationPayloadApply::new(&control);
+                let (first, second, third) =
+                    apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok($out {
-                    first: crate::detail::api::device_expr_gather_with_policy(
-                        policy,
-                        &self.$first,
-                        indices,
-                    )?,
-                    second: crate::detail::api::device_expr_gather_with_policy(
-                        policy,
-                        &self.$second,
-                        indices,
-                    )?,
-                    third: crate::detail::api::device_expr_gather_with_policy(
-                        policy,
-                        &self.$third,
-                        indices,
-                    )?,
+                    first,
+                    second,
+                    third,
                 })
             }
         }

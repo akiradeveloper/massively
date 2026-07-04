@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::detail::{
+    control::SegmentControl,
     control::{ReduceByKeyControl, ScanByKeyControl, SelectedRankControl},
     device::DeviceColumnView,
 };
@@ -13,6 +14,19 @@ fn reduce_output_selection_from_end_flags<R: Runtime>(
     let control = select::selected_rank_from_flags(policy, len, len_u32, end_flags)?;
     let count = select::selected_count(policy, &control)?;
     Ok((control, count))
+}
+
+fn empty_reduce_by_key_control<R: Runtime>(
+    policy: &CubePolicy<R>,
+    len: usize,
+) -> ReduceByKeyControl<R> {
+    let segment =
+        SegmentControl::from_head_end_flags(policy.empty_handle(), policy.empty_handle(), len, 0);
+    ReduceByKeyControl::from_segment(
+        segment,
+        crate::detail::control::SelectedRankControl::empty(policy.client()),
+        0,
+    )
 }
 
 pub(crate) trait KernelReduceByKeyKeys<KeyEq>: Sized {
@@ -56,6 +70,214 @@ pub(crate) trait KernelReduceByKeyCall<Values, KeyEq, Op>: Sized {
     ) -> Result<Self::Output, Error>;
 }
 
+pub(in crate::detail) struct SegmentedReduceApply<'a, R: Runtime> {
+    control: &'a ReduceByKeyControl<R>,
+}
+
+impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
+    pub(in crate::detail) fn new(control: &'a ReduceByKeyControl<R>) -> Self {
+        Self { control }
+    }
+
+    pub(in crate::detail) fn apply_expr<ValueSource, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        source: &ValueSource,
+        init: ValueSource::Item,
+    ) -> Result<DeviceVec<R, ValueSource::Item>, Error>
+    where
+        ValueSource: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueSource::Item: Scalar + 'static,
+        ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
+        Op: BinaryOp<(ValueSource::Item,)>,
+    {
+        let client = policy.client();
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = super::scan::SegmentedScanApply::new(&scan_control);
+        let inclusive = scan_apply.inclusive_expr::<ValueSource, Op>(policy, source)?;
+
+        let len_handle = client.create_from_slice(u32::as_bytes(&[self.control.len_u32]));
+        let init_handle = client.create_from_slice(ValueSource::Item::as_bytes(&[init]));
+        let reduced_value_handle =
+            client.empty(self.control.len * std::mem::size_of::<ValueSource::Item>());
+        let num_blocks = self
+            .control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_apply_init_kernel::launch_unchecked::<
+                ValueSource::Item,
+                Op,
+                ValueSource::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(init_handle.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_value_handle.clone(), self.control.len),
+            );
+        }
+
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &self.control.output_selection,
+            self.control.output_count,
+        );
+        payload_apply.apply_value::<R, ValueSource::Item>(policy, reduced_value_handle)
+    }
+
+    pub(in crate::detail) fn apply_expr2<ValueA, ValueB, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &ValueA,
+        b: &ValueB,
+        init: (ValueA::Item, ValueB::Item),
+    ) -> Result<DeviceSoA2<DeviceVec<R, ValueA::Item>, DeviceVec<R, ValueB::Item>>, Error>
+    where
+        ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueA::Item: Scalar + 'static,
+        ValueB::Item: Scalar + 'static,
+        ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+        ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+        (ValueA::Item, ValueB::Item): MItem<R>,
+        Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+    {
+        let client = policy.client();
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = super::scan::SegmentedScanApply::new(&scan_control);
+        let inclusive = scan_apply.inclusive_expr2::<ValueA, ValueB, Op>(policy, a, b)?;
+
+        let len_handle = client.create_from_slice(u32::as_bytes(&[self.control.len_u32]));
+        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
+        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
+        let reduced_a_handle = client.empty(self.control.len * std::mem::size_of::<ValueA::Item>());
+        let reduced_b_handle = client.empty(self.control.len * std::mem::size_of::<ValueB::Item>());
+        let num_blocks = self
+            .control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
+                ValueA::Item,
+                ValueB::Item,
+                Op,
+                ValueA::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.left.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(inclusive.right.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), self.control.len),
+            );
+        }
+
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &self.control.output_selection,
+            self.control.output_count,
+        );
+        Ok(DeviceSoA2 {
+            left: payload_apply.apply_value::<R, ValueA::Item>(policy, reduced_a_handle)?,
+            right: payload_apply.apply_value::<R, ValueB::Item>(policy, reduced_b_handle)?,
+        })
+    }
+
+    pub(in crate::detail) fn apply_expr3<ValueA, ValueB, ValueC, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &ValueA,
+        b: &ValueB,
+        c: &ValueC,
+        init: (ValueA::Item, ValueB::Item, ValueC::Item),
+    ) -> Result<
+        DeviceSoA3<
+            DeviceVec<R, ValueA::Item>,
+            DeviceVec<R, ValueB::Item>,
+            DeviceVec<R, ValueC::Item>,
+        >,
+        Error,
+    >
+    where
+        ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueC: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueA::Item: Scalar + 'static,
+        ValueB::Item: Scalar + 'static,
+        ValueC::Item: Scalar + 'static,
+        ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+        ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+        ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
+        (ValueA::Item, ValueB::Item, ValueC::Item): MItem<R>,
+        Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+    {
+        let client = policy.client();
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = super::scan::SegmentedScanApply::new(&scan_control);
+        let inclusive =
+            scan_apply.inclusive_expr3::<ValueA, ValueB, ValueC, Op>(policy, a, b, c)?;
+
+        let len_handle = client.create_from_slice(u32::as_bytes(&[self.control.len_u32]));
+        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
+        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
+        let init_c = client.create_from_slice(ValueC::Item::as_bytes(&[init.2]));
+        let reduced_a_handle = client.empty(self.control.len * std::mem::size_of::<ValueA::Item>());
+        let reduced_b_handle = client.empty(self.control.len * std::mem::size_of::<ValueB::Item>());
+        let reduced_c_handle = client.empty(self.control.len * std::mem::size_of::<ValueC::Item>());
+        let num_blocks = self
+            .control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
+                ValueA::Item,
+                ValueB::Item,
+                ValueC::Item,
+                Op,
+                ValueA::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.first.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(inclusive.second.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(inclusive.third.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(init_c.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(reduced_c_handle.clone(), self.control.len),
+            );
+        }
+
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &self.control.output_selection,
+            self.control.output_count,
+        );
+        Ok(DeviceSoA3 {
+            first: payload_apply.apply_value::<R, ValueA::Item>(policy, reduced_a_handle)?,
+            second: payload_apply.apply_value::<R, ValueB::Item>(policy, reduced_b_handle)?,
+            third: payload_apply.apply_value::<R, ValueC::Item>(policy, reduced_c_handle)?,
+        })
+    }
+}
+
 #[allow(dead_code)]
 impl<KeySource, KeyEq> KernelReduceByKeyKeys<KeyEq> for KeySource
 where
@@ -79,17 +301,7 @@ where
                 DeviceSoA1 {
                     source: policy.empty_device_vec(),
                 },
-                ReduceByKeyControl {
-                    head_flags: policy.empty_handle(),
-                    end_flags: policy.empty_handle(),
-                    output_selection: crate::detail::control::SelectedRankControl::empty(
-                        policy.client(),
-                    ),
-                    output_count: 0,
-                    len,
-                    len_u32: 0,
-                    _runtime: std::marker::PhantomData,
-                },
+                empty_reduce_by_key_control(policy, len),
             ));
         }
 
@@ -136,15 +348,11 @@ where
         let out_keys = payload_apply.apply_expr(policy, &self)?;
         Ok((
             DeviceSoA1 { source: out_keys },
-            ReduceByKeyControl {
-                head_flags,
-                end_flags,
+            ReduceByKeyControl::from_segment(
+                SegmentControl::from_head_end_flags(head_flags, end_flags, len, len_u32),
                 output_selection,
                 output_count,
-                len,
-                len_u32,
-                _runtime: std::marker::PhantomData,
-            },
+            ),
         ))
     }
 }
@@ -207,17 +415,7 @@ where
                     left: policy.empty_device_vec(),
                     right: policy.empty_device_vec(),
                 },
-                ReduceByKeyControl {
-                    head_flags: policy.empty_handle(),
-                    end_flags: policy.empty_handle(),
-                    output_selection: crate::detail::control::SelectedRankControl::empty(
-                        policy.client(),
-                    ),
-                    output_count: 0,
-                    len,
-                    len_u32: 0,
-                    _runtime: std::marker::PhantomData,
-                },
+                empty_reduce_by_key_control(policy, len),
             ));
         }
 
@@ -235,15 +433,11 @@ where
         let right = payload_apply.apply_expr(policy, &self.1)?;
         Ok((
             DeviceSoA2 { left, right },
-            ReduceByKeyControl {
-                head_flags,
-                end_flags,
+            ReduceByKeyControl::from_segment(
+                SegmentControl::from_head_end_flags(head_flags, end_flags, len, len_u32),
                 output_selection,
                 output_count,
-                len,
-                len_u32,
-                _runtime: std::marker::PhantomData,
-            },
+            ),
         ))
     }
 }
@@ -298,17 +492,7 @@ where
                     second: policy.empty_device_vec(),
                     third: policy.empty_device_vec(),
                 },
-                ReduceByKeyControl {
-                    head_flags: policy.empty_handle(),
-                    end_flags: policy.empty_handle(),
-                    output_selection: crate::detail::control::SelectedRankControl::empty(
-                        policy.client(),
-                    ),
-                    output_count: 0,
-                    len,
-                    len_u32: 0,
-                    _runtime: std::marker::PhantomData,
-                },
+                empty_reduce_by_key_control(policy, len),
             ));
         }
 
@@ -332,15 +516,11 @@ where
                 second,
                 third,
             },
-            ReduceByKeyControl {
-                head_flags,
-                end_flags,
+            ReduceByKeyControl::from_segment(
+                SegmentControl::from_head_end_flags(head_flags, end_flags, len, len_u32),
                 output_selection,
                 output_count,
-                len,
-                len_u32,
-                _runtime: std::marker::PhantomData,
-            },
+            ),
         ))
     }
 }
@@ -371,48 +551,9 @@ where
             });
         }
 
-        let client = policy.client();
-        let scan_control: ScanByKeyControl<ValueSource::Runtime> = control.into();
-        let inclusive = super::scan::inclusive_scan_by_flags_one::<ValueSource, Op>(
-            policy,
-            &self.0,
-            &scan_control,
-        )?;
-
-        let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
-        let init_handle = client.create_from_slice(ValueSource::Item::as_bytes(&[init.0]));
-        let reduced_value_handle =
-            client.empty(control.len * std::mem::size_of::<ValueSource::Item>());
-        let num_blocks = control
-            .len
-            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-
-        unsafe {
-            reduce_by_key_apply_init_kernel::launch_unchecked::<
-                ValueSource::Item,
-                Op,
-                ValueSource::Runtime,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.handle.clone(), control.len),
-                BufferArg::from_raw_parts(init_handle.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_value_handle.clone(), control.len),
-            );
-        }
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
-            &control.output_selection,
-            control.output_count,
-        );
+        let apply = SegmentedReduceApply::new(control);
         Ok(DeviceSoA1 {
-            source: payload_apply.apply_value::<ValueSource::Runtime, ValueSource::Item>(
-                policy,
-                reduced_value_handle,
-            )?,
+            source: apply.apply_expr::<ValueSource, Op>(policy, &self.0, init.0)?,
         })
     }
 }
@@ -450,56 +591,8 @@ where
             });
         }
 
-        let client = policy.client();
-        let scan_control: ScanByKeyControl<ValueA::Runtime> = control.into();
-        let inclusive = super::scan::inclusive_scan_by_flags_two::<ValueA, ValueB, Op>(
-            policy,
-            &self.0,
-            &self.1,
-            &scan_control,
-        )?;
-
-        let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
-        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
-        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
-        let reduced_a_handle = client.empty(control.len * std::mem::size_of::<ValueA::Item>());
-        let reduced_b_handle = client.empty(control.len * std::mem::size_of::<ValueB::Item>());
-        let num_blocks = control
-            .len
-            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-
-        unsafe {
-            reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
-                ValueA::Item,
-                ValueB::Item,
-                Op,
-                ValueA::Runtime,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.left.handle.clone(), control.len),
-                BufferArg::from_raw_parts(inclusive.right.handle.clone(), control.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), control.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), control.len),
-            );
-        }
-
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
-            &control.output_selection,
-            control.output_count,
-        );
-        Ok(DeviceSoA2 {
-            left: payload_apply
-                .apply_value::<ValueA::Runtime, ValueA::Item>(policy, reduced_a_handle)?,
-            right: payload_apply
-                .apply_value::<ValueA::Runtime, ValueB::Item>(policy, reduced_b_handle)?,
-        })
+        let apply = SegmentedReduceApply::new(control);
+        apply.apply_expr2::<ValueA, ValueB, Op>(policy, &self.0, &self.1, init)
     }
 }
 
@@ -542,65 +635,8 @@ where
             });
         }
 
-        let client = policy.client();
-        let scan_control: ScanByKeyControl<ValueA::Runtime> = control.into();
-        let inclusive = super::scan::inclusive_scan_by_flags_three::<ValueA, ValueB, ValueC, Op>(
-            policy,
-            &self.0,
-            &self.1,
-            &self.2,
-            &scan_control,
-        )?;
-
-        let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
-        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
-        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
-        let init_c = client.create_from_slice(ValueC::Item::as_bytes(&[init.2]));
-        let reduced_a_handle = client.empty(control.len * std::mem::size_of::<ValueA::Item>());
-        let reduced_b_handle = client.empty(control.len * std::mem::size_of::<ValueB::Item>());
-        let reduced_c_handle = client.empty(control.len * std::mem::size_of::<ValueC::Item>());
-        let num_blocks = control
-            .len
-            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-
-        unsafe {
-            reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
-                ValueA::Item,
-                ValueB::Item,
-                ValueC::Item,
-                Op,
-                ValueA::Runtime,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.first.handle.clone(), control.len),
-                BufferArg::from_raw_parts(inclusive.second.handle.clone(), control.len),
-                BufferArg::from_raw_parts(inclusive.third.handle.clone(), control.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(init_c.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), control.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), control.len),
-                BufferArg::from_raw_parts(reduced_c_handle.clone(), control.len),
-            );
-        }
-
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
-            &control.output_selection,
-            control.output_count,
-        );
-        Ok(DeviceSoA3 {
-            first: payload_apply
-                .apply_value::<ValueA::Runtime, ValueA::Item>(policy, reduced_a_handle)?,
-            second: payload_apply
-                .apply_value::<ValueA::Runtime, ValueB::Item>(policy, reduced_b_handle)?,
-            third: payload_apply
-                .apply_value::<ValueA::Runtime, ValueC::Item>(policy, reduced_c_handle)?,
-        })
+        let apply = SegmentedReduceApply::new(control);
+        apply.apply_expr3::<ValueA, ValueB, ValueC, Op>(policy, &self.0, &self.1, &self.2, init)
     }
 }
 
@@ -682,10 +718,57 @@ macro_rules! reduce_by_key_tuple7_scanned_values {
     }};
 }
 
+impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn apply_views7<A, B, C, D, E, F, G, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        e: &DeviceColumnView<R, E>,
+        f: &DeviceColumnView<R, F>,
+        g: &DeviceColumnView<R, G>,
+        init: (A, B, C, D, E, F, G),
+    ) -> Result<
+        (
+            DeviceVec<R, A>,
+            DeviceVec<R, B>,
+            DeviceVec<R, C>,
+            DeviceVec<R, D>,
+            DeviceVec<R, E>,
+            DeviceVec<R, F>,
+            DeviceVec<R, G>,
+        ),
+        Error,
+    >
+    where
+        A: Scalar + 'static,
+        B: Scalar + 'static,
+        C: Scalar + 'static,
+        D: Scalar + 'static,
+        E: Scalar + 'static,
+        F: Scalar + 'static,
+        G: Scalar + 'static,
+        Op: BinaryOp<(A, B, C, D, E, F, G)>,
+    {
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = super::scan::SegmentedScanApply::new(&scan_control);
+        let inclusive =
+            scan_apply.inclusive_views7::<A, B, C, D, E, F, G, Op>(policy, a, b, c, d, e, f, g)?;
+        let control = self.control;
+        reduce_by_key_tuple7_scanned_values!(
+            policy, control, inclusive, init;
+            A, B, C, D, E, F, G;
+            Op
+        )
+    }
+}
+
 macro_rules! impl_kernel_reduce_by_key_tuple4_views {
     () => {
-        impl<R, A, B, C, D, KeyEq, Op>
-            KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
+        impl<R, A, B, C, D, KeyEq, Op> KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -702,7 +785,12 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
         {
             type Runtime = R;
             type Init = (A, B, C, D);
-            type OutputValues = (DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>, DeviceVec<R, D>);
+            type OutputValues = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+            );
 
             fn reduce_by_key_values(
                 self,
@@ -711,7 +799,12 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
-                    return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
+                    return Ok((
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                    ));
                 }
                 let dummy4 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
@@ -719,16 +812,21 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
                 let dummy4 = DeviceColumnView::from_column(&dummy4);
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let scan_control: ScanByKeyControl<R> = control.into();
-                let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, u32, u32, u32,
-                    crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
-                >(policy, &self.0, &self.1, &self.2, &self.3, &dummy4, &dummy5, &dummy6, &scan_control)?;
-                let (a, b, c, d, _, _, _) = reduce_by_key_tuple7_scanned_values!(
-                    policy, control, inclusive, (init.0, init.1, init.2, init.3, 0, 0, 0);
-                    A, B, C, D, u32, u32, u32;
-                    crate::detail::api::Tuple4AsTuple7BinaryOp<Op>
-                )?;
+                let apply = SegmentedReduceApply::new(control);
+                let (a, b, c, d, _, _, _) = apply.apply_views7::<
+                                                    A, B, C, D, u32, u32, u32,
+                                                    crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
+                                                >(
+                                                    policy,
+                                                    &self.0,
+                                                    &self.1,
+                                                    &self.2,
+                                                    &self.3,
+                                                    &dummy4,
+                                                    &dummy5,
+                                                    &dummy6,
+                                                    (init.0, init.1, init.2, init.3, 0, 0, 0),
+                                                )?;
                 Ok((a, b, c, d))
             }
         }
@@ -737,8 +835,7 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
 
 macro_rules! impl_kernel_reduce_by_key_tuple5_views {
     () => {
-        impl<R, A, B, C, D, E, KeyEq, Op>
-            KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
+        impl<R, A, B, C, D, E, KeyEq, Op> KernelReduceByKeyValues<ReduceByKeyControl<R>, KeyEq, Op>
             for (
                 DeviceColumnView<R, A>,
                 DeviceColumnView<R, B>,
@@ -757,7 +854,13 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
         {
             type Runtime = R;
             type Init = (A, B, C, D, E);
-            type OutputValues = (DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>, DeviceVec<R, D>, DeviceVec<R, E>);
+            type OutputValues = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+            );
 
             fn reduce_by_key_values(
                 self,
@@ -766,22 +869,33 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
-                    return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
+                    return Ok((
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                    ));
                 }
                 let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy5 = DeviceColumnView::from_column(&dummy5);
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let scan_control: ScanByKeyControl<R> = control.into();
-                let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, E, u32, u32,
-                    crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
-                >(policy, &self.0, &self.1, &self.2, &self.3, &self.4, &dummy5, &dummy6, &scan_control)?;
-                let (a, b, c, d, e, _, _) = reduce_by_key_tuple7_scanned_values!(
-                    policy, control, inclusive, (init.0, init.1, init.2, init.3, init.4, 0, 0);
-                    A, B, C, D, E, u32, u32;
-                    crate::detail::api::Tuple5AsTuple7BinaryOp<Op>
-                )?;
+                let apply = SegmentedReduceApply::new(control);
+                let (a, b, c, d, e, _, _) = apply.apply_views7::<
+                                                    A, B, C, D, E, u32, u32,
+                                                    crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
+                                                >(
+                                                    policy,
+                                                    &self.0,
+                                                    &self.1,
+                                                    &self.2,
+                                                    &self.3,
+                                                    &self.4,
+                                                    &dummy5,
+                                                    &dummy6,
+                                                    (init.0, init.1, init.2, init.3, init.4, 0, 0),
+                                                )?;
                 Ok((a, b, c, d, e))
             }
         }
@@ -812,7 +926,14 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
         {
             type Runtime = R;
             type Init = (A, B, C, D, E, F);
-            type OutputValues = (DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>, DeviceVec<R, D>, DeviceVec<R, E>, DeviceVec<R, F>);
+            type OutputValues = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+                DeviceVec<R, F>,
+            );
 
             fn reduce_by_key_values(
                 self,
@@ -821,20 +942,32 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
-                    return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
+                    return Ok((
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                    ));
                 }
                 let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
                 let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let scan_control: ScanByKeyControl<R> = control.into();
-                let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, E, F, u32,
-                    crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
-                >(policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &dummy6, &scan_control)?;
-                let (a, b, c, d, e, f, _) = reduce_by_key_tuple7_scanned_values!(
-                    policy, control, inclusive, (init.0, init.1, init.2, init.3, init.4, init.5, 0);
-                    A, B, C, D, E, F, u32;
-                    crate::detail::api::Tuple6AsTuple7BinaryOp<Op>
-                )?;
+                let apply = SegmentedReduceApply::new(control);
+                let (a, b, c, d, e, f, _) = apply.apply_views7::<
+                                            A, B, C, D, E, F, u32,
+                                            crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
+                                        >(
+                                            policy,
+                                            &self.0,
+                                            &self.1,
+                                            &self.2,
+                                            &self.3,
+                                            &self.4,
+                                            &self.5,
+                                            &dummy6,
+                                            (init.0, init.1, init.2, init.3, init.4, init.5, 0),
+                                        )?;
                 Ok((a, b, c, d, e, f))
             }
         }
@@ -867,7 +1000,15 @@ macro_rules! impl_kernel_reduce_by_key_tuple7_views {
         {
             type Runtime = R;
             type Init = (A, B, C, D, E, F, G);
-            type OutputValues = (DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>, DeviceVec<R, D>, DeviceVec<R, E>, DeviceVec<R, F>, DeviceVec<R, G>);
+            type OutputValues = (
+                DeviceVec<R, A>,
+                DeviceVec<R, B>,
+                DeviceVec<R, C>,
+                DeviceVec<R, D>,
+                DeviceVec<R, E>,
+                DeviceVec<R, F>,
+                DeviceVec<R, G>,
+            );
 
             fn reduce_by_key_values(
                 self,
@@ -876,16 +1017,19 @@ macro_rules! impl_kernel_reduce_by_key_tuple7_views {
                 init: Self::Init,
             ) -> Result<Self::OutputValues, Error> {
                 if control.len == 0 {
-                    return Ok((policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec(), policy.empty_device_vec()));
+                    return Ok((
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                        policy.empty_device_vec(),
+                    ));
                 }
-                let scan_control: ScanByKeyControl<R> = control.into();
-                let inclusive = super::scan::inclusive_scan_by_flags_seven_views::<
-                    R, A, B, C, D, E, F, G, Op,
-                >(policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6, &scan_control)?;
-                reduce_by_key_tuple7_scanned_values!(
-                    policy, control, inclusive, init;
-                    A, B, C, D, E, F, G;
-                    Op
+                let apply = SegmentedReduceApply::new(control);
+                apply.apply_views7::<A, B, C, D, E, F, G, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6, init,
                 )
             }
         }

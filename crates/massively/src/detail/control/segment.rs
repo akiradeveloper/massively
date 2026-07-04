@@ -10,7 +10,6 @@ pub(crate) struct SegmentControl<R: Runtime> {
     pub(crate) _runtime: std::marker::PhantomData<R>,
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub(crate) struct ScanByKeyControl<R: Runtime> {
     pub(crate) head_flags: cubecl::server::Handle,
@@ -27,6 +26,65 @@ pub(crate) struct ReduceByKeyControl<R: Runtime> {
     pub(crate) len: usize,
     pub(crate) len_u32: u32,
     pub(crate) _runtime: std::marker::PhantomData<R>,
+}
+
+impl<R: Runtime> SegmentControl<R> {
+    pub(crate) fn from_head_flags(
+        head_flags: cubecl::server::Handle,
+        len: usize,
+        len_u32: u32,
+    ) -> Self {
+        Self {
+            head_flags,
+            end_flags: None,
+            len,
+            len_u32,
+            _runtime: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn from_head_end_flags(
+        head_flags: cubecl::server::Handle,
+        end_flags: cubecl::server::Handle,
+        len: usize,
+        len_u32: u32,
+    ) -> Self {
+        Self {
+            head_flags,
+            end_flags: Some(end_flags),
+            len,
+            len_u32,
+            _runtime: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<R: Runtime> ScanByKeyControl<R> {
+    pub(crate) fn from_segment(segment: &SegmentControl<R>) -> Self {
+        Self::from(segment)
+    }
+}
+
+impl<R: Runtime> ReduceByKeyControl<R> {
+    pub(crate) fn from_segment(
+        segment: SegmentControl<R>,
+        output_selection: super::SelectedRankControl,
+        output_count: usize,
+    ) -> Self {
+        let end_flags = segment
+            .end_flags
+            .clone()
+            .expect("reduce-by-key segment control must have end flags");
+        Self {
+            head_flags: segment.head_flags,
+            end_flags,
+            output_selection,
+            output_count,
+            len: segment.len,
+            len_u32: segment.len_u32,
+            _runtime: std::marker::PhantomData,
+        }
+    }
 }
 
 impl<R: Runtime> From<&ReduceByKeyControl<R>> for ScanByKeyControl<R> {

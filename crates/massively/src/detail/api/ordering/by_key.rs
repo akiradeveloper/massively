@@ -1,21 +1,14 @@
 use super::*;
-use crate::MIndex;
 impl<Keys, Values, Less> crate::detail::read::KernelSortByKeyCall<Values, Less> for Keys
 where
     Keys: crate::detail::read::KernelSortByKeyKeys<Less>,
-    Values: crate::detail::read::KernelSortByKeyValues<
-            DeviceVec<Keys::Runtime, MIndex>,
-            Runtime = Keys::Runtime,
-        >,
+    Values: crate::detail::read::KernelSortByKeyValues<Runtime = Keys::Runtime>,
 {
     type Runtime = Keys::Runtime;
-    type Output =
-        (
-            <Keys as crate::detail::read::KernelSortByKeyKeys<Less>>::OutputKeys,
-            <Values as crate::detail::read::KernelSortByKeyValues<
-                DeviceVec<Keys::Runtime, MIndex>,
-            >>::OutputValues,
-        );
+    type Output = (
+        <Keys as crate::detail::read::KernelSortByKeyKeys<Less>>::OutputKeys,
+        <Values as crate::detail::read::KernelSortByKeyValues>::OutputValues,
+    );
 
     fn sort_by_key_call(
         self,
@@ -24,9 +17,8 @@ where
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
         let (keys, indices) = self.sort_by_key_control(policy)?;
-        let control = crate::detail::control::PermutationControl::from_indices(&indices)?;
-        let indices = control.indices(policy);
-        let values = values.sort_by_key_values(policy, &indices)?;
+        let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
+        let values = values.sort_by_key_values(policy, control.permutation())?;
         Ok((keys, values))
     }
 }

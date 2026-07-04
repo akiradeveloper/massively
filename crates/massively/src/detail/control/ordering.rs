@@ -35,6 +35,25 @@ impl<R: Runtime> PermutationControl<R> {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct OrderingControl<R: Runtime> {
+    permutation: PermutationControl<R>,
+}
+
+impl<R: Runtime> OrderingControl<R> {
+    pub(crate) fn from_sorted_indices<T>(
+        indices: &crate::detail::device::DeviceVec<R, T>,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            permutation: PermutationControl::from_indices(indices)?,
+        })
+    }
+
+    pub(crate) fn permutation(&self) -> &PermutationControl<R> {
+        &self.permutation
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) struct MergeControl<R: Runtime> {
     pub(crate) source_side: cubecl::server::Handle,

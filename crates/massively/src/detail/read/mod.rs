@@ -19,10 +19,10 @@ use crate::{
         op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},
         primitives::{
             ordering as primitive_ordering, range as primitive_range, reduce as primitive_reduce,
-            scan as primitive_scan, search as primitive_search, select,
+            scan as primitive_scan, select,
         },
     },
-    error::{LengthForCompare, ensure_same_len},
+    error::ensure_same_len,
     expr::{DeviceGpuExpr, GpuExpr},
     index::{MIndex, mindex_from_usize},
     kernels::*,
@@ -32,7 +32,6 @@ use crate::{
 
 #[allow(dead_code)]
 const BLOCK_GATHER_WHERE_SIZE: u32 = 256;
-const BLOCK_SCATTER_WHERE_SIZE: u32 = 256;
 const BLOCK_REPLACE_WHERE_SIZE: u32 = 256;
 const BLOCK_UNIQUE_SIZE: u32 = 256;
 
@@ -74,15 +73,6 @@ where
     A::validate(left)?;
     C::validate(right)?;
     ensure_same_len(C::len(right), A::len(left))
-}
-
-fn validate_key_column<Key, Len>(keys: &Key, len: Len) -> Result<(), Error>
-where
-    Key: KernelColumn,
-    Len: LengthForCompare,
-{
-    Key::validate(keys)?;
-    ensure_same_len(Key::len(keys), len)
 }
 
 fn validate_columns3<A, C, D>(first: &A, second: &C, third: &D) -> Result<(), Error>

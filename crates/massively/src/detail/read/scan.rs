@@ -30,6 +30,190 @@ pub(crate) trait KernelAdjacentDifferenceInput<Op>: Sized {
     ) -> Result<Self::Output, Error>;
 }
 
+struct LinearScanApply;
+
+impl LinearScanApply {
+    fn inclusive_expr1<R, T, Expr, Op>(
+        policy: &CubePolicy<R>,
+        input: &KernelColumnBindings,
+        len: usize,
+    ) -> Result<DeviceSoA1<DeviceVec<R, T>>, Error>
+    where
+        R: Runtime,
+        T: Scalar + 'static,
+        Expr: DeviceGpuExpr<T>,
+        (T,): MItem<R>,
+        Op: BinaryOp<(T,)>,
+    {
+        primitive_scan::inclusive_scan_tuple1_device_expr::<R, T, Expr, Op>(policy, input, len)
+    }
+
+    fn exclusive_expr1<R, T, Expr, Op>(
+        policy: &CubePolicy<R>,
+        input: &KernelColumnBindings,
+        len: usize,
+        init: (T,),
+    ) -> Result<DeviceSoA1<DeviceVec<R, T>>, Error>
+    where
+        R: Runtime,
+        T: Scalar + 'static,
+        Expr: DeviceGpuExpr<T>,
+        (T,): MItem<R>,
+        Op: BinaryOp<(T,)>,
+    {
+        primitive_scan::exclusive_scan_tuple1_device_expr::<R, T, Expr, Op>(
+            policy, input, len, init,
+        )
+    }
+
+    fn adjacent_expr1<Source, Op>(
+        policy: &CubePolicy<Source::Runtime>,
+        source: &Source,
+    ) -> Result<DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>, Error>
+    where
+        Source: KernelColumn + KernelColumnAt<S0>,
+        Source::Item: Scalar + 'static,
+        Source::Expr: DeviceGpuExpr<Source::Item>,
+        Op: BinaryOp<Source::Item>,
+    {
+        let source = crate::detail::api::device_expr_adjacent_difference_with_policy::<Source, Op>(
+            policy, source,
+        )?;
+        Ok(DeviceSoA1 { source })
+    }
+
+    fn inclusive_expr2<R, A, C, AExpr, CExpr, Op>(
+        policy: &CubePolicy<R>,
+        left: &KernelColumnBindings,
+        right: &KernelColumnBindings,
+        len: usize,
+    ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        (A, C): MItem<R>,
+        Op: BinaryOp<(A, C)>,
+    {
+        primitive_scan::inclusive_scan_tuple2_device_expr::<R, A, C, AExpr, CExpr, Op>(
+            policy, left, right, len,
+        )
+    }
+
+    fn exclusive_expr2<R, A, C, AExpr, CExpr, Op>(
+        policy: &CubePolicy<R>,
+        left: &KernelColumnBindings,
+        right: &KernelColumnBindings,
+        len: usize,
+        init: (A, C),
+    ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        (A, C): MItem<R>,
+        Op: BinaryOp<(A, C)>,
+    {
+        primitive_scan::exclusive_scan_tuple2_device_expr::<R, A, C, AExpr, CExpr, Op>(
+            policy, left, right, len, init,
+        )
+    }
+
+    fn adjacent_expr2<R, A, C, AExpr, CExpr, Op>(
+        policy: &CubePolicy<R>,
+        left: &KernelColumnBindings,
+        right: &KernelColumnBindings,
+        len: usize,
+    ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        (A, C): MItem<R>,
+        Op: BinaryOp<(A, C)>,
+    {
+        primitive_scan::adjacent_difference_tuple2_device_expr::<R, A, C, AExpr, CExpr, Op>(
+            policy, left, right, len,
+        )
+    }
+
+    fn inclusive_expr3<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+        policy: &CubePolicy<R>,
+        first: &KernelColumnBindings,
+        second: &KernelColumnBindings,
+        third: &KernelColumnBindings,
+        len: usize,
+    ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        D: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        DExpr: DeviceGpuExpr<D>,
+        (A, C, D): MItem<R>,
+        Op: BinaryOp<(A, C, D)>,
+    {
+        primitive_scan::inclusive_scan_tuple3_device_expr::<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+            policy, first, second, third, len,
+        )
+    }
+
+    fn exclusive_expr3<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+        policy: &CubePolicy<R>,
+        first: &KernelColumnBindings,
+        second: &KernelColumnBindings,
+        third: &KernelColumnBindings,
+        len: usize,
+        init: (A, C, D),
+    ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        D: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        DExpr: DeviceGpuExpr<D>,
+        (A, C, D): MItem<R>,
+        Op: BinaryOp<(A, C, D)>,
+    {
+        primitive_scan::exclusive_scan_tuple3_device_expr::<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+            policy, first, second, third, len, init,
+        )
+    }
+
+    fn adjacent_expr3<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+        policy: &CubePolicy<R>,
+        first: &KernelColumnBindings,
+        second: &KernelColumnBindings,
+        third: &KernelColumnBindings,
+        len: usize,
+    ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        D: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        DExpr: DeviceGpuExpr<D>,
+        (A, C, D): MItem<R>,
+        Op: BinaryOp<(A, C, D)>,
+    {
+        primitive_scan::adjacent_difference_tuple3_device_expr::<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+            policy, first, second, third, len,
+        )
+    }
+}
+
 macro_rules! impl_kernel_inclusive_scan_tuple1 {
     ($target:ty, $field:tt) => {
         impl<S, Op> KernelInclusiveScanInput<Op> for $target
@@ -49,12 +233,9 @@ macro_rules! impl_kernel_inclusive_scan_tuple1 {
             ) -> Result<Self::Output, Error> {
                 let len = <S as KernelColumn>::len(&self.$field);
                 let bindings = <S as KernelColumn>::stage(&self.$field, policy)?;
-                primitive_scan::inclusive_scan_tuple1_device_expr::<
-                    S::Runtime,
-                    S::Item,
-                    S::Expr,
-                    Op,
-                >(policy, &bindings, len)
+                LinearScanApply::inclusive_expr1::<S::Runtime, S::Item, S::Expr, Op>(
+                    policy, &bindings, len,
+                )
             }
         }
     };
@@ -85,12 +266,9 @@ macro_rules! impl_kernel_exclusive_scan_tuple1 {
             ) -> Result<Self::Output, Error> {
                 let len = <S as KernelColumn>::len(&self.$field);
                 let bindings = <S as KernelColumn>::stage(&self.$field, policy)?;
-                primitive_scan::exclusive_scan_tuple1_device_expr::<
-                    S::Runtime,
-                    S::Item,
-                    S::Expr,
-                    Op,
-                >(policy, &bindings, len, init)
+                LinearScanApply::exclusive_expr1::<S::Runtime, S::Item, S::Expr, Op>(
+                    policy, &bindings, len, init,
+                )
             }
         }
     };
@@ -114,10 +292,7 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        let source = crate::detail::api::device_expr_adjacent_difference_with_policy::<S, Op>(
-            policy, &self,
-        )?;
-        Ok(DeviceSoA1 { source })
+        LinearScanApply::adjacent_expr1::<S, Op>(policy, &self)
     }
 }
 
@@ -138,11 +313,10 @@ macro_rules! impl_kernel_adjacent_difference_tuple1 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
-                let source = crate::detail::api::device_expr_adjacent_difference_with_policy::<
-                    S,
-                    crate::detail::api::Tuple1BinaryOp<Op>,
-                >(policy, &self.$field)?;
-                Ok(DeviceSoA1 { source })
+                LinearScanApply::adjacent_expr1::<S, crate::detail::api::Tuple1BinaryOp<Op>>(
+                    policy,
+                    &self.$field,
+                )
             }
         }
     };
@@ -176,7 +350,7 @@ macro_rules! impl_kernel_scan_tuple2 {
                 validate_columns2(&self.$left, &self.$right)?;
                 let left = <A as KernelColumn>::stage(&self.$left, policy)?;
                 let right = <C as KernelColumn>::stage(&self.$right, policy)?;
-                primitive_scan::inclusive_scan_tuple2_device_expr::<
+                LinearScanApply::inclusive_expr2::<
                     A::Runtime,
                     A::Item,
                     C::Item,
@@ -211,7 +385,7 @@ macro_rules! impl_kernel_scan_tuple2 {
                 validate_columns2(&self.$left, &self.$right)?;
                 let left = <A as KernelColumn>::stage(&self.$left, policy)?;
                 let right = <C as KernelColumn>::stage(&self.$right, policy)?;
-                primitive_scan::exclusive_scan_tuple2_device_expr::<
+                LinearScanApply::exclusive_expr2::<
                     A::Runtime,
                     A::Item,
                     C::Item,
@@ -250,7 +424,7 @@ macro_rules! impl_kernel_scan_tuple2 {
                 validate_columns2(&self.$left, &self.$right)?;
                 let left = <A as KernelColumn>::stage(&self.$left, policy)?;
                 let right = <C as KernelColumn>::stage(&self.$right, policy)?;
-                primitive_scan::adjacent_difference_tuple2_device_expr::<
+                LinearScanApply::adjacent_expr2::<
                     A::Runtime,
                     A::Item,
                     C::Item,
@@ -297,7 +471,7 @@ macro_rules! impl_kernel_scan_tuple3 {
                 let first = <A as KernelColumn>::stage(&self.$first, policy)?;
                 let second = <C as KernelColumn>::stage(&self.$second, policy)?;
                 let third = <D as KernelColumn>::stage(&self.$third, policy)?;
-                primitive_scan::inclusive_scan_tuple3_device_expr::<
+                LinearScanApply::inclusive_expr3::<
                     A::Runtime,
                     A::Item,
                     C::Item,
@@ -347,7 +521,7 @@ macro_rules! impl_kernel_scan_tuple3 {
                 let first = <A as KernelColumn>::stage(&self.$first, policy)?;
                 let second = <C as KernelColumn>::stage(&self.$second, policy)?;
                 let third = <D as KernelColumn>::stage(&self.$third, policy)?;
-                primitive_scan::exclusive_scan_tuple3_device_expr::<
+                LinearScanApply::exclusive_expr3::<
                     A::Runtime,
                     A::Item,
                     C::Item,
@@ -396,7 +570,7 @@ macro_rules! impl_kernel_scan_tuple3 {
                 let first = <A as KernelColumn>::stage(&self.$first, policy)?;
                 let second = <C as KernelColumn>::stage(&self.$second, policy)?;
                 let third = <D as KernelColumn>::stage(&self.$third, policy)?;
-                primitive_scan::adjacent_difference_tuple3_device_expr::<
+                LinearScanApply::adjacent_expr3::<
                     A::Runtime,
                     A::Item,
                     C::Item,

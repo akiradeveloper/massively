@@ -14,6 +14,80 @@ pub(crate) trait KernelSortInput<Less>: Sized {
     fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error>;
 }
 
+struct SortApply;
+
+impl SortApply {
+    fn apply_expr<Source, Less>(
+        policy: &CubePolicy<Source::Runtime>,
+        source: &Source,
+    ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
+    where
+        Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
+        Source::Item: Scalar + 'static,
+        Source::Expr: DeviceGpuExpr<Source::Item>,
+        Less: BinaryPredicateOp<Source::Item>,
+    {
+        primitive_ordering::sort_input_with_policy(policy, source, crate::op::GpuOp::<Less>::new())
+    }
+
+    fn apply_expr2<Left, Right, Less>(
+        policy: &CubePolicy<Left::Runtime>,
+        left: &Left,
+        right: &Right,
+    ) -> Result<
+        (
+            DeviceVec<Left::Runtime, Left::Item>,
+            DeviceVec<Left::Runtime, Right::Item>,
+        ),
+        Error,
+    >
+    where
+        Left: KernelColumn + KernelColumnAt<S0>,
+        Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
+        Left::Item: Scalar + 'static,
+        Right::Item: Scalar + 'static,
+        Left::Expr: DeviceGpuExpr<Left::Item>,
+        Right::Expr: DeviceGpuExpr<Right::Item>,
+        Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
+    {
+        primitive_ordering::sort_tuple2_input(policy, left, right, crate::op::GpuOp::<Less>::new())
+    }
+
+    fn apply_expr3<First, Second, Third, Less>(
+        policy: &CubePolicy<First::Runtime>,
+        first: &First,
+        second: &Second,
+        third: &Third,
+    ) -> Result<
+        (
+            DeviceVec<First::Runtime, First::Item>,
+            DeviceVec<First::Runtime, Second::Item>,
+            DeviceVec<First::Runtime, Third::Item>,
+        ),
+        Error,
+    >
+    where
+        First: KernelColumn + KernelColumnAt<S0>,
+        Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+        Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+        First::Item: Scalar + 'static,
+        Second::Item: Scalar + 'static,
+        Third::Item: Scalar + 'static,
+        First::Expr: DeviceGpuExpr<First::Item>,
+        Second::Expr: DeviceGpuExpr<Second::Item>,
+        Third::Expr: DeviceGpuExpr<Third::Item>,
+        Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+    {
+        primitive_ordering::sort_tuple3_input(
+            policy,
+            first,
+            second,
+            third,
+            crate::op::GpuOp::<Less>::new(),
+        )
+    }
+}
+
 #[allow(dead_code)]
 
 pub(crate) trait KernelPairOrderingInput<Other, Less>: Sized {
@@ -59,8 +133,10 @@ where
     type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
 
     fn reverse_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
+        let control = crate::detail::control::RangeControl::reverse(self.len())?;
+        let apply = crate::detail::api::RangePayloadApply::new(&control);
         Ok(DeviceSoA1 {
-            source: crate::detail::api::device_expr_reverse_collect(policy, &self)?,
+            source: apply.apply_expr(policy, &self)?,
         })
     }
 }
@@ -80,8 +156,10 @@ macro_rules! impl_kernel_reverse_tuple1 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
+                let control = crate::detail::control::RangeControl::reverse(self.$field.len())?;
+                let apply = crate::detail::api::RangePayloadApply::new(&control);
                 Ok(DeviceSoA1 {
-                    source: crate::detail::api::device_expr_reverse_collect(policy, &self.$field)?,
+                    source: apply.apply_expr(policy, &self.$field)?,
                 })
             }
         }
@@ -112,10 +190,10 @@ macro_rules! impl_kernel_reverse_tuple2 {
                 policy: &CubePolicy<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
-                Ok(DeviceSoA2 {
-                    left: crate::detail::api::device_expr_reverse_collect(policy, &self.$left)?,
-                    right: crate::detail::api::device_expr_reverse_collect(policy, &self.$right)?,
-                })
+                let control = crate::detail::control::RangeControl::reverse(self.$left.len())?;
+                let apply = crate::detail::api::RangePayloadApply::new(&control);
+                let (left, right) = apply.apply_expr2(policy, &self.$left, &self.$right)?;
+                Ok(DeviceSoA2 { left, right })
             }
         }
     };
@@ -168,10 +246,14 @@ macro_rules! impl_kernel_reverse_tuple3 {
                 policy: &CubePolicy<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
+                let control = crate::detail::control::RangeControl::reverse(self.$first.len())?;
+                let apply = crate::detail::api::RangePayloadApply::new(&control);
+                let (first, second, third) =
+                    apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok(DeviceSoA3 {
-                    first: crate::detail::api::device_expr_reverse_collect(policy, &self.$first)?,
-                    second: crate::detail::api::device_expr_reverse_collect(policy, &self.$second)?,
-                    third: crate::detail::api::device_expr_reverse_collect(policy, &self.$third)?,
+                    first,
+                    second,
+                    third,
                 })
             }
         }
@@ -212,11 +294,7 @@ where
 
     fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         Ok(DeviceSoA1 {
-            source: primitive_ordering::sort_input_with_policy(
-                policy,
-                &self,
-                crate::op::GpuOp::<Less>::new(),
-            )?,
+            source: SortApply::apply_expr::<Source, Less>(policy, &self)?,
         })
     }
 }
@@ -235,11 +313,7 @@ macro_rules! impl_kernel_sort_tuple1 {
 
             fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
                 Ok(DeviceSoA1 {
-                    source: primitive_ordering::sort_input_with_policy(
-                        policy,
-                        &self.$field,
-                        crate::op::GpuOp::<Less>::new(),
-                    )?,
+                    source: SortApply::apply_expr::<Source, Less>(policy, &self.$field)?,
                 })
             }
         }
@@ -286,12 +360,8 @@ macro_rules! impl_kernel_sort_tuple2 {
             >;
 
             fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-                let (left, right) = primitive_ordering::sort_tuple2_input(
-                    policy,
-                    &self.$left,
-                    &self.$right,
-                    crate::op::GpuOp::<Less>::new(),
-                )?;
+                let (left, right) =
+                    SortApply::apply_expr2::<Left, Right, Less>(policy, &self.$left, &self.$right)?;
                 Ok(DeviceSoA2 { left, right })
             }
         }
@@ -342,12 +412,11 @@ macro_rules! impl_kernel_sort_tuple3 {
             >;
 
             fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-                let (first, second, third) = primitive_ordering::sort_tuple3_input(
+                let (first, second, third) = SortApply::apply_expr3::<First, Second, Third, Less>(
                     policy,
                     &self.$first,
                     &self.$second,
                     &self.$third,
-                    crate::op::GpuOp::<Less>::new(),
                 )?;
                 Ok(DeviceSoA3 {
                     first,

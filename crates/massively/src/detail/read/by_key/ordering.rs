@@ -10,18 +10,118 @@ pub(crate) trait KernelSortByKeyKeys<Less>: Sized {
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error>;
 }
 
-pub(crate) trait KernelSortByKeyValues<IndexSource>: Sized
-where
-    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-{
+pub(crate) trait KernelSortByKeyValues: Sized {
     type Runtime: Runtime;
     type OutputValues;
 
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        indices: &IndexSource,
+        control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error>;
+}
+
+struct SortByKeyApply;
+
+impl SortByKeyApply {
+    fn apply_keys1<KeySource, Less>(
+        policy: &CubePolicy<KeySource::Runtime>,
+        keys: &KeySource,
+    ) -> Result<
+        (
+            DeviceVec<KeySource::Runtime, KeySource::Item>,
+            DeviceVec<KeySource::Runtime, MIndex>,
+        ),
+        Error,
+    >
+    where
+        KeySource: KernelColumn + KernelColumnAt<S0>,
+        KeySource::Item: Scalar + 'static,
+        KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
+        Less: BinaryPredicateOp<KeySource::Item>,
+    {
+        let indices =
+            primitive_range::indices_mindex(policy, <KeySource as KernelColumn>::len(keys))?;
+        primitive_ordering::sort_by_key_input_with_policy(
+            policy,
+            keys,
+            &indices,
+            crate::op::GpuOp::<Less>::new(),
+        )
+    }
+
+    fn apply_keys2<First, Second, Less>(
+        policy: &CubePolicy<First::Runtime>,
+        first: &First,
+        second: &Second,
+    ) -> Result<
+        (
+            DeviceVec<First::Runtime, First::Item>,
+            DeviceVec<First::Runtime, Second::Item>,
+            DeviceVec<First::Runtime, MIndex>,
+        ),
+        Error,
+    >
+    where
+        First: KernelColumn + KernelColumnAt<S0>,
+        Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+        First::Item: Scalar + 'static,
+        Second::Item: Scalar + 'static,
+        First::Expr: DeviceGpuExpr<First::Item>,
+        Second::Expr: DeviceGpuExpr<Second::Item>,
+        Less: BinaryPredicateOp<(First::Item, Second::Item)>,
+        crate::detail::api::Tuple2AsTuple3Less<Less>:
+            BinaryPredicateOp<(First::Item, Second::Item, u32)>,
+    {
+        let indices = primitive_range::indices_mindex(policy, <First as KernelColumn>::len(first))?;
+        let (first, second, _stable_tie, indices) =
+            primitive_ordering::sort_tuple3_by_key_input_with_policy(
+                policy,
+                first,
+                second,
+                &indices,
+                &indices,
+                crate::op::GpuOp::<crate::detail::api::Tuple2AsTuple3Less<Less>>::new(),
+            )?;
+        Ok((first, second, indices))
+    }
+
+    fn apply_keys3<First, Second, Third, Less>(
+        policy: &CubePolicy<First::Runtime>,
+        first: &First,
+        second: &Second,
+        third: &Third,
+    ) -> Result<
+        (
+            DeviceVec<First::Runtime, First::Item>,
+            DeviceVec<First::Runtime, Second::Item>,
+            DeviceVec<First::Runtime, Third::Item>,
+            DeviceVec<First::Runtime, MIndex>,
+        ),
+        Error,
+    >
+    where
+        First: KernelColumn + KernelColumnAt<S0>,
+        Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+        Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
+        First::Item: Scalar + 'static,
+        Second::Item: Scalar + 'static,
+        Third::Item: Scalar + 'static,
+        First::Expr: DeviceGpuExpr<First::Item>,
+        Second::Expr: DeviceGpuExpr<Second::Item>,
+        Third::Expr: DeviceGpuExpr<Third::Item>,
+        Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
+    {
+        let indices = primitive_range::indices_mindex(policy, <First as KernelColumn>::len(first))?;
+        primitive_ordering::sort_tuple3_by_key_input_with_policy(
+            policy,
+            first,
+            second,
+            third,
+            &indices,
+            crate::op::GpuOp::<Less>::new(),
+        )
+    }
 }
 
 pub(crate) trait KernelMergeByKeyKeys<RightKeys, Less>: Sized
@@ -93,14 +193,7 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
-        let indices =
-            primitive_range::indices_mindex(policy, <KeySource as KernelColumn>::len(&self))?;
-        let (keys, indices) = primitive_ordering::sort_by_key_input_with_policy(
-            policy,
-            &self,
-            &indices,
-            crate::op::GpuOp::<Less>::new(),
-        )?;
+        let (keys, indices) = SortByKeyApply::apply_keys1::<KeySource, Less>(policy, &self)?;
         Ok((DeviceSoA1 { source: keys }, indices))
     }
 }
@@ -172,17 +265,8 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
-        let indices =
-            primitive_range::indices_mindex(policy, <First as KernelColumn>::len(&self.0))?;
-        let (first, second, _stable_tie, indices) =
-            primitive_ordering::sort_tuple3_by_key_input_with_policy(
-                policy,
-                &self.0,
-                &self.1,
-                &indices,
-                &indices,
-                crate::op::GpuOp::<crate::detail::api::Tuple2AsTuple3Less<Less>>::new(),
-            )?;
+        let (first, second, indices) =
+            SortByKeyApply::apply_keys2::<First, Second, Less>(policy, &self.0, &self.1)?;
         Ok((
             DeviceSoA2 {
                 left: first,
@@ -217,16 +301,9 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
-        let indices =
-            primitive_range::indices_mindex(policy, <First as KernelColumn>::len(&self.0))?;
         let (first, second, third, indices) =
-            primitive_ordering::sort_tuple3_by_key_input_with_policy(
-                policy,
-                &self.0,
-                &self.1,
-                &self.2,
-                &indices,
-                crate::op::GpuOp::<Less>::new(),
+            SortByKeyApply::apply_keys3::<First, Second, Third, Less>(
+                policy, &self.0, &self.1, &self.2,
             )?;
         Ok((
             DeviceSoA3 {
@@ -239,13 +316,11 @@ where
     }
 }
 
-impl<ValueSource, IndexSource> KernelSortByKeyValues<IndexSource> for ValueSource
+impl<ValueSource> KernelSortByKeyValues for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
-    IndexSource::Expr: GpuExpr<MIndex>,
 {
     type Runtime = ValueSource::Runtime;
     type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
@@ -253,23 +328,23 @@ where
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        indices: &IndexSource,
+        control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
-        validate_key_column(indices, <ValueSource as KernelColumn>::len(&self))?;
-        self.gather_read(policy, indices)
+        ensure_same_len(control.len, <ValueSource as KernelColumn>::len(&self))?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(control);
+        Ok(DeviceSoA1 {
+            source: apply.apply_expr(policy, &self)?,
+        })
     }
 }
 
 macro_rules! impl_kernel_sort_by_key_values_tuple1 {
     ($target:ty, $field:tt) => {
-        impl<ValueSource, IndexSource> KernelSortByKeyValues<IndexSource> for $target
+        impl<ValueSource> KernelSortByKeyValues for $target
         where
             ValueSource: KernelColumn + KernelColumnAt<S0>,
-            IndexSource:
-                KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             ValueSource::Item: Scalar + 'static,
             ValueSource::Expr: GpuExpr<ValueSource::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = ValueSource::Runtime;
             type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
@@ -277,9 +352,9 @@ macro_rules! impl_kernel_sort_by_key_values_tuple1 {
             fn sort_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                indices: &IndexSource,
+                control: &crate::detail::control::PermutationControl<Self::Runtime>,
             ) -> Result<Self::OutputValues, Error> {
-                self.$field.sort_by_key_values(policy, indices)
+                self.$field.sort_by_key_values(policy, control)
             }
         }
     };
@@ -288,35 +363,32 @@ macro_rules! impl_kernel_sort_by_key_values_tuple1 {
 impl_kernel_sort_by_key_values_tuple1!(SoAView1<ValueSource>, source);
 impl_kernel_sort_by_key_values_tuple1!(DeviceSoA1<ValueSource>, source);
 
-impl<ValueSource, IndexSource> KernelSortByKeyValues<IndexSource> for (ValueSource,)
+impl<ValueSource> KernelSortByKeyValues for (ValueSource,)
 where
-    ValueSource: KernelSortByKeyValues<IndexSource>,
-    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
+    ValueSource: KernelSortByKeyValues,
 {
-    type Runtime = <ValueSource as KernelSortByKeyValues<IndexSource>>::Runtime;
-    type OutputValues = <ValueSource as KernelSortByKeyValues<IndexSource>>::OutputValues;
+    type Runtime = <ValueSource as KernelSortByKeyValues>::Runtime;
+    type OutputValues = <ValueSource as KernelSortByKeyValues>::OutputValues;
 
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        indices: &IndexSource,
+        control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
-        self.0.sort_by_key_values(policy, indices)
+        self.0.sort_by_key_values(policy, control)
     }
 }
 
 macro_rules! impl_kernel_sort_by_key_values_tuple2 {
     ($target:ty, $out:ident, $left:tt, $right:tt) => {
-        impl<Left, Right, IndexSource> KernelSortByKeyValues<IndexSource> for $target
+        impl<Left, Right> KernelSortByKeyValues for $target
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = Left::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             Left::Item: Scalar + 'static,
             Right::Item: Scalar + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type OutputValues =
@@ -325,11 +397,13 @@ macro_rules! impl_kernel_sort_by_key_values_tuple2 {
             fn sort_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                indices: &IndexSource,
+                control: &crate::detail::control::PermutationControl<Self::Runtime>,
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
-                validate_key_column(indices, <Left as KernelColumn>::len(&self.$left))?;
-                self.gather_read(policy, indices)
+                ensure_same_len(control.len, <Left as KernelColumn>::len(&self.$left))?;
+                let apply = crate::detail::api::PermutationPayloadApply::new(control);
+                let (left, right) = apply.apply_expr2(policy, &self.$left, &self.$right)?;
+                Ok($out { left, right })
             }
         }
     };
@@ -338,45 +412,42 @@ macro_rules! impl_kernel_sort_by_key_values_tuple2 {
 impl_kernel_sort_by_key_values_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
 impl_kernel_sort_by_key_values_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
 
-impl<Left, Right, IndexSource> KernelSortByKeyValues<IndexSource> for (Left, Right)
+impl<Left, Right> KernelSortByKeyValues for (Left, Right)
 where
-    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView2<Left, Right>: KernelSortByKeyValues<IndexSource>,
+    SoAView2<Left, Right>: KernelSortByKeyValues,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelSortByKeyValues<IndexSource>>::Runtime;
-    type OutputValues = <SoAView2<Left, Right> as KernelSortByKeyValues<IndexSource>>::OutputValues;
+    type Runtime = <SoAView2<Left, Right> as KernelSortByKeyValues>::Runtime;
+    type OutputValues = <SoAView2<Left, Right> as KernelSortByKeyValues>::OutputValues;
 
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        indices: &IndexSource,
+        control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
-        <SoAView2<Left, Right> as KernelSortByKeyValues<IndexSource>>::sort_by_key_values(
+        <SoAView2<Left, Right> as KernelSortByKeyValues>::sort_by_key_values(
             SoAView2 {
                 left: self.0,
                 right: self.1,
             },
             policy,
-            indices,
+            control,
         )
     }
 }
 
 macro_rules! impl_kernel_sort_by_key_values_tuple3 {
     ($target:ty, $out:ident, $first:tt, $second:tt, $third:tt) => {
-        impl<First, Second, Third, IndexSource> KernelSortByKeyValues<IndexSource> for $target
+        impl<First, Second, Third> KernelSortByKeyValues for $target
         where
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            IndexSource: KernelColumn<Runtime = First::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             First::Item: Scalar + 'static,
             Second::Item: Scalar + 'static,
             Third::Item: Scalar + 'static,
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type OutputValues = $out<
@@ -388,11 +459,18 @@ macro_rules! impl_kernel_sort_by_key_values_tuple3 {
             fn sort_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                indices: &IndexSource,
+                control: &crate::detail::control::PermutationControl<Self::Runtime>,
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
-                validate_key_column(indices, <First as KernelColumn>::len(&self.$first))?;
-                self.gather_read(policy, indices)
+                ensure_same_len(control.len, <First as KernelColumn>::len(&self.$first))?;
+                let apply = crate::detail::api::PermutationPayloadApply::new(control);
+                let (first, second, third) =
+                    apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
+                Ok($out {
+                    first,
+                    second,
+                    third,
+                })
             }
         }
     };
@@ -401,43 +479,39 @@ macro_rules! impl_kernel_sort_by_key_values_tuple3 {
 impl_kernel_sort_by_key_values_tuple3!(SoAView3<First, Second, Third>, DeviceSoA3, first, second, third);
 impl_kernel_sort_by_key_values_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, second, third);
 
-impl<First, Second, Third, IndexSource> KernelSortByKeyValues<IndexSource>
-    for (First, Second, Third)
+impl<First, Second, Third> KernelSortByKeyValues for (First, Second, Third)
 where
-    IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView3<First, Second, Third>: KernelSortByKeyValues<IndexSource>,
+    SoAView3<First, Second, Third>: KernelSortByKeyValues,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelSortByKeyValues<IndexSource>>::Runtime;
-    type OutputValues =
-        <SoAView3<First, Second, Third> as KernelSortByKeyValues<IndexSource>>::OutputValues;
+    type Runtime = <SoAView3<First, Second, Third> as KernelSortByKeyValues>::Runtime;
+    type OutputValues = <SoAView3<First, Second, Third> as KernelSortByKeyValues>::OutputValues;
 
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        indices: &IndexSource,
+        control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
-        <SoAView3<First, Second, Third> as KernelSortByKeyValues<IndexSource>>::sort_by_key_values(
+        <SoAView3<First, Second, Third> as KernelSortByKeyValues>::sort_by_key_values(
             SoAView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
             },
             policy,
-            indices,
+            control,
         )
     }
 }
 
 macro_rules! impl_kernel_sort_by_key_values_wide_tuple {
-    ($first_ty:ident : $first_idx:tt $(, $ty:ident : $idx:tt )+) => {
-        impl<$first_ty, $( $ty, )+ IndexSource> KernelSortByKeyValues<IndexSource>
+    ($apply:ident; $first_ty:ident : $first_idx:tt $(, $ty:ident : $idx:tt )+) => {
+        impl<$first_ty, $( $ty, )+> KernelSortByKeyValues
             for ($first_ty, $( $ty, )+)
         where
             $first_ty: KernelColumn + KernelColumnAt<S0>,
             $(
                 $ty: KernelColumn<Runtime = $first_ty::Runtime> + KernelColumnAt<S0>,
             )+
-            IndexSource: KernelColumn<Runtime = $first_ty::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             $first_ty::Item: Scalar + 'static,
             $first_ty::Expr: GpuExpr<$first_ty::Item>,
             $(
@@ -455,25 +529,23 @@ macro_rules! impl_kernel_sort_by_key_values_wide_tuple {
             fn sort_by_key_values(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                indices: &IndexSource,
+                control: &crate::detail::control::PermutationControl<Self::Runtime>,
             ) -> Result<Self::OutputValues, Error> {
                 self.$first_idx.validate()?;
                 $( self.$idx.validate()?; )+
-                validate_key_column(indices, self.0.len())?;
-                Ok((
-                    crate::detail::api::device_expr_gather_with_policy(policy, &self.$first_idx, indices)?,
-                    $( crate::detail::api::device_expr_gather_with_policy(policy, &self.$idx, indices)?, )+
-                ))
+                ensure_same_len(control.len, self.0.len())?;
+                let apply = crate::detail::api::PermutationPayloadApply::new(control);
+                apply.$apply(policy, &self.$first_idx, $( &self.$idx, )+)
             }
         }
     };
 }
 
-impl_kernel_sort_by_key_values_wide_tuple!(A: 0, B: 1, C: 2, D: 3);
-impl_kernel_sort_by_key_values_wide_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4);
-impl_kernel_sort_by_key_values_wide_tuple!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
+impl_kernel_sort_by_key_values_wide_tuple!(apply_expr4; A: 0, B: 1, C: 2, D: 3);
+impl_kernel_sort_by_key_values_wide_tuple!(apply_expr5; A: 0, B: 1, C: 2, D: 3, E: 4);
+impl_kernel_sort_by_key_values_wide_tuple!(apply_expr6; A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
 
-impl<A, B, C, D, E, F, G, IndexSource> KernelSortByKeyValues<IndexSource> for (A, B, C, D, E, F, G)
+impl<A, B, C, D, E, F, G> KernelSortByKeyValues for (A, B, C, D, E, F, G)
 where
     A: KernelColumn + KernelColumnAt<S0>,
     B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -482,7 +554,6 @@ where
     E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    IndexSource: KernelColumn<Runtime = A::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     A::Item: Scalar + 'static,
     B::Item: Scalar + 'static,
     C::Item: Scalar + 'static,
@@ -497,7 +568,6 @@ where
     E::Expr: GpuExpr<E::Item>,
     F::Expr: GpuExpr<F::Item>,
     G::Expr: GpuExpr<G::Item>,
-    IndexSource::Expr: GpuExpr<MIndex>,
 {
     type Runtime = A::Runtime;
     type OutputValues = (
@@ -513,7 +583,7 @@ where
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        indices: &IndexSource,
+        control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
         self.0.validate()?;
         self.1.validate()?;
@@ -528,16 +598,11 @@ where
         ensure_same_len(self.4.len(), self.0.len())?;
         ensure_same_len(self.5.len(), self.0.len())?;
         ensure_same_len(self.6.len(), self.0.len())?;
-        validate_key_column(indices, self.0.len())?;
-        Ok((
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.0, indices)?,
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.1, indices)?,
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.2, indices)?,
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.3, indices)?,
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.4, indices)?,
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.5, indices)?,
-            crate::detail::api::device_expr_gather_with_policy(policy, &self.6, indices)?,
-        ))
+        ensure_same_len(control.len, self.0.len())?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(control);
+        apply.apply_expr7(
+            policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
+        )
     }
 }
 
@@ -720,12 +785,8 @@ where
         right_values: RightValue,
         control: &primitive_ordering::MergeByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
-        let values = crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-            policy,
-            &self,
-            &right_values,
-            control,
-        )?;
+        let apply = crate::detail::api::MergePayloadApply::new(control);
+        let values = apply.apply_expr(policy, &self, &right_values)?;
         Ok(DeviceSoA1 { source: values })
     }
 }
@@ -811,20 +872,14 @@ macro_rules! impl_kernel_merge_by_key_values_tuple2 {
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
                 validate_columns2(&right_values.$left, &right_values.$right)?;
-                let left =
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$left,
-                        &right_values.$left,
-                        control,
-                    )?;
-                let right =
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$right,
-                        &right_values.$right,
-                        control,
-                    )?;
+                let apply = crate::detail::api::MergePayloadApply::new(control);
+                let (left, right) = apply.apply_expr2(
+                    policy,
+                    &self.$left,
+                    &self.$right,
+                    &right_values.$left,
+                    &right_values.$right,
+                )?;
                 Ok($out { left, right })
             }
         }
@@ -904,27 +959,16 @@ macro_rules! impl_kernel_merge_by_key_values_tuple3 {
                     &right_values.$second,
                     &right_values.$third,
                 )?;
-                let first =
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$first,
-                        &right_values.$first,
-                        control,
-                    )?;
-                let second =
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$second,
-                        &right_values.$second,
-                        control,
-                    )?;
-                let third =
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$third,
-                        &right_values.$third,
-                        control,
-                    )?;
+                let apply = crate::detail::api::MergePayloadApply::new(control);
+                let (first, second, third) = apply.apply_expr3(
+                    policy,
+                    &self.$first,
+                    &self.$second,
+                    &self.$third,
+                    &right_values.$first,
+                    &right_values.$second,
+                    &right_values.$third,
+                )?;
                 Ok($out {
                     first,
                     second,
@@ -1016,24 +1060,45 @@ macro_rules! impl_kernel_merge_by_key_values_tuple_wide {
                     self.$idx.validate()?;
                     right_values.$idx.validate()?;
                 )+
-                Ok((
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$first_idx,
-                        &right_values.$first_idx,
-                        control,
-                    )?,
-                    $(
-                    crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                        policy,
-                        &self.$idx,
-                        &right_values.$idx,
-                        control,
-                    )?,
-                    )+
-                ))
+                let apply = crate::detail::api::MergePayloadApply::new(control);
+                impl_kernel_merge_by_key_values_tuple_wide!(@apply apply, policy, self, right_values; $first_idx, $($idx),+)
             }
         }
+    };
+    (@apply $apply:ident, $policy:ident, $self_value:ident, $right_values:ident; 0, 1, 2, 3) => {
+        $apply.apply_expr4(
+            $policy,
+            (&$self_value.0, &$self_value.1, &$self_value.2, &$self_value.3),
+            (&$right_values.0, &$right_values.1, &$right_values.2, &$right_values.3),
+        )
+    };
+    (@apply $apply:ident, $policy:ident, $self_value:ident, $right_values:ident; 0, 1, 2, 3, 4) => {
+        $apply.apply_expr5(
+            $policy,
+            (&$self_value.0, &$self_value.1, &$self_value.2, &$self_value.3, &$self_value.4),
+            (&$right_values.0, &$right_values.1, &$right_values.2, &$right_values.3, &$right_values.4),
+        )
+    };
+    (@apply $apply:ident, $policy:ident, $self_value:ident, $right_values:ident; 0, 1, 2, 3, 4, 5) => {
+        $apply.apply_expr6(
+            $policy,
+            (
+                &$self_value.0,
+                &$self_value.1,
+                &$self_value.2,
+                &$self_value.3,
+                &$self_value.4,
+                &$self_value.5,
+            ),
+            (
+                &$right_values.0,
+                &$right_values.1,
+                &$right_values.2,
+                &$right_values.3,
+                &$right_values.4,
+                &$right_values.5,
+            ),
+        )
     };
 }
 
@@ -1111,49 +1176,21 @@ where
         right_values.4.validate()?;
         right_values.5.validate()?;
         right_values.6.validate()?;
-        Ok((
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.0,
+        let apply = crate::detail::api::MergePayloadApply::new(control);
+        apply.apply_expr7(
+            policy,
+            (
+                &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
+            ),
+            (
                 &right_values.0,
-                control,
-            )?,
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.1,
                 &right_values.1,
-                control,
-            )?,
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.2,
                 &right_values.2,
-                control,
-            )?,
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.3,
                 &right_values.3,
-                control,
-            )?,
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.4,
                 &right_values.4,
-                control,
-            )?,
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.5,
                 &right_values.5,
-                control,
-            )?,
-            crate::detail::api::device_expr_merge_by_key_values_with_control_with_policy(
-                policy,
-                &self.6,
                 &right_values.6,
-                control,
-            )?,
-        ))
+            ),
+        )
     }
 }

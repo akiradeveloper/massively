@@ -5,11 +5,15 @@
 //! column so row semantics stay synchronized.
 
 mod ordering;
+mod range;
+mod search;
 mod segment;
 mod selection;
 
 #[allow(unused_imports)]
-pub(crate) use ordering::{MergeByKeyControl, MergeControl, PermutationControl};
+pub(crate) use ordering::{MergeByKeyControl, MergeControl, OrderingControl, PermutationControl};
+pub(crate) use range::{RangeControl, RangeMapping};
+pub(crate) use search::SearchControl;
 #[allow(unused_imports)]
 pub(crate) use segment::{ReduceByKeyControl, ScanByKeyControl, SegmentControl};
 #[allow(unused_imports)]

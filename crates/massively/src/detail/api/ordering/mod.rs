@@ -33,10 +33,10 @@ where
     right.validate()?;
     let len = left.len() + right.len();
     if left.len() == 0 {
-        return super::device_expr_collect_with_policy(policy, right);
+        return super::MaterializePayloadApply::collect_expr(policy, right);
     }
     if right.len() == 0 {
-        return super::device_expr_collect_with_policy(policy, left);
+        return super::MaterializePayloadApply::collect_expr(policy, left);
     }
 
     let client = policy.client();
@@ -91,6 +91,26 @@ where
     }
 
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
+}
+
+struct MergeExprApply;
+
+impl MergeExprApply {
+    fn apply_expr<Left, Right, Less>(
+        policy: &CubePolicy<Left::Runtime>,
+        left: &Left,
+        right: &Right,
+    ) -> Result<DeviceVec<Left::Runtime, Left::Item>, Error>
+    where
+        Left: KernelColumn + KernelColumnAt<S0>,
+        Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
+        Left::Item: CubePrimitive + CubeElement,
+        Left::Expr: DeviceGpuExpr<Left::Item>,
+        Right::Expr: DeviceGpuExpr<Right::Item>,
+        Less: BinaryPredicateOp<Left::Item>,
+    {
+        device_expr_merge_with_policy::<Left, Right, Less>(policy, left, right)
+    }
 }
 
 fn device_expr_membership_compact_with_policy<Candidate, Sorted, Less>(
@@ -169,7 +189,7 @@ where
 
     let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag_handle)?;
     let count = select::selected_count(policy, &selected_rank)?;
-    super::device_expr_apply_selected_with_policy(policy, candidates, &selected_rank, count)
+    super::SelectedPayloadApply::new(&selected_rank, count).apply_expr(policy, candidates)
 }
 
 fn selected_rank_from_flags_with_policy<R>(
@@ -504,7 +524,7 @@ where
 {
     let right_only =
         device_expr_set_difference_with_policy::<Right, Left, Less>(policy, right, left)?;
-    device_expr_merge_with_policy::<Left, DeviceVec<Left::Runtime, Left::Item>, Less>(
+    MergeExprApply::apply_expr::<Left, DeviceVec<Left::Runtime, Left::Item>, Less>(
         policy,
         left,
         &right_only,
@@ -1022,7 +1042,7 @@ where
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&other)?;
         Ok(SoA1 {
-            source: device_expr_merge_with_policy::<Left, Right, Less>(
+            source: MergeExprApply::apply_expr::<Left, Right, Less>(
                 policy,
                 &self.source,
                 &other.source,
@@ -1229,7 +1249,8 @@ macro_rules! impl_tuple_pair_ordering {
         $input:ident -> $output:ident < $first:ident, $( $rest:ident ),+ ; $right_first_ty:ident, $( $right_rest_ty:ident ),+ >
         { $first_field:ident / $right_first_var:ident, $( $field:ident / $right_var:ident ),+ },
         $merge_control_fn:ident,
-        $membership_expr_fn:ident
+        $membership_expr_fn:ident,
+        $selected_apply:ident
     ) => {
         impl<$first, $( $rest ),+, $right_first_ty, $( $right_rest_ty ),+, Less>
             crate::detail::read::KernelPairOrderingInput<$input<$right_first_ty, $( $right_rest_ty ),+>, Less>
@@ -1314,22 +1335,9 @@ macro_rules! impl_tuple_pair_ordering {
                 )?;
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, other.$first_field.len(), flags)?;
-                let $right_first_var =
-                    super::device_expr_apply_selected_with_policy(
-                        policy,
-                        &other.$first_field,
-                        &selection,
-                        count,
-                    )?;
-                $(
-                    let $right_var =
-                        super::device_expr_apply_selected_with_policy(
-                            policy,
-                            &other.$field,
-                            &selection,
-                            count,
-                        )?;
-                )+
+                let selected_apply = super::SelectedPayloadApply::new(&selection, count);
+                let ($right_first_var, $( $right_var ),+) =
+                    selected_apply.$selected_apply(policy, &other.$first_field, $( &other.$field ),+)?;
                 let (output, _) = $merge_control_fn::<
                     $first,
                     $( $rest, )+
@@ -1370,22 +1378,9 @@ macro_rules! impl_tuple_pair_ordering {
                 )?;
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
-                let $first_field =
-                    super::device_expr_apply_selected_with_policy(
-                        policy,
-                        &self.$first_field,
-                        &selection,
-                        count,
-                    )?;
-                $(
-                    let $field =
-                        super::device_expr_apply_selected_with_policy(
-                            policy,
-                            &self.$field,
-                            &selection,
-                            count,
-                        )?;
-                )+
+                let selected_apply = super::SelectedPayloadApply::new(&selection, count);
+                let ($first_field, $( $field ),+) =
+                    selected_apply.$selected_apply(policy, &self.$first_field, $( &self.$field ),+)?;
                 Ok($output { $first_field, $( $field ),+ })
             }
 
@@ -1413,22 +1408,9 @@ macro_rules! impl_tuple_pair_ordering {
                 )?;
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
-                let $first_field =
-                    super::device_expr_apply_selected_with_policy(
-                        policy,
-                        &self.$first_field,
-                        &selection,
-                        count,
-                    )?;
-                $(
-                    let $field =
-                        super::device_expr_apply_selected_with_policy(
-                            policy,
-                            &self.$field,
-                            &selection,
-                            count,
-                        )?;
-                )+
+                let selected_apply = super::SelectedPayloadApply::new(&selection, count);
+                let ($first_field, $( $field ),+) =
+                    selected_apply.$selected_apply(policy, &self.$first_field, $( &self.$field ),+)?;
                 Ok($output { $first_field, $( $field ),+ })
             }
 
@@ -1436,10 +1418,10 @@ macro_rules! impl_tuple_pair_ordering {
     };
 }
 
-impl_tuple_pair_ordering!(SoAView2 -> SoA2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy);
-impl_tuple_pair_ordering!(SoA2 -> SoA2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy);
-impl_tuple_pair_ordering!(SoAView3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy);
-impl_tuple_pair_ordering!(SoA3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy);
+impl_tuple_pair_ordering!(SoAView2 -> SoA2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy, apply_expr2);
+impl_tuple_pair_ordering!(SoA2 -> SoA2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy, apply_expr2);
+impl_tuple_pair_ordering!(SoAView3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy, apply_expr3);
+impl_tuple_pair_ordering!(SoA3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy, apply_expr3);
 
 mod reverse;
 pub use reverse::reverse;

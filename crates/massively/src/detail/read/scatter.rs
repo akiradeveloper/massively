@@ -50,11 +50,14 @@ where
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
-    IndexSource::Expr: GpuExpr<MIndex>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
+    let index_values = crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+    let control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
     let initial = primitive_range::filled(policy, len, default)?;
     let output = DeviceColumnMutView::from_slice(&initial, 0, len);
-    crate::detail::api::device_expr_scatter_into_with_policy(policy, values, indices, &output)?;
+    let apply = crate::detail::api::IndexedWriteApply::new(&control);
+    apply.scatter_expr_into(policy, values, &output)?;
     Ok(initial)
 }
 
@@ -83,49 +86,12 @@ where
         <IndexSource as KernelColumn>::len(indices),
     )?;
     ensure_same_len(<ValueSource as KernelColumn>::len(values), stencil.len())?;
-    let flags = stencil.selection_flags_with_policy(policy, false)?;
-    let input_len = <ValueSource as KernelColumn>::len(values);
-    let block_count = input_len.div_ceil(BLOCK_SCATTER_WHERE_SIZE as usize);
-    let block_count_u32 =
-        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
-    let value_bindings = <ValueSource as KernelColumn>::stage(values, policy)?;
-    let index_bindings = <IndexSource as KernelColumn>::stage(indices, policy)?;
-    let value_slot0 = value_bindings.slot_or_first(0);
-    let value_slot1 = value_bindings.slot_or_first(1);
-    let value_slot2 = value_bindings.slot_or_first(2);
-    let value_slot3 = value_bindings.slot_or_first(3);
-    let index_slot0 = index_bindings.slot_or_first(0);
-    let index_slot1 = index_bindings.slot_or_first(1);
-    let index_slot2 = index_bindings.slot_or_first(2);
-    let index_slot3 = index_bindings.slot_or_first(3);
-    let value_slot_offsets = value_bindings.slot_offsets_handle(policy.client())?;
-    let index_slot_offsets = index_bindings.slot_offsets_handle(policy.client())?;
-    if input_len != 0 {
-        unsafe {
-            scatter_if_flags_kernel::launch_unchecked::<
-                ValueSource::Item,
-                ValueSource::Expr,
-                IndexSource::Expr,
-                ValueSource::Runtime,
-            >(
-                policy.client(),
-                CubeCount::Static(block_count_u32, 1, 1),
-                CubeDim::new_1d(BLOCK_SCATTER_WHERE_SIZE),
-                BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1),
-                BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1),
-                BufferArg::from_raw_parts(value_slot2.0.clone(), value_slot2.1),
-                BufferArg::from_raw_parts(value_slot3.0.clone(), value_slot3.1),
-                BufferArg::from_raw_parts(value_slot_offsets.clone(), 4),
-                BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1),
-                BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1),
-                BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1),
-                BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1),
-                BufferArg::from_raw_parts(index_slot_offsets.clone(), 4),
-                BufferArg::from_raw_parts(flags.flag.clone(), flags.len),
-                BufferArg::from_raw_parts(initial.handle.clone(), initial.len()),
-            );
-        }
-    }
+    let index_values = crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+    let write_control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
+    let mask = stencil.selection_flags_with_policy(policy, false)?;
+    let output = DeviceColumnMutView::from_slice(&initial, 0, len);
+    let apply = crate::detail::api::IndexedWriteApply::new(&write_control);
+    apply.scatter_expr_where_into(policy, values, &mask, &output)?;
     Ok(initial)
 }
 
@@ -135,7 +101,7 @@ where
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
     ValueSource::Item: Scalar + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
-    IndexSource::Expr: GpuExpr<MIndex>,
+    IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
@@ -165,7 +131,7 @@ macro_rules! impl_kernel_scatter_tuple1 {
                 KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
             ValueSource::Item: Scalar + 'static,
             ValueSource::Expr: GpuExpr<ValueSource::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = ValueSource::Runtime;
             type Default = (ValueSource::Item,);
@@ -233,7 +199,7 @@ macro_rules! impl_kernel_scatter_tuple2 {
             Right::Item: Scalar + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = Left::Runtime;
             type Default = (Left::Item, Right::Item);
@@ -314,7 +280,7 @@ macro_rules! impl_kernel_scatter_tuple3 {
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
-            IndexSource::Expr: GpuExpr<MIndex>,
+            IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = First::Runtime;
             type Default = (First::Item, Second::Item, Third::Item);

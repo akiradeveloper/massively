@@ -108,25 +108,6 @@ where
     Ok(())
 }
 
-pub(in crate::detail) fn device_expr_copy_where_with_policy<ExprSource, Pred>(
-    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
-    expr: &ExprSource,
-    invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
-) -> Result<DeviceVec<ExprSource::Runtime, ExprSource::Item>, Error>
-where
-    ExprSource: KernelColumn + KernelColumnAt<S0>,
-    ExprSource::Runtime: Runtime,
-    ExprSource::Item: CubePrimitive + CubeElement,
-    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item> + GpuExpr<ExprSource::Item>,
-    Pred: PredicateOp<ExprSource::Item>,
-{
-    let selected_rank =
-        device_expr_selected_rank_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
-    let count = select::selected_count(policy, &selected_rank)?;
-    device_expr_compact_with_selection_with_policy(policy, expr, &selected_rank, count)
-}
-
 pub(in crate::detail) fn device_expr_compact_with_selection_with_policy<ExprSource>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,

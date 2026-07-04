@@ -11,6 +11,71 @@ pub(crate) trait KernelReduceInput<Op>: Sized {
     ) -> Result<Self::Item, Error>;
 }
 
+struct LinearReduceApply;
+
+impl LinearReduceApply {
+    fn apply_expr1<R, T, Expr, Op>(
+        policy: &CubePolicy<R>,
+        input: &KernelColumnBindings,
+        len: usize,
+        init: (T,),
+    ) -> Result<(T,), Error>
+    where
+        R: Runtime,
+        T: Scalar + 'static,
+        Expr: DeviceGpuExpr<T>,
+        (T,): MItem<R>,
+        Op: BinaryOp<(T,)>,
+    {
+        primitive_reduce::reduce_tuple1_device_expr::<R, T, Expr, Op>(policy, input, len, init)
+    }
+
+    fn apply_expr2<R, A, C, AExpr, CExpr, Op>(
+        policy: &CubePolicy<R>,
+        left: &KernelColumnBindings,
+        right: &KernelColumnBindings,
+        len: usize,
+        init: (A, C),
+    ) -> Result<(A, C), Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        (A, C): MItem<R>,
+        Op: BinaryOp<(A, C)>,
+    {
+        primitive_reduce::reduce_tuple2_device_expr::<R, A, C, AExpr, CExpr, Op>(
+            policy, left, right, len, init,
+        )
+    }
+
+    fn apply_expr3<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+        policy: &CubePolicy<R>,
+        first: &KernelColumnBindings,
+        second: &KernelColumnBindings,
+        third: &KernelColumnBindings,
+        len: usize,
+        init: (A, C, D),
+    ) -> Result<(A, C, D), Error>
+    where
+        R: Runtime,
+        A: Scalar + 'static,
+        C: Scalar + 'static,
+        D: Scalar + 'static,
+        AExpr: DeviceGpuExpr<A>,
+        CExpr: DeviceGpuExpr<C>,
+        DExpr: DeviceGpuExpr<D>,
+        (A, C, D): MItem<R>,
+        Op: BinaryOp<(A, C, D)>,
+    {
+        primitive_reduce::reduce_tuple3_device_expr::<R, A, C, D, AExpr, CExpr, DExpr, Op>(
+            policy, first, second, third, len, init,
+        )
+    }
+}
+
 macro_rules! impl_kernel_reduce_tuple1 {
     ($target:ty, $field:tt) => {
         impl<S, Op> KernelReduceInput<Op> for $target
@@ -31,7 +96,7 @@ macro_rules! impl_kernel_reduce_tuple1 {
             ) -> Result<Self::Item, Error> {
                 let len = <S as KernelColumn>::len(&self.$field);
                 let bindings = <S as KernelColumn>::stage(&self.$field, policy)?;
-                primitive_reduce::reduce_tuple1_device_expr::<S::Runtime, S::Item, S::Expr, Op>(
+                LinearReduceApply::apply_expr1::<S::Runtime, S::Item, S::Expr, Op>(
                     policy, &bindings, len, init,
                 )
             }
@@ -72,7 +137,7 @@ macro_rules! impl_kernel_reduce_tuple2 {
                 )?;
                 let left = <A as KernelColumn>::stage(&self.$left, policy)?;
                 let right = <C as KernelColumn>::stage(&self.$right, policy)?;
-                primitive_reduce::reduce_tuple2_device_expr::<
+                LinearReduceApply::apply_expr2::<
                     A::Runtime,
                     A::Item,
                     C::Item,
@@ -155,7 +220,7 @@ macro_rules! impl_kernel_reduce_tuple3 {
                 let first = <A as KernelColumn>::stage(&self.$first, policy)?;
                 let second = <C as KernelColumn>::stage(&self.$second, policy)?;
                 let third = <D as KernelColumn>::stage(&self.$third, policy)?;
-                primitive_reduce::reduce_tuple3_device_expr::<
+                LinearReduceApply::apply_expr3::<
                     A::Runtime,
                     A::Item,
                     C::Item,

@@ -303,12 +303,9 @@ macro_rules! impl_wide_sort_dispatch_body {
                 crate::detail::api::Tuple4AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
             >::new(),
         )?;
-        Ok((
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
-        ))
+        let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        apply.apply_expr4($policy, &$input.0, &$input.1, &$input.2, &$input.3)
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4) => {{
         let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
@@ -337,13 +334,11 @@ macro_rules! impl_wide_sort_dispatch_body {
                 crate::detail::api::Tuple5AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
             >::new(),
         )?;
-        Ok((
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.4, &indices)?,
-        ))
+        let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        apply.apply_expr5(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4,
+        )
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5) => {{
         let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
@@ -370,14 +365,11 @@ macro_rules! impl_wide_sort_dispatch_body {
                 crate::detail::api::Tuple6AsTuple7BinaryPredicateOp<KernelOp<R, Less>>,
             >::new(),
         )?;
-        Ok((
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.4, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.5, &indices)?,
-        ))
+        let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        apply.apply_expr6(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5,
+        )
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4, 5, 6) => {{
         let indices = crate::detail::primitives::ordering::sort_tuple7_indices_input::<
@@ -400,15 +392,11 @@ macro_rules! impl_wide_sort_dispatch_body {
             &$input.6,
             crate::op::GpuOp::<KernelOp<R, Less>>::new(),
         )?;
-        Ok((
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.0, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.1, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.2, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.3, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.4, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.5, &indices)?,
-            crate::detail::api::device_expr_gather_with_policy($policy, &$input.6, &indices)?,
-        ))
+        let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
+        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        apply.apply_expr7(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
+        )
     }};
     ($policy:ident, $input:ident; $( $idx:tt ),+) => {{
         let _ = ($policy, $input);
@@ -1446,9 +1434,9 @@ macro_rules! impl_wide_mismatch_from_views {
                     BufferArg::from_raw_parts(flag.clone(), min_len),
                 );
             }
-            if let Some(index) =
-                crate::detail::primitives::search::first_flag($policy, flag, min_len, min_len)?
-            {
+            let search =
+                crate::detail::control::SearchControl::from_flags(flag, min_len, min_len);
+            if let Some(index) = crate::detail::api::QueryApply::first_flag($policy, search)? {
                 Ok(Some(index))
             } else if $a.len == $ra.len {
                 Ok(None)
@@ -1512,7 +1500,8 @@ macro_rules! impl_wide_adjacent_find_from_views {
                     BufferArg::from_raw_parts(flag.clone(), len),
                 );
             }
-            crate::detail::primitives::search::first_flag($policy, flag, len, len - 1)
+            let search = crate::detail::control::SearchControl::from_flags(flag, len, len - 1);
+            crate::detail::api::QueryApply::first_flag($policy, search)
         }
     }};
 }
@@ -1588,7 +1577,8 @@ macro_rules! impl_wide_find_first_of_from_views {
                     BufferArg::from_raw_parts(flag.clone(), len),
                 );
             }
-            crate::detail::primitives::search::first_flag($policy, flag, len, len)
+            let search = crate::detail::control::SearchControl::from_flags(flag, len, len);
+            crate::detail::api::QueryApply::first_flag($policy, search)
         }
     }};
 }
@@ -1773,9 +1763,9 @@ macro_rules! impl_wide_lexicographical_compare_from_views {
                     BufferArg::from_raw_parts(flag.clone(), min_len),
                 );
             }
-            let Some(index) =
-                crate::detail::primitives::search::first_flag($policy, flag, min_len, min_len)?
-            else {
+            let search =
+                crate::detail::control::SearchControl::from_flags(flag, min_len, min_len);
+            let Some(index) = crate::detail::api::QueryApply::first_flag($policy, search)? else {
                 return Ok(left_len < right_len);
             };
             let index_handle = client.create_from_slice(u32::as_bytes(&[index as u32]));
@@ -3734,7 +3724,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_gather_into_with_policy(
+                    crate::detail::api::IndexedExprApply::gather_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -3758,7 +3748,7 @@ macro_rules! impl_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_gather_with_policy(
+                    let $tmp = crate::detail::api::IndexedExprApply::gather_expr(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4169,7 +4159,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_gather_where_into_with_control(
+                    crate::detail::api::MaskedIndexedExprApply::gather_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4201,7 +4191,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_scatter_into_with_policy(
+                    crate::detail::api::IndexedExprApply::scatter_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4235,7 +4225,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_scatter_where_into_with_control(
+                    crate::detail::api::MaskedIndexedExprApply::scatter_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4617,11 +4607,8 @@ macro_rules! impl_miter_mut_soa {
                     {
                         let input =
                             crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
-                        crate::detail::api::device_expr_collect_into_with_policy(
-                            policy,
-                            &input,
-                            &output.$idx,
-                        )?;
+                        crate::detail::api::MaterializeWriteApply::new(&output.$idx)
+                            .collect_expr(policy, &input)?;
                     }
                 )+
                 Ok(())
@@ -4639,13 +4626,13 @@ macro_rules! impl_miter_mut_soa {
                     {
                         let input =
                             crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
-                        crate::detail::api::device_expr_copy_where_into_with_policy(
-                            policy,
-                            &input,
-                            &stencil,
-                            &output.$idx,
-                            KernelOp::<R, StencilFlag>::new(),
-                        )?;
+                        crate::detail::api::MaterializeWriteApply::new(&output.$idx)
+                            .copy_where_expr(
+                                policy,
+                                &input,
+                                &stencil,
+                                KernelOp::<R, StencilFlag>::new(),
+                            )?;
                     }
                 )+
                 Ok(())
@@ -4661,12 +4648,8 @@ macro_rules! impl_miter_mut_soa {
                 let output = self.into_inner();
                 let mask = stencil.mask();
                 $(
-                    crate::detail::api::replace_where_into_with_control(
-                        policy,
-                        replacement.$idx,
-                        &mask,
-                        &output.$idx,
-                    )?;
+                    crate::detail::api::MaskWriteApply::new(&mask, &output.$idx)
+                        .replace_value(policy, replacement.$idx)?;
                 )+
                 Ok(())
             }
@@ -4679,11 +4662,8 @@ macro_rules! impl_miter_mut_soa {
             {
                 let output = self.into_inner();
                 $(
-                    crate::detail::primitives::fill_slice_with_policy(
-                        policy,
-                        value.$idx,
-                        &output.$idx,
-                    )?;
+                    crate::detail::api::FillWriteApply::new(&output.$idx)
+                        .fill_value(policy, value.$idx)?;
                 )+
                 Ok(())
             }
@@ -5398,7 +5378,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_gather_into_with_policy(
+                    crate::detail::api::IndexedExprApply::gather_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5422,7 +5402,7 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_gather_with_policy(
+                    let $tmp = crate::detail::api::IndexedExprApply::gather_expr(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5455,7 +5435,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_gather_where_into_with_control(
+                    crate::detail::api::MaskedIndexedExprApply::gather_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5487,7 +5467,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_scatter_into_with_policy(
+                    crate::detail::api::IndexedExprApply::scatter_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5521,7 +5501,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::device_expr_scatter_where_into_with_control(
+                    crate::detail::api::MaskedIndexedExprApply::scatter_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5645,12 +5625,12 @@ macro_rules! impl_wide_miter_soa {
                 let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
-                crate::detail::primitives::search::first_flag(
-                    policy,
+                let search = crate::detail::control::SearchControl::from_flags(
                     selected_rank.flag.clone(),
                     selected_rank.len,
                     selected_rank.len,
-                )
+                );
+                crate::detail::api::QueryApply::first_flag(policy, search)
             }
 
             fn partition_dispatch<Pred, Output>(
@@ -5967,15 +5947,15 @@ macro_rules! impl_wide_miter_soa {
                 let right = right.into_view_with_policy(policy)?;
                 $(
                     let $tmp = {
-                        let left = crate::detail::api::device_expr_collect_with_policy(
+                        let left = crate::detail::api::MaterializePayloadApply::collect_expr(
                             policy,
                             &left.$idx,
                         )?;
-                        let right = crate::detail::api::device_expr_collect_with_policy(
+                        let right = crate::detail::api::MaterializePayloadApply::collect_expr(
                             policy,
                             &right.$idx,
                         )?;
-                        crate::detail::primitives::range::concat_device_with_policy(
+                        crate::detail::api::ConcatPayloadApply::apply_values(
                             policy,
                             &left,
                             &right,
@@ -6025,11 +6005,11 @@ macro_rules! impl_wide_miter_soa {
                 let ($($tmp,)+) = right_extra_apply.$selected_apply(policy, $( &right.$idx, )+)?;
                 $(
                     let $tmp = {
-                        let left = crate::detail::api::device_expr_collect_with_policy(
+                        let left = crate::detail::api::MaterializePayloadApply::collect_expr(
                             policy,
                             &left.$idx,
                         )?;
-                        crate::detail::primitives::range::concat_device_with_policy(
+                        crate::detail::api::ConcatPayloadApply::apply_values(
                             policy,
                             &left,
                             &$tmp,
