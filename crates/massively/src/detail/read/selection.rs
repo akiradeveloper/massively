@@ -104,12 +104,11 @@ where
     ) -> Result<Self::Output, Error> {
         <Source as KernelColumn>::validate(&self)?;
         ensure_same_len(<Source as KernelColumn>::len(&self), stencil.len())?;
-        let handles = stencil.selected_rank_with_policy(policy, false)?;
-        let count = select::selected_count(policy, &handles)?;
+        let selected_rank = stencil.selected_rank_with_policy(policy, false)?;
+        let count = select::selected_count(policy, &selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
         Ok(DeviceSoA1 {
-            source: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                policy, &self, &handles, count,
-            )?,
+            source: payload_apply.apply_expr(policy, &self)?,
         })
     }
 }
@@ -133,15 +132,12 @@ macro_rules! impl_kernel_copy_where_tuple1 {
             ) -> Result<Self::Output, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 ensure_same_len(<Source as KernelColumn>::len(&self.$field), stencil.len())?;
-                let handles = stencil.selected_rank_with_policy(policy, false)?;
-                let count = select::selected_count(policy, &handles)?;
+                let selected_rank = stencil.selected_rank_with_policy(policy, false)?;
+                let count = select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
                 Ok(DeviceSoA1 {
-                    source: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$field,
-                        &handles,
-                        count,
-                    )?,
+                    source: payload_apply.apply_expr(policy, &self.$field)?,
                 })
             }
         }
@@ -195,22 +191,12 @@ macro_rules! impl_kernel_copy_where_tuple2 {
             ) -> Result<Self::Output, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
                 ensure_same_len(<Left as KernelColumn>::len(&self.$left), stencil.len())?;
-                let handles = stencil.selected_rank_with_policy(policy, false)?;
-                let count = select::selected_count(policy, &handles)?;
-                Ok($out {
-                    left: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$left,
-                        &handles,
-                        count,
-                    )?,
-                    right: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$right,
-                        &handles,
-                        count,
-                    )?,
-                })
+                let selected_rank = stencil.selected_rank_with_policy(policy, false)?;
+                let count = select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                let (left, right) = payload_apply.apply_expr2(policy, &self.$left, &self.$right)?;
+                Ok($out { left, right })
             }
         }
     };
@@ -271,27 +257,16 @@ macro_rules! impl_kernel_copy_where_tuple3 {
             ) -> Result<Self::Output, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
                 ensure_same_len(<First as KernelColumn>::len(&self.$first), stencil.len())?;
-                let handles = stencil.selected_rank_with_policy(policy, false)?;
-                let count = select::selected_count(policy, &handles)?;
+                let selected_rank = stencil.selected_rank_with_policy(policy, false)?;
+                let count = select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                let (first, second, third) =
+                    payload_apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok($out {
-                    first: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$first,
-                        &handles,
-                        count,
-                    )?,
-                    second: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$second,
-                        &handles,
-                        count,
-                    )?,
-                    third: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$third,
-                        &handles,
-                        count,
-                    )?,
+                    first,
+                    second,
+                    third,
                 })
             }
         }
@@ -925,25 +900,25 @@ macro_rules! impl_kernel_select_tuple2 {
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
-                let handles = tuple2_selected_rank_read::<Left, Right, Pred>(
+                let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
                     env,
                 )?;
-                let count = select::selected_count(policy, &handles)?;
+                let count = select::selected_count(policy, &selected_rank)?;
                 Ok($out {
-                    left: crate::detail::api::device_expr_compact_with_selection_with_policy(
+                    left: crate::detail::api::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$left,
-                        &handles,
+                        &selected_rank,
                         count,
                     )?,
-                    right: crate::detail::api::device_expr_compact_with_selection_with_policy(
+                    right: crate::detail::api::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$right,
-                        &handles,
+                        &selected_rank,
                         count,
                     )?,
                 })
@@ -1010,7 +985,7 @@ macro_rules! impl_kernel_select_tuple3 {
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
-                let handles = tuple3_selected_rank_read::<First, Second, Third, Pred>(
+                let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
                     &self.$first,
                     &self.$second,
@@ -1018,24 +993,24 @@ macro_rules! impl_kernel_select_tuple3 {
                     invert,
                     env,
                 )?;
-                let count = select::selected_count(policy, &handles)?;
+                let count = select::selected_count(policy, &selected_rank)?;
                 Ok($out {
-                    first: crate::detail::api::device_expr_compact_with_selection_with_policy(
+                    first: crate::detail::api::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$first,
-                        &handles,
+                        &selected_rank,
                         count,
                     )?,
-                    second: crate::detail::api::device_expr_compact_with_selection_with_policy(
+                    second: crate::detail::api::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$second,
-                        &handles,
+                        &selected_rank,
                         count,
                     )?,
-                    third: crate::detail::api::device_expr_compact_with_selection_with_policy(
+                    third: crate::detail::api::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$third,
-                        &handles,
+                        &selected_rank,
                         count,
                     )?,
                 })
@@ -1222,14 +1197,14 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<MIndex, Error> {
-                let handles = tuple2_selected_rank_read::<Left, Right, Pred>(
+                let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
                     env,
                 )?;
-                mindex_from_usize(select::selected_count(policy, &handles)?)
+                mindex_from_usize(select::selected_count(policy, &selected_rank)?)
             }
 
             fn find_read(
@@ -1238,14 +1213,19 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<MIndex>, Error> {
-                let handles = tuple2_selected_rank_read::<Left, Right, Pred>(
+                let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
                     env,
                 )?;
-                primitive_search::first_flag(policy, handles.flag, handles.len, handles.len)
+                primitive_search::first_flag(
+                    policy,
+                    selected_rank.flag,
+                    selected_rank.len,
+                    selected_rank.len,
+                )
             }
         }
     };
@@ -1320,7 +1300,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<MIndex, Error> {
-                let handles = tuple3_selected_rank_read::<First, Second, Third, Pred>(
+                let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
                     &self.$first,
                     &self.$second,
@@ -1328,7 +1308,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     invert,
                     env,
                 )?;
-                mindex_from_usize(select::selected_count(policy, &handles)?)
+                mindex_from_usize(select::selected_count(policy, &selected_rank)?)
             }
 
             fn find_read(
@@ -1337,7 +1317,7 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                 invert: bool,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<MIndex>, Error> {
-                let handles = tuple3_selected_rank_read::<First, Second, Third, Pred>(
+                let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
                     &self.$first,
                     &self.$second,
@@ -1345,7 +1325,12 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     invert,
                     env,
                 )?;
-                primitive_search::first_flag(policy, handles.flag, handles.len, handles.len)
+                primitive_search::first_flag(
+                    policy,
+                    selected_rank.flag,
+                    selected_rank.len,
+                    selected_rank.len,
+                )
             }
         }
     };
@@ -1400,45 +1385,56 @@ where
 
 fn is_partitioned_from_flags_read<R: Runtime>(
     policy: &CubePolicy<R>,
-    handles: &select::SelectedRankControl,
+    selected_rank: &select::SelectedRankControl,
 ) -> Result<bool, Error> {
-    let first_rejected =
-        primitive_search::first_unset_flag(policy, handles.flag.clone(), handles.len, handles.len)?
-            .unwrap_or(mindex_from_usize(handles.len)?);
-    let selected_count = select::selected_count(policy, handles)?;
+    let first_rejected = primitive_search::first_unset_flag(
+        policy,
+        selected_rank.flag.clone(),
+        selected_rank.len,
+        selected_rank.len,
+    )?
+    .unwrap_or(mindex_from_usize(selected_rank.len)?);
+    let selected_count = select::selected_count(policy, selected_rank)?;
     Ok(mindex_from_usize(selected_count)? == first_rejected)
 }
 
 fn is_partitioned_single_read<R: Runtime>(
     policy: &CubePolicy<R>,
-    handles: select::SelectedRankControl,
+    selected_rank: select::SelectedRankControl,
 ) -> Result<bool, Error> {
-    let Some(point) =
-        primitive_search::first_unset_flag(policy, handles.flag.clone(), handles.len, handles.len)?
+    let Some(point) = primitive_search::first_unset_flag(
+        policy,
+        selected_rank.flag.clone(),
+        selected_rank.len,
+        selected_rank.len,
+    )?
     else {
         return Ok(true);
     };
     let point_usize = point as usize;
-    if point_usize + 1 >= handles.len {
+    if point_usize + 1 >= selected_rank.len {
         return Ok(true);
     }
 
     let client = policy.client();
     let point_handle = client.create_from_slice(u32::as_bytes(&[point]));
-    let tail_flags = client.empty(handles.len * std::mem::size_of::<u32>());
-    let block_count_u32 = selection_block_count_read(handles.len)?;
+    let tail_flags = client.empty(selected_rank.len * std::mem::size_of::<u32>());
+    let block_count_u32 = selection_block_count_read(selected_rank.len)?;
     unsafe {
         partition_tail_selected_flags_kernel::launch_unchecked::<R>(
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(256),
-            BufferArg::from_raw_parts(handles.flag.clone(), handles.len),
+            BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len),
             BufferArg::from_raw_parts(point_handle.clone(), 1),
-            BufferArg::from_raw_parts(tail_flags.clone(), handles.len),
+            BufferArg::from_raw_parts(tail_flags.clone(), selected_rank.len),
         );
     }
 
-    Ok(primitive_search::first_flag(policy, tail_flags, handles.len, handles.len)?.is_none())
+    Ok(
+        primitive_search::first_flag(policy, tail_flags, selected_rank.len, selected_rank.len)?
+            .is_none(),
+    )
 }
 
 impl<Source, Pred> KernelPartitionInput<Pred> for Source
@@ -1459,10 +1455,11 @@ where
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<bool, Error> {
         <Source as KernelColumn>::validate(&self)?;
-        let handles = crate::detail::api::device_expr_selected_rank_with_policy::<Source, Pred>(
-            policy, &self, false, env,
-        )?;
-        is_partitioned_single_read(policy, handles)
+        let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<
+            Source,
+            Pred,
+        >(policy, &self, false, env)?;
+        is_partitioned_single_read(policy, selected_rank)
     }
 
     fn partition_copy_read(
@@ -1477,14 +1474,9 @@ where
         >(policy, &self, false, env)?;
         let (split_rank, matching_count, failing_count) =
             select::split_rank_from_selected(policy, selected_rank)?;
-        let (matching, failing) =
-            crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                policy,
-                &self,
-                &split_rank,
-                matching_count,
-                failing_count,
-            )?;
+        let payload_apply =
+            crate::detail::api::SplitPayloadApply::new(&split_rank, matching_count, failing_count);
+        let (matching, failing) = payload_apply.apply_expr(policy, &self)?;
         Ok((
             DeviceSoA1 { source: matching },
             DeviceSoA1 { source: failing },
@@ -1512,11 +1504,11 @@ macro_rules! impl_kernel_partition_tuple1 {
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
-                let handles = crate::detail::api::device_expr_selected_rank_with_policy::<
+                let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<
                     Source,
                     Pred,
                 >(policy, &self.$field, false, env)?;
-                is_partitioned_single_read(policy, handles)
+                is_partitioned_single_read(policy, selected_rank)
             }
 
             fn partition_copy_read(
@@ -1531,14 +1523,12 @@ macro_rules! impl_kernel_partition_tuple1 {
                 >(policy, &self.$field, false, env)?;
                 let (split_rank, matching_count, failing_count) =
                     select::split_rank_from_selected(policy, selected_rank)?;
-                let (matching, failing) =
-                    crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &self.$field,
-                        &split_rank,
-                        matching_count,
-                        failing_count,
-                    )?;
+                let payload_apply = crate::detail::api::SplitPayloadApply::new(
+                    &split_rank,
+                    matching_count,
+                    failing_count,
+                );
+                let (matching, failing) = payload_apply.apply_expr(policy, &self.$field)?;
                 Ok((
                     DeviceSoA1 { source: matching },
                     DeviceSoA1 { source: failing },
@@ -1607,14 +1597,14 @@ macro_rules! impl_kernel_partition_tuple2 {
                 policy: &CubePolicy<Self::Runtime>,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
-                let handles = tuple2_selected_rank_read::<Left, Right, Pred>(
+                let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     false,
                     env,
                 )?;
-                is_partitioned_from_flags_read(policy, &handles)
+                is_partitioned_from_flags_read(policy, &selected_rank)
             }
 
             fn partition_copy_read(
@@ -1631,22 +1621,13 @@ macro_rules! impl_kernel_partition_tuple2 {
                 )?;
                 let (split_rank, selected_count, rejected_count) =
                     select::split_rank_from_selected(policy, selected_rank)?;
-                let (selected_left, rejected_left) =
-                    crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &self.$left,
-                        &split_rank,
-                        selected_count,
-                        rejected_count,
-                    )?;
-                let (selected_right, rejected_right) =
-                    crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &self.$right,
-                        &split_rank,
-                        selected_count,
-                        rejected_count,
-                    )?;
+                let payload_apply = crate::detail::api::SplitPayloadApply::new(
+                    &split_rank,
+                    selected_count,
+                    rejected_count,
+                );
+                let ((selected_left, selected_right), (rejected_left, rejected_right)) =
+                    payload_apply.apply_expr2(policy, &self.$left, &self.$right)?;
                 Ok((
                     $out {
                         left: selected_left,
@@ -1734,7 +1715,7 @@ macro_rules! impl_kernel_partition_tuple3 {
                 policy: &CubePolicy<Self::Runtime>,
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
-                let handles = tuple3_selected_rank_read::<First, Second, Third, Pred>(
+                let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
                     &self.$first,
                     &self.$second,
@@ -1742,7 +1723,7 @@ macro_rules! impl_kernel_partition_tuple3 {
                     false,
                     env,
                 )?;
-                is_partitioned_from_flags_read(policy, &handles)
+                is_partitioned_from_flags_read(policy, &selected_rank)
             }
 
             fn partition_copy_read(
@@ -1760,30 +1741,15 @@ macro_rules! impl_kernel_partition_tuple3 {
                 )?;
                 let (split_rank, selected_count, rejected_count) =
                     select::split_rank_from_selected(policy, selected_rank)?;
-                let (selected_first, rejected_first) =
-                    crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &self.$first,
-                        &split_rank,
-                        selected_count,
-                        rejected_count,
-                    )?;
-                let (selected_second, rejected_second) =
-                    crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &self.$second,
-                        &split_rank,
-                        selected_count,
-                        rejected_count,
-                    )?;
-                let (selected_third, rejected_third) =
-                    crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &self.$third,
-                        &split_rank,
-                        selected_count,
-                        rejected_count,
-                    )?;
+                let payload_apply = crate::detail::api::SplitPayloadApply::new(
+                    &split_rank,
+                    selected_count,
+                    rejected_count,
+                );
+                let (
+                    (selected_first, selected_second, selected_third),
+                    (rejected_first, rejected_second, rejected_third),
+                ) = payload_apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok((
                     $out {
                         first: selected_first,
@@ -2212,13 +2178,9 @@ where
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flags)?;
         let count = select::selected_count(policy, &selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
         Ok(DeviceSoA1 {
-            source: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                policy,
-                &self,
-                &selected_rank,
-                count,
-            )?,
+            source: payload_apply.apply_expr(policy, &self)?,
         })
     }
 }
@@ -2244,13 +2206,10 @@ macro_rules! impl_kernel_unique_tuple1 {
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flags)?;
                 let count = select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
                 Ok(DeviceSoA1 {
-                    source: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$field,
-                        &selected_rank,
-                        count,
-                    )?,
+                    source: payload_apply.apply_expr(policy, &self.$field)?,
                 })
             }
         }
@@ -2332,20 +2291,10 @@ macro_rules! impl_kernel_unique_tuple2 {
                 }
                 let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag)?;
                 let count = select::selected_count(policy, &selected_rank)?;
-                Ok($out {
-                    left: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$left,
-                        &selected_rank,
-                        count,
-                    )?,
-                    right: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$right,
-                        &selected_rank,
-                        count,
-                    )?,
-                })
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                let (left, right) = payload_apply.apply_expr2(policy, &self.$left, &self.$right)?;
+                Ok($out { left, right })
             }
         }
     };
@@ -2444,25 +2393,14 @@ macro_rules! impl_kernel_unique_tuple3 {
                 }
                 let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag)?;
                 let count = select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                let (first, second, third) =
+                    payload_apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok($out {
-                    first: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$first,
-                        &selected_rank,
-                        count,
-                    )?,
-                    second: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$second,
-                        &selected_rank,
-                        count,
-                    )?,
-                    third: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &self.$third,
-                        &selected_rank,
-                        count,
-                    )?,
+                    first,
+                    second,
+                    third,
                 })
             }
         }

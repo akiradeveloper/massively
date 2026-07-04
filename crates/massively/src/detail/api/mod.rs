@@ -1,6 +1,7 @@
 mod expr;
 mod memory;
 mod ordering;
+mod payload;
 mod reduce;
 mod scan;
 mod search;
@@ -10,11 +11,10 @@ mod sequence;
 #[allow(unused_imports)]
 pub(super) use expr::{
     device_expr_adjacent_difference_with_policy, device_expr_collect_with_policy,
-    device_expr_compact_split_with_split_with_policy,
-    device_expr_compact_with_selection_with_policy, device_expr_copy_where_with_policy,
-    device_expr_count_if_with_policy, device_expr_exclusive_scan_by_key_expr_keys_with_policy,
-    device_expr_find_if_with_policy, device_expr_gather_where_into_with_control,
-    device_expr_gather_with_policy, device_expr_inclusive_scan_by_key_expr_keys_with_policy,
+    device_expr_copy_where_with_policy, device_expr_count_if_with_policy,
+    device_expr_exclusive_scan_by_key_expr_keys_with_policy, device_expr_find_if_with_policy,
+    device_expr_gather_where_into_with_control, device_expr_gather_with_policy,
+    device_expr_inclusive_scan_by_key_expr_keys_with_policy,
     device_expr_minmax_element_with_policy, device_expr_reverse_collect,
     device_expr_scatter_where_into_with_control, device_expr_selected_rank_with_policy,
     device_expr_selection_flags_with_policy, replace_where_into_with_control,
@@ -35,6 +35,10 @@ pub(super) use ordering::{
 };
 pub use ordering::{
     merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,
+};
+pub(super) use payload::{
+    SelectedPayloadApply, SplitPayloadApply, device_expr_apply_selected_with_policy,
+    device_value_apply_selected_with_policy,
 };
 pub use reduce::{reduce, reduce_by_key};
 pub use scan::{

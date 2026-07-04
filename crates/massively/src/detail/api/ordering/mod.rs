@@ -169,7 +169,7 @@ where
 
     let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag_handle)?;
     let count = select::selected_count(policy, &selected_rank)?;
-    super::device_expr_compact_with_selection_with_policy(policy, candidates, &selected_rank, count)
+    super::device_expr_apply_selected_with_policy(policy, candidates, &selected_rank, count)
 }
 
 fn selected_rank_from_flags_with_policy<R>(
@@ -1315,7 +1315,7 @@ macro_rules! impl_tuple_pair_ordering {
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, other.$first_field.len(), flags)?;
                 let $right_first_var =
-                    super::device_expr_compact_with_selection_with_policy(
+                    super::device_expr_apply_selected_with_policy(
                         policy,
                         &other.$first_field,
                         &selection,
@@ -1323,7 +1323,7 @@ macro_rules! impl_tuple_pair_ordering {
                     )?;
                 $(
                     let $right_var =
-                        super::device_expr_compact_with_selection_with_policy(
+                        super::device_expr_apply_selected_with_policy(
                             policy,
                             &other.$field,
                             &selection,
@@ -1371,7 +1371,7 @@ macro_rules! impl_tuple_pair_ordering {
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
                 let $first_field =
-                    super::device_expr_compact_with_selection_with_policy(
+                    super::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$first_field,
                         &selection,
@@ -1379,7 +1379,7 @@ macro_rules! impl_tuple_pair_ordering {
                     )?;
                 $(
                     let $field =
-                        super::device_expr_compact_with_selection_with_policy(
+                        super::device_expr_apply_selected_with_policy(
                             policy,
                             &self.$field,
                             &selection,
@@ -1414,7 +1414,7 @@ macro_rules! impl_tuple_pair_ordering {
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
                 let $first_field =
-                    super::device_expr_compact_with_selection_with_policy(
+                    super::device_expr_apply_selected_with_policy(
                         policy,
                         &self.$first_field,
                         &selection,
@@ -1422,7 +1422,7 @@ macro_rules! impl_tuple_pair_ordering {
                     )?;
                 $(
                     let $field =
-                        super::device_expr_compact_with_selection_with_policy(
+                        super::device_expr_apply_selected_with_policy(
                             policy,
                             &self.$field,
                             &selection,
