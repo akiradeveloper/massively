@@ -304,7 +304,7 @@ macro_rules! impl_wide_sort_dispatch_body {
             >::new(),
         )?;
         let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        let apply = crate::detail::apply::PermutationPayloadApply::new(control.permutation());
         apply.apply_expr4($policy, &$input.0, &$input.1, &$input.2, &$input.3)
     }};
     ($policy:ident, $input:ident; 0, 1, 2, 3, 4) => {{
@@ -335,7 +335,7 @@ macro_rules! impl_wide_sort_dispatch_body {
             >::new(),
         )?;
         let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        let apply = crate::detail::apply::PermutationPayloadApply::new(control.permutation());
         apply.apply_expr5(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4,
         )
@@ -366,7 +366,7 @@ macro_rules! impl_wide_sort_dispatch_body {
             >::new(),
         )?;
         let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        let apply = crate::detail::apply::PermutationPayloadApply::new(control.permutation());
         apply.apply_expr6(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5,
         )
@@ -393,7 +393,7 @@ macro_rules! impl_wide_sort_dispatch_body {
             crate::op::GpuOp::<KernelOp<R, Less>>::new(),
         )?;
         let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(control.permutation());
+        let apply = crate::detail::apply::PermutationPayloadApply::new(control.permutation());
         apply.apply_expr7(
             $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
         )
@@ -722,107 +722,30 @@ macro_rules! impl_wide_unique_dispatch_body {
 
 macro_rules! impl_wide_reduce_dispatch_body {
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        use crate::detail::device::KernelColumn;
-        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let a = KernelColumn::stage(&$input.0, $policy)?;
-        let b = KernelColumn::stage(&$input.1, $policy)?;
-        let c = KernelColumn::stage(&$input.2, $policy)?;
-        let d = KernelColumn::stage(&$input.3, $policy)?;
-        let e = KernelColumn::stage(&dummy4, $policy)?;
-        let f = KernelColumn::stage(&dummy5, $policy)?;
-        let g = KernelColumn::stage(&dummy6, $policy)?;
-        let (a, b, c, d, _, _, _) = crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+        crate::detail::apply::LinearReduceApply::apply_views4::<
             R,
             $ty0,
             $ty1,
             $ty2,
             $ty3,
-            u32,
-            u32,
-            u32,
-            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
-            crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
-        >(
-            $policy,
-            &a,
-            &b,
-            &c,
-            &d,
-            &e,
-            &f,
-            &g,
-            $input.0.len,
-            ($init.0, $init.1, $init.2, $init.3, 0, 0, 0),
-        )?;
-        Ok((a, b, c, d))
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$input.2, &$input.3, $init)
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        use crate::detail::device::KernelColumn;
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let a = KernelColumn::stage(&$input.0, $policy)?;
-        let b = KernelColumn::stage(&$input.1, $policy)?;
-        let c = KernelColumn::stage(&$input.2, $policy)?;
-        let d = KernelColumn::stage(&$input.3, $policy)?;
-        let e = KernelColumn::stage(&$input.4, $policy)?;
-        let f = KernelColumn::stage(&dummy5, $policy)?;
-        let g = KernelColumn::stage(&dummy6, $policy)?;
-        let (a, b, c, d, e, _, _) = crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+        crate::detail::apply::LinearReduceApply::apply_views5::<
             R,
             $ty0,
             $ty1,
             $ty2,
             $ty3,
             $ty4,
-            u32,
-            u32,
-            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty4> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
-            crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
+            KernelOp<R, Op>,
         >(
-            $policy,
-            &a,
-            &b,
-            &c,
-            &d,
-            &e,
-            &f,
-            &g,
-            $input.0.len,
-            ($init.0, $init.1, $init.2, $init.3, $init.4, 0, 0),
-        )?;
-        Ok((a, b, c, d, e))
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, $init,
+        )
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        use crate::detail::device::KernelColumn;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let a = KernelColumn::stage(&$input.0, $policy)?;
-        let b = KernelColumn::stage(&$input.1, $policy)?;
-        let c = KernelColumn::stage(&$input.2, $policy)?;
-        let d = KernelColumn::stage(&$input.3, $policy)?;
-        let e = KernelColumn::stage(&$input.4, $policy)?;
-        let f = KernelColumn::stage(&$input.5, $policy)?;
-        let g = KernelColumn::stage(&dummy6, $policy)?;
-        let (a, b, c, d, e, f, _) = crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+        crate::detail::apply::LinearReduceApply::apply_views6::<
             R,
             $ty0,
             $ty1,
@@ -830,39 +753,13 @@ macro_rules! impl_wide_reduce_dispatch_body {
             $ty3,
             $ty4,
             $ty5,
-            u32,
-            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty4> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty5> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, u32> as KernelColumn>::Expr,
-            crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
+            KernelOp<R, Op>,
         >(
-            $policy,
-            &a,
-            &b,
-            &c,
-            &d,
-            &e,
-            &f,
-            &g,
-            $input.0.len,
-            ($init.0, $init.1, $init.2, $init.3, $init.4, $init.5, 0),
-        )?;
-        Ok((a, b, c, d, e, f))
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, $init,
+        )
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        use crate::detail::device::KernelColumn;
-        let a = KernelColumn::stage(&$input.0, $policy)?;
-        let b = KernelColumn::stage(&$input.1, $policy)?;
-        let c = KernelColumn::stage(&$input.2, $policy)?;
-        let d = KernelColumn::stage(&$input.3, $policy)?;
-        let e = KernelColumn::stage(&$input.4, $policy)?;
-        let f = KernelColumn::stage(&$input.5, $policy)?;
-        let g = KernelColumn::stage(&$input.6, $policy)?;
-        crate::detail::primitives::reduce::reduce_tuple7_device_expr::<
+        crate::detail::apply::LinearReduceApply::apply_views7::<
             R,
             $ty0,
             $ty1,
@@ -871,15 +768,11 @@ macro_rules! impl_wide_reduce_dispatch_body {
             $ty4,
             $ty5,
             $ty6,
-            <crate::detail::device::DeviceColumnView<R, $ty0> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty1> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty2> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty3> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty4> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty5> as KernelColumn>::Expr,
-            <crate::detail::device::DeviceColumnView<R, $ty6> as KernelColumn>::Expr,
             KernelOp<R, Op>,
-        >($policy, &a, &b, &c, &d, &e, &f, &g, $input.0.len, $init)
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &$input.6,
+            $init,
+        )
     }};
     ($policy:ident, $input:ident, $init:ident; $( $ty:ident ),+; $( $idx:tt ),+) => {{
         let _ = ($policy, $init);
@@ -892,70 +785,44 @@ macro_rules! impl_wide_reduce_dispatch_body {
 
 macro_rules! impl_wide_inclusive_scan_dispatch_body {
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, _, _, _) =
-            crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                u32,
-                u32,
-                u32,
-                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
-            )?;
-        Ok((a, b, c, d))
+        crate::detail::apply::LinearScanApply::inclusive_views4::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$input.2, &$input.3)
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, e, _, _) =
-            crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                u32,
-                u32,
-                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
-            )?;
-        Ok((a, b, c, d, e))
+        crate::detail::apply::LinearScanApply::inclusive_views5::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4,
+        )
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, e, f, _) =
-            crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                $ty5,
-                u32,
-                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
-            )?;
-        Ok((a, b, c, d, e, f))
+        crate::detail::apply::LinearScanApply::inclusive_views6::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5,
+        )
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        crate::detail::primitives::scan::inclusive_scan_tuple7_device_views::<
+        crate::detail::apply::LinearScanApply::inclusive_views7::<
             R,
             $ty0,
             $ty1,
@@ -980,94 +847,44 @@ macro_rules! impl_wide_inclusive_scan_dispatch_body {
 
 macro_rules! impl_wide_exclusive_scan_dispatch_body {
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, _, _, _) =
-            crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                u32,
-                u32,
-                u32,
-                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy,
-                &$input.0,
-                &$input.1,
-                &$input.2,
-                &$input.3,
-                &dummy4,
-                &dummy5,
-                &dummy6,
-                ($init.0, $init.1, $init.2, $init.3, 0, 0, 0),
-            )?;
-        Ok((a, b, c, d))
+        crate::detail::apply::LinearScanApply::exclusive_views4::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$input.2, &$input.3, $init)
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, e, _, _) =
-            crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                u32,
-                u32,
-                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy,
-                &$input.0,
-                &$input.1,
-                &$input.2,
-                &$input.3,
-                &$input.4,
-                &dummy5,
-                &dummy6,
-                ($init.0, $init.1, $init.2, $init.3, $init.4, 0, 0),
-            )?;
-        Ok((a, b, c, d, e))
+        crate::detail::apply::LinearScanApply::exclusive_views5::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, $init,
+        )
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, e, f, _) =
-            crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                $ty5,
-                u32,
-                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy,
-                &$input.0,
-                &$input.1,
-                &$input.2,
-                &$input.3,
-                &$input.4,
-                &$input.5,
-                &dummy6,
-                ($init.0, $init.1, $init.2, $init.3, $init.4, $init.5, 0),
-            )?;
-        Ok((a, b, c, d, e, f))
+        crate::detail::apply::LinearScanApply::exclusive_views6::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, $init,
+        )
     }};
     ($policy:ident, $input:ident, $init:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        crate::detail::primitives::scan::exclusive_scan_tuple7_device_views::<
+        crate::detail::apply::LinearScanApply::exclusive_views7::<
             R,
             $ty0,
             $ty1,
@@ -1093,70 +910,44 @@ macro_rules! impl_wide_exclusive_scan_dispatch_body {
 
 macro_rules! impl_wide_adjacent_difference_dispatch_body {
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident; 0, 1, 2, 3) => {{
-        let dummy4 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy4 = crate::detail::device::DeviceColumnView::from_column(&dummy4);
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, _, _, _) =
-            crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                u32,
-                u32,
-                u32,
-                crate::detail::api::Tuple4AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &dummy4, &dummy5, &dummy6,
-            )?;
-        Ok((a, b, c, d))
+        crate::detail::apply::LinearScanApply::adjacent_views4::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            KernelOp<R, Op>,
+        >($policy, &$input.0, &$input.1, &$input.2, &$input.3)
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident; 0, 1, 2, 3, 4) => {{
-        let dummy5 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy5 = crate::detail::device::DeviceColumnView::from_column(&dummy5);
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, e, _, _) =
-            crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                u32,
-                u32,
-                crate::detail::api::Tuple5AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &dummy5, &dummy6,
-            )?;
-        Ok((a, b, c, d, e))
+        crate::detail::apply::LinearScanApply::adjacent_views5::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4,
+        )
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident; 0, 1, 2, 3, 4, 5) => {{
-        let dummy6 = crate::detail::primitives::range::indices_mindex($policy, $input.0.len)?;
-        let dummy6 = crate::detail::device::DeviceColumnView::from_column(&dummy6);
-        let (a, b, c, d, e, f, _) =
-            crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
-                R,
-                $ty0,
-                $ty1,
-                $ty2,
-                $ty3,
-                $ty4,
-                $ty5,
-                u32,
-                crate::detail::api::Tuple6AsTuple7BinaryOp<KernelOp<R, Op>>,
-            >(
-                $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5, &dummy6,
-            )?;
-        Ok((a, b, c, d, e, f))
+        crate::detail::apply::LinearScanApply::adjacent_views6::<
+            R,
+            $ty0,
+            $ty1,
+            $ty2,
+            $ty3,
+            $ty4,
+            $ty5,
+            KernelOp<R, Op>,
+        >(
+            $policy, &$input.0, &$input.1, &$input.2, &$input.3, &$input.4, &$input.5,
+        )
     }};
     ($policy:ident, $input:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; 0, 1, 2, 3, 4, 5, 6) => {{
-        crate::detail::primitives::scan::adjacent_difference_tuple7_device_views::<
+        crate::detail::apply::LinearScanApply::adjacent_views7::<
             R,
             $ty0,
             $ty1,
@@ -1436,7 +1227,7 @@ macro_rules! impl_wide_mismatch_from_views {
             }
             let search =
                 crate::detail::control::SearchControl::from_flags(flag, min_len, min_len);
-            if let Some(index) = crate::detail::api::QueryApply::first_flag($policy, search)? {
+            if let Some(index) = crate::detail::apply::QueryApply::first_flag($policy, search)? {
                 Ok(Some(index))
             } else if $a.len == $ra.len {
                 Ok(None)
@@ -1501,7 +1292,7 @@ macro_rules! impl_wide_adjacent_find_from_views {
                 );
             }
             let search = crate::detail::control::SearchControl::from_flags(flag, len, len - 1);
-            crate::detail::api::QueryApply::first_flag($policy, search)
+            crate::detail::apply::QueryApply::first_flag($policy, search)
         }
     }};
 }
@@ -1578,7 +1369,7 @@ macro_rules! impl_wide_find_first_of_from_views {
                 );
             }
             let search = crate::detail::control::SearchControl::from_flags(flag, len, len);
-            crate::detail::api::QueryApply::first_flag($policy, search)
+            crate::detail::apply::QueryApply::first_flag($policy, search)
         }
     }};
 }
@@ -1765,7 +1556,7 @@ macro_rules! impl_wide_lexicographical_compare_from_views {
             }
             let search =
                 crate::detail::control::SearchControl::from_flags(flag, min_len, min_len);
-            let Some(index) = crate::detail::api::QueryApply::first_flag($policy, search)? else {
+            let Some(index) = crate::detail::apply::QueryApply::first_flag($policy, search)? else {
                 return Ok(left_len < right_len);
             };
             let index_handle = client.create_from_slice(u32::as_bytes(&[index as u32]));
@@ -1981,249 +1772,143 @@ macro_rules! impl_tuple_exclusive_scan_by_two_key_values_body {
 
 macro_rules! impl_tuple_reduce_by_three_key_values_body {
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $head_flags:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident; 0, 1) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
-            $policy, &$input.0, &$input.1, &$control,
-        )?;
-        let client = $policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
-        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
-        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
-        let num_blocks = $first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
-                $ty0,
-                $ty1,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.left.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.right.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
-            );
-        }
         let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
-            $end_flags,
+            $end_flags.clone(),
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
-        let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            $control.head_flags.clone(),
+            $end_flags,
+            $first_key.len,
+            $len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            value_selected_rank,
+            value_count,
+        );
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
         let key_inner = (
             payload_apply.apply_expr($policy, &$first_key)?,
             payload_apply.apply_expr($policy, &$second_key)?,
             payload_apply.apply_expr($policy, &$third_key)?,
         );
-        Ok((
-            key_inner,
-            (
-                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
-                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
-            ),
-        ))
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&reduce_control);
+        let values = reduce_apply
+            .apply_expr2::<_, _, KernelOp<R, Op>>($policy, &$input.0, &$input.1, $init)?;
+        Ok((key_inner, (values.left, values.right)))
     }};
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $third_key:ident, $head_flags:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident; 0, 1, 2) => {{
-        let inclusive =
-            crate::detail::read::inclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
-                $policy, &$input.0, &$input.1, &$input.2, &$control,
-            )?;
-        let client = $policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
-        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
-        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
-        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
-        let reduced_c_handle = client.empty($first_key.len * std::mem::size_of::<$ty2>());
-        let num_blocks = $first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
-                $ty0,
-                $ty1,
-                $ty2,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.first.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.second.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.third.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(init_c.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_c_handle.clone(), $first_key.len),
-            );
-        }
         let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
-            $end_flags,
+            $end_flags.clone(),
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
-        let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            $control.head_flags.clone(),
+            $end_flags,
+            $first_key.len,
+            $len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            value_selected_rank,
+            value_count,
+        );
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
         let key_inner = (
             payload_apply.apply_expr($policy, &$first_key)?,
             payload_apply.apply_expr($policy, &$second_key)?,
             payload_apply.apply_expr($policy, &$third_key)?,
         );
-        Ok((
-            key_inner,
-            (
-                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
-                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
-                payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
-            ),
-        ))
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&reduce_control);
+        let values = reduce_apply.apply_expr3::<_, _, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$input.2, $init,
+        )?;
+        Ok((key_inner, (values.first, values.second, values.third)))
     }};
 }
 
 macro_rules! impl_tuple_reduce_by_two_key_values_body {
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident; 0, 1) => {{
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_two::<_, _, KernelOp<R, Op>>(
-            $policy, &$input.0, &$input.1, &$control,
-        )?;
-        let client = $policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
-        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
-        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
-        let num_blocks = $first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
-                $ty0,
-                $ty1,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.left.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.right.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
-            );
-        }
         let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
-            $end_flags,
+            $end_flags.clone(),
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
-        let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            $control.head_flags.clone(),
+            $end_flags,
+            $first_key.len,
+            $len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            value_selected_rank,
+            value_count,
+        );
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
         let key_inner = (
             payload_apply.apply_expr($policy, &$first_key)?,
             payload_apply.apply_expr($policy, &$second_key)?,
         );
-        Ok((
-            key_inner,
-            (
-                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
-                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
-            ),
-        ))
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&reduce_control);
+        let values = reduce_apply
+            .apply_expr2::<_, _, KernelOp<R, Op>>($policy, &$input.0, &$input.1, $init)?;
+        Ok((key_inner, (values.left, values.right)))
     }};
     ($policy:ident, $input:ident, $init:ident, $first_key:ident, $second_key:ident, $end_flags:ident, $len_u32:ident, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident; 0, 1, 2) => {{
-        let inclusive =
-            crate::detail::read::inclusive_scan_by_flags_three::<_, _, _, KernelOp<R, Op>>(
-                $policy, &$input.0, &$input.1, &$input.2, &$control,
-            )?;
-        let client = $policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[$len_u32]));
-        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
-        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
-        let reduced_a_handle = client.empty($first_key.len * std::mem::size_of::<$ty0>());
-        let reduced_b_handle = client.empty($first_key.len * std::mem::size_of::<$ty1>());
-        let reduced_c_handle = client.empty($first_key.len * std::mem::size_of::<$ty2>());
-        let num_blocks = $first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
-                $ty0,
-                $ty1,
-                $ty2,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.first.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.second.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(inclusive.third.handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(init_c.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
-                BufferArg::from_raw_parts(reduced_c_handle.clone(), $first_key.len),
-            );
-        }
         let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
-            $end_flags,
+            $end_flags.clone(),
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
-        let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            $control.head_flags.clone(),
+            $end_flags,
+            $first_key.len,
+            $len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            value_selected_rank,
+            value_count,
+        );
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
         let key_inner = (
             payload_apply.apply_expr($policy, &$first_key)?,
             payload_apply.apply_expr($policy, &$second_key)?,
         );
-        Ok((
-            key_inner,
-            (
-                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
-                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
-                payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
-            ),
-        ))
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&reduce_control);
+        let values = reduce_apply.apply_expr3::<_, _, _, KernelOp<R, Op>>(
+            $policy, &$input.0, &$input.1, &$input.2, $init,
+        )?;
+        Ok((key_inner, (values.first, values.second, values.third)))
     }};
 }
 
@@ -2502,82 +2187,10 @@ macro_rules! impl_wide_reduce_by_single_key_values_body {
 
 macro_rules! impl_wide_reduce_by_single_key_tuple7_values_body {
     ($policy:ident, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $init:expr, $control:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; $op:ty) => {{
-        let scan_control: crate::detail::control::ScanByKeyControl<R> = (&$control).into();
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_seven_views::<
-            R, $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, $op,
-        >(
-            $policy, &$a, &$b, &$c, &$d, &$e, &$f, &$g, &scan_control,
-        )?;
-        let client = $policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[$control.len_u32]));
-        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
-        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
-        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
-        let init_d = client.create_from_slice($ty3::as_bytes(&[$init.3]));
-        let init_e = client.create_from_slice($ty4::as_bytes(&[$init.4]));
-        let init_f = client.create_from_slice($ty5::as_bytes(&[$init.5]));
-        let init_g = client.create_from_slice($ty6::as_bytes(&[$init.6]));
-        let reduced_a_handle = client.empty($control.len * std::mem::size_of::<$ty0>());
-        let reduced_b_handle = client.empty($control.len * std::mem::size_of::<$ty1>());
-        let reduced_c_handle = client.empty($control.len * std::mem::size_of::<$ty2>());
-        let reduced_d_handle = client.empty($control.len * std::mem::size_of::<$ty3>());
-        let reduced_e_handle = client.empty($control.len * std::mem::size_of::<$ty4>());
-        let reduced_f_handle = client.empty($control.len * std::mem::size_of::<$ty5>());
-        let reduced_g_handle = client.empty($control.len * std::mem::size_of::<$ty6>());
-        let num_blocks = $control
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_tuple7_apply_init_kernel::launch_unchecked::<
-                $ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, $op, R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.0.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(inclusive.1.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(inclusive.2.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(inclusive.3.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(inclusive.4.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(inclusive.5.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(inclusive.6.handle.clone(), $control.len),
-                BufferArg::from_raw_parts(init_a.clone(), 1),
-                BufferArg::from_raw_parts(init_b.clone(), 1),
-                BufferArg::from_raw_parts(init_c.clone(), 1),
-                BufferArg::from_raw_parts(init_d.clone(), 1),
-                BufferArg::from_raw_parts(init_e.clone(), 1),
-                BufferArg::from_raw_parts(init_f.clone(), 1),
-                BufferArg::from_raw_parts(init_g.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_a_handle.clone(), $control.len),
-                BufferArg::from_raw_parts(reduced_b_handle.clone(), $control.len),
-                BufferArg::from_raw_parts(reduced_c_handle.clone(), $control.len),
-                BufferArg::from_raw_parts(reduced_d_handle.clone(), $control.len),
-                BufferArg::from_raw_parts(reduced_e_handle.clone(), $control.len),
-                BufferArg::from_raw_parts(reduced_f_handle.clone(), $control.len),
-                BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
-            );
-        }
-        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags,
-        )?;
-        let value_count =
-            crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
-        Ok((
-            payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
-            payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
-            payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
-            payload_apply.apply_value::<R, $ty3>($policy, reduced_d_handle)?,
-            payload_apply.apply_value::<R, $ty4>($policy, reduced_e_handle)?,
-            payload_apply.apply_value::<R, $ty5>($policy, reduced_f_handle)?,
-            payload_apply.apply_value::<R, $ty6>($policy, reduced_g_handle)?,
-        ))
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&$control);
+        reduce_apply.apply_views7::<$ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6, $op>(
+            $policy, &$a, &$b, &$c, &$d, &$e, &$f, &$g, $init,
+        )
     }};
 }
 
@@ -2696,7 +2309,7 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
             payload_apply.apply_expr($policy, &$input.0)?,
             payload_apply.apply_expr($policy, &$input.1)?,
@@ -2714,7 +2327,7 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
             payload_apply.apply_expr($policy, &$input.0)?,
             payload_apply.apply_expr($policy, &$input.1)?,
@@ -2733,7 +2346,7 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
             payload_apply.apply_expr($policy, &$input.0)?,
             payload_apply.apply_expr($policy, &$input.1)?,
@@ -2753,7 +2366,7 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
-        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
             payload_apply.apply_expr($policy, &$input.0)?,
             payload_apply.apply_expr($policy, &$input.1)?,
@@ -3083,7 +2696,7 @@ macro_rules! impl_miter_soa {
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
                     payload_apply.apply_expr(policy, &first_key)?,
                     payload_apply.apply_expr(policy, &second_key)?,
@@ -3136,7 +2749,7 @@ macro_rules! impl_miter_soa {
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
                     payload_apply.apply_expr(policy, &first_key)?,
                     payload_apply.apply_expr(policy, &second_key)?,
@@ -3724,7 +3337,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::IndexedExprApply::gather_expr_into(
+                    crate::detail::apply::IndexedExprApply::gather_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -3748,7 +3361,7 @@ macro_rules! impl_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = crate::detail::api::IndexedExprApply::gather_expr(
+                    let $tmp = crate::detail::apply::IndexedExprApply::gather_expr(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4159,7 +3772,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::MaskedIndexedExprApply::gather_where_expr_into(
+                    crate::detail::apply::MaskedIndexedExprApply::gather_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4191,7 +3804,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::IndexedExprApply::scatter_expr_into(
+                    crate::detail::apply::IndexedExprApply::scatter_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4225,7 +3838,7 @@ macro_rules! impl_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::MaskedIndexedExprApply::scatter_where_expr_into(
+                    crate::detail::apply::MaskedIndexedExprApply::scatter_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -4607,7 +4220,7 @@ macro_rules! impl_miter_mut_soa {
                     {
                         let input =
                             crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
-                        crate::detail::api::MaterializeWriteApply::new(&output.$idx)
+                        crate::detail::apply::MaterializeWriteApply::new(&output.$idx)
                             .collect_expr(policy, &input)?;
                     }
                 )+
@@ -4626,7 +4239,7 @@ macro_rules! impl_miter_mut_soa {
                     {
                         let input =
                             crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
-                        crate::detail::api::MaterializeWriteApply::new(&output.$idx)
+                        crate::detail::apply::MaterializeWriteApply::new(&output.$idx)
                             .copy_where_expr(
                                 policy,
                                 &input,
@@ -4648,7 +4261,7 @@ macro_rules! impl_miter_mut_soa {
                 let output = self.into_inner();
                 let mask = stencil.mask();
                 $(
-                    crate::detail::api::MaskWriteApply::new(&mask, &output.$idx)
+                    crate::detail::apply::MaskWriteApply::new(&mask, &output.$idx)
                         .replace_value(policy, replacement.$idx)?;
                 )+
                 Ok(())
@@ -4662,7 +4275,7 @@ macro_rules! impl_miter_mut_soa {
             {
                 let output = self.into_inner();
                 $(
-                    crate::detail::api::FillWriteApply::new(&output.$idx)
+                    crate::detail::apply::FillWriteApply::new(&output.$idx)
                         .fill_value(policy, value.$idx)?;
                 )+
                 Ok(())
@@ -4903,7 +4516,7 @@ macro_rules! impl_wide_miter_soa {
                         KernelOp<R, Eq>,
                     >>::unique_by_key_control((keys,), policy)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&control.selection, control.count);
+                    crate::detail::apply::SelectedPayloadApply::new(&control.selection, control.count);
                 let value_inner = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>((key_inner.source,)),
@@ -4966,7 +4579,7 @@ macro_rules! impl_wide_miter_soa {
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
                     payload_apply.apply_expr(policy, &first_key)?,
                     payload_apply.apply_expr(policy, &second_key)?,
@@ -5270,7 +4883,7 @@ macro_rules! impl_wide_miter_soa {
                     selected_rank,
                 )?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(selected_rank, count);
                 let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
@@ -5291,7 +4904,7 @@ macro_rules! impl_wide_miter_soa {
                     selected_rank,
                 )?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(selected_rank, count);
                 let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
@@ -5378,7 +4991,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::IndexedExprApply::gather_expr_into(
+                    crate::detail::apply::IndexedExprApply::gather_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5402,7 +5015,7 @@ macro_rules! impl_wide_miter_soa {
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
-                    let $tmp = crate::detail::api::IndexedExprApply::gather_expr(
+                    let $tmp = crate::detail::apply::IndexedExprApply::gather_expr(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5435,7 +5048,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "gather_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::MaskedIndexedExprApply::gather_where_expr_into(
+                    crate::detail::apply::MaskedIndexedExprApply::gather_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5467,7 +5080,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::IndexedExprApply::scatter_expr_into(
+                    crate::detail::apply::IndexedExprApply::scatter_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5501,7 +5114,7 @@ macro_rules! impl_wide_miter_soa {
                     .ok_or_else(|| Error::Launch {
                         message: "scatter_where output must match input shape".to_string(),
                     })?;
-                    crate::detail::api::MaskedIndexedExprApply::scatter_where_expr_into(
+                    crate::detail::apply::MaskedIndexedExprApply::scatter_where_expr_into(
                         policy,
                         &input.$idx,
                         &indices,
@@ -5630,7 +5243,7 @@ macro_rules! impl_wide_miter_soa {
                     selected_rank.len,
                     selected_rank.len,
                 );
-                crate::detail::api::QueryApply::first_flag(policy, search)
+                crate::detail::apply::QueryApply::first_flag(policy, search)
             }
 
             fn partition_dispatch<Pred, Output>(
@@ -5652,7 +5265,7 @@ macro_rules! impl_wide_miter_soa {
                         policy,
                         selected_rank,
                 )?;
-                let payload_apply = crate::detail::api::SplitPayloadApply::new(
+                let payload_apply = crate::detail::apply::SplitPayloadApply::new(
                     &split_rank,
                     matching_count,
                     failing_count,
@@ -5947,15 +5560,15 @@ macro_rules! impl_wide_miter_soa {
                 let right = right.into_view_with_policy(policy)?;
                 $(
                     let $tmp = {
-                        let left = crate::detail::api::MaterializePayloadApply::collect_expr(
+                        let left = crate::detail::apply::MaterializePayloadApply::collect_expr(
                             policy,
                             &left.$idx,
                         )?;
-                        let right = crate::detail::api::MaterializePayloadApply::collect_expr(
+                        let right = crate::detail::apply::MaterializePayloadApply::collect_expr(
                             policy,
                             &right.$idx,
                         )?;
-                        crate::detail::api::ConcatPayloadApply::apply_values(
+                        crate::detail::apply::ConcatPayloadApply::apply_values(
                             policy,
                             &left,
                             &right,
@@ -5998,18 +5611,18 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 let right_extra_count =
                     crate::detail::primitives::select::selected_count(policy, &right_extra_rank)?;
-                let right_extra_apply = crate::detail::api::SelectedPayloadApply::new(
+                let right_extra_apply = crate::detail::apply::SelectedPayloadApply::new(
                     &right_extra_rank,
                     right_extra_count,
                 );
                 let ($($tmp,)+) = right_extra_apply.$selected_apply(policy, $( &right.$idx, )+)?;
                 $(
                     let $tmp = {
-                        let left = crate::detail::api::MaterializePayloadApply::collect_expr(
+                        let left = crate::detail::apply::MaterializePayloadApply::collect_expr(
                             policy,
                             &left.$idx,
                         )?;
-                        crate::detail::api::ConcatPayloadApply::apply_values(
+                        crate::detail::apply::ConcatPayloadApply::apply_values(
                             policy,
                             &left,
                             &$tmp,
@@ -6053,7 +5666,7 @@ macro_rules! impl_wide_miter_soa {
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
                 let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &left.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
@@ -6090,7 +5703,7 @@ macro_rules! impl_wide_miter_soa {
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
                 let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &left.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
@@ -6226,7 +5839,7 @@ macro_rules! impl_wide_miter_soa {
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
-                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
                     payload_apply.apply_expr(policy, &first_key)?,
                     payload_apply.apply_expr(policy, &second_key)?,

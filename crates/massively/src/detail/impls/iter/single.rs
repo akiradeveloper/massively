@@ -660,54 +660,33 @@ where
         let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-        let control: crate::detail::control::ScanByKeyControl<R> =
-            crate::detail::control::ScanByKeyControl {
-                head_flags,
-                len: first_key.len,
-                len_u32,
-                _runtime: std::marker::PhantomData,
-            };
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
-            policy, &values, &control,
-        )?;
-
-        let client = policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-        let init_handle = client.create_from_slice(T::as_bytes(&[init.0]));
-        let reduced_handle = client.empty(first_key.len * std::mem::size_of::<T>());
-        let num_blocks = first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_apply_init_kernel::launch_unchecked::<
-                T,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.handle.clone(), first_key.len),
-                BufferArg::from_raw_parts(init_handle.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_handle.clone(), first_key.len),
-            );
-        }
-
         let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
             first_key.len,
             len_u32,
-            end_flags,
+            end_flags.clone(),
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
-        let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            head_flags,
+            end_flags,
+            first_key.len,
+            len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            value_selected_rank,
+            value_count,
+        );
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
         let key_inner = payload_apply.apply_expr2(policy, &first_key, &second_key)?;
-        let value_inner = (payload_apply.apply_value::<R, T>(policy, reduced_handle)?,);
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&reduce_control);
+        let value_inner =
+            (reduce_apply.apply_expr::<_, KernelOp<R, Op>>(policy, &values, init.0)?,);
         Ok((
             array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
@@ -864,54 +843,33 @@ where
         let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
         let len_u32 = u32::try_from(first_key.len)
             .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
-        let control: crate::detail::control::ScanByKeyControl<R> =
-            crate::detail::control::ScanByKeyControl {
-                head_flags,
-                len: first_key.len,
-                len_u32,
-                _runtime: std::marker::PhantomData,
-            };
-        let inclusive = crate::detail::read::inclusive_scan_by_flags_one::<_, KernelOp<R, Op>>(
-            policy, &values, &control,
-        )?;
-
-        let client = policy.client();
-        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-        let init_handle = client.create_from_slice(T::as_bytes(&[init.0]));
-        let reduced_handle = client.empty(first_key.len * std::mem::size_of::<T>());
-        let num_blocks = first_key
-            .len
-            .div_ceil(crate::detail::primitives::scan::BLOCK_SCAN_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-        unsafe {
-            crate::kernels::reduce_by_key_apply_init_kernel::launch_unchecked::<
-                T,
-                KernelOp<R, Op>,
-                R,
-            >(
-                client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
-                CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
-                BufferArg::from_raw_parts(inclusive.handle.clone(), first_key.len),
-                BufferArg::from_raw_parts(init_handle.clone(), 1),
-                BufferArg::from_raw_parts(len_handle.clone(), 1),
-                BufferArg::from_raw_parts(reduced_handle.clone(), first_key.len),
-            );
-        }
-
         let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
             first_key.len,
             len_u32,
-            end_flags,
+            end_flags.clone(),
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
-        let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            head_flags,
+            end_flags,
+            first_key.len,
+            len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            value_selected_rank,
+            value_count,
+        );
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
         let key_inner = payload_apply.apply_expr3(policy, &first_key, &second_key, &third_key)?;
-        let value_inner = (payload_apply.apply_value::<R, T>(policy, reduced_handle)?,);
+        let reduce_apply = crate::detail::apply::SegmentedReduceApply::new(&reduce_control);
+        let value_inner =
+            (reduce_apply.apply_expr::<_, KernelOp<R, Op>>(policy, &values, init.0)?,);
         Ok((
             array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
@@ -964,7 +922,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "gather output must match input shape".to_string(),
             })?;
-        crate::detail::api::IndexedExprApply::gather_expr_into(policy, &input, &indices, &output)
+        crate::detail::apply::IndexedExprApply::gather_expr_into(policy, &input, &indices, &output)
     }
 
     fn permute_dispatch<Indices, Output>(
@@ -979,7 +937,7 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::api::IndexedExprApply::gather_expr(policy, &input, &indices)?;
+        let inner = crate::detail::apply::IndexedExprApply::gather_expr(policy, &input, &indices)?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
@@ -1414,7 +1372,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "gather_where output must match input shape".to_string(),
             })?;
-        crate::detail::api::MaskedIndexedExprApply::gather_where_expr_into(
+        crate::detail::apply::MaskedIndexedExprApply::gather_where_expr_into(
             policy, &input, &indices, &mask, &output,
         )
     }
@@ -1436,7 +1394,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "scatter output must match input shape".to_string(),
             })?;
-        crate::detail::api::IndexedExprApply::scatter_expr_into(policy, &input, &indices, &output)
+        crate::detail::apply::IndexedExprApply::scatter_expr_into(policy, &input, &indices, &output)
     }
 
     fn scatter_where_dispatch<Indices, Output>(
@@ -1459,7 +1417,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "scatter_where output must match input shape".to_string(),
             })?;
-        crate::detail::api::MaskedIndexedExprApply::scatter_where_expr_into(
+        crate::detail::apply::MaskedIndexedExprApply::scatter_where_expr_into(
             policy, &input, &indices, &mask, &output,
         )
     }
@@ -1789,7 +1747,7 @@ where
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
         let input = crate::detail::device::DeviceColumnView::from_column(&inner.0);
-        crate::detail::api::MaterializeWriteApply::new(&output).collect_expr(policy, &input)
+        crate::detail::apply::MaterializeWriteApply::new(&output).collect_expr(policy, &input)
     }
 
     fn write_where_from_inner(
@@ -1800,7 +1758,7 @@ where
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
         let input = crate::detail::device::DeviceColumnView::from_column(&inner.0);
-        crate::detail::api::MaterializeWriteApply::new(&output).copy_where_expr(
+        crate::detail::apply::MaterializeWriteApply::new(&output).copy_where_expr(
             policy,
             &input,
             &stencil,
@@ -1816,7 +1774,8 @@ where
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
         let mask = stencil.mask();
-        crate::detail::api::MaskWriteApply::new(&mask, &output).replace_value(policy, replacement.0)
+        crate::detail::apply::MaskWriteApply::new(&mask, &output)
+            .replace_value(policy, replacement.0)
     }
 
     fn fill_inner(
@@ -1825,7 +1784,7 @@ where
         value: Self::Item,
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
-        crate::detail::api::FillWriteApply::new(&output).fill_value(policy, value.0)
+        crate::detail::apply::FillWriteApply::new(&output).fill_value(policy, value.0)
     }
 }
 

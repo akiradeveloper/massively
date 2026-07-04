@@ -18,6 +18,7 @@ pub(crate) struct ScanByKeyControl<R: Runtime> {
     pub(crate) _runtime: std::marker::PhantomData<R>,
 }
 
+#[allow(dead_code)]
 pub(crate) struct ReduceByKeyControl<R: Runtime> {
     pub(crate) head_flags: cubecl::server::Handle,
     pub(crate) end_flags: cubecl::server::Handle,

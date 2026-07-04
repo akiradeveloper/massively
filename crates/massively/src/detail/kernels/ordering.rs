@@ -110,6 +110,112 @@ pub(crate) fn merge_path_device_expr_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_path_control_device_expr_kernel<
+    T: CubePrimitive,
+    LeftExpr: DeviceGpuExpr<T>,
+    RightExpr: DeviceGpuExpr<T>,
+    Less: BinaryPredicateOp<T>,
+>(
+    lhs_slot0: &[T],
+    lhs_slot1: &[T],
+    lhs_slot2: &[T],
+    lhs_slot3: &[T],
+    lhs_slot_offsets: &[u32],
+    lhs_len: &[u32],
+    rhs_slot0: &[T],
+    rhs_slot1: &[T],
+    rhs_slot2: &[T],
+    rhs_slot3: &[T],
+    rhs_slot_offsets: &[u32],
+    rhs_len: &[u32],
+    source_sides: &mut [u32],
+    source_indices: &mut [u32],
+) {
+    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let lhs_logical_len = lhs_len[0] as usize;
+    let rhs_logical_len = rhs_len[0] as usize;
+    if out < source_sides.len() {
+        let low_init = RuntimeCell::<usize>::new(0usize);
+        if out > rhs_logical_len {
+            low_init.store(out - rhs_logical_len);
+        }
+
+        let high_init = RuntimeCell::<usize>::new(out);
+        if high_init.read() > lhs_logical_len {
+            high_init.store(lhs_logical_len);
+        }
+
+        let low = RuntimeCell::<usize>::new(low_init.read());
+        let high = RuntimeCell::<usize>::new(high_init.read());
+        while low.read() < high.read() {
+            let mid = (low.read() + high.read()) / 2usize;
+            let rhs_index = out - mid;
+            if mid < lhs_logical_len
+                && rhs_index > 0usize
+                && !Less::apply(
+                    RightExpr::eval(
+                        rhs_slot0,
+                        rhs_slot1,
+                        rhs_slot2,
+                        rhs_slot3,
+                        rhs_slot_offsets,
+                        rhs_index - 1usize,
+                    ),
+                    LeftExpr::eval(
+                        lhs_slot0,
+                        lhs_slot1,
+                        lhs_slot2,
+                        lhs_slot3,
+                        lhs_slot_offsets,
+                        mid,
+                    ),
+                )
+            {
+                low.store(mid + 1usize);
+            } else {
+                high.store(mid);
+            }
+        }
+
+        let lhs_index = low.read();
+        let rhs_index = out - lhs_index;
+        if lhs_index < lhs_logical_len {
+            if rhs_index >= rhs_logical_len {
+                source_sides[out] = 0u32;
+                source_indices[out] = lhs_index as u32;
+            } else {
+                let lhs_value = LeftExpr::eval(
+                    lhs_slot0,
+                    lhs_slot1,
+                    lhs_slot2,
+                    lhs_slot3,
+                    lhs_slot_offsets,
+                    lhs_index,
+                );
+                let rhs_value = RightExpr::eval(
+                    rhs_slot0,
+                    rhs_slot1,
+                    rhs_slot2,
+                    rhs_slot3,
+                    rhs_slot_offsets,
+                    rhs_index,
+                );
+                if !Less::apply(rhs_value, lhs_value) {
+                    source_sides[out] = 0u32;
+                    source_indices[out] = lhs_index as u32;
+                } else {
+                    source_sides[out] = 1u32;
+                    source_indices[out] = rhs_index as u32;
+                }
+            }
+        } else {
+            source_sides[out] = 1u32;
+            source_indices[out] = rhs_index as u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn merge_by_key_control_device_expr_kernel<
     K: CubePrimitive,
     LeftExpr: DeviceGpuExpr<K>,

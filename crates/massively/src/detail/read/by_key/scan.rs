@@ -883,231 +883,6 @@ where
     ))
 }
 
-pub(in crate::detail) struct SegmentedScanApply<'a, R: Runtime> {
-    control: &'a ScanByKeyControl<R>,
-}
-
-impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
-    pub(in crate::detail) fn new(control: &'a ScanByKeyControl<R>) -> Self {
-        Self { control }
-    }
-
-    pub(in crate::detail) fn inclusive_expr<Source, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        source: &Source,
-    ) -> Result<DeviceVec<R, Source::Item>, Error>
-    where
-        Source: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        Source::Item: Scalar + 'static,
-        Source::Expr: DeviceGpuExpr<Source::Item>,
-        Op: BinaryOp<(Source::Item,)>,
-    {
-        inclusive_scan_by_flags_one::<Source, Op>(policy, source, self.control)
-    }
-
-    pub(in crate::detail) fn exclusive_expr<Source, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        source: &Source,
-        init: Source::Item,
-    ) -> Result<DeviceVec<R, Source::Item>, Error>
-    where
-        Source: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        Source::Item: Scalar + 'static,
-        Source::Expr: DeviceGpuExpr<Source::Item>,
-        Op: BinaryOp<(Source::Item,)>,
-    {
-        exclusive_scan_by_flags_one::<Source, Op>(policy, source, self.control, init)
-    }
-
-    pub(in crate::detail) fn inclusive_expr2<A, C, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        a: &A,
-        c: &C,
-    ) -> Result<DeviceSoA2<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>>, Error>
-    where
-        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
-        A::Expr: DeviceGpuExpr<A::Item>,
-        C::Expr: DeviceGpuExpr<C::Item>,
-        (A::Item, C::Item): MItem<R>,
-        Op: BinaryOp<(A::Item, C::Item)>,
-    {
-        inclusive_scan_by_flags_two::<A, C, Op>(policy, a, c, self.control)
-    }
-
-    pub(in crate::detail) fn exclusive_expr2<A, C, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        a: &A,
-        c: &C,
-        init: (A::Item, C::Item),
-    ) -> Result<DeviceSoA2<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>>, Error>
-    where
-        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
-        A::Expr: DeviceGpuExpr<A::Item>,
-        C::Expr: DeviceGpuExpr<C::Item>,
-        (A::Item, C::Item): MItem<R>,
-        Op: BinaryOp<(A::Item, C::Item)>,
-    {
-        exclusive_scan_by_flags_two::<A, C, Op>(policy, a, c, self.control, init)
-    }
-
-    pub(in crate::detail) fn inclusive_expr3<A, C, D, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        a: &A,
-        c: &C,
-        d: &D,
-    ) -> Result<
-        DeviceSoA3<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>, DeviceVec<R, D::Item>>,
-        Error,
-    >
-    where
-        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        D: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
-        D::Item: Scalar + 'static,
-        A::Expr: DeviceGpuExpr<A::Item>,
-        C::Expr: DeviceGpuExpr<C::Item>,
-        D::Expr: DeviceGpuExpr<D::Item>,
-        (A::Item, C::Item, D::Item): MItem<R>,
-        Op: BinaryOp<(A::Item, C::Item, D::Item)>,
-    {
-        inclusive_scan_by_flags_three::<A, C, D, Op>(policy, a, c, d, self.control)
-    }
-
-    pub(in crate::detail) fn exclusive_expr3<A, C, D, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        a: &A,
-        c: &C,
-        d: &D,
-        init: (A::Item, C::Item, D::Item),
-    ) -> Result<
-        DeviceSoA3<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>, DeviceVec<R, D::Item>>,
-        Error,
-    >
-    where
-        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        D: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
-        D::Item: Scalar + 'static,
-        A::Expr: DeviceGpuExpr<A::Item>,
-        C::Expr: DeviceGpuExpr<C::Item>,
-        D::Expr: DeviceGpuExpr<D::Item>,
-        (A::Item, C::Item, D::Item): MItem<R>,
-        Op: BinaryOp<(A::Item, C::Item, D::Item)>,
-    {
-        exclusive_scan_by_flags_three::<A, C, D, Op>(policy, a, c, d, self.control, init)
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(in crate::detail) fn inclusive_views7<A, B, C, D, E, F, G, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        a: &DeviceColumnView<R, A>,
-        b: &DeviceColumnView<R, B>,
-        c: &DeviceColumnView<R, C>,
-        d: &DeviceColumnView<R, D>,
-        e: &DeviceColumnView<R, E>,
-        f: &DeviceColumnView<R, F>,
-        g: &DeviceColumnView<R, G>,
-    ) -> Result<
-        (
-            DeviceVec<R, A>,
-            DeviceVec<R, B>,
-            DeviceVec<R, C>,
-            DeviceVec<R, D>,
-            DeviceVec<R, E>,
-            DeviceVec<R, F>,
-            DeviceVec<R, G>,
-        ),
-        Error,
-    >
-    where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
-        Op: BinaryOp<(A, B, C, D, E, F, G)>,
-    {
-        inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>(
-            policy,
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            self.control,
-        )
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    pub(in crate::detail) fn exclusive_views7<A, B, C, D, E, F, G, Op>(
-        &self,
-        policy: &CubePolicy<R>,
-        a: &DeviceColumnView<R, A>,
-        b: &DeviceColumnView<R, B>,
-        c: &DeviceColumnView<R, C>,
-        d: &DeviceColumnView<R, D>,
-        e: &DeviceColumnView<R, E>,
-        f: &DeviceColumnView<R, F>,
-        g: &DeviceColumnView<R, G>,
-        init: (A, B, C, D, E, F, G),
-    ) -> Result<
-        (
-            DeviceVec<R, A>,
-            DeviceVec<R, B>,
-            DeviceVec<R, C>,
-            DeviceVec<R, D>,
-            DeviceVec<R, E>,
-            DeviceVec<R, F>,
-            DeviceVec<R, G>,
-        ),
-        Error,
-    >
-    where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
-        Op: BinaryOp<(A, B, C, D, E, F, G)>,
-    {
-        exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>(
-            policy,
-            a,
-            b,
-            c,
-            d,
-            e,
-            f,
-            g,
-            self.control,
-            init,
-        )
-    }
-}
-
 impl<KeySource, KeyEq> KernelScanByKeyKeys<KeyEq> for KeySource
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
@@ -1279,7 +1054,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
                 policy: &CubePolicy<Self::Runtime>,
                 control: &ScanByKeyControl<S::Runtime>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 Ok(DeviceSoA1 {
                     source: apply.inclusive_expr::<S, Op>(policy, &self.$field)?,
                 })
@@ -1304,7 +1079,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
                 control: &ScanByKeyControl<S::Runtime>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 Ok(DeviceSoA1 {
                     source: apply.exclusive_expr::<S, Op>(policy, &self.$field, init)?,
                 })
@@ -1340,7 +1115,7 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
                 policy: &CubePolicy<Self::Runtime>,
                 control: &ScanByKeyControl<A::Runtime>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 apply.inclusive_expr2::<A, C, Op>(policy, &self.$left, &self.$right)
             }
         }
@@ -1368,7 +1143,7 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
                 control: &ScanByKeyControl<A::Runtime>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 apply.exclusive_expr2::<A, C, Op>(policy, &self.$left, &self.$right, init)
             }
         }
@@ -1407,7 +1182,7 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
                 policy: &CubePolicy<Self::Runtime>,
                 control: &ScanByKeyControl<A::Runtime>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 apply.inclusive_expr3::<A, C, D, Op>(
                     policy,
                     &self.$first,
@@ -1446,7 +1221,7 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
                 control: &ScanByKeyControl<A::Runtime>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 apply.exclusive_expr3::<A, C, D, Op>(
                     policy,
                     &self.$first,
@@ -1493,26 +1268,8 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
-                let dummy4 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy4 = DeviceColumnView::from_column(&dummy4);
-                let dummy5 = DeviceColumnView::from_column(&dummy5);
-                let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let (a, b, c, d, _, _, _) = apply.inclusive_views7::<
-                            A,
-                            B,
-                            C,
-                            D,
-                            u32,
-                            u32,
-                            u32,
-                            crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
-                        >(
-                            policy, &self.0, &self.1, &self.2, &self.3, &dummy4, &dummy5, &dummy6,
-                        )?;
-                Ok((a, b, c, d))
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
+                apply.inclusive_views4::<A, B, C, D, Op>(policy, &self.0, &self.1, &self.2, &self.3)
             }
         }
 
@@ -1547,34 +1304,10 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
-                let dummy4 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy4 = DeviceColumnView::from_column(&dummy4);
-                let dummy5 = DeviceColumnView::from_column(&dummy5);
-                let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let (a, b, c, d, _, _, _) = apply.exclusive_views7::<
-                            A,
-                            B,
-                            C,
-                            D,
-                            u32,
-                            u32,
-                            u32,
-                            crate::detail::api::Tuple4AsTuple7BinaryOp<Op>,
-                        >(
-                            policy,
-                            &self.0,
-                            &self.1,
-                            &self.2,
-                            &self.3,
-                            &dummy4,
-                            &dummy5,
-                            &dummy6,
-                            (init.0, init.1, init.2, init.3, 0, 0, 0),
-                        )?;
-                Ok((a, b, c, d))
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
+                apply.exclusive_views4::<A, B, C, D, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, init,
+                )
             }
         }
     };
@@ -1614,24 +1347,10 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
-                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy5 = DeviceColumnView::from_column(&dummy5);
-                let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let (a, b, c, d, e, _, _) = apply.inclusive_views7::<
-                            A,
-                            B,
-                            C,
-                            D,
-                            E,
-                            u32,
-                            u32,
-                            crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
-                        >(
-                            policy, &self.0, &self.1, &self.2, &self.3, &self.4, &dummy5, &dummy6,
-                        )?;
-                Ok((a, b, c, d, e))
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
+                apply.inclusive_views5::<A, B, C, D, E, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4,
+                )
             }
         }
 
@@ -1669,32 +1388,10 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
-                let dummy5 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy5 = DeviceColumnView::from_column(&dummy5);
-                let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let (a, b, c, d, e, _, _) = apply.exclusive_views7::<
-                            A,
-                            B,
-                            C,
-                            D,
-                            E,
-                            u32,
-                            u32,
-                            crate::detail::api::Tuple5AsTuple7BinaryOp<Op>,
-                        >(
-                            policy,
-                            &self.0,
-                            &self.1,
-                            &self.2,
-                            &self.3,
-                            &self.4,
-                            &dummy5,
-                            &dummy6,
-                            (init.0, init.1, init.2, init.3, init.4, 0, 0),
-                        )?;
-                Ok((a, b, c, d, e))
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
+                apply.exclusive_views5::<A, B, C, D, E, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, init,
+                )
             }
         }
     };
@@ -1737,22 +1434,10 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
-                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let (a, b, c, d, e, f, _) = apply.inclusive_views7::<
-                            A,
-                            B,
-                            C,
-                            D,
-                            E,
-                            F,
-                            u32,
-                            crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
-                        >(
-                            policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &dummy6,
-                        )?;
-                Ok((a, b, c, d, e, f))
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
+                apply.inclusive_views6::<A, B, C, D, E, F, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5,
+                )
             }
         }
 
@@ -1793,30 +1478,10 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
-                let dummy6 = primitive_range::indices_mindex(policy, self.0.len)?;
-                let dummy6 = DeviceColumnView::from_column(&dummy6);
-                let (a, b, c, d, e, f, _) = apply.exclusive_views7::<
-                            A,
-                            B,
-                            C,
-                            D,
-                            E,
-                            F,
-                            u32,
-                            crate::detail::api::Tuple6AsTuple7BinaryOp<Op>,
-                        >(
-                            policy,
-                            &self.0,
-                            &self.1,
-                            &self.2,
-                            &self.3,
-                            &self.4,
-                            &self.5,
-                            &dummy6,
-                            (init.0, init.1, init.2, init.3, init.4, init.5, 0),
-                        )?;
-                Ok((a, b, c, d, e, f))
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
+                apply.exclusive_views6::<A, B, C, D, E, F, Op>(
+                    policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, init,
+                )
             }
         }
     };
@@ -1862,7 +1527,7 @@ macro_rules! impl_kernel_scan_by_key_tuple7_views {
                 policy: &CubePolicy<R>,
                 control: &ScanByKeyControl<R>,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 apply.inclusive_views7::<A, B, C, D, E, F, G, Op>(
                     policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
                 )
@@ -1909,7 +1574,7 @@ macro_rules! impl_kernel_scan_by_key_tuple7_views {
                 control: &ScanByKeyControl<R>,
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
-                let apply = SegmentedScanApply::new(control);
+                let apply = crate::detail::apply::SegmentedScanApply::new(control);
                 apply.exclusive_views7::<A, B, C, D, E, F, G, Op>(
                     policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6, init,
                 )

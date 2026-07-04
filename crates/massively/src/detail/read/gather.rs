@@ -50,9 +50,9 @@ where
         indices: &IndexSource,
     ) -> Result<Self::Output, Error> {
         let index_values =
-            crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, indices)?;
         let control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(&control);
+        let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
         Ok(DeviceSoA1 {
             source: apply.apply_expr(policy, &self)?,
         })
@@ -132,10 +132,10 @@ macro_rules! impl_kernel_gather_tuple2 {
             ) -> Result<Self::Output, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
                 let index_values =
-                    crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+                    crate::detail::apply::MaterializePayloadApply::collect_expr(policy, indices)?;
                 let control =
                     crate::detail::control::PermutationControl::from_indices(&index_values)?;
-                let apply = crate::detail::api::PermutationPayloadApply::new(&control);
+                let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
                 let (left, right) = apply.apply_expr2(policy, &self.$left, &self.$right)?;
                 Ok($out { left, right })
             }
@@ -200,10 +200,10 @@ macro_rules! impl_kernel_gather_tuple3 {
             ) -> Result<Self::Output, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
                 let index_values =
-                    crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+                    crate::detail::apply::MaterializePayloadApply::collect_expr(policy, indices)?;
                 let control =
                     crate::detail::control::PermutationControl::from_indices(&index_values)?;
-                let apply = crate::detail::api::PermutationPayloadApply::new(&control);
+                let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
                 let (first, second, third) =
                     apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok($out {

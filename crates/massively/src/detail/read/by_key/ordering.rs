@@ -21,109 +21,6 @@ pub(crate) trait KernelSortByKeyValues: Sized {
     ) -> Result<Self::OutputValues, Error>;
 }
 
-struct SortByKeyApply;
-
-impl SortByKeyApply {
-    fn apply_keys1<KeySource, Less>(
-        policy: &CubePolicy<KeySource::Runtime>,
-        keys: &KeySource,
-    ) -> Result<
-        (
-            DeviceVec<KeySource::Runtime, KeySource::Item>,
-            DeviceVec<KeySource::Runtime, MIndex>,
-        ),
-        Error,
-    >
-    where
-        KeySource: KernelColumn + KernelColumnAt<S0>,
-        KeySource::Item: Scalar + 'static,
-        KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
-        Less: BinaryPredicateOp<KeySource::Item>,
-    {
-        let indices =
-            primitive_range::indices_mindex(policy, <KeySource as KernelColumn>::len(keys))?;
-        primitive_ordering::sort_by_key_input_with_policy(
-            policy,
-            keys,
-            &indices,
-            crate::op::GpuOp::<Less>::new(),
-        )
-    }
-
-    fn apply_keys2<First, Second, Less>(
-        policy: &CubePolicy<First::Runtime>,
-        first: &First,
-        second: &Second,
-    ) -> Result<
-        (
-            DeviceVec<First::Runtime, First::Item>,
-            DeviceVec<First::Runtime, Second::Item>,
-            DeviceVec<First::Runtime, MIndex>,
-        ),
-        Error,
-    >
-    where
-        First: KernelColumn + KernelColumnAt<S0>,
-        Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-        First::Item: Scalar + 'static,
-        Second::Item: Scalar + 'static,
-        First::Expr: DeviceGpuExpr<First::Item>,
-        Second::Expr: DeviceGpuExpr<Second::Item>,
-        Less: BinaryPredicateOp<(First::Item, Second::Item)>,
-        crate::detail::api::Tuple2AsTuple3Less<Less>:
-            BinaryPredicateOp<(First::Item, Second::Item, u32)>,
-    {
-        let indices = primitive_range::indices_mindex(policy, <First as KernelColumn>::len(first))?;
-        let (first, second, _stable_tie, indices) =
-            primitive_ordering::sort_tuple3_by_key_input_with_policy(
-                policy,
-                first,
-                second,
-                &indices,
-                &indices,
-                crate::op::GpuOp::<crate::detail::api::Tuple2AsTuple3Less<Less>>::new(),
-            )?;
-        Ok((first, second, indices))
-    }
-
-    fn apply_keys3<First, Second, Third, Less>(
-        policy: &CubePolicy<First::Runtime>,
-        first: &First,
-        second: &Second,
-        third: &Third,
-    ) -> Result<
-        (
-            DeviceVec<First::Runtime, First::Item>,
-            DeviceVec<First::Runtime, Second::Item>,
-            DeviceVec<First::Runtime, Third::Item>,
-            DeviceVec<First::Runtime, MIndex>,
-        ),
-        Error,
-    >
-    where
-        First: KernelColumn + KernelColumnAt<S0>,
-        Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-        Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-        First::Item: Scalar + 'static,
-        Second::Item: Scalar + 'static,
-        Third::Item: Scalar + 'static,
-        First::Expr: DeviceGpuExpr<First::Item>,
-        Second::Expr: DeviceGpuExpr<Second::Item>,
-        Third::Expr: DeviceGpuExpr<Third::Item>,
-        Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
-    {
-        let indices = primitive_range::indices_mindex(policy, <First as KernelColumn>::len(first))?;
-        primitive_ordering::sort_tuple3_by_key_input_with_policy(
-            policy,
-            first,
-            second,
-            third,
-            &indices,
-            crate::op::GpuOp::<Less>::new(),
-        )
-    }
-}
-
 pub(crate) trait KernelMergeByKeyKeys<RightKeys, Less>: Sized
 where
     RightKeys: Sized,
@@ -193,7 +90,8 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
-        let (keys, indices) = SortByKeyApply::apply_keys1::<KeySource, Less>(policy, &self)?;
+        let (keys, indices) =
+            crate::detail::apply::SortByKeyApply::apply_keys1::<KeySource, Less>(policy, &self)?;
         Ok((DeviceSoA1 { source: keys }, indices))
     }
 }
@@ -266,7 +164,9 @@ where
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
         let (first, second, indices) =
-            SortByKeyApply::apply_keys2::<First, Second, Less>(policy, &self.0, &self.1)?;
+            crate::detail::apply::SortByKeyApply::apply_keys2::<First, Second, Less>(
+                policy, &self.0, &self.1,
+            )?;
         Ok((
             DeviceSoA2 {
                 left: first,
@@ -302,7 +202,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
         let (first, second, third, indices) =
-            SortByKeyApply::apply_keys3::<First, Second, Third, Less>(
+            crate::detail::apply::SortByKeyApply::apply_keys3::<First, Second, Third, Less>(
                 policy, &self.0, &self.1, &self.2,
             )?;
         Ok((
@@ -331,7 +231,7 @@ where
         control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
         ensure_same_len(control.len, <ValueSource as KernelColumn>::len(&self))?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(control);
+        let apply = crate::detail::apply::PermutationPayloadApply::new(control);
         Ok(DeviceSoA1 {
             source: apply.apply_expr(policy, &self)?,
         })
@@ -401,7 +301,7 @@ macro_rules! impl_kernel_sort_by_key_values_tuple2 {
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
                 ensure_same_len(control.len, <Left as KernelColumn>::len(&self.$left))?;
-                let apply = crate::detail::api::PermutationPayloadApply::new(control);
+                let apply = crate::detail::apply::PermutationPayloadApply::new(control);
                 let (left, right) = apply.apply_expr2(policy, &self.$left, &self.$right)?;
                 Ok($out { left, right })
             }
@@ -463,7 +363,7 @@ macro_rules! impl_kernel_sort_by_key_values_tuple3 {
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns3(&self.$first, &self.$second, &self.$third)?;
                 ensure_same_len(control.len, <First as KernelColumn>::len(&self.$first))?;
-                let apply = crate::detail::api::PermutationPayloadApply::new(control);
+                let apply = crate::detail::apply::PermutationPayloadApply::new(control);
                 let (first, second, third) =
                     apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
                 Ok($out {
@@ -534,7 +434,7 @@ macro_rules! impl_kernel_sort_by_key_values_wide_tuple {
                 self.$first_idx.validate()?;
                 $( self.$idx.validate()?; )+
                 ensure_same_len(control.len, self.0.len())?;
-                let apply = crate::detail::api::PermutationPayloadApply::new(control);
+                let apply = crate::detail::apply::PermutationPayloadApply::new(control);
                 apply.$apply(policy, &self.$first_idx, $( &self.$idx, )+)
             }
         }
@@ -599,7 +499,7 @@ where
         ensure_same_len(self.5.len(), self.0.len())?;
         ensure_same_len(self.6.len(), self.0.len())?;
         ensure_same_len(control.len, self.0.len())?;
-        let apply = crate::detail::api::PermutationPayloadApply::new(control);
+        let apply = crate::detail::apply::PermutationPayloadApply::new(control);
         apply.apply_expr7(
             policy, &self.0, &self.1, &self.2, &self.3, &self.4, &self.5, &self.6,
         )
@@ -623,7 +523,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         right_keys: RightKey,
     ) -> Result<(Self::OutputKeys, primitive_ordering::MergeByKeyControl), Error> {
-        let (keys, control) = crate::detail::api::device_expr_merge_by_key_control_with_policy::<
+        let (keys, control) = crate::detail::apply::MergeByKeyControlApply::apply_keys1::<
             LeftKey,
             RightKey,
             Less,
@@ -705,7 +605,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         right_keys: (RightA, RightB),
     ) -> Result<(Self::OutputKeys, primitive_ordering::MergeByKeyControl), Error> {
-        crate::detail::api::device_expr_merge_tuple2_by_key_control_with_policy::<
+        crate::detail::apply::MergeByKeyControlApply::apply_keys2::<
             LeftA,
             LeftB,
             RightA,
@@ -747,7 +647,7 @@ where
         policy: &CubePolicy<Self::Runtime>,
         right_keys: (RightA, RightB, RightC),
     ) -> Result<(Self::OutputKeys, primitive_ordering::MergeByKeyControl), Error> {
-        crate::detail::api::device_expr_merge_tuple3_by_key_control_with_policy::<
+        crate::detail::apply::MergeByKeyControlApply::apply_keys3::<
             LeftA,
             LeftB,
             LeftC,
@@ -785,7 +685,7 @@ where
         right_values: RightValue,
         control: &primitive_ordering::MergeByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
-        let apply = crate::detail::api::MergePayloadApply::new(control);
+        let apply = crate::detail::apply::MergePayloadApply::new(control);
         let values = apply.apply_expr(policy, &self, &right_values)?;
         Ok(DeviceSoA1 { source: values })
     }
@@ -872,7 +772,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple2 {
             ) -> Result<Self::OutputValues, Error> {
                 validate_columns2(&self.$left, &self.$right)?;
                 validate_columns2(&right_values.$left, &right_values.$right)?;
-                let apply = crate::detail::api::MergePayloadApply::new(control);
+                let apply = crate::detail::apply::MergePayloadApply::new(control);
                 let (left, right) = apply.apply_expr2(
                     policy,
                     &self.$left,
@@ -959,7 +859,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple3 {
                     &right_values.$second,
                     &right_values.$third,
                 )?;
-                let apply = crate::detail::api::MergePayloadApply::new(control);
+                let apply = crate::detail::apply::MergePayloadApply::new(control);
                 let (first, second, third) = apply.apply_expr3(
                     policy,
                     &self.$first,
@@ -1060,7 +960,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple_wide {
                     self.$idx.validate()?;
                     right_values.$idx.validate()?;
                 )+
-                let apply = crate::detail::api::MergePayloadApply::new(control);
+                let apply = crate::detail::apply::MergePayloadApply::new(control);
                 impl_kernel_merge_by_key_values_tuple_wide!(@apply apply, policy, self, right_values; $first_idx, $($idx),+)
             }
         }
@@ -1176,7 +1076,7 @@ where
         right_values.4.validate()?;
         right_values.5.validate()?;
         right_values.6.validate()?;
-        let apply = crate::detail::api::MergePayloadApply::new(control);
+        let apply = crate::detail::apply::MergePayloadApply::new(control);
         apply.apply_expr7(
             policy,
             (

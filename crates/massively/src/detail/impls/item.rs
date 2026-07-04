@@ -161,12 +161,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformUnaryOutput<
-                        R,
-                        Input,
-                        KernelOp<R, Op>,
-                    >>::run(policy, input, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelOp<R, Op>>(policy, input, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -203,13 +198,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA2Output<
-                        R,
-                        Left,
-                        Right,
-                        KernelOp<R, Op>,
-                    >>::run(policy, left, right, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -252,20 +241,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA3Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        KernelOp<R, Op>,
-                    >>::run(
-                        policy,
-                        first,
-                        second,
-                        third,
-                        env,
-                )?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -302,15 +278,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA4Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -350,16 +318,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA5Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        Fifth,
-                        KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, fifth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -403,17 +362,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA6Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        Fifth,
-                        Sixth,
-                        KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, fifth, sixth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -464,28 +413,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA7Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        Fifth,
-                        Sixth,
-                        Seventh,
-                        KernelOp<R, Op>,
-                    >>::run(
-                        policy,
-                        first,
-                        second,
-                        third,
-                        fourth,
-                        fifth,
-                        sixth,
-                        seventh,
-                        env,
-                )?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -603,12 +531,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformUnaryOutput<
-                        R,
-                        Input,
-                        KernelOp<R, Op>,
-                    >>::run(policy, input, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelOp<R, Op>>(policy, input, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -645,13 +568,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA2Output<
-                        R,
-                        Left,
-                        Right,
-                        KernelOp<R, Op>,
-                    >>::run(policy, left, right, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -694,20 +611,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA3Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        KernelOp<R, Op>,
-                    >>::run(
-                        policy,
-                        first,
-                        second,
-                        third,
-                        env,
-                )?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -744,15 +648,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA4Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -792,16 +688,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA5Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        Fifth,
-                        KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, fifth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -845,17 +732,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA6Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        Fifth,
-                        Sixth,
-                        KernelOp<R, Op>,
-                    >>::run(policy, first, second, third, fourth, fifth, sixth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -906,28 +783,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage =
-                    <Self as crate::detail::TransformSoA7Output<
-                        R,
-                        First,
-                        Second,
-                        Third,
-                        Fourth,
-                        Fifth,
-                        Sixth,
-                        Seventh,
-                        KernelOp<R, Op>,
-                    >>::run(
-                        policy,
-                        first,
-                        second,
-                        third,
-                        fourth,
-                        fifth,
-                        sixth,
-                        seventh,
-                        env,
-                )?;
+                let storage = crate::detail::apply::TransformPayloadApply::soa7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
         }

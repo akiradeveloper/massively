@@ -1,6 +1,7 @@
 #![allow(unused_unsafe)]
 
 pub(crate) mod api;
+pub(crate) mod apply;
 pub(crate) mod control;
 pub(crate) mod device;
 pub(crate) mod dispatch;

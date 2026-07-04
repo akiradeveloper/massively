@@ -4,7 +4,7 @@ mod collect;
 mod indexed;
 mod scan;
 mod search;
-pub(in crate::detail::api) mod selection;
+pub(in crate::detail) mod selection;
 
 pub use collect::device_expr_collect_into_with_policy;
 pub(in crate::detail) use collect::{device_expr_collect_with_policy, device_expr_reverse_collect};

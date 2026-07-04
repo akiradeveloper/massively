@@ -52,11 +52,12 @@ where
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
     IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
-    let index_values = crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+    let index_values =
+        crate::detail::apply::MaterializePayloadApply::collect_expr(policy, indices)?;
     let control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
     let initial = primitive_range::filled(policy, len, default)?;
     let output = DeviceColumnMutView::from_slice(&initial, 0, len);
-    let apply = crate::detail::api::IndexedWriteApply::new(&control);
+    let apply = crate::detail::apply::IndexedWriteApply::new(&control);
     apply.scatter_expr_into(policy, values, &output)?;
     Ok(initial)
 }
@@ -86,11 +87,12 @@ where
         <IndexSource as KernelColumn>::len(indices),
     )?;
     ensure_same_len(<ValueSource as KernelColumn>::len(values), stencil.len())?;
-    let index_values = crate::detail::api::MaterializePayloadApply::collect_expr(policy, indices)?;
+    let index_values =
+        crate::detail::apply::MaterializePayloadApply::collect_expr(policy, indices)?;
     let write_control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
     let mask = stencil.selection_flags_with_policy(policy, false)?;
     let output = DeviceColumnMutView::from_slice(&initial, 0, len);
-    let apply = crate::detail::api::IndexedWriteApply::new(&write_control);
+    let apply = crate::detail::apply::IndexedWriteApply::new(&write_control);
     apply.scatter_expr_where_into(policy, values, &mask, &output)?;
     Ok(initial)
 }

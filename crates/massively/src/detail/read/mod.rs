@@ -18,8 +18,8 @@ use crate::{
         },
         op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},
         primitives::{
-            ordering as primitive_ordering, range as primitive_range, reduce as primitive_reduce,
-            scan as primitive_scan, select,
+            ordering as primitive_ordering, range as primitive_range, scan as primitive_scan,
+            select,
         },
     },
     error::ensure_same_len,
@@ -35,7 +35,7 @@ const BLOCK_GATHER_WHERE_SIZE: u32 = 256;
 const BLOCK_REPLACE_WHERE_SIZE: u32 = 256;
 const BLOCK_UNIQUE_SIZE: u32 = 256;
 
-mod by_key;
+pub(in crate::detail) mod by_key;
 mod core;
 mod gather;
 mod ordering;
