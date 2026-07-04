@@ -4,3 +4,6 @@ doc:
 
 bench:
     cargo bench -p massively > doc.ai/bench.log
+
+test:
+    cargo nextest run

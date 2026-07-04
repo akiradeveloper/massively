@@ -2032,41 +2032,18 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
         let key_inner = (
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$first_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$second_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$third_key,
-                &value_selected_rank,
-                value_count,
-            )?,
+            payload_apply.apply_expr($policy, &$first_key)?,
+            payload_apply.apply_expr($policy, &$second_key)?,
+            payload_apply.apply_expr($policy, &$third_key)?,
         );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_a_handle,
-                    value_count,
-                )?,
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_b_handle,
-                    value_count,
-                )?,
+                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
+                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
             ),
         ))
     }};
@@ -2119,47 +2096,19 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
         let key_inner = (
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$first_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$second_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$third_key,
-                &value_selected_rank,
-                value_count,
-            )?,
+            payload_apply.apply_expr($policy, &$first_key)?,
+            payload_apply.apply_expr($policy, &$second_key)?,
+            payload_apply.apply_expr($policy, &$third_key)?,
         );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_a_handle,
-                    value_count,
-                )?,
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_b_handle,
-                    value_count,
-                )?,
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty2>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_c_handle,
-                    value_count,
-                )?,
+                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
+                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
+                payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
             ),
         ))
     }};
@@ -2208,35 +2157,17 @@ macro_rules! impl_tuple_reduce_by_two_key_values_body {
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
         let key_inner = (
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$first_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$second_key,
-                &value_selected_rank,
-                value_count,
-            )?,
+            payload_apply.apply_expr($policy, &$first_key)?,
+            payload_apply.apply_expr($policy, &$second_key)?,
         );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_a_handle,
-                    value_count,
-                )?,
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_b_handle,
-                    value_count,
-                )?,
+                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
+                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
             ),
         ))
     }};
@@ -2289,41 +2220,18 @@ macro_rules! impl_tuple_reduce_by_two_key_values_body {
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
         let key_inner = (
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$first_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
-                $policy,
-                &$second_key,
-                &value_selected_rank,
-                value_count,
-            )?,
+            payload_apply.apply_expr($policy, &$first_key)?,
+            payload_apply.apply_expr($policy, &$second_key)?,
         );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_a_handle,
-                    value_count,
-                )?,
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_b_handle,
-                    value_count,
-                )?,
-                crate::detail::primitives::select::compact_value_with_count::<R, $ty2>(
-                    $policy,
-                    &value_selected_rank,
-                    reduced_c_handle,
-                    value_count,
-                )?,
+                payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
+                payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
+                payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
             ),
         ))
     }};
@@ -2670,49 +2578,15 @@ macro_rules! impl_wide_reduce_by_single_key_tuple7_values_body {
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
         Ok((
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
-                $policy,
-                &value_selected_rank,
-                reduced_a_handle,
-                value_count,
-            )?,
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
-                $policy,
-                &value_selected_rank,
-                reduced_b_handle,
-                value_count,
-            )?,
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty2>(
-                $policy,
-                &value_selected_rank,
-                reduced_c_handle,
-                value_count,
-            )?,
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty3>(
-                $policy,
-                &value_selected_rank,
-                reduced_d_handle,
-                value_count,
-            )?,
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty4>(
-                $policy,
-                &value_selected_rank,
-                reduced_e_handle,
-                value_count,
-            )?,
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty5>(
-                $policy,
-                &value_selected_rank,
-                reduced_f_handle,
-                value_count,
-            )?,
-            crate::detail::primitives::select::compact_value_with_count::<R, $ty6>(
-                $policy,
-                &value_selected_rank,
-                reduced_g_handle,
-                value_count,
-            )?,
+            payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
+            payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
+            payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
+            payload_apply.apply_value::<R, $ty3>($policy, reduced_d_handle)?,
+            payload_apply.apply_value::<R, $ty4>($policy, reduced_e_handle)?,
+            payload_apply.apply_value::<R, $ty5>($policy, reduced_f_handle)?,
+            payload_apply.apply_value::<R, $ty6>($policy, reduced_g_handle)?,
         ))
     }};
 }
@@ -2832,11 +2706,12 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
+            payload_apply.apply_expr($policy, &$input.0)?,
+            payload_apply.apply_expr($policy, &$input.1)?,
+            payload_apply.apply_expr($policy, &$input.2)?,
+            payload_apply.apply_expr($policy, &$input.3)?,
         ))
     }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {{
@@ -2849,12 +2724,13 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.4, &selected_rank, count)?,
+            payload_apply.apply_expr($policy, &$input.0)?,
+            payload_apply.apply_expr($policy, &$input.1)?,
+            payload_apply.apply_expr($policy, &$input.2)?,
+            payload_apply.apply_expr($policy, &$input.3)?,
+            payload_apply.apply_expr($policy, &$input.4)?,
         ))
     }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {{
@@ -2867,13 +2743,14 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.4, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.5, &selected_rank, count)?,
+            payload_apply.apply_expr($policy, &$input.0)?,
+            payload_apply.apply_expr($policy, &$input.1)?,
+            payload_apply.apply_expr($policy, &$input.2)?,
+            payload_apply.apply_expr($policy, &$input.3)?,
+            payload_apply.apply_expr($policy, &$input.4)?,
+            payload_apply.apply_expr($policy, &$input.5)?,
         ))
     }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {{
@@ -2886,14 +2763,15 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
             flags,
         )?;
         let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
         Ok((
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.4, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.5, &selected_rank, count)?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.6, &selected_rank, count)?,
+            payload_apply.apply_expr($policy, &$input.0)?,
+            payload_apply.apply_expr($policy, &$input.1)?,
+            payload_apply.apply_expr($policy, &$input.2)?,
+            payload_apply.apply_expr($policy, &$input.3)?,
+            payload_apply.apply_expr($policy, &$input.4)?,
+            payload_apply.apply_expr($policy, &$input.5)?,
+            payload_apply.apply_expr($policy, &$input.6)?,
         ))
     }};
     ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {
@@ -3214,27 +3092,14 @@ macro_rules! impl_miter_soa {
                 )?;
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &first_key,
-                        &selected_rank,
-                        count,
-                    )?,
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &second_key,
-                        &selected_rank,
-                        count,
-                    )?,
+                    payload_apply.apply_expr(policy, &first_key)?,
+                    payload_apply.apply_expr(policy, &second_key)?,
                 );
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &values.$idx,
-                        &selected_rank,
-                        count,
-                    )?;
+                    let $tmp = payload_apply.apply_expr(policy, &values.$idx)?;
                 )+
                 Ok((
                     array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
@@ -3280,33 +3145,15 @@ macro_rules! impl_miter_soa {
                 )?;
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &first_key,
-                        &selected_rank,
-                        count,
-                    )?,
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &second_key,
-                        &selected_rank,
-                        count,
-                    )?,
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &third_key,
-                        &selected_rank,
-                        count,
-                    )?,
+                    payload_apply.apply_expr(policy, &first_key)?,
+                    payload_apply.apply_expr(policy, &second_key)?,
+                    payload_apply.apply_expr(policy, &third_key)?,
                 );
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &values.$idx,
-                        &selected_rank,
-                        count,
-                    )?;
+                    let $tmp = payload_apply.apply_expr(policy, &values.$idx)?;
                 )+
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
@@ -4894,7 +4741,7 @@ macro_rules! impl_miter_mut_soa {
 }
 
 macro_rules! impl_wide_miter_soa {
-    ($name:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+) => {
+    ($name:ident; $selected_apply:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+) => {
         impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
@@ -5075,15 +4922,9 @@ macro_rules! impl_wide_miter_soa {
                     <(crate::detail::device::DeviceColumnView<R, K>,) as crate::detail::read::KernelUniqueByKeyKeys<
                         KernelOp<R, Eq>,
                     >>::unique_by_key_control((keys,), policy)?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &input.$idx,
-                        &control.selection,
-                        control.count,
-                    )?;
-                )+
-                let value_inner = ($($tmp,)+);
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&control.selection, control.count);
+                let value_inner = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok((
                     array_from_inner::<R, (K,), KeyOutput>((key_inner.source,)),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(value_inner),
@@ -5144,28 +4985,13 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &first_key,
-                        &selected_rank,
-                        count,
-                    )?,
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &second_key,
-                        &selected_rank,
-                        count,
-                    )?,
+                    payload_apply.apply_expr(policy, &first_key)?,
+                    payload_apply.apply_expr(policy, &second_key)?,
                 );
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &input.$idx,
-                        &selected_rank,
-                        count,
-                    )?;
-                )+
+                let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok((
                     array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(($($tmp,)+)),
@@ -5463,14 +5289,9 @@ macro_rules! impl_wide_miter_soa {
                     policy,
                     selected_rank,
                 )?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &input.$idx,
-                        selected_rank,
-                        count,
-                    )?;
-                )+
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(selected_rank, count);
+                let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
@@ -5489,14 +5310,9 @@ macro_rules! impl_wide_miter_soa {
                     policy,
                     selected_rank,
                 )?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &input.$idx,
-                        selected_rank,
-                        count,
-                    )?;
-                )+
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(selected_rank, count);
+                let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
@@ -5757,11 +5573,11 @@ macro_rules! impl_wide_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
                 mindex_from_usize(crate::detail::primitives::select::selected_count(
-                    policy, &handles,
+                    policy, &selected_rank,
                 )?)
             }
 
@@ -5776,11 +5592,11 @@ macro_rules! impl_wide_miter_soa {
             {
                 let len = self.len();
                 let input = self.into_inner_with_policy(policy)?;
-                let handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
                 Ok(mindex_from_usize(crate::detail::primitives::select::selected_count(
-                    policy, &handles,
+                    policy, &selected_rank,
                 )?)? == len)
             }
 
@@ -5794,10 +5610,10 @@ macro_rules! impl_wide_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
-                Ok(crate::detail::primitives::select::selected_count(policy, &handles)? != 0)
+                Ok(crate::detail::primitives::select::selected_count(policy, &selected_rank)? != 0)
             }
 
             fn none_of_dispatch<Pred>(
@@ -5810,10 +5626,10 @@ macro_rules! impl_wide_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
-                Ok(crate::detail::primitives::select::selected_count(policy, &handles)? == 0)
+                Ok(crate::detail::primitives::select::selected_count(policy, &selected_rank)? == 0)
             }
 
             fn find_if_dispatch<Pred>(
@@ -5826,14 +5642,14 @@ macro_rules! impl_wide_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
                 crate::detail::primitives::search::first_flag(
                     policy,
-                    handles.flag.clone(),
-                    handles.len,
-                    handles.len,
+                    selected_rank.flag.clone(),
+                    selected_rank.len,
+                    selected_rank.len,
                 )
             }
 
@@ -5856,17 +5672,12 @@ macro_rules! impl_wide_miter_soa {
                         policy,
                         selected_rank,
                 )?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_split_with_split_with_policy(
-                        policy,
-                        &input.$idx,
-                        &split_rank,
-                        matching_count,
-                        failing_count,
-                    )?;
-                )+
-                let matching = ($($tmp.0,)+);
-                let failing = ($($tmp.1,)+);
+                let payload_apply = crate::detail::api::SplitPayloadApply::new(
+                    &split_rank,
+                    matching_count,
+                    failing_count,
+                );
+                let (matching, failing) = payload_apply.$selected_apply(policy, $( &input.$idx, )+)?;
                 Ok((
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(matching),
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(failing),
@@ -5883,18 +5694,18 @@ macro_rules! impl_wide_miter_soa {
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, env, false; $( $ty ),+; $( $idx ),+
                 )?;
                 let first_rejected = crate::detail::primitives::search::first_unset_flag(
                     policy,
-                    handles.flag.clone(),
-                    handles.len,
-                    handles.len,
+                    selected_rank.flag.clone(),
+                    selected_rank.len,
+                    selected_rank.len,
                 )?
-                .unwrap_or(mindex_from_usize(handles.len)?);
+                .unwrap_or(mindex_from_usize(selected_rank.len)?);
                 let selected_count =
-                    crate::detail::primitives::select::selected_count(policy, &handles)?;
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 Ok(mindex_from_usize(selected_count)? == first_rejected)
             }
 
@@ -6207,22 +6018,21 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 let right_extra_count =
                     crate::detail::primitives::select::selected_count(policy, &right_extra_rank)?;
+                let right_extra_apply = crate::detail::api::SelectedPayloadApply::new(
+                    &right_extra_rank,
+                    right_extra_count,
+                );
+                let ($($tmp,)+) = right_extra_apply.$selected_apply(policy, $( &right.$idx, )+)?;
                 $(
                     let $tmp = {
                         let left = crate::detail::api::device_expr_collect_with_policy(
                             policy,
                             &left.$idx,
                         )?;
-                        let right_extra = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                            policy,
-                            &right.$idx,
-                            &right_extra_rank,
-                            right_extra_count,
-                        )?;
                         crate::detail::primitives::range::concat_device_with_policy(
                             policy,
                             &left,
-                            &right_extra,
+                            &$tmp,
                         )?
                     };
                 )+
@@ -6262,14 +6072,9 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &left.$idx,
-                        &selected_rank,
-                        count,
-                    )?;
-                )+
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &left.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
@@ -6304,14 +6109,9 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &left.$idx,
-                        &selected_rank,
-                        count,
-                    )?;
-                )+
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
+                let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &left.$idx, )+)?;
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
             }
 
@@ -6445,34 +6245,14 @@ macro_rules! impl_wide_miter_soa {
                 )?;
                 let count =
                     crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+                let payload_apply =
+                    crate::detail::api::SelectedPayloadApply::new(&selected_rank, count);
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &first_key,
-                        &selected_rank,
-                        count,
-                    )?,
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &second_key,
-                        &selected_rank,
-                        count,
-                    )?,
-                    crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &third_key,
-                        &selected_rank,
-                        count,
-                    )?,
+                    payload_apply.apply_expr(policy, &first_key)?,
+                    payload_apply.apply_expr(policy, &second_key)?,
+                    payload_apply.apply_expr(policy, &third_key)?,
                 );
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                        policy,
-                        &values.$idx,
-                        &selected_rank,
-                        count,
-                    )?;
-                )+
+                let ($($tmp,)+) = payload_apply.$selected_apply(policy, $( &values.$idx, )+)?;
                 Ok((
                     array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
                     array_from_inner::<R, <Self as MIter<R>>::Item, ValueOutput>(($($tmp,)+)),
@@ -6484,10 +6264,10 @@ macro_rules! impl_wide_miter_soa {
 
 impl_miter_soa!(SoA2; A: 0: a, C: 1: c => transform_binary);
 impl_miter_soa!(SoA3; A: 0: a, C: 1: c, D: 2: d => transform_ternary);
-impl_wide_miter_soa!(SoA4; A: 0: a, C: 1: c, D: 2: d, E: 3: e);
-impl_wide_miter_soa!(SoA5; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f);
-impl_wide_miter_soa!(SoA6; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g);
-impl_wide_miter_soa!(SoA7; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g, H: 6: h);
+impl_wide_miter_soa!(SoA4; apply_expr4; A: 0: a, C: 1: c, D: 2: d, E: 3: e);
+impl_wide_miter_soa!(SoA5; apply_expr5; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f);
+impl_wide_miter_soa!(SoA6; apply_expr6; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g);
+impl_wide_miter_soa!(SoA7; apply_expr7; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g, H: 6: h);
 impl_miter_mut_soa!(SoA2; A: 0, C: 1);
 impl_miter_mut_soa!(SoA3; A: 0, C: 1, D: 2);
 impl_miter_mut_soa!(SoA4; A: 0, C: 1, D: 2, E: 3);

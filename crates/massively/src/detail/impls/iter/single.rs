@@ -705,13 +705,13 @@ where
         let value_count =
             crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
         let key_inner = (
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
+            crate::detail::api::device_expr_apply_selected_with_policy(
                 policy,
                 &first_key,
                 &value_selected_rank,
                 value_count,
             )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
+            crate::detail::api::device_expr_apply_selected_with_policy(
                 policy,
                 &second_key,
                 &value_selected_rank,
@@ -719,7 +719,7 @@ where
             )?,
         );
         let value_inner = (
-            crate::detail::primitives::select::compact_value_with_count::<R, T>(
+            crate::detail::api::device_value_apply_selected_with_policy::<R, T>(
                 policy,
                 &value_selected_rank,
                 reduced_handle,
@@ -927,19 +927,19 @@ where
         let value_count =
             crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
         let key_inner = (
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
+            crate::detail::api::device_expr_apply_selected_with_policy(
                 policy,
                 &first_key,
                 &value_selected_rank,
                 value_count,
             )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
+            crate::detail::api::device_expr_apply_selected_with_policy(
                 policy,
                 &second_key,
                 &value_selected_rank,
                 value_count,
             )?,
-            crate::detail::api::device_expr_compact_with_selection_with_policy(
+            crate::detail::api::device_expr_apply_selected_with_policy(
                 policy,
                 &third_key,
                 &value_selected_rank,
@@ -947,7 +947,7 @@ where
             )?,
         );
         let value_inner = (
-            crate::detail::primitives::select::compact_value_with_count::<R, T>(
+            crate::detail::api::device_value_apply_selected_with_policy::<R, T>(
                 policy,
                 &value_selected_rank,
                 reduced_handle,

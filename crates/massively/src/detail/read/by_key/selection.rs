@@ -67,12 +67,9 @@ where
         let len = <KeySource as KernelColumn>::len(&self);
         let flags = unique_one_flags_read::<KeySource, Eq>(policy, &self)?;
         let control = unique_by_key_control_from_flags(policy, len, flags)?;
-        let out_keys = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self,
-            &control.selection,
-            control.count,
-        )?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&control.selection, control.count);
+        let out_keys = payload_apply.apply_expr(policy, &self)?;
         Ok((DeviceSoA1 { source: out_keys }, control))
     }
 }
@@ -152,18 +149,12 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple2 {
                     &self.$right,
                 )?;
                 let control = unique_by_key_control_from_flags(policy, len, flags)?;
-                let left = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$left,
+                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
-                )?;
-                let right = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$right,
-                    &control.selection,
-                    control.count,
-                )?;
+                );
+                let left = payload_apply.apply_expr(policy, &self.$left)?;
+                let right = payload_apply.apply_expr(policy, &self.$right)?;
                 Ok(($out { left, right }, control))
             }
         }
@@ -229,24 +220,13 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
                     Eq,
                 >(policy, &self.$first, &self.$second, &self.$third)?;
                 let control = unique_by_key_control_from_flags(policy, len, flags)?;
-                let first = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$first,
+                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
-                )?;
-                let second = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$second,
-                    &control.selection,
-                    control.count,
-                )?;
-                let third = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$third,
-                    &control.selection,
-                    control.count,
-                )?;
+                );
+                let first = payload_apply.apply_expr(policy, &self.$first)?;
+                let second = payload_apply.apply_expr(policy, &self.$second)?;
+                let third = payload_apply.apply_expr(policy, &self.$third)?;
                 Ok((
                     $out {
                         first,
@@ -316,13 +296,10 @@ where
             <ValueSource as KernelColumn>::len(&self),
             control.selection.len,
         )?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&control.selection, control.count);
         Ok(DeviceSoA1 {
-            source: crate::detail::api::device_expr_compact_with_selection_with_policy(
-                policy,
-                &self,
-                &control.selection,
-                control.count,
-            )?,
+            source: payload_apply.apply_expr(policy, &self)?,
         })
     }
 }
@@ -393,18 +370,12 @@ macro_rules! impl_kernel_unique_by_key_values_tuple2 {
                     <Left as KernelColumn>::len(&self.$left),
                     control.selection.len,
                 )?;
-                let left = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$left,
+                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
-                )?;
-                let right = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$right,
-                    &control.selection,
-                    control.count,
-                )?;
+                );
+                let left = payload_apply.apply_expr(policy, &self.$left)?;
+                let right = payload_apply.apply_expr(policy, &self.$right)?;
                 Ok($out { left, right })
             }
         }
@@ -468,24 +439,13 @@ macro_rules! impl_kernel_unique_by_key_values_tuple3 {
                     <First as KernelColumn>::len(&self.$first),
                     control.selection.len,
                 )?;
-                let first = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$first,
+                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
-                )?;
-                let second = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$second,
-                    &control.selection,
-                    control.count,
-                )?;
-                let third = crate::detail::api::device_expr_compact_with_selection_with_policy(
-                    policy,
-                    &self.$third,
-                    &control.selection,
-                    control.count,
-                )?;
+                );
+                let first = payload_apply.apply_expr(policy, &self.$first)?;
+                let second = payload_apply.apply_expr(policy, &self.$second)?;
+                let third = payload_apply.apply_expr(policy, &self.$third)?;
                 Ok($out {
                     first,
                     second,

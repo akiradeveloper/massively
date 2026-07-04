@@ -131,12 +131,9 @@ where
 
         let (output_selection, output_count) =
             reduce_output_selection_from_end_flags(policy, len, len_u32, end_flags.clone())?;
-        let out_keys = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self,
-            &output_selection,
-            output_count,
-        )?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&output_selection, output_count);
+        let out_keys = payload_apply.apply_expr(policy, &self)?;
         Ok((
             DeviceSoA1 { source: out_keys },
             ReduceByKeyControl {
@@ -232,18 +229,10 @@ where
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let (output_selection, output_count) =
             reduce_output_selection_from_end_flags(policy, len, len_u32, end_flags.clone())?;
-        let left = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self.0,
-            &output_selection,
-            output_count,
-        )?;
-        let right = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self.1,
-            &output_selection,
-            output_count,
-        )?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&output_selection, output_count);
+        let left = payload_apply.apply_expr(policy, &self.0)?;
+        let right = payload_apply.apply_expr(policy, &self.1)?;
         Ok((
             DeviceSoA2 { left, right },
             ReduceByKeyControl {
@@ -332,24 +321,11 @@ where
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let (output_selection, output_count) =
             reduce_output_selection_from_end_flags(policy, len, len_u32, end_flags.clone())?;
-        let first = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self.0,
-            &output_selection,
-            output_count,
-        )?;
-        let second = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self.1,
-            &output_selection,
-            output_count,
-        )?;
-        let third = crate::detail::api::device_expr_compact_with_selection_with_policy(
-            policy,
-            &self.2,
-            &output_selection,
-            output_count,
-        )?;
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&output_selection, output_count);
+        let first = payload_apply.apply_expr(policy, &self.0)?;
+        let second = payload_apply.apply_expr(policy, &self.1)?;
+        let third = payload_apply.apply_expr(policy, &self.2)?;
         Ok((
             DeviceSoA3 {
                 first,
@@ -428,12 +404,14 @@ where
                 BufferArg::from_raw_parts(reduced_value_handle.clone(), control.len),
             );
         }
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &control.output_selection,
+            control.output_count,
+        );
         Ok(DeviceSoA1 {
-            source: select::compact_value_with_count::<ValueSource::Runtime, ValueSource::Item>(
+            source: payload_apply.apply_value::<ValueSource::Runtime, ValueSource::Item>(
                 policy,
-                &control.output_selection,
                 reduced_value_handle,
-                control.output_count,
             )?,
         })
     }
@@ -512,19 +490,15 @@ where
             );
         }
 
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &control.output_selection,
+            control.output_count,
+        );
         Ok(DeviceSoA2 {
-            left: select::compact_value_with_count::<ValueA::Runtime, ValueA::Item>(
-                policy,
-                &control.output_selection,
-                reduced_a_handle,
-                control.output_count,
-            )?,
-            right: select::compact_value_with_count::<ValueA::Runtime, ValueB::Item>(
-                policy,
-                &control.output_selection,
-                reduced_b_handle,
-                control.output_count,
-            )?,
+            left: payload_apply
+                .apply_value::<ValueA::Runtime, ValueA::Item>(policy, reduced_a_handle)?,
+            right: payload_apply
+                .apply_value::<ValueA::Runtime, ValueB::Item>(policy, reduced_b_handle)?,
         })
     }
 }
@@ -615,25 +589,17 @@ where
             );
         }
 
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &control.output_selection,
+            control.output_count,
+        );
         Ok(DeviceSoA3 {
-            first: select::compact_value_with_count::<ValueA::Runtime, ValueA::Item>(
-                policy,
-                &control.output_selection,
-                reduced_a_handle,
-                control.output_count,
-            )?,
-            second: select::compact_value_with_count::<ValueA::Runtime, ValueB::Item>(
-                policy,
-                &control.output_selection,
-                reduced_b_handle,
-                control.output_count,
-            )?,
-            third: select::compact_value_with_count::<ValueA::Runtime, ValueC::Item>(
-                policy,
-                &control.output_selection,
-                reduced_c_handle,
-                control.output_count,
-            )?,
+            first: payload_apply
+                .apply_value::<ValueA::Runtime, ValueA::Item>(policy, reduced_a_handle)?,
+            second: payload_apply
+                .apply_value::<ValueA::Runtime, ValueB::Item>(policy, reduced_b_handle)?,
+            third: payload_apply
+                .apply_value::<ValueA::Runtime, ValueC::Item>(policy, reduced_c_handle)?,
         })
     }
 }
@@ -700,49 +666,18 @@ macro_rules! reduce_by_key_tuple7_scanned_values {
                 BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
             );
         }
+        let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+            &$control.output_selection,
+            $control.output_count,
+        );
         Ok::<_, Error>((
-            select::compact_value_with_count::<R, $ty0>(
-                $policy,
-                &$control.output_selection,
-                reduced_a_handle,
-                $control.output_count,
-            )?,
-            select::compact_value_with_count::<R, $ty1>(
-                $policy,
-                &$control.output_selection,
-                reduced_b_handle,
-                $control.output_count,
-            )?,
-            select::compact_value_with_count::<R, $ty2>(
-                $policy,
-                &$control.output_selection,
-                reduced_c_handle,
-                $control.output_count,
-            )?,
-            select::compact_value_with_count::<R, $ty3>(
-                $policy,
-                &$control.output_selection,
-                reduced_d_handle,
-                $control.output_count,
-            )?,
-            select::compact_value_with_count::<R, $ty4>(
-                $policy,
-                &$control.output_selection,
-                reduced_e_handle,
-                $control.output_count,
-            )?,
-            select::compact_value_with_count::<R, $ty5>(
-                $policy,
-                &$control.output_selection,
-                reduced_f_handle,
-                $control.output_count,
-            )?,
-            select::compact_value_with_count::<R, $ty6>(
-                $policy,
-                &$control.output_selection,
-                reduced_g_handle,
-                $control.output_count,
-            )?,
+            payload_apply.apply_value::<R, $ty0>($policy, reduced_a_handle)?,
+            payload_apply.apply_value::<R, $ty1>($policy, reduced_b_handle)?,
+            payload_apply.apply_value::<R, $ty2>($policy, reduced_c_handle)?,
+            payload_apply.apply_value::<R, $ty3>($policy, reduced_d_handle)?,
+            payload_apply.apply_value::<R, $ty4>($policy, reduced_e_handle)?,
+            payload_apply.apply_value::<R, $ty5>($policy, reduced_f_handle)?,
+            payload_apply.apply_value::<R, $ty6>($policy, reduced_g_handle)?,
         ))
     }};
 }

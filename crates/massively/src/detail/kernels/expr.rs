@@ -5247,6 +5247,117 @@ pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceG
     }
 }
 
+macro_rules! define_selected_apply_tuple_device_expr_kernel {
+    (
+        $name:ident,
+        ($first_ty:ident: $first_expr:ident:
+            $first_slot0:ident, $first_slot1:ident, $first_slot2:ident, $first_slot3:ident,
+            $first_offsets:ident => $first_output:ident
+        $(,
+            $ty:ident: $expr:ident:
+                $slot0:ident, $slot1:ident, $slot2:ident, $slot3:ident, $offsets:ident => $output:ident
+        )* $(,)?)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+        >(
+            flags: &[u32],
+            positions: &[u32],
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
+            $first_output: &mut [$first_ty],
+            $(
+                $output: &mut [$ty],
+            )*
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < flags.len() && flags[global] != 0u32 {
+                let position = (positions[global] - 1u32) as usize;
+                $first_output[position] = $first_expr::eval(
+                    $first_slot0,
+                    $first_slot1,
+                    $first_slot2,
+                    $first_slot3,
+                    $first_offsets,
+                    global,
+                );
+                $(
+                    $output[position] = $expr::eval(
+                        $slot0,
+                        $slot1,
+                        $slot2,
+                        $slot3,
+                        $offsets,
+                        global,
+                    );
+                )*
+            }
+        }
+    };
+}
+
+define_selected_apply_tuple_device_expr_kernel!(
+    selected_apply_tuple2_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => output_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => output_b)
+);
+define_selected_apply_tuple_device_expr_kernel!(
+    selected_apply_tuple3_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => output_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => output_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => output_c)
+);
+define_selected_apply_tuple_device_expr_kernel!(
+    selected_apply_tuple4_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => output_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => output_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => output_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => output_d)
+);
+define_selected_apply_tuple_device_expr_kernel!(
+    selected_apply_tuple5_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => output_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => output_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => output_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => output_d,
+     E: ExprE: e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets => output_e)
+);
+define_selected_apply_tuple_device_expr_kernel!(
+    selected_apply_tuple6_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => output_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => output_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => output_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => output_d,
+     E: ExprE: e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets => output_e,
+     F: ExprF: f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets => output_f)
+);
+define_selected_apply_tuple_device_expr_kernel!(
+    selected_apply_tuple7_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => output_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => output_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => output_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => output_d,
+     E: ExprE: e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets => output_e,
+     F: ExprF: f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets => output_f,
+     G: ExprG: g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets => output_g)
+);
+
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn unique_by_key_device_expr_flags_kernel<
     K: CubePrimitive,
@@ -5307,6 +5418,127 @@ pub(crate) fn compact_split_scatter_device_expr_kernel<T: CubePrimitive, Expr: D
         }
     }
 }
+
+macro_rules! define_split_apply_tuple_device_expr_kernel {
+    (
+        $name:ident,
+        ($first_ty:ident: $first_expr:ident:
+            $first_slot0:ident, $first_slot1:ident, $first_slot2:ident, $first_slot3:ident,
+            $first_offsets:ident => $first_selected:ident, $first_rejected:ident
+        $(,
+            $ty:ident: $expr:ident:
+                $slot0:ident, $slot1:ident, $slot2:ident, $slot3:ident, $offsets:ident
+                => $selected:ident, $rejected:ident
+        )* $(,)?)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            $first_ty: CubePrimitive,
+            $( $ty: CubePrimitive, )*
+            $first_expr: DeviceGpuExpr<$first_ty>,
+            $( $expr: DeviceGpuExpr<$ty>, )*
+        >(
+            flags: &[u32],
+            positions: &[u32],
+            $first_slot0: &[$first_ty],
+            $first_slot1: &[$first_ty],
+            $first_slot2: &[$first_ty],
+            $first_slot3: &[$first_ty],
+            $first_offsets: &[u32],
+            $(
+                $slot0: &[$ty],
+                $slot1: &[$ty],
+                $slot2: &[$ty],
+                $slot3: &[$ty],
+                $offsets: &[u32],
+            )*
+            $first_selected: &mut [$first_ty],
+            $first_rejected: &mut [$first_ty],
+            $(
+                $selected: &mut [$ty],
+                $rejected: &mut [$ty],
+            )*
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < flags.len() {
+                let first_value = $first_expr::eval(
+                    $first_slot0,
+                    $first_slot1,
+                    $first_slot2,
+                    $first_slot3,
+                    $first_offsets,
+                    global,
+                );
+                if flags[global] != 0u32 {
+                    let selected_position = (positions[global] - 1u32) as usize;
+                    $first_selected[selected_position] = first_value;
+                    $(
+                        $selected[selected_position] = $expr::eval(
+                            $slot0,
+                            $slot1,
+                            $slot2,
+                            $slot3,
+                            $offsets,
+                            global,
+                        );
+                    )*
+                } else {
+                    let selected_before_or_at = positions[global];
+                    let rejected_before = ((global as u32) - selected_before_or_at) as usize;
+                    $first_rejected[rejected_before] = first_value;
+                    $(
+                        $rejected[rejected_before] = $expr::eval(
+                            $slot0,
+                            $slot1,
+                            $slot2,
+                            $slot3,
+                            $offsets,
+                            global,
+                        );
+                    )*
+                }
+            }
+        }
+    };
+}
+
+define_split_apply_tuple_device_expr_kernel!(
+    split_apply_tuple2_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => selected_a, rejected_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => selected_b, rejected_b)
+);
+define_split_apply_tuple_device_expr_kernel!(
+    split_apply_tuple3_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => selected_a, rejected_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => selected_b, rejected_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => selected_c, rejected_c)
+);
+define_split_apply_tuple_device_expr_kernel!(
+    split_apply_tuple4_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => selected_a, rejected_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => selected_b, rejected_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => selected_c, rejected_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => selected_d, rejected_d)
+);
+define_split_apply_tuple_device_expr_kernel!(
+    split_apply_tuple5_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => selected_a, rejected_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => selected_b, rejected_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => selected_c, rejected_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => selected_d, rejected_d,
+     E: ExprE: e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets => selected_e, rejected_e)
+);
+define_split_apply_tuple_device_expr_kernel!(
+    split_apply_tuple6_device_expr_kernel,
+    (A: ExprA: a_slot0, a_slot1, a_slot2, a_slot3, a_slot_offsets => selected_a, rejected_a,
+     B: ExprB: b_slot0, b_slot1, b_slot2, b_slot3, b_slot_offsets => selected_b, rejected_b,
+     C: ExprC: c_slot0, c_slot1, c_slot2, c_slot3, c_slot_offsets => selected_c, rejected_c,
+     D: ExprD: d_slot0, d_slot1, d_slot2, d_slot3, d_slot_offsets => selected_d, rejected_d,
+     E: ExprE: e_slot0, e_slot1, e_slot2, e_slot3, e_slot_offsets => selected_e, rejected_e,
+     F: ExprF: f_slot0, f_slot1, f_slot2, f_slot3, f_slot_offsets => selected_f, rejected_f)
+);
 
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn compact_scatter_pair_kernel<A: CubePrimitive, B: CubePrimitive>(
