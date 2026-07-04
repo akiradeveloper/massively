@@ -15,13 +15,12 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::adjacent_difference_dispatch(
-            source,
-            exec.policy(),
-            op,
-        )?;
-    write_owned_output(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::adjacent_difference_into_dispatch(
+        source,
+        exec.policy(),
+        op,
+        out,
+    )
 }
 
 /// Computes an exclusive scan.
@@ -40,14 +39,13 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::exclusive_scan_dispatch(
-            source,
-            exec.policy(),
-            init,
-            op,
-        )?;
-    write_owned_output(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::exclusive_scan_into_dispatch(
+        source,
+        exec.policy(),
+        init,
+        op,
+        out,
+    )
 }
 
 /// Exclusive scan by key.
@@ -71,16 +69,15 @@ where
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Keys as sealed::MIterDispatch<R>>::exclusive_scan_by_key_dispatch(
-            keys,
-            exec.policy(),
-            values,
-            key_eq,
-            init,
-            op,
-        )?;
-    write_owned_output(exec.policy(), owned, out)
+    <Keys as sealed::MIterDispatch<R>>::exclusive_scan_by_key_into_dispatch(
+        keys,
+        exec.policy(),
+        values,
+        key_eq,
+        init,
+        op,
+        out,
+    )
 }
 
 /// Computes an inclusive scan.
@@ -98,9 +95,12 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::inclusive_scan_dispatch(source, exec.policy(), op)?;
-    write_owned_output(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::inclusive_scan_into_dispatch(
+        source,
+        exec.policy(),
+        op,
+        out,
+    )
 }
 
 /// Inclusive scan by key.
@@ -123,13 +123,12 @@ where
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Keys as sealed::MIterDispatch<R>>::inclusive_scan_by_key_dispatch(
-            keys,
-            exec.policy(),
-            values,
-            key_eq,
-            op,
-        )?;
-    write_owned_output(exec.policy(), owned, out)
+    <Keys as sealed::MIterDispatch<R>>::inclusive_scan_by_key_into_dispatch(
+        keys,
+        exec.policy(),
+        values,
+        key_eq,
+        op,
+        out,
+    )
 }

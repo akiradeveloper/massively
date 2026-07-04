@@ -16,9 +16,12 @@ where
     validate_device_slice(exec, &stencil)?;
     validate_output(exec, &out)?;
     let stencil = u32_stencil(exec.policy(), stencil, false)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::copy_where_dispatch(source, exec.policy(), stencil)?;
-    write_owned_prefix(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::copy_where_into_dispatch(
+        source,
+        exec.policy(),
+        stencil,
+        out,
+    )
 }
 
 /// Removes elements whose `u32` stencil flag is non-zero.
@@ -37,9 +40,12 @@ where
     validate_device_slice(exec, &stencil)?;
     validate_output(exec, &out)?;
     let stencil = u32_stencil(exec.policy(), stencil, true)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::remove_where_dispatch(source, exec.policy(), stencil)?;
-    write_owned_prefix(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::remove_where_into_dispatch(
+        source,
+        exec.policy(),
+        stencil,
+        out,
+    )
 }
 
 /// Replaces elements whose `u32` stencil flag is non-zero.

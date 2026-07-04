@@ -8,7 +8,6 @@ use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
 use crate::runtime::{DeviceSlice, Executor};
-use crate::value::{MAlloc, StorageFromInner};
 
 pub use crate::Error;
 
@@ -26,34 +25,6 @@ where
     Output: MIterMut<R>,
 {
     <Output as sealed::MIterMutDispatch<R>>::validate_executor(output, exec)
-}
-
-fn write_owned_output<R, Owned, Output>(
-    policy: &crate::detail::CubePolicy<R>,
-    owned: Owned,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Owned: StorageFromInner<R>,
-    Output: MIterMut<R, Item = Owned::Item>,
-{
-    output.write_from_inner(policy, owned.into_inner())
-}
-
-fn write_owned_prefix<R, Owned, Output>(
-    policy: &crate::detail::CubePolicy<R>,
-    owned: Owned,
-    output: Output,
-) -> Result<MIndex, Error>
-where
-    R: Runtime,
-    Owned: StorageFromInner<R>,
-    Output: MIterMut<R, Item = Owned::Item>,
-{
-    let len = owned.len();
-    output.write_prefix_from_inner(policy, owned.into_inner())?;
-    Ok(len)
 }
 
 fn validate_device_slice<R, T>(

@@ -40,19 +40,14 @@ where
     validate_input(exec, &values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    let (reduced_keys, reduced_values): (
-        <KeyOutput::Item as MAlloc<R>>::Storage,
-        <ValueOutput::Item as MAlloc<R>>::Storage,
-    ) = <Keys as sealed::MIterDispatch<R>>::reduce_by_key_dispatch(
+    <Keys as sealed::MIterDispatch<R>>::reduce_by_key_into_dispatch(
         keys,
         exec.policy(),
         values,
         key_eq,
         init,
         op,
-    )?;
-    let len = reduced_keys.len();
-    out_k.write_prefix_from_inner(exec.policy(), reduced_keys.into_inner())?;
-    out_v.write_prefix_from_inner(exec.policy(), reduced_values.into_inner())?;
-    Ok(len)
+        out_k,
+        out_v,
+    )
 }

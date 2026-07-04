@@ -112,11 +112,11 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let (selected, rejected): (
-        <Output::Item as MAlloc<R>>::Storage,
-        <Output::Item as MAlloc<R>>::Storage,
-    ) = <Input as sealed::MIterDispatch<R>>::partition_dispatch(source, exec.policy(), pred, env)?;
-    let split = selected.len();
-    out.write_split_from_inner(exec.policy(), selected.into_inner(), rejected.into_inner())?;
-    Ok(split)
+    <Input as sealed::MIterDispatch<R>>::partition_into_dispatch(
+        source,
+        exec.policy(),
+        pred,
+        env,
+        out,
+    )
 }
