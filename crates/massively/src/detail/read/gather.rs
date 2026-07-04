@@ -269,7 +269,7 @@ where
     <InputSource as KernelColumn>::validate(input)?;
     <IndexSource as KernelColumn>::validate(indices)?;
     ensure_same_len(<IndexSource as KernelColumn>::len(indices), stencil.len())?;
-    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let flags = stencil.selection_flags_with_policy(policy, false)?;
 
     let len = <IndexSource as KernelColumn>::len(indices);
     let output = primitive_range::filled(policy, len, default)?;

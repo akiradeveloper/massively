@@ -13,4 +13,6 @@ pub(crate) use ordering::{MergeByKeyControl, MergeControl, PermutationControl};
 #[allow(unused_imports)]
 pub(crate) use segment::{ReduceByKeyControl, ScanByKeyControl, SegmentControl};
 #[allow(unused_imports)]
-pub(crate) use selection::{SelectionControl, SelectionHandles, UniqueByKeyControl};
+pub(crate) use selection::{
+    MaskControl, SelectedRankControl, SplitRankControl, UniqueByKeyControl,
+};

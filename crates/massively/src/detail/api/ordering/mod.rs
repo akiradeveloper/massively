@@ -167,25 +167,23 @@ where
         );
     }
 
-    let handles =
-        select::handles_from_flags(policy, len, len_u32, flag_handle, policy.empty_handle())?;
-    let count = select::selected_count(policy, &handles)?;
-    super::device_expr_compact_with_selection_with_policy(policy, candidates, &handles, count)
+    let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag_handle)?;
+    let count = select::selected_count(policy, &selected_rank)?;
+    super::device_expr_compact_with_selection_with_policy(policy, candidates, &selected_rank, count)
 }
 
 fn selected_rank_from_flags_with_policy<R>(
     policy: &CubePolicy<R>,
     len: usize,
     flag_handle: cubecl::server::Handle,
-) -> Result<(select::SelectionControl, usize), Error>
+) -> Result<(select::SelectedRankControl, usize), Error>
 where
     R: Runtime,
 {
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let handles =
-        select::handles_from_flags(policy, len, len_u32, flag_handle, policy.empty_handle())?;
-    let count = select::selected_count(policy, &handles)?;
-    Ok((handles.control, count))
+    let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag_handle)?;
+    let count = select::selected_count(policy, &selected_rank)?;
+    Ok((selected_rank, count))
 }
 
 fn tuple2_membership_expr_flags_with_policy<CandidateA, CandidateB, SortedA, SortedB, Less>(

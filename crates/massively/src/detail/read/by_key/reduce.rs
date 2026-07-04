@@ -1,6 +1,6 @@
 use super::super::*;
 use crate::detail::{
-    control::{ReduceByKeyControl, ScanByKeyControl},
+    control::{ReduceByKeyControl, ScanByKeyControl, SelectedRankControl},
     device::DeviceColumnView,
 };
 
@@ -9,11 +9,10 @@ fn reduce_output_selection_from_end_flags<R: Runtime>(
     len: usize,
     len_u32: u32,
     end_flags: cubecl::server::Handle,
-) -> Result<(select::SelectionControl, usize), Error> {
-    let handles =
-        select::handles_from_flags(policy, len, len_u32, end_flags, policy.empty_handle())?;
-    let count = select::selected_count(policy, &handles)?;
-    Ok((handles.control, count))
+) -> Result<(SelectedRankControl, usize), Error> {
+    let control = select::selected_rank_from_flags(policy, len, len_u32, end_flags)?;
+    let count = select::selected_count(policy, &control)?;
+    Ok((control, count))
 }
 
 pub(crate) trait KernelReduceByKeyKeys<KeyEq>: Sized {
@@ -83,7 +82,7 @@ where
                 ReduceByKeyControl {
                     head_flags: policy.empty_handle(),
                     end_flags: policy.empty_handle(),
-                    output_selection: crate::detail::control::SelectionControl::empty(
+                    output_selection: crate::detail::control::SelectedRankControl::empty(
                         policy.client(),
                     ),
                     output_count: 0,
@@ -214,7 +213,7 @@ where
                 ReduceByKeyControl {
                     head_flags: policy.empty_handle(),
                     end_flags: policy.empty_handle(),
-                    output_selection: crate::detail::control::SelectionControl::empty(
+                    output_selection: crate::detail::control::SelectedRankControl::empty(
                         policy.client(),
                     ),
                     output_count: 0,
@@ -313,7 +312,7 @@ where
                 ReduceByKeyControl {
                     head_flags: policy.empty_handle(),
                     end_flags: policy.empty_handle(),
-                    output_selection: crate::detail::control::SelectionControl::empty(
+                    output_selection: crate::detail::control::SelectedRankControl::empty(
                         policy.client(),
                     ),
                     output_count: 0,
@@ -429,12 +428,11 @@ where
                 BufferArg::from_raw_parts(reduced_value_handle.clone(), control.len),
             );
         }
-
-        let handles = control.output_selection.for_value(reduced_value_handle);
         Ok(DeviceSoA1 {
-            source: select::compact_with_count::<ValueSource::Runtime, ValueSource::Item>(
+            source: select::compact_value_with_count::<ValueSource::Runtime, ValueSource::Item>(
                 policy,
-                handles,
+                &control.output_selection,
+                reduced_value_handle,
                 control.output_count,
             )?,
         })
@@ -514,17 +512,17 @@ where
             );
         }
 
-        let left_handles = control.output_selection.for_value(reduced_a_handle);
-        let right_handles = control.output_selection.for_value(reduced_b_handle);
         Ok(DeviceSoA2 {
-            left: select::compact_with_count::<ValueA::Runtime, ValueA::Item>(
+            left: select::compact_value_with_count::<ValueA::Runtime, ValueA::Item>(
                 policy,
-                left_handles,
+                &control.output_selection,
+                reduced_a_handle,
                 control.output_count,
             )?,
-            right: select::compact_with_count::<ValueA::Runtime, ValueB::Item>(
+            right: select::compact_value_with_count::<ValueA::Runtime, ValueB::Item>(
                 policy,
-                right_handles,
+                &control.output_selection,
+                reduced_b_handle,
                 control.output_count,
             )?,
         })
@@ -617,23 +615,23 @@ where
             );
         }
 
-        let first_handles = control.output_selection.for_value(reduced_a_handle);
-        let second_handles = control.output_selection.for_value(reduced_b_handle);
-        let third_handles = control.output_selection.for_value(reduced_c_handle);
         Ok(DeviceSoA3 {
-            first: select::compact_with_count::<ValueA::Runtime, ValueA::Item>(
+            first: select::compact_value_with_count::<ValueA::Runtime, ValueA::Item>(
                 policy,
-                first_handles,
+                &control.output_selection,
+                reduced_a_handle,
                 control.output_count,
             )?,
-            second: select::compact_with_count::<ValueA::Runtime, ValueB::Item>(
+            second: select::compact_value_with_count::<ValueA::Runtime, ValueB::Item>(
                 policy,
-                second_handles,
+                &control.output_selection,
+                reduced_b_handle,
                 control.output_count,
             )?,
-            third: select::compact_with_count::<ValueA::Runtime, ValueC::Item>(
+            third: select::compact_value_with_count::<ValueA::Runtime, ValueC::Item>(
                 policy,
-                third_handles,
+                &control.output_selection,
+                reduced_c_handle,
                 control.output_count,
             )?,
         })
@@ -702,21 +700,49 @@ macro_rules! reduce_by_key_tuple7_scanned_values {
                 BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
             );
         }
-        let value_a_handles = $control.output_selection.for_value(reduced_a_handle);
-        let value_b_handles = $control.output_selection.for_value(reduced_b_handle);
-        let value_c_handles = $control.output_selection.for_value(reduced_c_handle);
-        let value_d_handles = $control.output_selection.for_value(reduced_d_handle);
-        let value_e_handles = $control.output_selection.for_value(reduced_e_handle);
-        let value_f_handles = $control.output_selection.for_value(reduced_f_handle);
-        let value_g_handles = $control.output_selection.for_value(reduced_g_handle);
         Ok::<_, Error>((
-            select::compact_with_count::<R, $ty0>($policy, value_a_handles, $control.output_count)?,
-            select::compact_with_count::<R, $ty1>($policy, value_b_handles, $control.output_count)?,
-            select::compact_with_count::<R, $ty2>($policy, value_c_handles, $control.output_count)?,
-            select::compact_with_count::<R, $ty3>($policy, value_d_handles, $control.output_count)?,
-            select::compact_with_count::<R, $ty4>($policy, value_e_handles, $control.output_count)?,
-            select::compact_with_count::<R, $ty5>($policy, value_f_handles, $control.output_count)?,
-            select::compact_with_count::<R, $ty6>($policy, value_g_handles, $control.output_count)?,
+            select::compact_value_with_count::<R, $ty0>(
+                $policy,
+                &$control.output_selection,
+                reduced_a_handle,
+                $control.output_count,
+            )?,
+            select::compact_value_with_count::<R, $ty1>(
+                $policy,
+                &$control.output_selection,
+                reduced_b_handle,
+                $control.output_count,
+            )?,
+            select::compact_value_with_count::<R, $ty2>(
+                $policy,
+                &$control.output_selection,
+                reduced_c_handle,
+                $control.output_count,
+            )?,
+            select::compact_value_with_count::<R, $ty3>(
+                $policy,
+                &$control.output_selection,
+                reduced_d_handle,
+                $control.output_count,
+            )?,
+            select::compact_value_with_count::<R, $ty4>(
+                $policy,
+                &$control.output_selection,
+                reduced_e_handle,
+                $control.output_count,
+            )?,
+            select::compact_value_with_count::<R, $ty5>(
+                $policy,
+                &$control.output_selection,
+                reduced_f_handle,
+                $control.output_count,
+            )?,
+            select::compact_value_with_count::<R, $ty6>(
+                $policy,
+                &$control.output_selection,
+                reduced_g_handle,
+                $control.output_count,
+            )?,
         ))
     }};
 }

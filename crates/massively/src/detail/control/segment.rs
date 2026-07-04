@@ -22,7 +22,7 @@ pub(crate) struct ScanByKeyControl<R: Runtime> {
 pub(crate) struct ReduceByKeyControl<R: Runtime> {
     pub(crate) head_flags: cubecl::server::Handle,
     pub(crate) end_flags: cubecl::server::Handle,
-    pub(crate) output_selection: super::SelectionControl,
+    pub(crate) output_selection: super::SelectedRankControl,
     pub(crate) output_count: usize,
     pub(crate) len: usize,
     pub(crate) len_u32: u32,

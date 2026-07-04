@@ -83,7 +83,7 @@ where
         <IndexSource as KernelColumn>::len(indices),
     )?;
     ensure_same_len(<ValueSource as KernelColumn>::len(values), stencil.len())?;
-    let flags = stencil.selection_handles_with_policy(policy, false)?;
+    let flags = stencil.selection_flags_with_policy(policy, false)?;
     let input_len = <ValueSource as KernelColumn>::len(values);
     let block_count = input_len.div_ceil(BLOCK_SCATTER_WHERE_SIZE as usize);
     let block_count_u32 =
