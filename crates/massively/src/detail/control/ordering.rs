@@ -58,9 +58,23 @@ impl<R: Runtime> OrderingControl<R> {
 pub(crate) struct MergeControl<R: Runtime> {
     pub(crate) source_side: cubecl::server::Handle,
     pub(crate) source_index: cubecl::server::Handle,
+    pub(crate) left_len: usize,
+    pub(crate) right_len: usize,
     pub(crate) len: usize,
     pub(crate) len_u32: u32,
     pub(crate) _runtime: std::marker::PhantomData<R>,
+}
+
+impl<R: Runtime> MergeControl<R> {
+    pub(crate) fn as_merge_by_key_control(&self) -> MergeByKeyControl {
+        MergeByKeyControl {
+            source_sides: self.source_side.clone(),
+            source_indices: self.source_index.clone(),
+            left_len: self.left_len,
+            right_len: self.right_len,
+            len: self.len,
+        }
+    }
 }
 
 #[derive(Clone)]

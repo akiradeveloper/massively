@@ -89,7 +89,7 @@ fn selection_family_has_no_legacy_handles_or_aliases() {
 fn partition_payload_application_uses_split_rank_control() {
     let read_selection = read("src/detail/read/selection.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/selection.rs");
 
     assert!(
         read_selection.contains("split_rank_from_selected"),
@@ -117,63 +117,146 @@ fn partition_payload_application_uses_split_rank_control() {
 
 #[test]
 fn payload_apply_boundary_is_explicit() {
+    let detail_mod = read("src/detail/mod.rs");
     let api_mod = read("src/detail/api/mod.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let apply_mod = read("src/detail/apply/mod.rs");
+    let selection_payload = read("src/detail/apply/selection.rs");
 
     assert!(
-        api_mod.contains("mod payload;"),
-        "detail/api should expose a payload-apply module"
+        detail_mod.contains("pub(crate) mod apply;"),
+        "detail should expose apply as a first-class internal module"
     );
     assert!(
-        payload.contains("struct SelectedPayloadApply"),
+        !api_mod.contains("mod payload;"),
+        "detail/api should not own the payload-apply module"
+    );
+    assert!(
+        !api_mod.contains("crate::detail::apply::"),
+        "detail/api should not re-export apply objects"
+    );
+    assert!(
+        apply_mod.contains("mod selection;")
+            && apply_mod.contains("mod permutation;")
+            && apply_mod.contains("mod query;")
+            && apply_mod.contains("mod materialize;")
+            && apply_mod.contains("mod mask;")
+            && apply_mod.contains("mod range;")
+            && apply_mod.contains("mod merge;")
+            && apply_mod.contains("mod ordering;")
+            && apply_mod.contains("mod search;")
+            && apply_mod.contains("mod scan;")
+            && apply_mod.contains("mod reduce;")
+            && apply_mod.contains("mod transform;")
+            && apply_mod.contains("pub(in crate::detail) use selection::")
+            && apply_mod.contains("pub(in crate::detail) use permutation::")
+            && apply_mod.contains("pub(in crate::detail) use query::")
+            && apply_mod.contains("pub(in crate::detail) use materialize::")
+            && apply_mod.contains("pub(in crate::detail) use mask::")
+            && apply_mod.contains("pub(in crate::detail) use range::")
+            && apply_mod.contains("pub(in crate::detail) use merge::")
+            && apply_mod.contains("pub(in crate::detail) use ordering::")
+            && apply_mod.contains("pub(in crate::detail) use search::")
+            && apply_mod.contains("pub(in crate::detail) use scan::")
+            && apply_mod.contains("pub(in crate::detail) use reduce::")
+            && apply_mod.contains("pub(in crate::detail) use transform::"),
+        "detail/apply should split apply families into their own modules"
+    );
+    assert!(
+        selection_payload.contains("struct SelectedPayloadApply"),
         "selected payload apply should have a typed CSA operation object"
     );
     assert!(
-        payload.contains("struct SplitPayloadApply"),
+        selection_payload.contains("struct SplitPayloadApply"),
         "split payload apply should have a typed CSA operation object"
     );
     assert!(
-        payload.contains("SelectedRankControl") && payload.contains("SplitRankControl"),
+        selection_payload.contains("SelectedRankControl")
+            && selection_payload.contains("SplitRankControl"),
         "payload apply should be typed by CSA controls"
     );
     assert!(
-        payload.contains("fn apply_expr") && payload.contains("fn apply_value"),
+        selection_payload.contains("fn apply_expr") && selection_payload.contains("fn apply_value"),
         "payload apply objects should own payload application methods"
     );
     assert!(
-        payload.contains("fn apply_expr2")
-            && payload.contains("fn apply_expr3")
-            && payload.contains("fn apply_expr4")
-            && payload.contains("fn apply_expr5")
-            && payload.contains("fn apply_expr6")
-            && payload.contains("fn apply_expr7")
-            && payload.contains("fn apply_value2")
-            && payload.contains("fn apply_value3"),
+        selection_payload.contains("fn apply_expr2")
+            && selection_payload.contains("fn apply_expr3")
+            && selection_payload.contains("fn apply_expr4")
+            && selection_payload.contains("fn apply_expr5")
+            && selection_payload.contains("fn apply_expr6")
+            && selection_payload.contains("fn apply_expr7")
+            && selection_payload.contains("fn apply_value2")
+            && selection_payload.contains("fn apply_value3"),
         "payload apply should expose multi-column insertion points"
     );
     assert!(
-        payload.contains("device_expr_apply_selected2_with_policy")
-            && payload.contains("device_expr_apply_selected3_with_policy")
-            && payload.contains("device_expr_apply_selected4_with_policy")
-            && payload.contains("device_expr_apply_selected5_with_policy")
-            && payload.contains("device_expr_apply_selected6_with_policy")
-            && payload.contains("device_expr_apply_selected7_with_policy"),
+        selection_payload.contains("device_expr_apply_selected2_with_policy")
+            && selection_payload.contains("device_expr_apply_selected3_with_policy")
+            && selection_payload.contains("device_expr_apply_selected4_with_policy")
+            && selection_payload.contains("device_expr_apply_selected5_with_policy")
+            && selection_payload.contains("device_expr_apply_selected6_with_policy")
+            && selection_payload.contains("device_expr_apply_selected7_with_policy"),
         "tuple selected payload apply should route through fused CSA apply helpers"
     );
     assert!(
-        payload.contains("device_expr_apply_split2_with_policy")
-            && payload.contains("device_expr_apply_split3_with_policy")
-            && payload.contains("device_expr_apply_split4_with_policy")
-            && payload.contains("device_expr_apply_split5_with_policy")
-            && payload.contains("device_expr_apply_split6_with_policy")
-            && payload.contains("device_expr_apply_split7_with_policy"),
+        selection_payload.contains("device_expr_apply_split2_with_policy")
+            && selection_payload.contains("device_expr_apply_split3_with_policy")
+            && selection_payload.contains("device_expr_apply_split4_with_policy")
+            && selection_payload.contains("device_expr_apply_split5_with_policy")
+            && selection_payload.contains("device_expr_apply_split6_with_policy")
+            && selection_payload.contains("device_expr_apply_split7_with_policy"),
         "tuple split payload apply should route through fused CSA apply helpers"
     );
     assert!(
-        payload.contains("device_expr_compact_with_selection_with_policy")
-            && payload.contains("device_expr_compact_split_with_split_with_policy"),
+        selection_payload.contains("device_expr_compact_with_selection_with_policy")
+            && selection_payload.contains("device_expr_compact_split_with_split_with_policy"),
         "payload apply wrappers should own the compact implementation vocabulary"
     );
+}
+
+#[test]
+fn transform_dispatch_uses_transform_payload_apply() {
+    let apply = read("src/detail/apply/transform.rs");
+    let item_impls = read("src/detail/impls/item.rs");
+
+    assert!(
+        apply.contains("struct TransformPayloadApply")
+            && apply.contains("fn unary<")
+            && apply.contains("fn soa2<")
+            && apply.contains("fn soa3<")
+            && apply.contains("fn soa4<")
+            && apply.contains("fn soa5<")
+            && apply.contains("fn soa6<")
+            && apply.contains("fn soa7<")
+            && apply.contains("Output::run(policy"),
+        "TransformPayloadApply should own transform payload dispatch boundaries"
+    );
+    assert!(
+        item_impls.matches("TransformPayloadApply::").count() >= 14
+            && item_impls.contains("TransformPayloadApply::unary")
+            && item_impls.contains("TransformPayloadApply::soa7")
+            && !item_impls.contains(">>::run(policy"),
+        "MItem transform dispatch should route through TransformPayloadApply"
+    );
+}
+
+#[test]
+fn apply_objects_live_under_detail_apply() {
+    for (path, source) in rust_sources_under("src/detail") {
+        if path.contains("/src/detail/apply/") {
+            continue;
+        }
+
+        for line in source.lines() {
+            let defines_apply_struct = line.contains("struct ") && line.contains("Apply");
+            assert!(
+                !defines_apply_struct,
+                "apply operation structs should live under detail/apply, found `{}` in {}",
+                line.trim(),
+                path
+            );
+        }
+    }
 }
 
 #[test]
@@ -231,9 +314,10 @@ fn selection_call_sites_use_payload_apply_vocabulary() {
 #[test]
 fn compact_implementation_vocabulary_is_payload_private() {
     let allowed = [
-        "src/detail/api/payload.rs",
+        "src/detail/apply/mod.rs",
         "src/detail/api/expr/mod.rs",
         "src/detail/api/expr/selection.rs",
+        "src/detail/apply/selection.rs",
         "src/detail/primitives/select.rs",
     ];
     let forbidden = [
@@ -298,7 +382,7 @@ fn fused_split_kernel_is_the_partition_apply_kernel() {
 
 #[test]
 fn tuple_selected_payload_apply_has_fused_apply_kernels() {
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/selection.rs");
     let expr_selection = read("src/detail/api/expr/selection.rs");
     let kernels = read("src/detail/kernels/expr.rs");
 
@@ -340,7 +424,7 @@ fn tuple_selected_payload_apply_has_fused_apply_kernels() {
 
 #[test]
 fn tuple_split_payload_apply_has_fused_apply_kernels() {
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/selection.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
     let expr_selection = read("src/detail/api/expr/selection.rs");
     let kernels = read("src/detail/kernels/expr.rs");
@@ -411,7 +495,7 @@ fn flags_only_consumers_stop_at_mask_control() {
 
 #[test]
 fn mask_consumers_use_mask_apply_boundaries() {
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/mask.rs");
     let api_mod = read("src/detail/api/mod.rs");
     let single_impls = read("src/detail/impls/iter/single.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
@@ -432,12 +516,12 @@ fn mask_consumers_use_mask_apply_boundaries() {
         "MaskedIndexedExprApply should own masked indexed write boundaries"
     );
     assert!(
-        api_mod.contains("MaskWriteApply")
-            && api_mod.contains("MaskedIndexedExprApply")
+        !api_mod.contains("MaskWriteApply")
+            && !api_mod.contains("MaskedIndexedExprApply")
             && !api_mod.contains("replace_where_into_with_control")
             && !api_mod.contains("device_expr_gather_where_into_with_control")
             && !api_mod.contains("device_expr_scatter_where_into_with_control"),
-        "detail api should expose mask apply objects instead of raw mask wrapper re-exports"
+        "detail api should not expose mask apply objects or raw mask wrapper re-exports"
     );
     assert!(
         single_impls.contains("MaskedIndexedExprApply::gather_where_expr_into")
@@ -464,7 +548,7 @@ fn sort_by_key_values_use_permutation_payload_apply() {
     let api_by_key = read("src/detail/api/ordering/by_key.rs");
     let by_key_ordering = read("src/detail/read/by_key/ordering.rs");
     let control = read("src/detail/control/ordering.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/permutation.rs");
 
     assert!(
         control.contains("struct OrderingControl")
@@ -493,16 +577,8 @@ fn sort_by_key_values_use_permutation_payload_apply() {
 
 #[test]
 fn sort_values_use_sort_apply() {
-    let ordering = read("src/detail/read/ordering.rs");
-    let apply_start = ordering
-        .find("struct SortApply")
-        .expect("SortApply should exist");
-    let call_start = ordering[apply_start..]
-        .find("impl<Source, Less> KernelSortInput<Less> for Source")
-        .map(|offset| apply_start + offset)
-        .expect("sort apply should precede sort impls");
-    let apply = &ordering[apply_start..call_start];
-    let call_sites = &ordering[call_start..];
+    let apply = read("src/detail/apply/ordering.rs");
+    let call_sites = read("src/detail/read/ordering.rs");
 
     assert!(
         apply.contains("fn apply_expr")
@@ -526,16 +602,8 @@ fn sort_values_use_sort_apply() {
 
 #[test]
 fn sort_by_key_keys_use_sort_by_key_apply() {
-    let by_key_ordering = read("src/detail/read/by_key/ordering.rs");
-    let apply_start = by_key_ordering
-        .find("struct SortByKeyApply")
-        .expect("SortByKeyApply should exist");
-    let call_start = by_key_ordering[apply_start..]
-        .find("pub(crate) trait KernelMergeByKeyKeys")
-        .map(|offset| apply_start + offset)
-        .expect("sort-by-key apply should precede merge-by-key traits");
-    let apply = &by_key_ordering[apply_start..call_start];
-    let call_sites = &by_key_ordering[call_start..];
+    let apply = read("src/detail/apply/ordering.rs");
+    let call_sites = read("src/detail/read/by_key/ordering.rs");
 
     assert!(
         apply.contains("fn apply_keys1")
@@ -552,6 +620,32 @@ fn sort_by_key_keys_use_sort_by_key_apply() {
             && !call_sites.contains("primitive_ordering::sort_by_key_input_with_policy")
             && !call_sites.contains("primitive_ordering::sort_tuple3_by_key_input_with_policy"),
         "sort-by-key key call sites should route through SortByKeyApply"
+    );
+}
+
+#[test]
+fn merge_by_key_keys_use_merge_by_key_control_apply() {
+    let apply = read("src/detail/apply/ordering.rs");
+    let call_sites = read("src/detail/read/by_key/ordering.rs");
+
+    assert!(
+        apply.contains("struct MergeByKeyControlApply")
+            && apply.contains("fn apply_keys1")
+            && apply.contains("fn apply_keys2")
+            && apply.contains("fn apply_keys3")
+            && apply.contains("device_expr_merge_by_key_control_with_policy")
+            && apply.contains("device_expr_merge_tuple2_by_key_control_with_policy")
+            && apply.contains("device_expr_merge_tuple3_by_key_control_with_policy"),
+        "MergeByKeyControlApply should own merge-by-key key/control implementation boundaries"
+    );
+    assert!(
+        call_sites.contains("MergeByKeyControlApply::apply_keys1")
+            && call_sites.contains("MergeByKeyControlApply::apply_keys2")
+            && call_sites.contains("MergeByKeyControlApply::apply_keys3")
+            && !call_sites.contains("device_expr_merge_by_key_control_with_policy")
+            && !call_sites.contains("device_expr_merge_tuple2_by_key_control_with_policy")
+            && !call_sites.contains("device_expr_merge_tuple3_by_key_control_with_policy"),
+        "merge-by-key key call sites should route through MergeByKeyControlApply"
     );
 }
 
@@ -599,7 +693,7 @@ fn gather_read_uses_permutation_payload_apply() {
 
 #[test]
 fn indexed_expr_dispatch_uses_indexed_expr_apply() {
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/permutation.rs");
     let api_mod = read("src/detail/api/mod.rs");
     let single_impls = read("src/detail/impls/iter/single.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
@@ -617,10 +711,10 @@ fn indexed_expr_dispatch_uses_indexed_expr_apply() {
         "IndexedExprApply should own allocation-free indexed expr apply boundaries"
     );
     assert!(
-        api_mod.contains("IndexedExprApply")
+        !api_mod.contains("IndexedExprApply")
             && !api_mod.contains("device_expr_gather_into_with_policy")
             && !api_mod.contains("device_expr_scatter_into_with_policy"),
-        "detail api should expose the indexed expr apply object instead of raw indexed wrapper re-exports"
+        "detail api should not expose indexed expr apply objects or raw indexed wrapper re-exports"
     );
     assert!(
         single_impls.contains("IndexedExprApply::gather_expr_into")
@@ -645,7 +739,7 @@ fn indexed_expr_dispatch_uses_indexed_expr_apply() {
 #[test]
 fn scatter_read_uses_indexed_write_apply() {
     let scatter = read("src/detail/read/scatter.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/permutation.rs");
 
     assert!(
         scatter.contains("PermutationControl::from_indices(&index_values)")
@@ -664,7 +758,7 @@ fn scatter_read_uses_indexed_write_apply() {
 
 #[test]
 fn materialize_write_paths_use_materialize_write_apply() {
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/materialize.rs");
     let api_mod = read("src/detail/api/mod.rs");
     let single_impls = read("src/detail/impls/iter/single.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
@@ -680,10 +774,10 @@ fn materialize_write_paths_use_materialize_write_apply() {
         "MaterializeWriteApply should own contiguous collect/copy-where write boundaries"
     );
     assert!(
-        api_mod.contains("MaterializeWriteApply")
+        !api_mod.contains("MaterializeWriteApply")
             && !api_mod.contains("device_expr_collect_into_with_policy")
             && !api_mod.contains("device_expr_copy_where_into_with_policy"),
-        "detail api should expose the typed write apply object instead of collect/copy wrapper re-exports"
+        "detail api should not expose typed write apply objects or collect/copy wrapper re-exports"
     );
     assert!(
         single_impls.contains("MaterializeWriteApply::new(&output).collect_expr")
@@ -702,27 +796,29 @@ fn materialize_write_paths_use_materialize_write_apply() {
 
 #[test]
 fn fill_and_concat_use_payload_apply_boundaries() {
-    let payload = read("src/detail/api/payload.rs");
+    let materialize_payload = read("src/detail/apply/materialize.rs");
+    let range_payload = read("src/detail/apply/range.rs");
     let api_mod = read("src/detail/api/mod.rs");
     let single_impls = read("src/detail/impls/iter/single.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
 
     assert!(
-        payload.contains("struct FillWriteApply")
-            && payload.contains("fn fill_value")
-            && payload.contains("primitives::fill_slice_with_policy(policy, value, self.output)"),
+        materialize_payload.contains("struct FillWriteApply")
+            && materialize_payload.contains("fn fill_value")
+            && materialize_payload
+                .contains("primitives::fill_slice_with_policy(policy, value, self.output)"),
         "FillWriteApply should own fill-slice write boundaries"
     );
     assert!(
-        payload.contains("struct ConcatPayloadApply")
-            && payload.contains("fn apply_values")
-            && payload
+        range_payload.contains("struct ConcatPayloadApply")
+            && range_payload.contains("fn apply_values")
+            && range_payload
                 .contains("primitives::range::concat_device_with_policy(policy, left, right)"),
         "ConcatPayloadApply should own concat materialization boundaries"
     );
     assert!(
-        api_mod.contains("FillWriteApply") && api_mod.contains("ConcatPayloadApply"),
-        "detail api should expose fill/concat apply objects"
+        !api_mod.contains("FillWriteApply") && !api_mod.contains("ConcatPayloadApply"),
+        "detail api should not expose fill/concat apply objects"
     );
     assert!(
         single_impls.contains("FillWriteApply::new(&output).fill_value")
@@ -740,13 +836,12 @@ fn fill_and_concat_use_payload_apply_boundaries() {
 
 #[test]
 fn materialize_payload_paths_use_materialize_payload_apply() {
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/materialize.rs");
     let api_mod = read("src/detail/api/mod.rs");
     let memory = read("src/detail/api/memory.rs");
     let gather = read("src/detail/read/gather.rs");
     let scatter = read("src/detail/read/scatter.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
-    let ordering = read("src/detail/api/ordering/mod.rs");
 
     assert!(
         payload.contains("struct MaterializePayloadApply")
@@ -755,21 +850,20 @@ fn materialize_payload_paths_use_materialize_payload_apply() {
         "MaterializePayloadApply should own expression-to-owned-payload collect boundaries"
     );
     assert!(
-        api_mod.contains("MaterializePayloadApply")
+        !api_mod.contains("MaterializePayloadApply")
             && !api_mod.contains("device_expr_collect_with_policy"),
-        "detail api should expose MaterializePayloadApply instead of the raw collect re-export"
+        "detail api should not expose MaterializePayloadApply or the raw collect re-export"
     );
     assert!(
         memory.contains("MaterializePayloadApply::collect_expr")
             && gather.contains("MaterializePayloadApply::collect_expr")
             && scatter.contains("MaterializePayloadApply::collect_expr")
-            && tuple_impls.contains("MaterializePayloadApply::collect_expr")
-            && ordering.contains("MaterializePayloadApply::collect_expr"),
+            && tuple_impls.contains("MaterializePayloadApply::collect_expr"),
         "owned materialize call sites should use MaterializePayloadApply"
     );
 
     let allowed = [
-        "src/detail/api/payload.rs",
+        "src/detail/apply/materialize.rs",
         "src/detail/api/expr/mod.rs",
         "src/detail/api/expr/collect.rs",
     ];
@@ -788,7 +882,7 @@ fn materialize_payload_paths_use_materialize_payload_apply() {
 #[test]
 fn scatter_where_read_combines_mask_control_and_indexed_write_apply() {
     let scatter = read("src/detail/read/scatter.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/permutation.rs");
 
     assert!(
         scatter.contains("let mask = stencil.selection_flags_with_policy(policy, false)?;")
@@ -809,7 +903,7 @@ fn scatter_where_read_combines_mask_control_and_indexed_write_apply() {
 fn reverse_read_uses_range_payload_apply() {
     let ordering = read("src/detail/read/ordering.rs");
     let control = read("src/detail/control/range.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/range.rs");
 
     assert!(
         ordering.contains("RangeControl::reverse")
@@ -831,39 +925,55 @@ fn reverse_read_uses_range_payload_apply() {
 
 #[test]
 fn scan_by_key_values_use_segmented_scan_apply() {
-    let scan = read("src/detail/read/by_key/scan.rs");
+    let apply = read("src/detail/apply/scan.rs");
+    let call_sites = read("src/detail/read/by_key/scan.rs");
 
     assert!(
-        scan.contains("struct SegmentedScanApply")
-            && scan.contains("control: &'a ScanByKeyControl<R>")
-            && scan.contains(
+        apply.contains("struct SegmentedScanApply")
+            && apply.contains("control: &'a ScanByKeyControl<R>")
+            && apply.contains(
                 "inclusive_scan_by_flags_one::<Source, Op>(policy, source, self.control)"
             )
-            && scan.contains(
+            && apply.contains(
                 "exclusive_scan_by_flags_one::<Source, Op>(policy, source, self.control, init)"
             )
-            && scan.contains("inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>")
-            && scan.contains("exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>"),
+            && apply.contains("fn inclusive_views4")
+            && apply.contains("fn inclusive_views5")
+            && apply.contains("fn inclusive_views6")
+            && apply.contains("inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>")
+            && apply.contains("fn exclusive_views4")
+            && apply.contains("fn exclusive_views5")
+            && apply.contains("fn exclusive_views6")
+            && apply.contains("exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>"),
         "SegmentedScanApply should own the segmented scan helper boundary"
     );
     assert!(
-        scan.matches("SegmentedScanApply::new(control)").count() >= 14,
+        call_sites
+            .matches("SegmentedScanApply::new(control)")
+            .count()
+            >= 14
+            && call_sites.contains("apply.inclusive_views4::<A, B, C, D, Op>")
+            && call_sites.contains("apply.inclusive_views5::<A, B, C, D, E, Op>")
+            && call_sites.contains("apply.inclusive_views6::<A, B, C, D, E, F, Op>")
+            && call_sites.contains("apply.inclusive_views7::<A, B, C, D, E, F, G, Op>")
+            && call_sites.contains("apply.exclusive_views4::<A, B, C, D, Op>")
+            && call_sites.contains("apply.exclusive_views5::<A, B, C, D, E, Op>")
+            && call_sites.contains("apply.exclusive_views6::<A, B, C, D, E, F, Op>")
+            && call_sites.contains("apply.exclusive_views7::<A, B, C, D, E, F, G, Op>")
+            && !call_sites.contains("primitive_range::indices_mindex")
+            && !call_sites.contains("Tuple4AsTuple7BinaryOp<Op>")
+            && !call_sites.contains("Tuple5AsTuple7BinaryOp<Op>")
+            && !call_sites.contains("Tuple6AsTuple7BinaryOp<Op>")
+            && !call_sites.contains("struct SegmentedScanApply"),
         "scan-by-key value arities should apply payload through SegmentedScanApply"
     );
 }
 
 #[test]
 fn linear_scan_values_use_linear_scan_apply() {
-    let scan = read("src/detail/read/scan.rs");
-    let apply_start = scan
-        .find("struct LinearScanApply")
-        .expect("linear scan apply should exist");
-    let macro_start = scan[apply_start..]
-        .find("macro_rules! impl_kernel_inclusive_scan_tuple1")
-        .map(|offset| apply_start + offset)
-        .expect("linear scan apply should precede scan impls");
-    let apply = &scan[apply_start..macro_start];
-    let call_sites = &scan[macro_start..];
+    let apply = read("src/detail/apply/scan.rs");
+    let call_sites = read("src/detail/read/scan.rs");
+    let wide_call_sites = read("src/detail/impls/iter/tuple.rs");
 
     assert!(
         apply.contains("fn inclusive_expr1")
@@ -874,7 +984,19 @@ fn linear_scan_values_use_linear_scan_apply() {
             && apply.contains("fn adjacent_expr2")
             && apply.contains("fn inclusive_expr3")
             && apply.contains("fn exclusive_expr3")
-            && apply.contains("fn adjacent_expr3"),
+            && apply.contains("fn adjacent_expr3")
+            && apply.contains("fn inclusive_views4")
+            && apply.contains("fn inclusive_views5")
+            && apply.contains("fn inclusive_views6")
+            && apply.contains("fn inclusive_views7")
+            && apply.contains("fn exclusive_views4")
+            && apply.contains("fn exclusive_views5")
+            && apply.contains("fn exclusive_views6")
+            && apply.contains("fn exclusive_views7")
+            && apply.contains("fn adjacent_views4")
+            && apply.contains("fn adjacent_views5")
+            && apply.contains("fn adjacent_views6")
+            && apply.contains("fn adjacent_views7"),
         "LinearScanApply should own linear scan and adjacent-difference apply boundaries"
     );
     assert!(
@@ -885,25 +1007,34 @@ fn linear_scan_values_use_linear_scan_apply() {
             && !call_sites.contains("device_expr_adjacent_difference_with_policy"),
         "linear scan read paths should route through LinearScanApply"
     );
+    assert!(
+        wide_call_sites.contains("LinearScanApply::inclusive_views4")
+            && wide_call_sites.contains("LinearScanApply::inclusive_views7")
+            && wide_call_sites.contains("LinearScanApply::exclusive_views4")
+            && wide_call_sites.contains("LinearScanApply::exclusive_views7")
+            && wide_call_sites.contains("LinearScanApply::adjacent_views4")
+            && wide_call_sites.contains("LinearScanApply::adjacent_views7")
+            && !wide_call_sites.contains("inclusive_scan_tuple7_device_views")
+            && !wide_call_sites.contains("exclusive_scan_tuple7_device_views")
+            && !wide_call_sites.contains("adjacent_difference_tuple7_device_views"),
+        "linear wide tuple scan dispatch should route through LinearScanApply instead of primitives"
+    );
 }
 
 #[test]
 fn linear_reduce_values_use_linear_reduce_apply() {
-    let reduce = read("src/detail/read/reduce.rs");
-    let apply_start = reduce
-        .find("struct LinearReduceApply")
-        .expect("linear reduce apply should exist");
-    let macro_start = reduce[apply_start..]
-        .find("macro_rules! impl_kernel_reduce_tuple1")
-        .map(|offset| apply_start + offset)
-        .expect("linear reduce apply should precede reduce impls");
-    let apply = &reduce[apply_start..macro_start];
-    let call_sites = &reduce[macro_start..];
+    let apply = read("src/detail/apply/reduce.rs");
+    let call_sites = read("src/detail/read/reduce.rs");
+    let wide_call_sites = read("src/detail/impls/iter/tuple.rs");
 
     assert!(
         apply.contains("fn apply_expr1")
             && apply.contains("fn apply_expr2")
-            && apply.contains("fn apply_expr3"),
+            && apply.contains("fn apply_expr3")
+            && apply.contains("fn apply_views4")
+            && apply.contains("fn apply_views5")
+            && apply.contains("fn apply_views6")
+            && apply.contains("fn apply_views7"),
         "LinearReduceApply should own linear reduce apply boundaries"
     );
     assert!(
@@ -911,27 +1042,62 @@ fn linear_reduce_values_use_linear_reduce_apply() {
             && !call_sites.contains("primitive_reduce::reduce_tuple"),
         "linear reduce read paths should route through LinearReduceApply"
     );
+    assert!(
+        wide_call_sites.contains("LinearReduceApply::apply_views4")
+            && wide_call_sites.contains("LinearReduceApply::apply_views7")
+            && !wide_call_sites.contains("reduce_tuple7_device_expr"),
+        "linear wide tuple reduce dispatch should route through LinearReduceApply instead of primitives"
+    );
 }
 
 #[test]
 fn reduce_by_key_values_use_segmented_reduce_apply() {
-    let reduce = read("src/detail/read/by_key/reduce.rs");
+    let apply = read("src/detail/apply/reduce.rs");
+    let call_sites = read("src/detail/read/by_key/reduce.rs");
+    let single_impls = read("src/detail/impls/iter/single.rs");
+    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
 
     assert!(
-        reduce.contains("struct SegmentedReduceApply")
-            && reduce.contains("control: &'a ReduceByKeyControl<R>")
-            && reduce.contains("SegmentedScanApply::new(&scan_control)")
-            && reduce.contains("reduce_by_key_tuple7_scanned_values!")
-            && reduce.contains("SelectedPayloadApply::new"),
+        apply.contains("struct SegmentedReduceApply")
+            && apply.contains("control: &'a ReduceByKeyControl<R>")
+            && apply.contains("SegmentedScanApply::new(&scan_control)")
+            && apply.contains("fn apply_views4")
+            && apply.contains("fn apply_views5")
+            && apply.contains("fn apply_views6")
+            && apply.contains("fn apply_views7")
+            && apply.contains("reduce_by_key_tuple7_scanned_values!")
+            && apply.contains("SelectedPayloadApply::new"),
         "SegmentedReduceApply should own segmented scan, init application, and selected output compaction"
     );
     assert!(
-        reduce.matches("SegmentedReduceApply::new(control)").count() >= 7
-            && reduce.contains("apply.apply_expr::<ValueSource, Op>")
-            && reduce.contains("apply.apply_expr2::<ValueA, ValueB, Op>")
-            && reduce.contains("apply.apply_expr3::<ValueA, ValueB, ValueC, Op>")
-            && reduce.contains("apply.apply_views7::<A, B, C, D, E, F, G, Op>"),
+        call_sites
+            .matches("SegmentedReduceApply::new(control)")
+            .count()
+            >= 7
+            && call_sites.contains("apply.apply_expr::<ValueSource, Op>")
+            && call_sites.contains("apply.apply_expr2::<ValueA, ValueB, Op>")
+            && call_sites.contains("apply.apply_expr3::<ValueA, ValueB, ValueC, Op>")
+            && call_sites.contains("apply.apply_views4::<A, B, C, D, Op>")
+            && call_sites.contains("apply.apply_views5::<A, B, C, D, E, Op>")
+            && call_sites.contains("apply.apply_views6::<A, B, C, D, E, F, Op>")
+            && call_sites.contains("apply.apply_views7::<A, B, C, D, E, F, G, Op>")
+            && !call_sites.contains("primitive_range::indices_mindex")
+            && !call_sites.contains("Tuple4AsTuple7BinaryOp<Op>")
+            && !call_sites.contains("Tuple5AsTuple7BinaryOp<Op>")
+            && !call_sites.contains("Tuple6AsTuple7BinaryOp<Op>")
+            && !call_sites.contains("struct SegmentedReduceApply"),
         "reduce-by-key value arities should apply payload through SegmentedReduceApply"
+    );
+    assert!(
+        single_impls.contains("SegmentedReduceApply::new(&reduce_control)")
+            && tuple_impls.contains("SegmentedReduceApply::new(&reduce_control)")
+            && tuple_impls.contains("SegmentedReduceApply::new(&$control)")
+            && !single_impls.contains("reduce_by_key_apply_init_kernel")
+            && !tuple_impls.contains("reduce_by_key_apply_init_kernel")
+            && !tuple_impls.contains("reduce_by_key_tuple2_apply_init_kernel")
+            && !tuple_impls.contains("reduce_by_key_tuple3_apply_init_kernel")
+            && !tuple_impls.contains("reduce_by_key_tuple7_apply_init_kernel"),
+        "iterator reduce-by-key dispatch should route apply-init work through SegmentedReduceApply"
     );
 }
 
@@ -974,7 +1140,7 @@ fn by_key_control_generation_uses_segment_control() {
 #[test]
 fn merge_by_key_values_use_merge_payload_apply() {
     let ordering = read("src/detail/read/by_key/ordering.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/merge.rs");
 
     assert!(
         payload.contains("struct MergePayloadApply")
@@ -995,31 +1161,38 @@ fn merge_by_key_values_use_merge_payload_apply() {
 
 #[test]
 fn plain_merge_uses_merge_expr_apply() {
-    let ordering = read("src/detail/api/ordering/mod.rs");
-    let apply_start = ordering
-        .find("struct MergeExprApply")
-        .expect("plain merge apply should exist");
-    let set_union_start = ordering[apply_start..]
-        .find("fn device_expr_membership_compact_with_policy")
-        .map(|offset| apply_start + offset)
-        .expect("merge apply should precede membership helpers");
-    let apply = &ordering[apply_start..set_union_start];
-    let call_sites = &ordering[set_union_start..];
+    let apply = read("src/detail/apply/ordering.rs");
+    let control = read("src/detail/control/ordering.rs");
+    let call_sites = read("src/detail/api/ordering/mod.rs");
+    let kernels = read("src/detail/kernels/ordering.rs");
 
     assert!(
-        apply.contains("fn apply_expr")
-            && apply.contains("device_expr_merge_with_policy::<Left, Right, Less>"),
-        "MergeExprApply should own the plain merge implementation boundary"
+        control.contains("struct MergeControl")
+            && control.contains("source_side")
+            && control.contains("source_index")
+            && control.contains("fn as_merge_by_key_control"),
+        "plain merge should have a true MergeControl carrying source side/index"
     );
     assert!(
-        call_sites.matches("MergeExprApply::apply_expr").count() >= 2
-            && !call_sites.contains("device_expr_merge_with_policy::<"),
-        "plain merge and set_union should route through MergeExprApply"
+        apply.contains("struct MergeControlApply")
+            && apply.contains("device_expr_merge_control_with_policy::<Left, Right, Less>")
+            && apply.contains("MergePayloadApply::new(&payload_control)")
+            && apply.contains(".apply_expr(policy, left, right)"),
+        "MergeExprApply should compose MergeControlApply with MergePayloadApply"
+    );
+    assert!(
+        kernels.contains("merge_path_control_device_expr_kernel")
+            && call_sites.contains("device_expr_merge_control_with_policy")
+            && call_sites.matches("MergeExprApply::apply_expr").count() >= 2
+            && !call_sites.contains("device_expr_merge_with_policy::<")
+            && !call_sites.contains("merge_path_device_expr_kernel::launch_unchecked"),
+        "plain merge call sites should build MergeControl and avoid direct fused payload launch"
     );
 }
 
 #[test]
-fn tuple_set_algorithms_use_selected_payload_apply() {
+fn set_algorithms_use_membership_control_and_selected_payload_apply() {
+    let apply = read("src/detail/apply/ordering.rs");
     let ordering = read("src/detail/api/ordering/mod.rs");
     let macro_start = ordering
         .find("macro_rules! impl_tuple_pair_ordering")
@@ -1030,6 +1203,23 @@ fn tuple_set_algorithms_use_selected_payload_apply() {
         .expect("public merge function should delimit tuple pair ordering macro");
     let tuple_pair_ordering = &ordering[macro_start..macro_end];
 
+    assert!(
+        apply.contains("struct SetMembershipControlApply")
+            && apply.contains("fn set_union_expr")
+            && apply.contains("fn set_intersection_expr")
+            && apply.contains("fn set_difference_expr")
+            && apply.contains("fn tuple2_membership_expr_flags_with_policy")
+            && apply.contains("fn tuple3_membership_expr_flags_with_policy"),
+        "SetMembershipControlApply should own set membership control-generation boundaries"
+    );
+    assert!(
+        ordering.contains("SetMembershipControlApply::set_union_expr")
+            && ordering.contains("SetMembershipControlApply::set_intersection_expr")
+            && ordering.contains("SetMembershipControlApply::set_difference_expr")
+            && ordering.contains("SetMembershipControlApply::$membership_expr_fn")
+            && !tuple_pair_ordering.contains("let flags = $membership_expr_fn::<"),
+        "set algorithm call sites should route membership control generation through SetMembershipControlApply"
+    );
     assert!(
         tuple_pair_ordering
             .matches("SelectedPayloadApply::new(&selection, count)")
@@ -1044,7 +1234,7 @@ fn tuple_set_algorithms_use_selected_payload_apply() {
 #[test]
 fn predicate_queries_use_query_apply() {
     let selection = read("src/detail/read/selection.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/query.rs");
 
     assert!(
         payload.contains("struct QueryApply")
@@ -1067,7 +1257,8 @@ fn predicate_queries_use_query_apply() {
 fn search_queries_use_search_control_and_query_apply() {
     let control = read("src/detail/control/search.rs");
     let control_mod = read("src/detail/control/mod.rs");
-    let payload = read("src/detail/api/payload.rs");
+    let payload = read("src/detail/apply/query.rs");
+    let search_apply = read("src/detail/apply/search.rs");
     let search = read("src/detail/api/search.rs");
     let selection = read("src/detail/read/selection.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
@@ -1087,10 +1278,28 @@ fn search_queries_use_search_control_and_query_apply() {
         "QueryApply should own flag readback helpers for search-style queries"
     );
     assert!(
+        search_apply.contains("struct SearchControlApply")
+            && search_apply.contains("fn adjacent_find_expr")
+            && search_apply.contains("fn lower_bound_expr")
+            && search_apply.contains("fn upper_bound_expr")
+            && search_apply.contains("fn is_sorted_until_expr")
+            && search_apply.contains("fn mismatch_expr")
+            && search_apply.contains("fn find_first_of_expr")
+            && search_apply.contains("fn lexicographical_compare_expr"),
+        "SearchControlApply should own scalar search control/query operation boundaries"
+    );
+    assert!(
         search.matches("SearchControl::from_flags").count() >= 10
             && search.matches("QueryApply::first_flag").count() >= 5
             && search.matches("QueryApply::first_flag_or").count() >= 5
             && search.matches("QueryApply::minmax_expr").count() >= 3
+            && search.contains("SearchControlApply::adjacent_find_expr")
+            && search.contains("SearchControlApply::lower_bound_expr")
+            && search.contains("SearchControlApply::upper_bound_expr")
+            && search.contains("SearchControlApply::is_sorted_until_expr")
+            && search.contains("SearchControlApply::mismatch_expr")
+            && search.contains("SearchControlApply::find_first_of_expr")
+            && search.contains("SearchControlApply::lexicographical_compare_expr")
             && !search.contains("search::first_flag")
             && !search.contains("primitives::search")
             && !search.contains("device_expr_minmax_element_with_policy"),
@@ -1113,25 +1322,24 @@ fn search_queries_use_search_control_and_query_apply() {
 #[test]
 fn search_many_outputs_use_search_payload_apply() {
     let search = read("src/detail/api/search.rs");
-    let apply_start = search
-        .find("struct SearchPayloadApply")
-        .expect("SearchPayloadApply should exist");
-    let stage_start = search[apply_start..]
-        .find("fn stage_search_column")
-        .map(|offset| apply_start + offset)
-        .expect("search payload apply should precede staging helpers");
-    let apply = &search[apply_start..stage_start];
-    let call_sites = &search[stage_start..];
+    let apply = read("src/detail/apply/search.rs");
+    let call_sites = &search;
 
     assert!(
         apply.contains("fn lower_bound_many_expr")
             && apply.contains("fn upper_bound_many_expr")
+            && apply.contains("trait TupleSearchPayloadApply")
+            && apply.contains("fn lower_bound_many_payload")
+            && apply.contains("fn upper_bound_many_payload")
+            && apply.contains("impl_tuple_search_payload_apply!")
             && apply.contains("fn empty_or_zero")
             && apply.contains("fn prepare")
             && apply.contains("fn finish")
             && apply.contains("lower_bound_device_expr_many_kernel::launch_unchecked")
-            && apply.contains("upper_bound_device_expr_many_kernel::launch_unchecked"),
-        "SearchPayloadApply should own single-column many-bound payload materialization"
+            && apply.contains("upper_bound_device_expr_many_kernel::launch_unchecked")
+            && apply.contains("tuple7_lower_bound_device_expr_many_kernel")
+            && apply.contains("tuple7_upper_bound_device_expr_many_kernel"),
+        "SearchPayloadApply should own single-column and tuple many-bound payload materialization"
     );
     assert!(
         call_sites.contains("SearchPayloadApply::lower_bound_many_expr")
@@ -1141,14 +1349,76 @@ fn search_many_outputs_use_search_payload_apply() {
         "single-column many-bound call sites should route through SearchPayloadApply"
     );
     assert!(
-        call_sites
-            .matches("SearchPayloadApply::empty_or_zero")
-            .count()
-            >= 2
-            && call_sites.matches("SearchPayloadApply::prepare").count() >= 2
-            && call_sites.matches("SearchPayloadApply::finish").count() >= 2,
-        "tuple many-bound paths should share SearchPayloadApply output preparation and finish boundaries"
+        call_sites.contains("TupleSearchPayloadApply")
+            && call_sites.contains("lower_bound_many_payload(self, policy, values)")
+            && call_sites.contains("upper_bound_many_payload(self, policy, values)")
+            && !call_sites.contains("lower_bound_device_expr_many_kernel::launch_unchecked")
+            && !call_sites.contains("upper_bound_device_expr_many_kernel::launch_unchecked"),
+        "tuple many-bound paths should route kernel launches through TupleSearchPayloadApply"
     );
+}
+
+#[test]
+fn search_many_kernel_launches_stay_inside_payload_apply() {
+    let many_bound_launches = [
+        "lower_bound_device_expr_many_kernel::launch_unchecked",
+        "upper_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple2_lower_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple2_upper_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple3_lower_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple3_upper_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple4_lower_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple4_upper_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple5_lower_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple5_upper_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple6_lower_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple6_upper_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple7_lower_bound_device_expr_many_kernel::launch_unchecked",
+        "tuple7_upper_bound_device_expr_many_kernel::launch_unchecked",
+    ];
+
+    for (path, source) in rust_sources_under("src/detail") {
+        for launch in many_bound_launches {
+            if !source.contains(launch) {
+                continue;
+            }
+
+            assert!(
+                path.ends_with("src/detail/apply/search.rs"),
+                "many-bound search launch should stay inside SearchPayloadApply/TupleSearchPayloadApply, found {} in {}",
+                launch,
+                path
+            );
+        }
+    }
+}
+
+#[test]
+fn csa_documentation_names_active_family_boundaries() {
+    let csa = fs::read_to_string(crate_root().join("../../doc/CSA.md"))
+        .expect("CSA design doc should be readable");
+
+    for token in [
+        "SortApply",
+        "SortByKeyApply",
+        "OrderingControl",
+        "PermutationPayloadApply",
+        "SearchControl",
+        "QueryApply",
+        "SearchPayloadApply",
+        "TupleSearchPayloadApply",
+        "MergeControlApply",
+        "MergeControl",
+        "MergeByKeyControlApply",
+        "MergePayloadApply",
+        "Multi-column support should be centralized",
+    ] {
+        assert!(
+            csa.contains(token),
+            "CSA design doc should name active boundary `{}`",
+            token
+        );
+    }
 }
 
 #[test]
@@ -1190,5 +1460,52 @@ fn detail_control_does_not_launch_kernels() {
                 path.display()
             );
         }
+    }
+}
+
+#[test]
+fn raw_kernel_launches_stay_in_csa_implementation_boundaries() {
+    let allowed = [
+        "src/detail/api/expr/collect.rs",
+        "src/detail/api/expr/indexed.rs",
+        "src/detail/api/expr/scan.rs",
+        "src/detail/api/expr/search.rs",
+        "src/detail/api/expr/selection.rs",
+        "src/detail/api/memory.rs",
+        "src/detail/api/ordering/mod.rs",
+        "src/detail/api/search.rs",
+        "src/detail/api/selection_control.rs",
+        "src/detail/apply/reduce.rs",
+        "src/detail/apply/search.rs",
+        "src/detail/impls/iter/tuple.rs",
+        "src/detail/impls/mod.rs",
+        "src/detail/kernels/expr.rs",
+        "src/detail/kernels/ordering.rs",
+        "src/detail/kernels/range.rs",
+        "src/detail/kernels/scan.rs",
+        "src/detail/kernels/selection.rs",
+        "src/detail/primitives/ordering/radix.rs",
+        "src/detail/primitives/ordering/sort.rs",
+        "src/detail/primitives/range.rs",
+        "src/detail/primitives/reduce.rs",
+        "src/detail/primitives/scan.rs",
+        "src/detail/primitives/search.rs",
+        "src/detail/primitives/select.rs",
+        "src/detail/read/by_key/reduce.rs",
+        "src/detail/read/by_key/scan.rs",
+        "src/detail/read/gather.rs",
+        "src/detail/read/selection.rs",
+    ];
+
+    for (path, source) in rust_sources_under("src/detail") {
+        if !source.contains("launch_unchecked") {
+            continue;
+        }
+
+        assert!(
+            allowed.iter().any(|allowed| path.ends_with(allowed)),
+            "raw kernel launch should stay in CSA implementation boundaries, found in {}",
+            path
+        );
     }
 }

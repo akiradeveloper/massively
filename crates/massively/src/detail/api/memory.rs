@@ -1131,8 +1131,9 @@ where
 
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let left = super::MaterializePayloadApply::collect_expr(policy, &self.left)?;
-        let right = super::MaterializePayloadApply::collect_expr(policy, &self.right)?;
+        let left = crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.left)?;
+        let right =
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.right)?;
         Ok((left, right))
     }
 }
@@ -1149,7 +1150,8 @@ where
 
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let source = super::MaterializePayloadApply::collect_expr(policy, &self.source)?;
+        let source =
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.source)?;
         Ok((source,))
     }
 }
@@ -1221,9 +1223,12 @@ where
 
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         SoA::validate(&self)?;
-        let first = super::MaterializePayloadApply::collect_expr(policy, &self.first)?;
-        let second = super::MaterializePayloadApply::collect_expr(policy, &self.second)?;
-        let third = super::MaterializePayloadApply::collect_expr(policy, &self.third)?;
+        let first =
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.first)?;
+        let second =
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.second)?;
+        let third =
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.third)?;
         Ok((first, second, third))
     }
 }

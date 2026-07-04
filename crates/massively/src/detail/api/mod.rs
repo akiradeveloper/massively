@@ -1,15 +1,14 @@
-mod expr;
+pub(in crate::detail) mod expr;
 mod memory;
-mod ordering;
-mod payload;
+pub(in crate::detail) mod ordering;
 mod reduce;
 mod scan;
-mod search;
+pub(in crate::detail) mod search;
 mod selection;
 mod sequence;
 
 #[allow(unused_imports)]
-pub(super) use expr::{
+pub(in crate::detail) use expr::{
     device_expr_adjacent_difference_with_policy, device_expr_count_if_with_policy,
     device_expr_exclusive_scan_by_key_expr_keys_with_policy, device_expr_find_if_with_policy,
     device_expr_gather_with_policy, device_expr_inclusive_scan_by_key_expr_keys_with_policy,
@@ -20,20 +19,9 @@ pub use memory::{
     MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformSoA4Output,
     TransformSoA5Output, TransformSoA6Output, TransformSoA7Output, TransformUnaryOutput,
 };
-pub(super) use ordering::{
-    device_expr_merge_by_key_control_with_policy,
-    device_expr_merge_by_key_values_with_control_with_policy,
-    device_expr_merge_tuple2_by_key_control_with_policy,
-    device_expr_merge_tuple3_by_key_control_with_policy,
-};
+pub(in crate::detail) use ordering::device_expr_merge_by_key_values_with_control_with_policy;
 pub use ordering::{
     merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,
-};
-pub(super) use payload::{
-    ConcatPayloadApply, FillWriteApply, IndexedExprApply, IndexedWriteApply, MaskWriteApply,
-    MaskedIndexedExprApply, MaterializePayloadApply, MaterializeWriteApply, MergePayloadApply,
-    PermutationPayloadApply, QueryApply, RangePayloadApply, SelectedPayloadApply,
-    SplitPayloadApply,
 };
 pub use reduce::{reduce, reduce_by_key};
 pub use scan::{

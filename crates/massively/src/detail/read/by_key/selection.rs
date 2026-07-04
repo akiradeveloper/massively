@@ -70,7 +70,7 @@ where
         let flags = unique_one_flags_read::<KeySource, Eq>(policy, &self)?;
         let control = unique_by_key_control_from_flags(policy, len, flags)?;
         let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&control.selection, control.count);
+            crate::detail::apply::SelectedPayloadApply::new(&control.selection, control.count);
         let out_keys = payload_apply.apply_expr(policy, &self)?;
         Ok((DeviceSoA1 { source: out_keys }, control))
     }
@@ -151,7 +151,7 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple2 {
                     &self.$right,
                 )?;
                 let control = unique_by_key_control_from_flags(policy, len, flags)?;
-                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+                let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
                 );
@@ -222,7 +222,7 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
                     Eq,
                 >(policy, &self.$first, &self.$second, &self.$third)?;
                 let control = unique_by_key_control_from_flags(policy, len, flags)?;
-                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+                let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
                 );
@@ -299,7 +299,7 @@ where
             control.selection.len,
         )?;
         let payload_apply =
-            crate::detail::api::SelectedPayloadApply::new(&control.selection, control.count);
+            crate::detail::apply::SelectedPayloadApply::new(&control.selection, control.count);
         Ok(DeviceSoA1 {
             source: payload_apply.apply_expr(policy, &self)?,
         })
@@ -372,7 +372,7 @@ macro_rules! impl_kernel_unique_by_key_values_tuple2 {
                     <Left as KernelColumn>::len(&self.$left),
                     control.selection.len,
                 )?;
-                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+                let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
                 );
@@ -441,7 +441,7 @@ macro_rules! impl_kernel_unique_by_key_values_tuple3 {
                     <First as KernelColumn>::len(&self.$first),
                     control.selection.len,
                 )?;
-                let payload_apply = crate::detail::api::SelectedPayloadApply::new(
+                let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
                     &control.selection,
                     control.count,
                 );

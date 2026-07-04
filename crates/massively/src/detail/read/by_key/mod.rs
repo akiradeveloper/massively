@@ -5,7 +5,7 @@
 
 mod ordering;
 mod reduce;
-mod scan;
+pub(in crate::detail) mod scan;
 mod selection;
 
 #[allow(unused_imports)]

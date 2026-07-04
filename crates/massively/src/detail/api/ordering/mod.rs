@@ -16,11 +16,11 @@ use cubecl::prelude::*;
 
 const BLOCK_ORDERING_SIZE: u32 = 256;
 
-fn device_expr_merge_with_policy<Left, Right, Less>(
+pub(in crate::detail) fn device_expr_merge_control_with_policy<Left, Right, Less>(
     policy: &CubePolicy<Left::Runtime>,
     left: &Left,
     right: &Right,
-) -> Result<DeviceVec<Left::Runtime, Left::Item>, Error>
+) -> Result<crate::detail::control::MergeControl<Left::Runtime>, Error>
 where
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
@@ -32,85 +32,72 @@ where
     left.validate()?;
     right.validate()?;
     let len = left.len() + right.len();
-    if left.len() == 0 {
-        return super::MaterializePayloadApply::collect_expr(policy, right);
-    }
-    if right.len() == 0 {
-        return super::MaterializePayloadApply::collect_expr(policy, left);
-    }
-
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let client = policy.client();
-    let output_handle = client.empty(len * std::mem::size_of::<Left::Item>());
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
-    let left_len_u32 =
-        u32::try_from(left.len()).map_err(|_| Error::LengthTooLarge { len: left.len() })?;
-    let right_len_u32 =
-        u32::try_from(right.len()).map_err(|_| Error::LengthTooLarge { len: right.len() })?;
-    let left_len_handle = client.create_from_slice(u32::as_bytes(&[left_len_u32]));
-    let right_len_handle = client.create_from_slice(u32::as_bytes(&[right_len_u32]));
-    let left_bindings = left.stage(policy)?;
-    let right_bindings = right.stage(policy)?;
-    let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
-    let right_slot_offsets = right_bindings.slot_offsets_handle(client)?;
-    let left_slot0 = left_bindings.slots.first().unwrap();
-    let left_slot1 = left_bindings.slots.get(1).unwrap_or(left_slot0);
-    let left_slot2 = left_bindings.slots.get(2).unwrap_or(left_slot0);
-    let left_slot3 = left_bindings.slots.get(3).unwrap_or(left_slot0);
-    let right_slot0 = right_bindings.slots.first().unwrap();
-    let right_slot1 = right_bindings.slots.get(1).unwrap_or(right_slot0);
-    let right_slot2 = right_bindings.slots.get(2).unwrap_or(right_slot0);
-    let right_slot3 = right_bindings.slots.get(3).unwrap_or(right_slot0);
+    let source_sides = client.empty(len * std::mem::size_of::<u32>());
+    let source_indices = client.empty(len * std::mem::size_of::<u32>());
 
-    unsafe {
-        merge_path_device_expr_kernel::launch_unchecked::<
-            Left::Item,
-            Left::Expr,
-            Right::Expr,
-            Less,
-            Left::Runtime,
-        >(
-            client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
-            CubeDim::new_1d(BLOCK_ORDERING_SIZE),
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
-            unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
-            unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
-            unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
-            unsafe { BufferArg::from_raw_parts(left_slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(left_len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
-            unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
-            unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
-            unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
-            unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(right_len_handle.clone(), 1) },
-        );
+    if len != 0 {
+        let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        let left_len_u32 =
+            u32::try_from(left.len()).map_err(|_| Error::LengthTooLarge { len: left.len() })?;
+        let right_len_u32 =
+            u32::try_from(right.len()).map_err(|_| Error::LengthTooLarge { len: right.len() })?;
+        let left_len_handle = client.create_from_slice(u32::as_bytes(&[left_len_u32]));
+        let right_len_handle = client.create_from_slice(u32::as_bytes(&[right_len_u32]));
+        let left_bindings = left.stage(policy)?;
+        let right_bindings = right.stage(policy)?;
+        let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
+        let right_slot_offsets = right_bindings.slot_offsets_handle(client)?;
+        let left_slot0 = left_bindings.slots.first().unwrap();
+        let left_slot1 = left_bindings.slots.get(1).unwrap_or(left_slot0);
+        let left_slot2 = left_bindings.slots.get(2).unwrap_or(left_slot0);
+        let left_slot3 = left_bindings.slots.get(3).unwrap_or(left_slot0);
+        let right_slot0 = right_bindings.slots.first().unwrap();
+        let right_slot1 = right_bindings.slots.get(1).unwrap_or(right_slot0);
+        let right_slot2 = right_bindings.slots.get(2).unwrap_or(right_slot0);
+        let right_slot3 = right_bindings.slots.get(3).unwrap_or(right_slot0);
+
+        unsafe {
+            merge_path_control_device_expr_kernel::launch_unchecked::<
+                Left::Item,
+                Left::Expr,
+                Right::Expr,
+                Less,
+                Left::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(left_slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(left_len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
+                unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
+                unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
+                unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
+                unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(right_len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(source_sides.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(source_indices.clone(), len) },
+            );
+        }
     }
 
-    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
-}
-
-struct MergeExprApply;
-
-impl MergeExprApply {
-    fn apply_expr<Left, Right, Less>(
-        policy: &CubePolicy<Left::Runtime>,
-        left: &Left,
-        right: &Right,
-    ) -> Result<DeviceVec<Left::Runtime, Left::Item>, Error>
-    where
-        Left: KernelColumn + KernelColumnAt<S0>,
-        Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
-        Left::Item: CubePrimitive + CubeElement,
-        Left::Expr: DeviceGpuExpr<Left::Item>,
-        Right::Expr: DeviceGpuExpr<Right::Item>,
-        Less: BinaryPredicateOp<Left::Item>,
-    {
-        device_expr_merge_with_policy::<Left, Right, Less>(policy, left, right)
-    }
+    Ok(crate::detail::control::MergeControl {
+        source_side: source_sides,
+        source_index: source_indices,
+        left_len: left.len(),
+        right_len: right.len(),
+        len,
+        len_u32,
+        _runtime: std::marker::PhantomData,
+    })
 }
 
 fn device_expr_membership_compact_with_policy<Candidate, Sorted, Less>(
@@ -189,7 +176,8 @@ where
 
     let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flag_handle)?;
     let count = select::selected_count(policy, &selected_rank)?;
-    super::SelectedPayloadApply::new(&selected_rank, count).apply_expr(policy, candidates)
+    crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count)
+        .apply_expr(policy, candidates)
 }
 
 fn selected_rank_from_flags_with_policy<R>(
@@ -206,7 +194,13 @@ where
     Ok((selected_rank, count))
 }
 
-fn tuple2_membership_expr_flags_with_policy<CandidateA, CandidateB, SortedA, SortedB, Less>(
+pub(in crate::detail) fn tuple2_membership_expr_flags_with_policy<
+    CandidateA,
+    CandidateB,
+    SortedA,
+    SortedB,
+    Less,
+>(
     policy: &CubePolicy<CandidateA::Runtime>,
     candidate_a: &CandidateA,
     candidate_b: &CandidateB,
@@ -319,7 +313,7 @@ where
     Ok(flag)
 }
 
-fn tuple3_membership_expr_flags_with_policy<
+pub(in crate::detail) fn tuple3_membership_expr_flags_with_policy<
     CandidateA,
     CandidateB,
     CandidateC,
@@ -477,7 +471,7 @@ where
     Ok(flag)
 }
 
-fn device_expr_set_difference_with_policy<Left, Right, Less>(
+pub(in crate::detail) fn device_expr_set_difference_with_policy<Left, Right, Less>(
     policy: &CubePolicy<Left::Runtime>,
     left: &Left,
     right: &Right,
@@ -493,7 +487,7 @@ where
     device_expr_membership_compact_with_policy::<Left, Right, Less>(policy, left, right, false)
 }
 
-fn device_expr_set_intersection_with_policy<Left, Right, Less>(
+pub(in crate::detail) fn device_expr_set_intersection_with_policy<Left, Right, Less>(
     policy: &CubePolicy<Left::Runtime>,
     left: &Left,
     right: &Right,
@@ -509,7 +503,7 @@ where
     device_expr_membership_compact_with_policy::<Left, Right, Less>(policy, left, right, true)
 }
 
-fn device_expr_set_union_with_policy<Left, Right, Less>(
+pub(in crate::detail) fn device_expr_set_union_with_policy<Left, Right, Less>(
     policy: &CubePolicy<Left::Runtime>,
     left: &Left,
     right: &Right,
@@ -524,11 +518,11 @@ where
 {
     let right_only =
         device_expr_set_difference_with_policy::<Right, Left, Less>(policy, right, left)?;
-    MergeExprApply::apply_expr::<Left, DeviceVec<Left::Runtime, Left::Item>, Less>(
-        policy,
-        left,
-        &right_only,
-    )
+    crate::detail::apply::MergeExprApply::apply_expr::<
+        Left,
+        DeviceVec<Left::Runtime, Left::Item>,
+        Less,
+    >(policy, left, &right_only)
 }
 
 pub(crate) fn device_expr_merge_by_key_control_with_policy<LeftKey, RightKey, Less>(
@@ -1042,7 +1036,7 @@ where
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&other)?;
         Ok(SoA1 {
-            source: MergeExprApply::apply_expr::<Left, Right, Less>(
+            source: crate::detail::apply::MergeExprApply::apply_expr::<Left, Right, Less>(
                 policy,
                 &self.source,
                 &other.source,
@@ -1059,11 +1053,11 @@ where
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&other)?;
         Ok(SoA1 {
-            source: device_expr_set_union_with_policy::<Left, Right, Less>(
-                policy,
-                &self.source,
-                &other.source,
-            )?,
+            source: crate::detail::apply::SetMembershipControlApply::set_union_expr::<
+                Left,
+                Right,
+                Less,
+            >(policy, &self.source, &other.source)?,
         })
     }
 
@@ -1076,11 +1070,11 @@ where
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&other)?;
         Ok(SoA1 {
-            source: device_expr_set_intersection_with_policy::<Left, Right, Less>(
-                policy,
-                &self.source,
-                &other.source,
-            )?,
+            source: crate::detail::apply::SetMembershipControlApply::set_intersection_expr::<
+                Left,
+                Right,
+                Less,
+            >(policy, &self.source, &other.source)?,
         })
     }
 
@@ -1093,11 +1087,11 @@ where
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&other)?;
         Ok(SoA1 {
-            source: device_expr_set_difference_with_policy::<Left, Right, Less>(
-                policy,
-                &self.source,
-                &other.source,
-            )?,
+            source: crate::detail::apply::SetMembershipControlApply::set_difference_expr::<
+                Left,
+                Right,
+                Less,
+            >(policy, &self.source, &other.source)?,
         })
     }
 }
@@ -1319,7 +1313,7 @@ macro_rules! impl_tuple_pair_ordering {
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let flags = $membership_expr_fn::<
+                let flags = crate::detail::apply::SetMembershipControlApply::$membership_expr_fn::<
                     $right_first_ty,
                     $( $right_rest_ty, )+
                     $first,
@@ -1335,7 +1329,7 @@ macro_rules! impl_tuple_pair_ordering {
                 )?;
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, other.$first_field.len(), flags)?;
-                let selected_apply = super::SelectedPayloadApply::new(&selection, count);
+                let selected_apply = crate::detail::apply::SelectedPayloadApply::new(&selection, count);
                 let ($right_first_var, $( $right_var ),+) =
                     selected_apply.$selected_apply(policy, &other.$first_field, $( &other.$field ),+)?;
                 let (output, _) = $merge_control_fn::<
@@ -1362,7 +1356,7 @@ macro_rules! impl_tuple_pair_ordering {
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let flags = $membership_expr_fn::<
+                let flags = crate::detail::apply::SetMembershipControlApply::$membership_expr_fn::<
                     $first,
                     $( $rest, )+
                     $right_first_ty,
@@ -1378,7 +1372,7 @@ macro_rules! impl_tuple_pair_ordering {
                 )?;
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
-                let selected_apply = super::SelectedPayloadApply::new(&selection, count);
+                let selected_apply = crate::detail::apply::SelectedPayloadApply::new(&selection, count);
                 let ($first_field, $( $field ),+) =
                     selected_apply.$selected_apply(policy, &self.$first_field, $( &self.$field ),+)?;
                 Ok($output { $first_field, $( $field ),+ })
@@ -1392,7 +1386,7 @@ macro_rules! impl_tuple_pair_ordering {
             ) -> Result<Self::Output, Error> {
                 ReadOnlySoA::validate(&self)?;
                 ReadOnlySoA::validate(&other)?;
-                let flags = $membership_expr_fn::<
+                let flags = crate::detail::apply::SetMembershipControlApply::$membership_expr_fn::<
                     $first,
                     $( $rest, )+
                     $right_first_ty,
@@ -1408,7 +1402,7 @@ macro_rules! impl_tuple_pair_ordering {
                 )?;
                 let (selection, count) =
                     selected_rank_from_flags_with_policy(policy, self.$first_field.len(), flags)?;
-                let selected_apply = super::SelectedPayloadApply::new(&selection, count);
+                let selected_apply = crate::detail::apply::SelectedPayloadApply::new(&selection, count);
                 let ($first_field, $( $field ),+) =
                     selected_apply.$selected_apply(policy, &self.$first_field, $( &self.$field ),+)?;
                 Ok($output { $first_field, $( $field ),+ })
