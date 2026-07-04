@@ -18,9 +18,7 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Left as sealed::MIterDispatch<R>>::merge_dispatch(left, exec.policy(), right, less)?;
-    write_owned_output(exec.policy(), owned, out)
+    <Left as sealed::MIterDispatch<R>>::merge_into_dispatch(left, exec.policy(), right, less, out)
 }
 
 /// Merges two sorted key-value ranges by key.
@@ -50,19 +48,16 @@ where
     validate_input(exec, &right_values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    let (keys, values): (
-        <KeyOutput::Item as MAlloc<R>>::Storage,
-        <ValueOutput::Item as MAlloc<R>>::Storage,
-    ) = <LeftKeys as sealed::MIterDispatch<R>>::merge_by_key_dispatch(
+    <LeftKeys as sealed::MIterDispatch<R>>::merge_by_key_into_dispatch(
         left_keys,
         exec.policy(),
         right_keys,
         left_values,
         right_values,
         less,
-    )?;
-    write_owned_output(exec.policy(), keys, out_k)?;
-    write_owned_output(exec.policy(), values, out_v)
+        out_k,
+        out_v,
+    )
 }
 
 /// Reverses a massively iterator.
@@ -78,9 +73,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::reverse_dispatch(source, exec.policy())?;
-    write_owned_output(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::reverse_into_dispatch(source, exec.policy(), out)
 }
 
 /// Sorts a massively iterator.
@@ -98,9 +91,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::sort_dispatch(source, exec.policy(), less)?;
-    write_owned_output(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::sort_into_dispatch(source, exec.policy(), less, out)
 }
 
 /// Sorts key-value pairs by key.
@@ -124,17 +115,14 @@ where
     validate_input(exec, &values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    let (sorted_keys, sorted_values): (
-        <KeyOutput::Item as MAlloc<R>>::Storage,
-        <ValueOutput::Item as MAlloc<R>>::Storage,
-    ) = <Keys as sealed::MIterDispatch<R>>::sort_by_key_dispatch(
+    <Keys as sealed::MIterDispatch<R>>::sort_by_key_into_dispatch(
         keys,
         exec.policy(),
         values,
         less,
-    )?;
-    write_owned_output(exec.policy(), sorted_keys, out_k)?;
-    write_owned_output(exec.policy(), sorted_values, out_v)
+        out_k,
+        out_v,
+    )
 }
 
 /// Stable sort. The current lower implementation is stable.

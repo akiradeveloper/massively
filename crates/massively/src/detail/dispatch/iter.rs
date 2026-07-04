@@ -102,6 +102,25 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("sort_by_key")
     }
 
+    fn sort_by_single_key_into_dispatch<K, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        keys: crate::detail::device::DeviceColumnView<R, K>,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K,)>,
+        KeyOutput: MIterMut<R, Item = (K,)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, keys, less, key_output, value_output);
+        unsupported("sort_by_key")
+    }
+
     fn sort_by_three_key_dispatch<K1, K2, K3, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -123,6 +142,37 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("sort_by_key")
     }
 
+    fn sort_by_three_key_into_dispatch<K1, K2, K3, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        K3: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+        KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            first_key,
+            second_key,
+            third_key,
+            less,
+            key_output,
+            value_output,
+        );
+        unsupported("sort_by_key")
+    }
+
     fn sort_by_two_key_dispatch<K1, K2, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -139,6 +189,34 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, less);
+        unsupported("sort_by_key")
+    }
+
+    fn sort_by_two_key_into_dispatch<K1, K2, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K1, K2)>,
+        KeyOutput: MIterMut<R, Item = (K1, K2)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            first_key,
+            second_key,
+            less,
+            key_output,
+            value_output,
+        );
         unsupported("sort_by_key")
     }
 
@@ -175,6 +253,25 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, _eq);
+        unsupported("unique_by_key")
+    }
+
+    fn unique_by_single_key_into_dispatch<K, Eq, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        keys: crate::detail::device::DeviceColumnView<R, K>,
+        eq: Eq,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        K: Scalar + 'static,
+        Eq: op::BinaryPredicateOp<R, (K,)>,
+        KeyOutput: MIterMut<R, Item = (K,)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, keys, eq, key_output, value_output);
         unsupported("unique_by_key")
     }
 
@@ -218,6 +315,37 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("unique_by_key")
     }
 
+    fn unique_by_three_key_into_dispatch<K1, K2, K3, Eq, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        eq: Eq,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        K3: Scalar + 'static,
+        Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+        KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            first_key,
+            second_key,
+            third_key,
+            eq,
+            key_output,
+            value_output,
+        );
+        unsupported("unique_by_key")
+    }
+
     fn unique_by_two_key_dispatch<K1, K2, Eq, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -237,6 +365,27 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("unique_by_key")
     }
 
+    fn unique_by_two_key_into_dispatch<K1, K2, Eq, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        eq: Eq,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        Eq: op::BinaryPredicateOp<R, (K1, K2)>,
+        KeyOutput: MIterMut<R, Item = (K1, K2)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, first_key, second_key, eq, key_output, value_output);
+        unsupported("unique_by_key")
+    }
+
     fn inclusive_scan_by_single_key_dispatch<K, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -252,6 +401,25 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, key_eq, op);
+        unsupported("inclusive_scan_by_key")
+    }
+
+    fn inclusive_scan_by_single_key_into_dispatch<K, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        keys: crate::detail::device::DeviceColumnView<R, K>,
+        key_eq: KeyEq,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K,)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, keys, key_eq, op, output);
         unsupported("inclusive_scan_by_key")
     }
 
@@ -277,6 +445,29 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("inclusive_scan_by_key")
     }
 
+    fn inclusive_scan_by_three_key_into_dispatch<K1, K2, K3, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        key_eq: KeyEq,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        K3: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, first_key, second_key, third_key, key_eq, op, output);
+        unsupported("inclusive_scan_by_key")
+    }
+
     fn inclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -294,6 +485,27 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, key_eq, op);
+        unsupported("inclusive_scan_by_key")
+    }
+
+    fn inclusive_scan_by_two_key_into_dispatch<K1, K2, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        key_eq: KeyEq,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, first_key, second_key, key_eq, op, output);
         unsupported("inclusive_scan_by_key")
     }
 
@@ -337,6 +549,26 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("exclusive_scan_by_key")
     }
 
+    fn exclusive_scan_by_single_key_into_dispatch<K, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        keys: crate::detail::device::DeviceColumnView<R, K>,
+        key_eq: KeyEq,
+        init: <Self as MIter<R>>::Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K,)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, keys, key_eq, init, op, output);
+        unsupported("exclusive_scan_by_key")
+    }
+
     fn exclusive_scan_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -360,6 +592,32 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("exclusive_scan_by_key")
     }
 
+    fn exclusive_scan_by_three_key_into_dispatch<K1, K2, K3, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        key_eq: KeyEq,
+        init: <Self as MIter<R>>::Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        K3: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy, first_key, second_key, third_key, key_eq, init, op, output,
+        );
+        unsupported("exclusive_scan_by_key")
+    }
+
     fn exclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -378,6 +636,28 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, key_eq, init, op);
+        unsupported("exclusive_scan_by_key")
+    }
+
+    fn exclusive_scan_by_two_key_into_dispatch<K1, K2, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        key_eq: KeyEq,
+        init: <Self as MIter<R>>::Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, first_key, second_key, key_eq, init, op, output);
         unsupported("exclusive_scan_by_key")
     }
 
@@ -423,6 +703,28 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("reduce_by_key")
     }
 
+    fn reduce_by_single_key_into_dispatch<K, KeyEq, Op, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        keys: crate::detail::device::DeviceColumnView<R, K>,
+        key_eq: KeyEq,
+        init: <Self as MIter<R>>::Item,
+        op: Op,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        K: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K,)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = (K,)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (policy, keys, key_eq, init, op, key_output, value_output);
+        unsupported("reduce_by_key")
+    }
+
     fn reduce_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -447,6 +749,42 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("reduce_by_key")
     }
 
+    fn reduce_by_three_key_into_dispatch<K1, K2, K3, KeyEq, Op, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        key_eq: KeyEq,
+        init: <Self as MIter<R>>::Item,
+        op: Op,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        K3: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            first_key,
+            second_key,
+            third_key,
+            key_eq,
+            init,
+            op,
+            key_output,
+            value_output,
+        );
+        unsupported("reduce_by_key")
+    }
+
     fn reduce_by_two_key_dispatch<K1, K2, KeyEq, Op, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -466,6 +804,39 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, key_eq, init, op);
+        unsupported("reduce_by_key")
+    }
+
+    fn reduce_by_two_key_into_dispatch<K1, K2, KeyEq, Op, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        key_eq: KeyEq,
+        init: <Self as MIter<R>>::Item,
+        op: Op,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = (K1, K2)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            first_key,
+            second_key,
+            key_eq,
+            init,
+            op,
+            key_output,
+            value_output,
+        );
         unsupported("reduce_by_key")
     }
 
@@ -513,6 +884,36 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         })
     }
 
+    fn merge_by_single_key_same_into_dispatch<K, RightValues, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        left_keys: crate::detail::device::DeviceColumnView<R, K>,
+        right_keys: crate::detail::device::DeviceColumnView<R, K>,
+        right_values: RightValues,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+        K: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K,)>,
+        KeyOutput: MIterMut<R, Item = (K,)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            left_keys,
+            right_keys,
+            right_values,
+            less,
+            key_output,
+            value_output,
+        );
+        unsupported("merge_by_key")
+    }
+
     fn merge_by_three_key_same_dispatch<K1, K2, K3, RightValues, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -549,6 +950,54 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         unsupported("merge_by_key")
     }
 
+    fn merge_by_three_key_same_into_dispatch<
+        K1,
+        K2,
+        K3,
+        RightValues,
+        Less,
+        KeyOutput,
+        ValueOutput,
+    >(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        left_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        left_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        left_third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        right_third_key: crate::detail::device::DeviceColumnView<R, K3>,
+        right_values: RightValues,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        K3: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
+        KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            left_first_key,
+            left_second_key,
+            left_third_key,
+            right_first_key,
+            right_second_key,
+            right_third_key,
+            right_values,
+            less,
+            key_output,
+            value_output,
+        );
+        unsupported("merge_by_key")
+    }
+
     fn merge_by_two_key_same_dispatch<K1, K2, RightValues, Less, KeyOutput, ValueOutput>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -576,6 +1025,41 @@ pub trait MIterDispatch<R: Runtime>: Sized {
             right_second_key,
             right_values,
             less,
+        );
+        unsupported("merge_by_key")
+    }
+
+    fn merge_by_two_key_same_into_dispatch<K1, K2, RightValues, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        left_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        left_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        right_first_key: crate::detail::device::DeviceColumnView<R, K1>,
+        right_second_key: crate::detail::device::DeviceColumnView<R, K2>,
+        right_values: RightValues,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
+        K1: Scalar + 'static,
+        K2: Scalar + 'static,
+        Less: op::BinaryPredicateOp<R, (K1, K2)>,
+        KeyOutput: MIterMut<R, Item = (K1, K2)>,
+        ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            left_first_key,
+            left_second_key,
+            right_first_key,
+            right_second_key,
+            right_values,
+            less,
+            key_output,
+            value_output,
         );
         unsupported("merge_by_key")
     }
@@ -1298,5 +1782,334 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Err(Error::Launch {
             message: "merge_by_key is not supported for this key iterator shape".to_string(),
         })
+    }
+
+    fn reverse_into_dispatch<Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("reverse")
+    }
+
+    fn sort_into_dispatch<Less, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _less: Less,
+        _output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("sort")
+    }
+
+    fn merge_into_dispatch<Right, Output, Less>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _right: Right,
+        _less: Less,
+        _output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        unsupported("merge")
+    }
+
+    fn set_union_into_dispatch<Right, Output, Less>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _right: Right,
+        _less: Less,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        unsupported("set_union")
+    }
+
+    fn set_intersection_into_dispatch<Right, Output, Less>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _right: Right,
+        _less: Less,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        unsupported("set_intersection")
+    }
+
+    fn set_difference_into_dispatch<Right, Output, Less>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _right: Right,
+        _less: Less,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Right: MIter<R, Item = <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        unsupported("set_difference")
+    }
+
+    fn inclusive_scan_into_dispatch<Op, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _op: Op,
+        _output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("inclusive_scan")
+    }
+
+    fn exclusive_scan_into_dispatch<Op, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _init: <Self as MIter<R>>::Item,
+        _op: Op,
+        _output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("exclusive_scan")
+    }
+
+    fn exclusive_scan_by_key_into_dispatch<Values, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        values: Values,
+        key_eq: KeyEq,
+        init: <Values as MIter<R>>::Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Values: MIter<R>,
+        KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Values as MIter<R>>::Item>,
+    {
+        let _ = (policy, values, key_eq, init, op, output);
+        unsupported("exclusive_scan_by_key")
+    }
+
+    fn adjacent_difference_into_dispatch<Op, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _op: Op,
+        _output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("adjacent_difference")
+    }
+
+    fn inclusive_scan_by_key_into_dispatch<Values, KeyEq, Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        values: Values,
+        key_eq: KeyEq,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Values: MIter<R>,
+        KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Values as MIter<R>>::Item>,
+    {
+        let _ = (policy, values, key_eq, op, output);
+        unsupported("inclusive_scan_by_key")
+    }
+
+    fn copy_where_into_dispatch<Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _stencil: crate::detail::api::PrecomputedSelection<R>,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("copy_where")
+    }
+
+    fn remove_where_into_dispatch<Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _stencil: crate::detail::api::PrecomputedSelection<R>,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("remove_where")
+    }
+
+    fn partition_into_dispatch<Pred, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        _env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("partition")
+    }
+
+    fn unique_into_dispatch<Pred, Output>(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        _output: Output,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+    {
+        unsupported("unique")
+    }
+
+    fn reduce_by_key_into_dispatch<Values, KeyEq, Op, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        values: Values,
+        key_eq: KeyEq,
+        init: <Values as MIter<R>>::Item,
+        op: Op,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Values: MIter<R>,
+        <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
+        KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: MIterMut<R, Item = <Values as MIter<R>>::Item>,
+    {
+        let _ = (policy, values, key_eq, init, op, key_output, value_output);
+        unsupported("reduce_by_key")
+    }
+
+    fn unique_by_key_into_dispatch<Values, Eq, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        values: Values,
+        eq: Eq,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<MIndex, Error>
+    where
+        Self: MIter<R>,
+        Values: MIter<R>,
+        <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
+        Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: MIterMut<R, Item = <Values as MIter<R>>::Item>,
+    {
+        let _ = (policy, values, eq, key_output, value_output);
+        unsupported("unique_by_key")
+    }
+
+    fn sort_by_key_into_dispatch<Values, Less, KeyOutput, ValueOutput>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        values: Values,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        Values: MIter<R>,
+        <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: MIterMut<R, Item = <Values as MIter<R>>::Item>,
+    {
+        let _ = (policy, values, less, key_output, value_output);
+        unsupported("sort_by_key")
+    }
+
+    fn merge_by_key_into_dispatch<
+        RightKeys,
+        LeftValues,
+        RightValues,
+        Less,
+        KeyOutput,
+        ValueOutput,
+    >(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        right_keys: RightKeys,
+        left_values: LeftValues,
+        right_values: RightValues,
+        less: Less,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<(), Error>
+    where
+        Self: MIter<R>,
+        RightKeys: MIter<R, Item = <Self as MIter<R>>::Item>,
+        LeftValues: MIter<R>,
+        RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item>,
+        <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+        KeyOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: MIterMut<R, Item = <LeftValues as MIter<R>>::Item>,
+    {
+        let _ = (
+            policy,
+            right_keys,
+            left_values,
+            right_values,
+            less,
+            key_output,
+            value_output,
+        );
+        unsupported("merge_by_key")
     }
 }

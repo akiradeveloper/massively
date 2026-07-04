@@ -18,14 +18,13 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Left as sealed::MIterDispatch<R>>::set_difference_dispatch(
-            left,
-            exec.policy(),
-            right,
-            less,
-        )?;
-    write_owned_prefix(exec.policy(), owned, out)
+    <Left as sealed::MIterDispatch<R>>::set_difference_into_dispatch(
+        left,
+        exec.policy(),
+        right,
+        less,
+        out,
+    )
 }
 
 /// Computes the sorted set intersection of two sorted inputs.
@@ -46,14 +45,13 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Left as sealed::MIterDispatch<R>>::set_intersection_dispatch(
-            left,
-            exec.policy(),
-            right,
-            less,
-        )?;
-    write_owned_prefix(exec.policy(), owned, out)
+    <Left as sealed::MIterDispatch<R>>::set_intersection_into_dispatch(
+        left,
+        exec.policy(),
+        right,
+        less,
+        out,
+    )
 }
 
 /// Computes the sorted set union of two sorted inputs.
@@ -74,7 +72,11 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Left as sealed::MIterDispatch<R>>::set_union_dispatch(left, exec.policy(), right, less)?;
-    write_owned_prefix(exec.policy(), owned, out)
+    <Left as sealed::MIterDispatch<R>>::set_union_into_dispatch(
+        left,
+        exec.policy(),
+        right,
+        less,
+        out,
+    )
 }

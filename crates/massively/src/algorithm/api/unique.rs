@@ -15,9 +15,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    let owned: <Output::Item as MAlloc<R>>::Storage =
-        <Input as sealed::MIterDispatch<R>>::unique_dispatch(source, exec.policy(), pred)?;
-    write_owned_prefix(exec.policy(), owned, out)
+    <Input as sealed::MIterDispatch<R>>::unique_into_dispatch(source, exec.policy(), pred, out)
 }
 
 /// Removes consecutive duplicate keys and keeps their values.
@@ -41,17 +39,12 @@ where
     validate_input(exec, &values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    let (unique_keys, unique_values): (
-        <KeyOutput::Item as MAlloc<R>>::Storage,
-        <ValueOutput::Item as MAlloc<R>>::Storage,
-    ) = <Keys as sealed::MIterDispatch<R>>::unique_by_key_dispatch(
+    <Keys as sealed::MIterDispatch<R>>::unique_by_key_into_dispatch(
         keys,
         exec.policy(),
         values,
         eq,
-    )?;
-    let len = unique_keys.len();
-    out_k.write_prefix_from_inner(exec.policy(), unique_keys.into_inner())?;
-    out_v.write_prefix_from_inner(exec.policy(), unique_values.into_inner())?;
-    Ok(len)
+        out_k,
+        out_v,
+    )
 }
