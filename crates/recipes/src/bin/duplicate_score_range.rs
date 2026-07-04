@@ -24,17 +24,21 @@ where
     B: cubecl::prelude::Runtime,
 {
     let query = exec.to_device(&[target])?;
-    let lower = lower_bound(
+    let lower = exec.constant(1, 0_u32)?;
+    lower_bound(
         exec,
         SoA1(score.slice(..)),
         SoA1(query.slice(..)),
         common::LessU32,
+        lower.slice_mut(..),
     )?;
-    let upper = upper_bound(
+    let upper = exec.constant(1, 0_u32)?;
+    upper_bound(
         exec,
         SoA1(score.slice(..)),
         SoA1(query.slice(..)),
         common::LessU32,
+        upper.slice_mut(..),
     )?;
     let lower = exec.to_host(&lower)?;
     let upper = exec.to_host(&upper)?;

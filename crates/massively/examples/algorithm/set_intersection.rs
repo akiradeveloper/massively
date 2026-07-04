@@ -9,13 +9,18 @@ fn main() -> common::Result {
     let left = exec.to_device(&[1.0_f32, 2.0, 4.0])?;
     let right = exec.to_device(&[2.0_f32, 3.0])?;
 
-    let SoA1(output) = set_intersection(
+    let output = exec.to_device(&[0.0_f32; 2])?;
+    let len = set_intersection(
         &exec,
         SoA1(left.slice(..)),
         SoA1(right.slice(..)),
         common::LessF32,
+        SoA1(output.slice_mut(..)),
     )?;
 
-    println!("set intersection: {:?}", exec.to_host(&output)?);
+    println!(
+        "set intersection: {:?}",
+        exec.to_host(&output.slice(..len))?
+    );
     Ok(())
 }

@@ -8,7 +8,7 @@ use crate::Error;
 use crate::detail::dispatch;
 use crate::index::MIndex;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
-use crate::value::MItem;
+use crate::value::{MAlloc, MItem};
 
 /// Single-column structure-of-arrays container.
 #[derive(Clone, Copy, Debug)]
@@ -82,6 +82,113 @@ impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for SoA7<A, B, C, D, E, F,
     }
 }
 
+/// Device-backed value that can produce a read-only slice view.
+pub trait ToSlice {
+    type Slice<'a>
+    where
+        Self: 'a;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
+}
+
+/// Device-backed value that can produce a mutable slice view.
+pub trait ToSliceMut {
+    type SliceMut<'a>
+    where
+        Self: 'a;
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
+}
+
+impl<R, T> ToSlice for DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type Slice<'a>
+        = DeviceSlice<'a, R, T>
+    where
+        Self: 'a;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>,
+    {
+        DeviceVec::slice(self, range)
+    }
+}
+
+impl<R, T> ToSliceMut for DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type SliceMut<'a>
+        = DeviceSliceMut<'a, R, T>
+    where
+        Self: 'a;
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    where
+        Bounds: RangeBounds<MIndex>,
+    {
+        DeviceVec::slice_mut(self, range)
+    }
+}
+
+impl<'a, R, T> ToSlice for DeviceSlice<'a, R, T>
+where
+    R: Runtime,
+{
+    type Slice<'b>
+        = DeviceSlice<'b, R, T>
+    where
+        Self: 'b;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>,
+    {
+        DeviceSlice::slice(self, range)
+    }
+}
+
+impl<'a, R, T> ToSlice for DeviceSliceMut<'a, R, T>
+where
+    R: Runtime,
+{
+    type Slice<'b>
+        = DeviceSlice<'b, R, T>
+    where
+        Self: 'b;
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>,
+    {
+        DeviceSliceMut::slice(self, range)
+    }
+}
+
+impl<'a, R, T> ToSliceMut for DeviceSliceMut<'a, R, T>
+where
+    R: Runtime,
+{
+    type SliceMut<'b>
+        = DeviceSliceMut<'b, R, T>
+    where
+        Self: 'b;
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    where
+        Bounds: RangeBounds<MIndex>,
+    {
+        DeviceSliceMut::slice_mut(self, range)
+    }
+}
+
 pub(crate) fn normalize_soa_range<Bounds>(len: MIndex, range: Bounds) -> Range<MIndex>
 where
     Bounds: RangeBounds<MIndex>,
@@ -132,6 +239,40 @@ macro_rules! impl_soa_slice_api {
             }
         }
 
+        impl<R, $( $ty ),+> ToSlice for $name<$( DeviceVec<R, $ty> ),+>
+        where
+            R: Runtime,
+        {
+            type Slice<'a>
+                = $name<$( DeviceSlice<'a, R, $ty> ),+>
+            where
+                Self: 'a;
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                <$name<$( DeviceVec<R, $ty> ),+>>::slice(self, range)
+            }
+        }
+
+        impl<R, $( $ty ),+> ToSliceMut for $name<$( DeviceVec<R, $ty> ),+>
+        where
+            R: Runtime,
+        {
+            type SliceMut<'a>
+                = $name<$( DeviceSliceMut<'a, R, $ty> ),+>
+            where
+                Self: 'a;
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                <$name<$( DeviceVec<R, $ty> ),+>>::slice_mut(self, range)
+            }
+        }
+
         impl<'a, R, $( $ty ),+> $name<$( DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
@@ -143,6 +284,23 @@ macro_rules! impl_soa_slice_api {
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
+            }
+        }
+
+        impl<'a, R, $( $ty ),+> ToSlice for $name<$( DeviceSlice<'a, R, $ty> ),+>
+        where
+            R: Runtime,
+        {
+            type Slice<'b>
+                = $name<$( DeviceSlice<'b, R, $ty> ),+>
+            where
+                Self: 'b;
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                <$name<$( DeviceSlice<'a, R, $ty> ),+>>::slice(self, range)
             }
         }
 
@@ -166,6 +324,40 @@ macro_rules! impl_soa_slice_api {
             {
                 let range = normalize_soa_range(self.0.len(), range);
                 $name($( self.$idx.slice_mut(range.clone()) ),+)
+            }
+        }
+
+        impl<'a, R, $( $ty ),+> ToSlice for $name<$( DeviceSliceMut<'a, R, $ty> ),+>
+        where
+            R: Runtime,
+        {
+            type Slice<'b>
+                = $name<$( DeviceSlice<'b, R, $ty> ),+>
+            where
+                Self: 'b;
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                <$name<$( DeviceSliceMut<'a, R, $ty> ),+>>::slice(self, range)
+            }
+        }
+
+        impl<'a, R, $( $ty ),+> ToSliceMut for $name<$( DeviceSliceMut<'a, R, $ty> ),+>
+        where
+            R: Runtime,
+        {
+            type SliceMut<'b>
+                = $name<$( DeviceSliceMut<'b, R, $ty> ),+>
+            where
+                Self: 'b;
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                <$name<$( DeviceSliceMut<'a, R, $ty> ),+>>::slice_mut(self, range)
             }
         }
 
@@ -225,7 +417,9 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
     fn into_view_with_policy(
         self,
         policy: &crate::detail::CubePolicy<R>,
-    ) -> Result<<Self::Item as MItem<R>>::View, Error>;
+    ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
+    where
+        Self::Item: MAlloc<R>;
 
     /// Returns the logical length.
     fn len(&self) -> MIndex;
@@ -238,7 +432,7 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
 
 /// Mutable massively iterator used as an explicit algorithm output.
 pub trait MIterMut<R: Runtime>: dispatch::MIterMutDispatch<R> + Sized {
-    type Item: MItem<R>;
+    type Item: MAlloc<R>;
 
     #[doc(hidden)]
     type Inner;
@@ -250,14 +444,29 @@ pub trait MIterMut<R: Runtime>: dispatch::MIterMutDispatch<R> + Sized {
     fn write_from_inner(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        inner: <Self::Item as MItem<R>>::Inner,
+        inner: <Self::Item as MAlloc<R>>::Inner,
+    ) -> Result<(), Error>;
+
+    #[doc(hidden)]
+    fn write_prefix_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: <Self::Item as MAlloc<R>>::Inner,
+    ) -> Result<(), Error>;
+
+    #[doc(hidden)]
+    fn write_split_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        selected: <Self::Item as MAlloc<R>>::Inner,
+        rejected: <Self::Item as MAlloc<R>>::Inner,
     ) -> Result<(), Error>;
 
     #[doc(hidden)]
     fn write_where_from_inner(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        inner: <Self::Item as MItem<R>>::Inner,
+        inner: <Self::Item as MAlloc<R>>::Inner,
         stencil: crate::detail::api::PrecomputedSelection<R>,
     ) -> Result<(), Error>;
 

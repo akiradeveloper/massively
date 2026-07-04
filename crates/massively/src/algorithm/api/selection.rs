@@ -1,35 +1,45 @@
 use super::*;
 
 /// Copies elements whose `u32` stencil flag is non-zero.
-pub fn copy_where<R, Input>(
+pub fn copy_where<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
     stencil: DeviceSlice<'_, R, u32>,
-) -> Result<<Input::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
 {
     validate_input(exec, &source)?;
     validate_device_slice(exec, &stencil)?;
+    validate_output(exec, &out)?;
     let stencil = u32_stencil(exec.policy(), stencil, false)?;
-    <Input as sealed::MIterDispatch<R>>::copy_where_dispatch(source, exec.policy(), stencil)
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Input as sealed::MIterDispatch<R>>::copy_where_dispatch(source, exec.policy(), stencil)?;
+    write_owned_prefix(exec.policy(), owned, out)
 }
 
 /// Removes elements whose `u32` stencil flag is non-zero.
-pub fn remove_where<R, Input>(
+pub fn remove_where<R, Input, Output>(
     exec: &Executor<R>,
     source: Input,
     stencil: DeviceSlice<'_, R, u32>,
-) -> Result<<Input::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
 {
     validate_input(exec, &source)?;
     validate_device_slice(exec, &stencil)?;
+    validate_output(exec, &out)?;
     let stencil = u32_stencil(exec.policy(), stencil, true)?;
-    <Input as sealed::MIterDispatch<R>>::remove_where_dispatch(source, exec.policy(), stencil)
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Input as sealed::MIterDispatch<R>>::remove_where_dispatch(source, exec.policy(), stencil)?;
+    write_owned_prefix(exec.policy(), owned, out)
 }
 
 /// Replaces elements whose `u32` stencil flag is non-zero.

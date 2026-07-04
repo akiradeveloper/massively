@@ -47,8 +47,8 @@ fn executor_alloc_allocates_owned_soa_from_mitem() {
     let pair: massively::SoA2<massively::DeviceVec<_, f32>, massively::DeviceVec<_, u32>> =
         exec.alloc::<(f32, u32)>(3).unwrap();
 
-    assert_eq!(massively::MVec::len(&single), 4);
-    assert_eq!(massively::MVec::len(&pair), 3);
+    assert_eq!(single.0.len(), 4);
+    assert_eq!(pair.0.len(), 3);
 }
 
 fn scatter_into_allocated<R, Input>(
@@ -56,13 +56,17 @@ fn scatter_into_allocated<R, Input>(
     source: Input,
     indices: massively::DeviceSlice<'_, R, massively::MIndex>,
     len: massively::MIndex,
-) -> Result<<Input::Item as massively::MItem<R>>::Vec, massively::Error>
+) -> Result<<Input::Item as massively::MAlloc<R>>::Storage, massively::Error>
 where
     R: Runtime,
     Input: massively::MIter<R>,
+    Input::Item: massively::MAlloc<R>,
+    <Input::Item as massively::MAlloc<R>>::Storage: massively::ToSliceMut,
+    for<'a> <<Input::Item as massively::MAlloc<R>>::Storage as massively::ToSliceMut>::SliceMut<'a>:
+        massively::MIterMut<R, Item = Input::Item>,
 {
     let out = exec.alloc::<Input::Item>(len)?;
-    scatter(exec, source, indices, massively::MVec::slice_mut(&out, ..))?;
+    scatter(exec, source, indices, out.slice_mut(..))?;
     Ok(out)
 }
 
@@ -223,8 +227,14 @@ fn inclusive_scan_accepts_device_slice() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
 
-    let massively::SoA1(output) =
-        inclusive_scan(&exec, massively::SoA1(input.slice(1..4)), TupleSum).unwrap();
+    let output = exec.to_device(&[0.0_f32; 3]).unwrap();
+    inclusive_scan(
+        &exec,
+        massively::SoA1(input.slice(1..4)),
+        TupleSum,
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 5.0, 9.0]);
 }
@@ -273,11 +283,17 @@ fn reverse_accepts_multi_column_device_slices() {
     let values = exec.to_device(&[0.0_f32, 1.0, 2.0, 3.0, 99.0]).unwrap();
     let tags = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
 
-    let massively::SoA2(values, tags) =
-        reverse(&exec, massively::SoA2(values.slice(1..4), tags.slice(1..4))).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    reverse(
+        &exec,
+        massively::SoA2(values.slice(1..4), tags.slice(1..4)),
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
+    )
+    .unwrap();
 
-    assert_eq!(exec.to_host(&values).unwrap(), vec![3.0, 2.0, 1.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![30, 20, 10]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![3.0, 2.0, 1.0]);
+    assert_eq!(exec.to_host(&out_tags).unwrap(), vec![30, 20, 10]);
 }
 
 #[test]
@@ -286,15 +302,18 @@ fn sort_accepts_multi_column_device_slices() {
     let values = exec.to_device(&[99.0_f32, 2.0, 1.0, 2.0, 88.0]).unwrap();
     let tags = exec.to_device(&[99_u32, 20, 30, 10, 88]).unwrap();
 
-    let massively::SoA2(values, tags) = sort(
+    let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    sort(
         &exec,
         massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         MixedTupleLess,
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 2.0, 2.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![30, 10, 20]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![1.0, 2.0, 2.0]);
+    assert_eq!(exec.to_host(&out_tags).unwrap(), vec![30, 10, 20]);
 }
 
 #[test]
@@ -304,9 +323,16 @@ fn sort_accepts_offset_device_slice() {
         .to_device(&[999.0_f32, 4.0, 1.0, 3.0, 2.0, 888.0])
         .unwrap();
 
-    let massively::SoA1(values) = sort(&exec, massively::SoA1(values.slice(1..5)), Less).unwrap();
+    let output = exec.to_device(&[0.0_f32; 4]).unwrap();
+    sort(
+        &exec,
+        massively::SoA1(values.slice(1..5)),
+        Less,
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
-    assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
 }
 
 #[test]
@@ -370,11 +396,13 @@ fn merge_accepts_device_slices() {
     let left = exec.to_device(&[0_u32, 1, 3, 99]).unwrap();
     let right = exec.to_device(&[2_u32, 4, 88]).unwrap();
 
-    let massively::SoA1(output) = merge(
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+    merge(
         &exec,
         massively::SoA1(left.slice(1..3)),
         massively::SoA1(right.slice(..2)),
         LessU32,
+        massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -391,19 +419,27 @@ fn merge_by_key_accepts_offset_device_slices_with_tuple_values() {
     let right_a = exec.to_device(&[777.0_f32, 200.0, 400.0, 666.0]).unwrap();
     let right_b = exec.to_device(&[777_u32, 20, 40, 666]).unwrap();
 
-    let (massively::SoA1(keys), massively::SoA2(a, b)) = merge_by_key(
+    let out_keys = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 4]).unwrap();
+    merge_by_key(
         &exec,
         massively::SoA1(left_keys.slice(1..3)),
         massively::SoA2(left_a.slice(1..3), left_b.slice(1..3)),
         massively::SoA1(right_keys.slice(1..3)),
         massively::SoA2(right_a.slice(1..3), right_b.slice(1..3)),
         LessU32,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2, 3, 4]);
-    assert_eq!(exec.to_host(&a).unwrap(), vec![100.0, 200.0, 300.0, 400.0]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 20, 30, 40]);
+    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 3, 4]);
+    assert_eq!(
+        exec.to_host(&out_a).unwrap(),
+        vec![100.0, 200.0, 300.0, 400.0]
+    );
+    assert_eq!(exec.to_host(&out_b).unwrap(), vec![10, 20, 30, 40]);
 }
 
 #[test]
@@ -416,37 +452,63 @@ fn tuple_set_algorithms_accept_offset_device_slices() {
     let right_a = exec.to_device(&[77.0_f32, 2.0, 3.0, 4.0, 66.0]).unwrap();
     let right_b = exec.to_device(&[77_u32, 20, 30, 40, 66]).unwrap();
 
-    let massively::SoA2(union_a, union_b) = set_union(
+    let union_a = exec.to_device(&[0.0_f32; 7]).unwrap();
+    let union_b = exec.to_device(&[0_u32; 7]).unwrap();
+    let union_len = set_union(
         &exec,
         massively::SoA2(left_a.slice(1..5), left_b.slice(1..5)),
         massively::SoA2(right_a.slice(1..4), right_b.slice(1..4)),
         MixedTupleLess,
+        massively::SoA2(union_a.slice_mut(..), union_b.slice_mut(..)),
     )
     .unwrap();
-    let massively::SoA2(intersection_a, intersection_b) = set_intersection(
+    let intersection_a = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let intersection_b = exec.to_device(&[0_u32; 4]).unwrap();
+    let intersection_len = set_intersection(
         &exec,
         massively::SoA2(left_a.slice(1..5), left_b.slice(1..5)),
         massively::SoA2(right_a.slice(1..4), right_b.slice(1..4)),
         MixedTupleLess,
+        massively::SoA2(intersection_a.slice_mut(..), intersection_b.slice_mut(..)),
     )
     .unwrap();
-    let massively::SoA2(difference_a, difference_b) = set_difference(
+    let difference_a = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let difference_b = exec.to_device(&[0_u32; 4]).unwrap();
+    let difference_len = set_difference(
         &exec,
         massively::SoA2(left_a.slice(1..5), left_b.slice(1..5)),
         massively::SoA2(right_a.slice(1..4), right_b.slice(1..4)),
         MixedTupleLess,
+        massively::SoA2(difference_a.slice_mut(..), difference_b.slice_mut(..)),
     )
     .unwrap();
 
     assert_eq!(
-        exec.to_host(&union_a).unwrap(),
+        exec.to_host(&union_a.slice(..union_len)).unwrap(),
         vec![1.0, 2.0, 2.0, 3.0, 4.0]
     );
-    assert_eq!(exec.to_host(&union_b).unwrap(), vec![10, 20, 21, 30, 40]);
-    assert_eq!(exec.to_host(&intersection_a).unwrap(), vec![2.0, 4.0]);
-    assert_eq!(exec.to_host(&intersection_b).unwrap(), vec![20, 40]);
-    assert_eq!(exec.to_host(&difference_a).unwrap(), vec![1.0, 2.0]);
-    assert_eq!(exec.to_host(&difference_b).unwrap(), vec![10, 21]);
+    assert_eq!(
+        exec.to_host(&union_b.slice(..union_len)).unwrap(),
+        vec![10, 20, 21, 30, 40]
+    );
+    assert_eq!(
+        exec.to_host(&intersection_a.slice(..intersection_len))
+            .unwrap(),
+        vec![2.0, 4.0]
+    );
+    assert_eq!(
+        exec.to_host(&intersection_b.slice(..intersection_len))
+            .unwrap(),
+        vec![20, 40]
+    );
+    assert_eq!(
+        exec.to_host(&difference_a.slice(..difference_len)).unwrap(),
+        vec![1.0, 2.0]
+    );
+    assert_eq!(
+        exec.to_host(&difference_b.slice(..difference_len)).unwrap(),
+        vec![10, 21]
+    );
 }
 
 #[test]
@@ -485,12 +547,14 @@ fn inclusive_scan_by_key_accepts_device_slice_keys_and_values() {
     let keys = exec.to_device(&[9_u32, 1, 1, 2, 2, 8]).unwrap();
     let values = exec.to_device(&[99_u32, 10, 20, 1, 2, 88]).unwrap();
 
-    let massively::SoA1(output) = inclusive_scan_by_key(
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+    inclusive_scan_by_key(
         &exec,
         massively::SoA1(keys.slice(1..5)),
         massively::SoA1(values.slice(1..5)),
         EqualU32,
         Sum,
+        massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -503,16 +567,20 @@ fn sort_by_key_accepts_device_slice_keys_and_values() {
     let keys = exec.to_device(&[99_u32, 3, 1, 2, 88]).unwrap();
     let values = exec.to_device(&[99_u32, 30, 10, 20, 88]).unwrap();
 
-    let (massively::SoA1(keys), massively::SoA1(values)) = sort_by_key(
+    let out_keys = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 3]).unwrap();
+    sort_by_key(
         &exec,
         massively::SoA1(keys.slice(1..4)),
         massively::SoA1(values.slice(1..4)),
         LessU32,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA1(out_values.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2, 3]);
-    assert_eq!(exec.to_host(&values).unwrap(), vec![10, 20, 30]);
+    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![10, 20, 30]);
 }
 
 #[test]
@@ -522,17 +590,22 @@ fn sort_by_key_accepts_multi_column_device_slice_values() {
     let values = exec.to_device(&[99.0_f32, 30.0, 10.0, 20.0, 88.0]).unwrap();
     let tags = exec.to_device(&[99_u32, 300, 100, 200, 88]).unwrap();
 
-    let (massively::SoA1(keys), massively::SoA2(values, tags)) = sort_by_key(
+    let out_keys = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 3]).unwrap();
+    sort_by_key(
         &exec,
         massively::SoA1(keys.slice(1..4)),
         massively::SoA2(values.slice(1..4), tags.slice(1..4)),
         LessU32,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![1, 2, 3]);
-    assert_eq!(exec.to_host(&values).unwrap(), vec![10.0, 20.0, 30.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![100, 200, 300]);
+    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![10.0, 20.0, 30.0]);
+    assert_eq!(exec.to_host(&out_tags).unwrap(), vec![100, 200, 300]);
 }
 
 #[test]
@@ -544,17 +617,28 @@ fn unique_by_key_accepts_multi_column_device_slice_values() {
         .unwrap();
     let tags = exec.to_device(&[99_u32, 100, 200, 300, 400, 88]).unwrap();
 
-    let (massively::SoA1(keys), massively::SoA2(values, tags)) = unique_by_key(
+    let out_keys = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 4]).unwrap();
+    let len = unique_by_key(
         &exec,
         massively::SoA1(keys.slice(1..5)),
         massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1]);
-    assert_eq!(exec.to_host(&values).unwrap(), vec![10.0, 30.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![100, 300]);
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 1]);
+    assert_eq!(
+        exec.to_host(&out_values.slice(..len)).unwrap(),
+        vec![10.0, 30.0]
+    );
+    assert_eq!(
+        exec.to_host(&out_tags.slice(..len)).unwrap(),
+        vec![100, 300]
+    );
 }
 
 #[test]
@@ -566,17 +650,20 @@ fn inclusive_scan_by_key_accepts_multi_column_device_slice_values() {
         .unwrap();
     let tags = exec.to_device(&[99_u32, 10, 20, 30, 40, 88]).unwrap();
 
-    let massively::SoA2(values, tags) = inclusive_scan_by_key(
+    let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 4]).unwrap();
+    inclusive_scan_by_key(
         &exec,
         massively::SoA1(keys.slice(1..5)),
         massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
         TupleSum,
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&values).unwrap(), vec![1.0, 3.0, 3.0, 7.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![10, 30, 30, 70]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![1.0, 3.0, 3.0, 7.0]);
+    assert_eq!(exec.to_host(&out_tags).unwrap(), vec![10, 30, 30, 70]);
 }
 
 #[test]
@@ -588,18 +675,21 @@ fn exclusive_scan_by_key_accepts_multi_column_device_slice_values() {
         .unwrap();
     let tags = exec.to_device(&[99_u32, 10, 20, 30, 40, 88]).unwrap();
 
-    let massively::SoA2(values, tags) = exclusive_scan_by_key(
+    let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 4]).unwrap();
+    exclusive_scan_by_key(
         &exec,
         massively::SoA1(keys.slice(1..5)),
         massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
         (0.0_f32, 0_u32),
         TupleSum,
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&values).unwrap(), vec![0.0, 1.0, 0.0, 3.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![0, 10, 0, 30]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![0.0, 1.0, 0.0, 3.0]);
+    assert_eq!(exec.to_host(&out_tags).unwrap(), vec![0, 10, 0, 30]);
 }
 
 #[test]
@@ -611,19 +701,27 @@ fn reduce_by_key_accepts_multi_column_device_slice_values() {
         .unwrap();
     let tags = exec.to_device(&[99_u32, 10, 20, 30, 40, 88]).unwrap();
 
-    let (massively::SoA1(keys), massively::SoA2(values, tags)) = reduce_by_key(
+    let out_keys = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_tags = exec.to_device(&[0_u32; 4]).unwrap();
+    let len = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(1..5)),
         massively::SoA2(values.slice(1..5), tags.slice(1..5)),
         EqualU32,
         (0.0_f32, 0_u32),
         TupleSum,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1]);
-    assert_eq!(exec.to_host(&values).unwrap(), vec![3.0, 7.0]);
-    assert_eq!(exec.to_host(&tags).unwrap(), vec![30, 70]);
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 1]);
+    assert_eq!(
+        exec.to_host(&out_values.slice(..len)).unwrap(),
+        vec![3.0, 7.0]
+    );
+    assert_eq!(exec.to_host(&out_tags.slice(..len)).unwrap(), vec![30, 70]);
 }
 
 #[test]
@@ -632,14 +730,16 @@ fn copy_where_accepts_device_slice_stencil() {
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
 
-    let massively::SoA1(output) = copy_where(
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    let len = copy_where(
         &exec,
         massively::SoA1(values.slice(1..4)),
         stencil.slice(1..4),
+        massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&output).unwrap(), vec![20, 40]);
+    assert_eq!(exec.to_host(&output.slice(..len)).unwrap(), vec![20, 40]);
 }
 
 #[test]
@@ -648,14 +748,16 @@ fn remove_where_accepts_device_slice_input_and_stencil() {
     let values = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
     let stencil = exec.to_device(&[0_u32, 0, 1, 0, 0]).unwrap();
 
-    let massively::SoA1(output) = remove_where(
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    let len = remove_where(
         &exec,
         massively::SoA1(values.slice(1..4)),
         stencil.slice(1..4),
+        massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&output).unwrap(), vec![10, 30]);
+    assert_eq!(exec.to_host(&output.slice(..len)).unwrap(), vec![10, 30]);
 }
 
 #[test]

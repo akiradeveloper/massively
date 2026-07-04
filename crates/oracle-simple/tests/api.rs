@@ -173,7 +173,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = api_inclusive_scan(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleMaxOp).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        api_inclusive_scan(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::inclusive_scan(&input));
     }
 
@@ -182,7 +183,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = api_exclusive_scan(&exec, massively::SoA1(input_g.slice(slice_range(&input))), (init,), TupleMaxOp).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        api_exclusive_scan(&exec, massively::SoA1(input_g.slice(slice_range(&input))), (init,), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::exclusive_scan(&input, init));
     }
 
@@ -191,7 +193,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = api_adjacent_difference(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleMaxOp).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        api_adjacent_difference(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::adjacent_difference(&input));
     }
 
@@ -202,8 +205,9 @@ proptest! {
         let stencil = stencil_flags(&input);
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
-        let massively::SoA1(output_g) = api_copy_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil))).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::copy_where(&input, &stencil));
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        let len = api_copy_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::copy_where(&input, &stencil));
     }
 
     #[test]
@@ -213,8 +217,9 @@ proptest! {
         let stencil = stencil_flags(&input);
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
-        let massively::SoA1(output_g) = api_remove_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil))).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::remove_where(&input, &stencil));
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        let len = api_remove_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::remove_where(&input, &stencil));
     }
 
     #[test]
@@ -222,10 +227,11 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let (massively::SoA1(matching_g), massively::SoA1(failing_g)) = api_partition(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        let split = api_partition(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, (), massively::SoA1(output_g.slice_mut(..))).unwrap();
         let (matching, failing) = oracle_simple::partition(&input);
-        prop_assert_eq!(exec.to_host(&matching_g).unwrap(), matching);
-        prop_assert_eq!(exec.to_host(&failing_g).unwrap(), failing);
+        prop_assert_eq!(exec.to_host(&output_g.slice(..split)).unwrap(), matching);
+        prop_assert_eq!(exec.to_host(&output_g.slice(split..mindex(input.len()))).unwrap(), failing);
     }
 
     #[test]
@@ -303,8 +309,9 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = api_unique(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleSameLowNibble).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::unique(&input));
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        let len = api_unique(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleSameLowNibble, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::unique(&input));
     }
 
     #[test]
@@ -312,7 +319,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = api_reverse(&exec, massively::SoA1(input_g.slice(slice_range(&input)))).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        api_reverse(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::reverse(&input));
     }
 
@@ -386,7 +394,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = api_sort(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        api_sort(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::sort(&input));
     }
 
@@ -395,7 +404,8 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        let massively::SoA1(output_g) = stable_sort(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+        stable_sort(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::sort(&input));
     }
 
@@ -406,11 +416,13 @@ proptest! {
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
         let values_g = padded_device(&exec, &values);
-        let output = lower_bound(
+        let output = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        lower_bound(
             &exec,
             massively::SoA1(sorted_g.slice(slice_range(&sorted))),
             massively::SoA1(values_g.slice(slice_range(&values))),
             TupleBucketThenValueLess,
+            output.slice_mut(..),
         ).unwrap();
         prop_assert_eq!(exec.to_host(&output).unwrap(), oracle_simple::lower_bound(&sorted, &values));
     }
@@ -422,11 +434,13 @@ proptest! {
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
         let values_g = padded_device(&exec, &values);
-        let output = upper_bound(
+        let output = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        upper_bound(
             &exec,
             massively::SoA1(sorted_g.slice(slice_range(&sorted))),
             massively::SoA1(values_g.slice(slice_range(&values))),
             TupleBucketThenValueLess,
+            output.slice_mut(..),
         ).unwrap();
         prop_assert_eq!(exec.to_host(&output).unwrap(), oracle_simple::upper_bound(&sorted, &values));
     }
@@ -457,7 +471,8 @@ proptest! {
         let exec = exec();
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
-        let massively::SoA1(output_g) = merge(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; left.len() + right.len()]).unwrap();
+        merge(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::merge(&left, &right));
     }
 
@@ -469,8 +484,9 @@ proptest! {
         let exec = exec();
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
-        let massively::SoA1(output_g) = set_union(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::set_union(&left, &right));
+        let output_g = exec.to_device(&vec![0_u32; left.len() + right.len()]).unwrap();
+        let len = set_union(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::set_union(&left, &right));
     }
 
     #[test]
@@ -481,8 +497,9 @@ proptest! {
         let exec = exec();
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
-        let massively::SoA1(output_g) = set_intersection(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::set_intersection(&left, &right));
+        let output_g = exec.to_device(&vec![0_u32; left.len().min(right.len())]).unwrap();
+        let len = set_intersection(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::set_intersection(&left, &right));
     }
 
     #[test]
@@ -493,8 +510,9 @@ proptest! {
         let exec = exec();
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
-        let massively::SoA1(output_g) = set_difference(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::set_difference(&left, &right));
+        let output_g = exec.to_device(&vec![0_u32; left.len()]).unwrap();
+        let len = set_difference(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::set_difference(&left, &right));
     }
 
     #[test]
@@ -579,7 +597,8 @@ proptest! {
         let exec = exec();
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
-        let massively::SoA1(output_g) = inclusive_scan_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, TupleMaxOp).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        inclusive_scan_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::inclusive_scan_by_key(&keys, &values));
     }
 
@@ -591,7 +610,8 @@ proptest! {
         let exec = exec();
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
-        let massively::SoA1(output_g) = exclusive_scan_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp).unwrap();
+        let output_g = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        exclusive_scan_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::exclusive_scan_by_key(&keys, &values, init));
     }
 
@@ -604,10 +624,11 @@ proptest! {
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle_simple::reduce_by_key(&keys, &values, init);
-        let (massively::SoA1(actual_keys), massively::SoA1(actual_values)) =
-            reduce_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp).unwrap();
-        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
-        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
+        let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
+        let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        let len = reduce_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&actual_keys.slice(..len)).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values.slice(..len)).unwrap(), expected_values);
     }
 
     #[test]
@@ -618,10 +639,11 @@ proptest! {
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle_simple::unique_by_key(&keys, &values);
-        let (massively::SoA1(actual_keys), massively::SoA1(actual_values)) =
-            unique_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble).unwrap();
-        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
-        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
+        let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
+        let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        let len = unique_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
+        prop_assert_eq!(exec.to_host(&actual_keys.slice(..len)).unwrap(), expected_keys);
+        prop_assert_eq!(exec.to_host(&actual_values.slice(..len)).unwrap(), expected_values);
     }
 
     #[test]
@@ -632,8 +654,9 @@ proptest! {
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle_simple::sort_by_key(&keys, &values);
-        let (massively::SoA1(actual_keys), massively::SoA1(actual_values)) =
-            sort_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess).unwrap();
+        let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
+        let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        sort_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
@@ -646,8 +669,9 @@ proptest! {
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
         let (expected_keys, expected_values) = oracle_simple::sort_by_key(&keys, &values);
-        let (massively::SoA1(actual_keys), massively::SoA1(actual_values)) =
-            stable_sort_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess).unwrap();
+        let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
+        let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        stable_sort_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
@@ -668,12 +692,16 @@ proptest! {
         let right_keys_g = padded_device(&exec, &right_keys);
         let right_values_g = padded_device(&exec, &right_values);
         let (expected_keys, expected_values) = oracle_simple::merge_by_key(&left_keys, &left_values, &right_keys, &right_values);
-        let (massively::SoA1(actual_keys), massively::SoA1(actual_values)) = merge_by_key(&exec,
+        let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
+        let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
+        merge_by_key(&exec,
             massively::SoA1(left_keys_g.slice(slice_range(&left_keys))),
             massively::SoA1(left_values_g.slice(slice_range(&left_values))),
             massively::SoA1(right_keys_g.slice(slice_range(&right_keys))),
             massively::SoA1(right_values_g.slice(slice_range(&right_values))),
             TupleBucketThenValueLess,
+            massively::SoA1(actual_keys.slice_mut(..)),
+            massively::SoA1(actual_values.slice_mut(..)),
         )
         .unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);

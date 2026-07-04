@@ -55,28 +55,39 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA2(page_id, user_id) = sort(
+    let len = page_id.len();
+    let sorted_page_id = exec.constant(len, 0_u32)?;
+    let sorted_user_id = exec.constant(len, 0_u32)?;
+    sort(
         exec,
         SoA2(page_id.slice(..), user_id.slice(..)),
         LessVisitPair,
+        SoA2(sorted_page_id.slice_mut(..), sorted_user_id.slice_mut(..)),
     )?;
-    let SoA2(page_id, _user_id) = unique(
+    let page_id = exec.constant(len, 0_u32)?;
+    let user_id = exec.constant(len, 0_u32)?;
+    let unique_len = unique(
         exec,
-        SoA2(page_id.slice(..), user_id.slice(..)),
+        SoA2(sorted_page_id.slice(..), sorted_user_id.slice(..)),
         EqualVisitPair,
+        SoA2(page_id.slice_mut(..), user_id.slice_mut(..)),
     )?;
-    let ones = exec.constant(page_id.len(), 1_u32)?;
-    let (SoA1(page_id), SoA1(unique_count)) = reduce_by_key(
+    let ones = exec.constant(unique_len, 1_u32)?;
+    let out_page_id = exec.constant(unique_len, 0_u32)?;
+    let unique_count = exec.constant(unique_len, 0_u32)?;
+    let len = reduce_by_key(
         exec,
-        SoA1(page_id.slice(..)),
+        SoA1(page_id.slice(..unique_len)),
         SoA1(ones.slice(..)),
         common::EqualU32,
         (0_u32,),
         common::SumU32,
+        SoA1(out_page_id.slice_mut(..)),
+        SoA1(unique_count.slice_mut(..)),
     )?;
     Ok(Output {
-        page_id,
-        unique_count,
+        page_id: exec.to_device(&exec.to_host(&out_page_id.slice(..len))?)?,
+        unique_count: exec.to_device(&exec.to_host(&unique_count.slice(..len))?)?,
     })
 }
 

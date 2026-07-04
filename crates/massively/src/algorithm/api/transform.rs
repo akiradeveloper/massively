@@ -19,23 +19,6 @@ where
     <Input as sealed::MIterDispatch<R>>::transform_dispatch(source, exec.policy(), op, env, out)
 }
 
-/// Applies a unary transform to a massively iterator into owned device storage.
-pub fn map<R, Input, Output, Op>(
-    exec: &Executor<R>,
-    source: Input,
-    op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-) -> Result<Output, Error>
-where
-    R: Runtime,
-    Input: MIter<R>,
-    Output: MVec<R>,
-    Op: op::UnaryOp<R, Input::Item, Output = Output::Item>,
-{
-    validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::map_dispatch(source, exec.policy(), op, env)
-}
-
 /// Applies a unary transform where the `u32` stencil flag is non-zero.
 pub fn transform_where<R, Input, Output, Op>(
     exec: &Executor<R>,

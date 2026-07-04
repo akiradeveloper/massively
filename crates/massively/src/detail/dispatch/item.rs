@@ -6,9 +6,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         input: crate::detail::device::DeviceColumnView<R, Input>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         Input: Scalar,
         Op: op::UnaryOp<R, (Input,), Output = Self>,
     {
@@ -24,9 +24,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         right: crate::detail::device::DeviceColumnView<R, Right>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         Left: Scalar,
         Right: Scalar,
         Op: op::UnaryOp<R, (Left, Right), Output = Self>,
@@ -44,9 +44,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         third: crate::detail::device::DeviceColumnView<R, Third>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         First: Scalar,
         Second: Scalar,
         Third: Scalar,
@@ -66,9 +66,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         First: Scalar,
         Second: Scalar,
         Third: Scalar,
@@ -90,9 +90,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         First: Scalar,
         Second: Scalar,
         Third: Scalar,
@@ -117,9 +117,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         First: Scalar,
         Second: Scalar,
         Third: Scalar,
@@ -146,9 +146,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
         op: Op,
         env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<<Self as MItem<R>>::Inner, Error>
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         First: Scalar,
         Second: Scalar,
         Third: Scalar,
@@ -168,12 +168,12 @@ pub trait MItemDispatch<R: Runtime>: Sized {
 
     fn reduce_inner<Op>(
         policy: &crate::detail::CubePolicy<R>,
-        input: <Self as MItem<R>>::Inner,
+        input: <Self as MAlloc<R>>::Inner,
         init: Self,
         op: Op,
     ) -> Result<Self, Error>
     where
-        Self: MItem<R>,
+        Self: MAlloc<R>,
         Op: op::ReductionOp<R, Self>,
     {
         let _ = (policy, input, init, op);

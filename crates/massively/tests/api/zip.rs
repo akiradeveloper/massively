@@ -336,7 +336,14 @@ fn soa7_reverse_returns_all_columns() {
     let f = exec.to_device(&[51_u32, 52, 53]).unwrap();
     let g = exec.to_device(&[61_u32, 62, 63]).unwrap();
 
-    let massively::SoA7(a, b, c, d, e, f, g) = reverse(
+    let out_a = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_c = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_d = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_e = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_f = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_g = exec.to_device(&[0_u32; 3]).unwrap();
+    reverse(
         &exec,
         massively::SoA7(
             a.slice(..),
@@ -347,14 +354,23 @@ fn soa7_reverse_returns_all_columns() {
             f.slice(..),
             g.slice(..),
         ),
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&a).unwrap(), vec![3, 2, 1]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![13, 12, 11]);
-    assert_eq!(exec.to_host(&c).unwrap(), vec![23, 22, 21]);
-    assert_eq!(exec.to_host(&d).unwrap(), vec![33, 32, 31]);
-    assert_eq!(exec.to_host(&e).unwrap(), vec![43, 42, 41]);
-    assert_eq!(exec.to_host(&f).unwrap(), vec![53, 52, 51]);
-    assert_eq!(exec.to_host(&g).unwrap(), vec![63, 62, 61]);
+    assert_eq!(exec.to_host(&out_a).unwrap(), vec![3, 2, 1]);
+    assert_eq!(exec.to_host(&out_b).unwrap(), vec![13, 12, 11]);
+    assert_eq!(exec.to_host(&out_c).unwrap(), vec![23, 22, 21]);
+    assert_eq!(exec.to_host(&out_d).unwrap(), vec![33, 32, 31]);
+    assert_eq!(exec.to_host(&out_e).unwrap(), vec![43, 42, 41]);
+    assert_eq!(exec.to_host(&out_f).unwrap(), vec![53, 52, 51]);
+    assert_eq!(exec.to_host(&out_g).unwrap(), vec![63, 62, 61]);
 }

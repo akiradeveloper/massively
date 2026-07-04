@@ -23,13 +23,15 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA1(out) = set_difference(
+    let out = exec.constant(allowlist.len(), 0_u32)?;
+    let len = set_difference(
         exec,
         SoA1(allowlist.slice(..)),
         SoA1(banlist.slice(..)),
         common::LessU32,
+        SoA1(out.slice_mut(..)),
     )?;
-    Ok(out)
+    Ok(exec.to_device(&exec.to_host(&out.slice(..len))?)?)
 }
 
 fn main() -> common::Result {

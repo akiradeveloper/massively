@@ -110,7 +110,8 @@ pub fn lower_bound<R, Input, Values, Less>(
     source: Input,
     values: Values,
     less: Less,
-) -> Result<DeviceVec<R, MIndex>, Error>
+    out: crate::runtime::DeviceSliceMut<'_, R, MIndex>,
+) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -119,7 +120,14 @@ where
 {
     validate_input(exec, &source)?;
     validate_input(exec, &values)?;
-    <Input as sealed::MIterDispatch<R>>::lower_bound_dispatch(source, exec.policy(), values, less)
+    exec.ensure_policy_id(out.source.inner.policy_id())?;
+    let bounds = <Input as sealed::MIterDispatch<R>>::lower_bound_dispatch(
+        source,
+        exec.policy(),
+        values,
+        less,
+    )?;
+    exec.copy(bounds.slice(..), out)
 }
 
 /// Finds the maximum element index.
@@ -191,7 +199,8 @@ pub fn upper_bound<R, Input, Values, Less>(
     source: Input,
     values: Values,
     less: Less,
-) -> Result<DeviceVec<R, MIndex>, Error>
+    out: crate::runtime::DeviceSliceMut<'_, R, MIndex>,
+) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
@@ -200,5 +209,12 @@ where
 {
     validate_input(exec, &source)?;
     validate_input(exec, &values)?;
-    <Input as sealed::MIterDispatch<R>>::upper_bound_dispatch(source, exec.policy(), values, less)
+    exec.ensure_policy_id(out.source.inner.policy_id())?;
+    let bounds = <Input as sealed::MIterDispatch<R>>::upper_bound_dispatch(
+        source,
+        exec.policy(),
+        values,
+        less,
+    )?;
+    exec.copy(bounds.slice(..), out)
 }

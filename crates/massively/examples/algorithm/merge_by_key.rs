@@ -11,13 +11,17 @@ fn main() -> common::Result {
     let right_keys = exec.to_device(&[1_u32, 3])?;
     let right_values = exec.to_device(&[10.0_f32, 30.0])?;
 
-    let (SoA1(keys), SoA1(values)) = merge_by_key(
+    let keys = exec.to_device(&[0_u32; 4])?;
+    let values = exec.to_device(&[0.0_f32; 4])?;
+    merge_by_key(
         &exec,
         SoA1(left_keys.slice(..)),
         SoA1(left_values.slice(..)),
         SoA1(right_keys.slice(..)),
         SoA1(right_values.slice(..)),
         common::LessU32,
+        SoA1(keys.slice_mut(..)),
+        SoA1(values.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&keys)?, vec![0, 1, 2, 3]);

@@ -35,7 +35,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R>,
+        Output: StorageFromInner<R>,
         Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
     {
         let _ = (policy, op, env);
@@ -65,7 +65,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = policy;
         unsupported("reverse")
@@ -79,7 +79,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, less);
         unsupported("sort")
@@ -95,8 +95,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Self: MIter<R>,
         K: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
-        KeyOutput: MVec<R, Item = (K,)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K,)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, _less);
         unsupported("sort_by_key")
@@ -116,8 +116,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K2: Scalar + 'static,
         K3: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-        KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, third_key, less);
         unsupported("sort_by_key")
@@ -135,8 +135,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K1: Scalar + 'static,
         K2: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2)>,
-        KeyOutput: MVec<R, Item = (K1, K2)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, less);
         unsupported("sort_by_key")
@@ -153,8 +153,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Values: MIter<R>,
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-        ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
     {
         Err(Error::Launch {
             message: "sort_by_key is not supported for this key iterator shape".to_string(),
@@ -171,8 +171,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Self: MIter<R>,
         K: Scalar + 'static,
         Eq: op::BinaryPredicateOp<R, (K,)>,
-        KeyOutput: MVec<R, Item = (K,)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K,)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, _eq);
         unsupported("unique_by_key")
@@ -189,8 +189,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         Values: MIter<R>,
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-        ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
     {
         Err(Error::Launch {
             message: "unique_by_key is not supported for this key iterator shape".to_string(),
@@ -211,8 +211,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K2: Scalar + 'static,
         K3: Scalar + 'static,
         Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-        KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, third_key, eq);
         unsupported("unique_by_key")
@@ -230,8 +230,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K1: Scalar + 'static,
         K2: Scalar + 'static,
         Eq: op::BinaryPredicateOp<R, (K1, K2)>,
-        KeyOutput: MVec<R, Item = (K1, K2)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, eq);
         unsupported("unique_by_key")
@@ -249,7 +249,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, key_eq, op);
         unsupported("inclusive_scan_by_key")
@@ -271,7 +271,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K3: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, third_key, key_eq, op);
         unsupported("inclusive_scan_by_key")
@@ -291,7 +291,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K2: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, key_eq, op);
         unsupported("inclusive_scan_by_key")
@@ -310,7 +310,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Values as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
     {
         Err(Error::Launch {
             message: "inclusive_scan_by_key is not supported for this key iterator shape"
@@ -331,7 +331,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, key_eq, op);
         unsupported("exclusive_scan_by_key")
@@ -354,7 +354,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K3: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, third_key, key_eq, init, op);
         unsupported("exclusive_scan_by_key")
@@ -375,7 +375,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K2: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, key_eq, init, op);
         unsupported("exclusive_scan_by_key")
@@ -395,7 +395,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Values as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
     {
         Err(Error::Launch {
             message: "exclusive_scan_by_key is not supported for this key iterator shape"
@@ -416,8 +416,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = (K,)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K,)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, keys, key_eq, op);
         unsupported("reduce_by_key")
@@ -440,8 +440,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K3: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, third_key, key_eq, init, op);
         unsupported("reduce_by_key")
@@ -462,8 +462,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K2: Scalar + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = (K1, K2)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, first_key, second_key, key_eq, init, op);
         unsupported("reduce_by_key")
@@ -483,8 +483,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
         Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-        ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
     {
         Err(Error::Launch {
             message: "reduce_by_key is not supported for this key iterator shape".to_string(),
@@ -504,8 +504,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
         K: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
-        KeyOutput: MVec<R, Item = (K,)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K,)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (left_keys, right_keys);
         Err(Error::Launch {
@@ -532,8 +532,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K2: Scalar + 'static,
         K3: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-        KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (
             policy,
@@ -565,8 +565,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         K1: Scalar + 'static,
         K2: Scalar + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2)>,
-        KeyOutput: MVec<R, Item = (K1, K2)>,
-        ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+        ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (
             policy,
@@ -609,7 +609,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
             + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
         <Indices as crate::detail::device::KernelColumn>::Expr:
             crate::expr::GpuExpr<MIndex> + crate::expr::DeviceGpuExpr<MIndex>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, indices);
         unsupported("permute")
@@ -695,7 +695,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, op);
         unsupported("inclusive_scan")
@@ -710,7 +710,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, _init, op);
         unsupported("exclusive_scan")
@@ -724,7 +724,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, op);
         unsupported("adjacent_difference")
@@ -737,7 +737,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (_policy, _stencil);
         unsupported("copy_where")
@@ -752,7 +752,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, pred, env);
         unsupported("remove_if")
@@ -765,7 +765,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (_policy, _stencil);
         unsupported("remove_where")
@@ -850,7 +850,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, pred, env);
         unsupported("partition")
@@ -878,7 +878,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (_policy, replacement, _stencil);
         unsupported("replace_where")
@@ -907,7 +907,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
         let _ = (policy, pred);
         unsupported("unique")
@@ -1094,7 +1094,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1111,7 +1111,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1128,7 +1128,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1145,7 +1145,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     where
         Self: MIter<R>,
         Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1221,7 +1221,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1237,7 +1237,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1253,7 +1253,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1269,7 +1269,7 @@ pub trait MIterDispatch<R: Runtime>: Sized {
     ) -> Result<Output, Error>
     where
         Self: MIter<R>,
-        Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+        Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
     {
         Err(Error::Launch {
@@ -1292,8 +1292,8 @@ pub trait MIterDispatch<R: Runtime>: Sized {
         RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item>,
         <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
         Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-        KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-        ValueOutput: MVec<R, Item = <LeftValues as MIter<R>>::Item>,
+        KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+        ValueOutput: StorageFromInner<R, Item = <LeftValues as MIter<R>>::Item>,
     {
         Err(Error::Launch {
             message: "merge_by_key is not supported for this key iterator shape".to_string(),

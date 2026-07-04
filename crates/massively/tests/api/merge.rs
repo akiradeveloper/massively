@@ -7,16 +7,18 @@ fn merge_accepts_borrowed_tuple_columns() {
     let left_b = exec.to_device(&[10_u32, 30]).unwrap();
     let right_a = exec.to_device(&[2.0_f32, 4.0]).unwrap();
     let right_b = exec.to_device(&[20_u32, 40]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 4]).unwrap();
 
-    let output = merge(
+    merge(
         &exec,
         massively::SoA2(left_a.slice(..), left_b.slice(..)),
         massively::SoA2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
+        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
-    let massively::SoA2(a, b) = output;
 
-    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 20, 30, 40]);
+    assert_eq!(exec.to_host(&out_a).unwrap(), vec![1.0, 2.0, 3.0, 4.0]);
+    assert_eq!(exec.to_host(&out_b).unwrap(), vec![10, 20, 30, 40]);
 }

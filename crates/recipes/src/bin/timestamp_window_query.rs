@@ -25,11 +25,13 @@ where
     B: cubecl::prelude::Runtime,
 {
     let queries = exec.to_device(&[start, end])?;
-    let indices = lower_bound(
+    let indices = exec.constant(2, 0_u32)?;
+    lower_bound(
         exec,
         SoA1(timestamp.slice(..)),
         SoA1(queries.slice(..)),
         common::LessU32,
+        indices.slice_mut(..),
     )?;
     let indices = exec.to_host(&indices)?;
     Ok((indices[0], indices[1]))

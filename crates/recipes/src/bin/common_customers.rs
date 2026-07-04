@@ -22,8 +22,15 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA1(out) = set_intersection(exec, SoA1(a.slice(..)), SoA1(b.slice(..)), common::LessU32)?;
-    Ok(out)
+    let out = exec.constant(a.len().min(b.len()), 0_u32)?;
+    let len = set_intersection(
+        exec,
+        SoA1(a.slice(..)),
+        SoA1(b.slice(..)),
+        common::LessU32,
+        SoA1(out.slice_mut(..)),
+    )?;
+    Ok(exec.to_device(&exec.to_host(&out.slice(..len))?)?)
 }
 
 fn main() -> common::Result {

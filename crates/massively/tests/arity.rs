@@ -471,7 +471,9 @@ macro_rules! adjacent_difference_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::adjacent_difference(&exec, values.slice(..), ArityReduce).unwrap();
+        let out = $output(&exec);
+        massively::adjacent_difference(&exec, values.slice(..), ArityReduce, out.slice_mut(..))
+            .unwrap();
     }};
 }
 define_value_arity_tests!(adjacent_difference_arity, adjacent_difference_case);
@@ -507,8 +509,15 @@ macro_rules! copy_where_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
+        let out = $output(&exec);
         let stencil = stencil(&exec);
-        massively::copy_where(&exec, values.slice(..), stencil.slice(..)).unwrap();
+        massively::copy_where(
+            &exec,
+            values.slice(..),
+            stencil.slice(..),
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(copy_where_arity, copy_where_case);
@@ -536,7 +545,15 @@ macro_rules! exclusive_scan_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::exclusive_scan(&exec, values.slice(..), $init, ArityReduce).unwrap();
+        let out = $output(&exec);
+        massively::exclusive_scan(
+            &exec,
+            values.slice(..),
+            $init,
+            ArityReduce,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(exclusive_scan_arity, exclusive_scan_case);
@@ -546,6 +563,7 @@ macro_rules! exclusive_scan_by_key_key_case {
         let exec = exec();
         let keys = $keys(&exec);
         let values = values1(&exec);
+        let out = output1(&exec);
         massively::exclusive_scan_by_key(
             &exec,
             keys.slice(..),
@@ -553,6 +571,7 @@ macro_rules! exclusive_scan_by_key_key_case {
             ArityEq,
             (0_u32,),
             ArityReduce,
+            out.slice_mut(..),
         )
         .unwrap();
     }};
@@ -567,6 +586,7 @@ macro_rules! exclusive_scan_by_key_value_case {
         let exec = exec();
         let keys = values1(&exec);
         let values = $values(&exec);
+        let out = $output(&exec);
         massively::exclusive_scan_by_key(
             &exec,
             keys.slice(..),
@@ -574,6 +594,7 @@ macro_rules! exclusive_scan_by_key_value_case {
             ArityEq,
             $init,
             ArityReduce,
+            out.slice_mut(..),
         )
         .unwrap();
     }};
@@ -651,7 +672,8 @@ macro_rules! inclusive_scan_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::inclusive_scan(&exec, values.slice(..), ArityReduce).unwrap();
+        let out = $output(&exec);
+        massively::inclusive_scan(&exec, values.slice(..), ArityReduce, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(inclusive_scan_arity, inclusive_scan_case);
@@ -661,12 +683,14 @@ macro_rules! inclusive_scan_by_key_key_case {
         let exec = exec();
         let keys = $keys(&exec);
         let values = values1(&exec);
+        let out = output1(&exec);
         massively::inclusive_scan_by_key(
             &exec,
             keys.slice(..),
             values.slice(..),
             ArityEq,
             ArityReduce,
+            out.slice_mut(..),
         )
         .unwrap();
     }};
@@ -681,12 +705,14 @@ macro_rules! inclusive_scan_by_key_value_case {
         let exec = exec();
         let keys = values1(&exec);
         let values = $values(&exec);
+        let out = $output(&exec);
         massively::inclusive_scan_by_key(
             &exec,
             keys.slice(..),
             values.slice(..),
             ArityEq,
             ArityReduce,
+            out.slice_mut(..),
         )
         .unwrap();
     }};
@@ -739,7 +765,15 @@ macro_rules! lower_bound_case {
         let exec = exec();
         let values = $values(&exec);
         let needles = $values(&exec);
-        massively::lower_bound(&exec, values.slice(..), needles.slice(..), ArityLess).unwrap();
+        let out = zeros_u32(&exec);
+        massively::lower_bound(
+            &exec,
+            values.slice(..),
+            needles.slice(..),
+            ArityLess,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(lower_bound_arity, lower_bound_case);
@@ -748,8 +782,15 @@ macro_rules! map_input_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        let _out: massively::SoA1<U32Vec> =
-            massively::map(&exec, values.slice(..), ArityTupleToScalar, ()).unwrap();
+        let out = output1(&exec);
+        massively::transform(
+            &exec,
+            values.slice(..),
+            ArityTupleToScalar,
+            (),
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(map_input_arity, map_input_case);
@@ -759,7 +800,8 @@ macro_rules! map_output_case {
         let exec = exec();
         let _ = $values_fn;
         let values = values1(&exec);
-        let _out: $owned = massively::map(&exec, values.slice(..), $op, ()).unwrap();
+        let out = $output(&exec);
+        massively::transform(&exec, values.slice(..), $op, (), out.slice_mut(..)).unwrap();
     }};
 }
 define_output_arity_tests!(map_output_arity, map_output_case);
@@ -778,7 +820,15 @@ macro_rules! merge_case {
         let exec = exec();
         let left = $values(&exec);
         let right = $values(&exec);
-        massively::merge(&exec, left.slice(..), right.slice(..), ArityLess).unwrap();
+        let out = $output(&exec);
+        massively::merge(
+            &exec,
+            left.slice(0..2),
+            right.slice(0..2),
+            ArityLess,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(merge_arity, merge_case);
@@ -790,13 +840,17 @@ macro_rules! merge_by_key_key_case {
         let right_keys = $keys(&exec);
         let left_values = values1(&exec);
         let right_values = values1(&exec);
+        let out_keys = $keys(&exec);
+        let out_values = output1(&exec);
         massively::merge_by_key(
             &exec,
-            left_keys.slice(..),
-            left_values.slice(..),
-            right_keys.slice(..),
-            right_values.slice(..),
+            left_keys.slice(0..2),
+            left_values.slice(0..2),
+            right_keys.slice(0..2),
+            right_values.slice(0..2),
             ArityLess,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
         )
         .unwrap();
     }};
@@ -810,13 +864,17 @@ macro_rules! merge_by_key_value_case {
         let right_keys = values1(&exec);
         let left_values = $values(&exec);
         let right_values = $values(&exec);
+        let out_keys = output1(&exec);
+        let out_values = $output(&exec);
         massively::merge_by_key(
             &exec,
-            left_keys.slice(..),
-            left_values.slice(..),
-            right_keys.slice(..),
-            right_values.slice(..),
+            left_keys.slice(0..2),
+            left_values.slice(0..2),
+            right_keys.slice(0..2),
+            right_values.slice(0..2),
             ArityLess,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
         )
         .unwrap();
     }};
@@ -864,7 +922,8 @@ macro_rules! partition_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::partition(&exec, values.slice(..), ArityPred, ()).unwrap();
+        let out = $output(&exec);
+        massively::partition(&exec, values.slice(..), ArityPred, (), out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(partition_arity, partition_case);
@@ -873,8 +932,15 @@ macro_rules! permute_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
+        let out = $output(&exec);
         let indices = indices(&exec);
-        let _out: $owned = massively::permute(&exec, values.slice(..), indices.slice(..)).unwrap();
+        massively::gather(
+            &exec,
+            values.slice(..),
+            indices.slice(..),
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(permute_arity, permute_case);
@@ -893,6 +959,8 @@ macro_rules! reduce_by_key_key_case {
         let exec = exec();
         let keys = $keys(&exec);
         let values = values1(&exec);
+        let out_keys = $keys(&exec);
+        let out_values = output1(&exec);
         massively::reduce_by_key(
             &exec,
             keys.slice(..),
@@ -900,6 +968,8 @@ macro_rules! reduce_by_key_key_case {
             ArityEq,
             (0_u32,),
             ArityReduce,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
         )
         .unwrap();
     }};
@@ -911,6 +981,8 @@ macro_rules! reduce_by_key_value_case {
         let exec = exec();
         let keys = values1(&exec);
         let values = $values(&exec);
+        let out_keys = output1(&exec);
+        let out_values = $output(&exec);
         massively::reduce_by_key(
             &exec,
             keys.slice(..),
@@ -918,6 +990,8 @@ macro_rules! reduce_by_key_value_case {
             ArityEq,
             $init,
             ArityReduce,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
         )
         .unwrap();
     }};
@@ -928,8 +1002,15 @@ macro_rules! remove_where_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
+        let out = $output(&exec);
         let stencil = stencil(&exec);
-        massively::remove_where(&exec, values.slice(..), stencil.slice(..)).unwrap();
+        massively::remove_where(
+            &exec,
+            values.slice(..),
+            stencil.slice(..),
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(remove_where_arity, remove_where_case);
@@ -948,7 +1029,8 @@ macro_rules! reverse_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::reverse(&exec, values.slice(..)).unwrap();
+        let out = $output(&exec);
+        massively::reverse(&exec, values.slice(..), out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(reverse_arity, reverse_case);
@@ -994,7 +1076,15 @@ macro_rules! set_difference_case {
         let exec = exec();
         let left = $values(&exec);
         let right = $values(&exec);
-        massively::set_difference(&exec, left.slice(..), right.slice(..), ArityLess).unwrap();
+        let out = $output(&exec);
+        massively::set_difference(
+            &exec,
+            left.slice(..),
+            right.slice(..),
+            ArityLess,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(set_difference_arity, set_difference_case);
@@ -1004,7 +1094,15 @@ macro_rules! set_intersection_case {
         let exec = exec();
         let left = $values(&exec);
         let right = $values(&exec);
-        massively::set_intersection(&exec, left.slice(..), right.slice(..), ArityLess).unwrap();
+        let out = $output(&exec);
+        massively::set_intersection(
+            &exec,
+            left.slice(..),
+            right.slice(..),
+            ArityLess,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(set_intersection_arity, set_intersection_case);
@@ -1014,7 +1112,15 @@ macro_rules! set_union_case {
         let exec = exec();
         let left = $values(&exec);
         let right = $values(&exec);
-        massively::set_union(&exec, left.slice(..), right.slice(..), ArityLess).unwrap();
+        let out = $output(&exec);
+        massively::set_union(
+            &exec,
+            left.slice(0..2),
+            right.slice(0..2),
+            ArityLess,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(set_union_arity, set_union_case);
@@ -1023,7 +1129,8 @@ macro_rules! sort_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::sort(&exec, values.slice(..), ArityLess).unwrap();
+        let out = $output(&exec);
+        massively::sort(&exec, values.slice(..), ArityLess, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(sort_arity, sort_case);
@@ -1033,7 +1140,17 @@ macro_rules! sort_by_key_key_case {
         let exec = exec();
         let keys = $keys(&exec);
         let values = values1(&exec);
-        massively::sort_by_key(&exec, keys.slice(..), values.slice(..), ArityLess).unwrap();
+        let out_keys = $keys(&exec);
+        let out_values = output1(&exec);
+        massively::sort_by_key(
+            &exec,
+            keys.slice(..),
+            values.slice(..),
+            ArityLess,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_key_arity_tests!(sort_by_key_key_arity, sort_by_key_key_case);
@@ -1043,7 +1160,17 @@ macro_rules! sort_by_key_value_case {
         let exec = exec();
         let keys = values1(&exec);
         let values = $values(&exec);
-        massively::sort_by_key(&exec, keys.slice(..), values.slice(..), ArityLess).unwrap();
+        let out_keys = output1(&exec);
+        let out_values = $output(&exec);
+        massively::sort_by_key(
+            &exec,
+            keys.slice(..),
+            values.slice(..),
+            ArityLess,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(sort_by_key_value_arity, sort_by_key_value_case);
@@ -1052,7 +1179,8 @@ macro_rules! stable_sort_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::stable_sort(&exec, values.slice(..), ArityLess).unwrap();
+        let out = $output(&exec);
+        massively::stable_sort(&exec, values.slice(..), ArityLess, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(stable_sort_arity, stable_sort_case);
@@ -1062,7 +1190,17 @@ macro_rules! stable_sort_by_key_key_case {
         let exec = exec();
         let keys = $keys(&exec);
         let values = values1(&exec);
-        massively::stable_sort_by_key(&exec, keys.slice(..), values.slice(..), ArityLess).unwrap();
+        let out_keys = $keys(&exec);
+        let out_values = output1(&exec);
+        massively::stable_sort_by_key(
+            &exec,
+            keys.slice(..),
+            values.slice(..),
+            ArityLess,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_key_arity_tests!(stable_sort_by_key_key_arity, stable_sort_by_key_key_case);
@@ -1072,7 +1210,17 @@ macro_rules! stable_sort_by_key_value_case {
         let exec = exec();
         let keys = values1(&exec);
         let values = $values(&exec);
-        massively::stable_sort_by_key(&exec, keys.slice(..), values.slice(..), ArityLess).unwrap();
+        let out_keys = output1(&exec);
+        let out_values = $output(&exec);
+        massively::stable_sort_by_key(
+            &exec,
+            keys.slice(..),
+            values.slice(..),
+            ArityLess,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(
@@ -1151,7 +1299,8 @@ macro_rules! unique_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::unique(&exec, values.slice(..), ArityEq).unwrap();
+        let out = $output(&exec);
+        massively::unique(&exec, values.slice(..), ArityEq, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(unique_arity, unique_case);
@@ -1161,7 +1310,17 @@ macro_rules! unique_by_key_key_case {
         let exec = exec();
         let keys = $keys(&exec);
         let values = values1(&exec);
-        massively::unique_by_key(&exec, keys.slice(..), values.slice(..), ArityEq).unwrap();
+        let out_keys = $keys(&exec);
+        let out_values = output1(&exec);
+        massively::unique_by_key(
+            &exec,
+            keys.slice(..),
+            values.slice(..),
+            ArityEq,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_key_arity_tests!(unique_by_key_key_arity, unique_by_key_key_case);
@@ -1171,7 +1330,17 @@ macro_rules! unique_by_key_value_case {
         let exec = exec();
         let keys = values1(&exec);
         let values = $values(&exec);
-        massively::unique_by_key(&exec, keys.slice(..), values.slice(..), ArityEq).unwrap();
+        let out_keys = output1(&exec);
+        let out_values = $output(&exec);
+        massively::unique_by_key(
+            &exec,
+            keys.slice(..),
+            values.slice(..),
+            ArityEq,
+            out_keys.slice_mut(..),
+            out_values.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(unique_by_key_value_arity, unique_by_key_value_case);
@@ -1181,7 +1350,15 @@ macro_rules! upper_bound_case {
         let exec = exec();
         let values = $values(&exec);
         let needles = $values(&exec);
-        massively::upper_bound(&exec, values.slice(..), needles.slice(..), ArityLess).unwrap();
+        let out = zeros_u32(&exec);
+        massively::upper_bound(
+            &exec,
+            values.slice(..),
+            needles.slice(..),
+            ArityLess,
+            out.slice_mut(..),
+        )
+        .unwrap();
     }};
 }
 define_value_arity_tests!(upper_bound_arity, upper_bound_case);

@@ -33,17 +33,17 @@ pub use algorithm::{
     adjacent_difference, adjacent_find, all_of, any_of, copy_where, count_if, equal,
     exclusive_scan, exclusive_scan_by_key, fill, find_first_of, find_if, gather, gather_where,
     inclusive_scan, inclusive_scan_by_key, is_partitioned, is_sorted, is_sorted_until,
-    lexicographical_compare, lower_bound, map, max_element, merge, merge_by_key, min_element,
-    minmax_element, mismatch, none_of, partition, permute, reduce, reduce_by_key, remove_where,
+    lexicographical_compare, lower_bound, max_element, merge, merge_by_key, min_element,
+    minmax_element, mismatch, none_of, partition, reduce, reduce_by_key, remove_where,
     replace_where, reverse, scatter, scatter_where, set_difference, set_intersection, set_union,
     sort, sort_by_key, stable_sort, stable_sort_by_key, transform, transform_where, unique,
     unique_by_key, upper_bound,
 };
 pub use error::Error;
 pub use index::MIndex;
-pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
+pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice, ToSliceMut};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
-pub use value::{MItem, MVec};
+pub use value::{MAlloc, MItem, MStorageElement};
 
 /// Common facade traits and types.
 ///
@@ -51,8 +51,8 @@ pub use value::{MItem, MVec};
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIndex, MItem, MIter, MIterMut, MVec,
-        SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,
+        MStorageElement, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice, ToSliceMut,
     };
 }
 

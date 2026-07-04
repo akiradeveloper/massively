@@ -32,7 +32,13 @@ fn solve<B>(exec: &Executor<B>, price: DeviceVec<B, f32>) -> common::Result<Devi
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA1(delta) = adjacent_difference(exec, SoA1(price.slice(..)), PriceDelta)?;
+    let delta = exec.constant(price.len(), 0.0_f32)?;
+    adjacent_difference(
+        exec,
+        SoA1(price.slice(..)),
+        PriceDelta,
+        SoA1(delta.slice_mut(..)),
+    )?;
     Ok(delta)
 }
 

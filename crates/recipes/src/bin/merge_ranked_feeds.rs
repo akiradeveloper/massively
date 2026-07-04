@@ -30,13 +30,18 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (SoA1(timestamp), SoA1(event_id)) = merge_by_key(
+    let len = left_timestamp.len() + right_timestamp.len();
+    let timestamp = exec.constant(len, 0_u32)?;
+    let event_id = exec.constant(len, 0_u32)?;
+    merge_by_key(
         exec,
         SoA1(left_timestamp.slice(..)),
         SoA1(left_event_id.slice(..)),
         SoA1(right_timestamp.slice(..)),
         SoA1(right_event_id.slice(..)),
         common::LessU32,
+        SoA1(timestamp.slice_mut(..)),
+        SoA1(event_id.slice_mut(..)),
     )?;
     Ok(Output {
         timestamp,

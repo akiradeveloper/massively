@@ -97,23 +97,26 @@ where
 }
 
 /// Partitions elements by `pred`.
-pub fn partition<R, Input, Pred>(
+pub fn partition<R, Input, Pred, Output>(
     exec: &Executor<R>,
     source: Input,
     pred: Pred,
     env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-) -> Result<
-    (
-        <Input::Item as MItem<R>>::Vec,
-        <Input::Item as MItem<R>>::Vec,
-    ),
-    Error,
->
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Pred: op::PredicateOp<R, Input::Item>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
+    Pred: op::PredicateOp<R, Output::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::partition_dispatch(source, exec.policy(), pred, env)
+    validate_output(exec, &out)?;
+    let (selected, rejected): (
+        <Output::Item as MAlloc<R>>::Storage,
+        <Output::Item as MAlloc<R>>::Storage,
+    ) = <Input as sealed::MIterDispatch<R>>::partition_dispatch(source, exec.policy(), pred, env)?;
+    let split = selected.len();
+    out.write_split_from_inner(exec.policy(), selected.into_inner(), rejected.into_inner())?;
+    Ok(split)
 }

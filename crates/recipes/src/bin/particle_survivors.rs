@@ -92,12 +92,20 @@ where
         (),
         SoA1(stencil.slice_mut(..)),
     )?;
-    let SoA3(x, y, vx) = remove_where(
+    let x = exec.constant(next_x.len(), 0.0_f32)?;
+    let y = exec.constant(next_y.len(), 0.0_f32)?;
+    let vx = exec.constant(next_vx.len(), 0.0_f32)?;
+    let len = remove_where(
         exec,
         SoA3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         stencil.slice(..),
+        SoA3(x.slice_mut(..), y.slice_mut(..), vx.slice_mut(..)),
     )?;
-    Ok(Output { x, y, vx })
+    Ok(Output {
+        x: exec.to_device(&exec.to_host(&x.slice(..len))?)?,
+        y: exec.to_device(&exec.to_host(&y.slice(..len))?)?,
+        vx: exec.to_device(&exec.to_host(&vx.slice(..len))?)?,
+    })
 }
 
 fn main() -> common::Result {

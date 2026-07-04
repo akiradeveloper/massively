@@ -23,12 +23,14 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA1(balance) = inclusive_scan_by_key(
+    let balance = exec.constant(amount_delta.len(), 0.0_f32)?;
+    inclusive_scan_by_key(
         exec,
         SoA1(account_id.slice(..)),
         SoA1(amount_delta.slice(..)),
         common::EqualU32,
         common::SumF32,
+        SoA1(balance.slice_mut(..)),
     )?;
     Ok(balance)
 }

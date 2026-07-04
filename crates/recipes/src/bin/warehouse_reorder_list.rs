@@ -63,19 +63,32 @@ where
         (),
         SoA1(urgency.slice_mut(..)),
     )?;
-    let SoA2(sku, urgency) = copy_where(
+    let filtered_sku = exec.constant(sku.len(), 0_u32)?;
+    let filtered_urgency = exec.constant(urgency.len(), 0_u32)?;
+    let len = copy_where(
         exec,
         SoA2(sku.slice(..), urgency.slice(..)),
         urgency.slice(..),
+        SoA2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
     )?;
-    let (SoA1(urgency), SoA1(sku)) = sort_by_key(
+    let sorted_urgency = exec.constant(len, 0_u32)?;
+    let sorted_sku = exec.constant(len, 0_u32)?;
+    sort_by_key(
         exec,
-        SoA1(urgency.slice(..)),
-        SoA1(sku.slice(..)),
+        SoA1(filtered_urgency.slice(..len)),
+        SoA1(filtered_sku.slice(..len)),
         common::LessU32,
+        SoA1(sorted_urgency.slice_mut(..)),
+        SoA1(sorted_sku.slice_mut(..)),
     )?;
-    let SoA1(urgency) = reverse(exec, SoA1(urgency.slice(..)))?;
-    let SoA1(sku) = reverse(exec, SoA1(sku.slice(..)))?;
+    let urgency = exec.constant(len, 0_u32)?;
+    let sku = exec.constant(len, 0_u32)?;
+    reverse(
+        exec,
+        SoA1(sorted_urgency.slice(..)),
+        SoA1(urgency.slice_mut(..)),
+    )?;
+    reverse(exec, SoA1(sorted_sku.slice(..)), SoA1(sku.slice_mut(..)))?;
     Ok(Output { sku, urgency })
 }
 

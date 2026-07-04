@@ -1,40 +1,57 @@
 use super::*;
 
 /// Removes consecutive duplicates under `pred`.
-pub fn unique<R, Input, Pred>(
+pub fn unique<R, Input, Pred, Output>(
     exec: &Executor<R>,
     source: Input,
     pred: Pred,
-) -> Result<<Input::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Pred: op::BinaryPredicateOp<R, Input::Item>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
+    Pred: op::BinaryPredicateOp<R, Output::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::unique_dispatch(source, exec.policy(), pred)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Input as sealed::MIterDispatch<R>>::unique_dispatch(source, exec.policy(), pred)?;
+    write_owned_prefix(exec.policy(), owned, out)
 }
 
 /// Removes consecutive duplicate keys and keeps their values.
-pub fn unique_by_key<R, Keys, Values, Eq>(
+pub fn unique_by_key<R, Keys, Values, Eq, KeyOutput, ValueOutput>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     eq: Eq,
-) -> Result<
-    (
-        <Keys::Item as MItem<R>>::Vec,
-        <Values::Item as MItem<R>>::Vec,
-    ),
-    Error,
->
+    out_k: KeyOutput,
+    out_v: ValueOutput,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Keys: MIter<R>,
-    Values: MIter<R>,
-    Eq: op::BinaryPredicateOp<R, Keys::Item>,
+    KeyOutput: MIterMut<R>,
+    ValueOutput: MIterMut<R>,
+    Keys: MIter<R, Item = KeyOutput::Item>,
+    Values: MIter<R, Item = ValueOutput::Item>,
+    Eq: op::BinaryPredicateOp<R, KeyOutput::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
-    <Keys as sealed::MIterDispatch<R>>::unique_by_key_dispatch(keys, exec.policy(), values, eq)
+    validate_output(exec, &out_k)?;
+    validate_output(exec, &out_v)?;
+    let (unique_keys, unique_values): (
+        <KeyOutput::Item as MAlloc<R>>::Storage,
+        <ValueOutput::Item as MAlloc<R>>::Storage,
+    ) = <Keys as sealed::MIterDispatch<R>>::unique_by_key_dispatch(
+        keys,
+        exec.policy(),
+        values,
+        eq,
+    )?;
+    let len = unique_keys.len();
+    out_k.write_prefix_from_inner(exec.policy(), unique_keys.into_inner())?;
+    out_v.write_prefix_from_inner(exec.policy(), unique_values.into_inner())?;
+    Ok(len)
 }

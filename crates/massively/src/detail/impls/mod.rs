@@ -9,8 +9,8 @@ use crate::error::ensure_same_len;
 use crate::index::{MIndex, mindex_from_usize, usize_from_mindex};
 use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
 use crate::op;
-use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor, Scalar};
-use crate::value::{MItem, MVec};
+use crate::runtime::{DeviceSliceMut, DeviceVec, Executor, Scalar};
+use crate::value::{MAlloc, MItem, StorageFromInner};
 
 mod item;
 mod iter;

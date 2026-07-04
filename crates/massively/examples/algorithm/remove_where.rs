@@ -9,8 +9,14 @@ fn main() -> common::Result {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0])?;
     let stencil = exec.to_device(&[0_u32, 1, 0, 1])?;
 
-    let SoA1(output) = remove_where(&exec, SoA1(values.slice(..)), stencil.slice(..))?;
+    let output = exec.to_device(&[0.0_f32; 4])?;
+    let len = remove_where(
+        &exec,
+        SoA1(values.slice(..)),
+        stencil.slice(..),
+        SoA1(output.slice_mut(..)),
+    )?;
 
-    assert_eq!(exec.to_host(&output)?, vec![-1.0, -3.0]);
+    assert_eq!(exec.to_host(&output.slice(..len))?, vec![-1.0, -3.0]);
     Ok(())
 }

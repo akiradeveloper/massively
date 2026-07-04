@@ -7,8 +7,8 @@ use crate::detail::op_adapter::{KernelOp, StencilFlag};
 use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
-use crate::runtime::{DeviceSlice, DeviceVec, Executor};
-use crate::value::{MItem, MVec};
+use crate::runtime::{DeviceSlice, Executor};
+use crate::value::{MAlloc, StorageFromInner};
 
 pub use crate::Error;
 
@@ -26,6 +26,34 @@ where
     Output: MIterMut<R>,
 {
     <Output as sealed::MIterMutDispatch<R>>::validate_executor(output, exec)
+}
+
+fn write_owned_output<R, Owned, Output>(
+    policy: &crate::detail::CubePolicy<R>,
+    owned: Owned,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Owned: StorageFromInner<R>,
+    Output: MIterMut<R, Item = Owned::Item>,
+{
+    output.write_from_inner(policy, owned.into_inner())
+}
+
+fn write_owned_prefix<R, Owned, Output>(
+    policy: &crate::detail::CubePolicy<R>,
+    owned: Owned,
+    output: Output,
+) -> Result<MIndex, Error>
+where
+    R: Runtime,
+    Owned: StorageFromInner<R>,
+    Output: MIterMut<R, Item = Owned::Item>,
+{
+    let len = owned.len();
+    output.write_prefix_from_inner(policy, owned.into_inner())?;
+    Ok(len)
 }
 
 fn validate_device_slice<R, T>(
@@ -78,7 +106,7 @@ mod set;
 mod transform;
 mod unique;
 
-pub use indexed::{gather, gather_where, permute, scatter, scatter_where};
+pub use indexed::{gather, gather_where, scatter, scatter_where};
 pub use ordering::{
     merge, merge_by_key, reverse, sort, sort_by_key, stable_sort, stable_sort_by_key,
 };
@@ -94,5 +122,5 @@ pub use search::{
 };
 pub use selection::{copy_where, fill, remove_where, replace_where};
 pub use set::{set_difference, set_intersection, set_union};
-pub use transform::{map, transform, transform_where};
+pub use transform::{transform, transform_where};
 pub use unique::{unique, unique_by_key};

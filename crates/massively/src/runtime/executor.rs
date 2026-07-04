@@ -2,17 +2,17 @@
 
 use std::marker::PhantomData;
 
-use cubecl::prelude::{CubeElement, CubePrimitive, Runtime};
+use cubecl::prelude::Runtime;
 
 use crate::Error;
 use crate::detail::dispatch;
 use crate::index::{MIndex, usize_from_mindex};
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
-use crate::value::MItem;
+use crate::value::{MAlloc, MStorageElement};
 
 /// Scalar value that can be stored in one device column.
-pub trait Scalar: CubePrimitive + CubeElement {}
-impl<T> Scalar for T where T: CubePrimitive + CubeElement {}
+pub trait Scalar: MStorageElement {}
+impl<T> Scalar for T where T: MStorageElement {}
 
 /// Device-resident data that can be copied back to host memory by an executor.
 pub trait ToHost<R: Runtime>:
@@ -98,11 +98,11 @@ impl<R: Runtime> Executor<R> {
     /// intended as temporary output buffers for algorithms that write every
     /// element before the data is read. Reading an allocated buffer before
     /// writing it produces unspecified values.
-    pub fn alloc<Item>(&self, len: MIndex) -> Result<Item::Vec, Error>
+    pub fn alloc<Item>(&self, len: MIndex) -> Result<Item::Storage, Error>
     where
-        Item: MItem<R>,
+        Item: MAlloc<R>,
     {
-        Item::alloc_vec(self, len)
+        Item::alloc_storage(self, len)
     }
 
     /// Allocates an `MIndex` device vector containing `0..len`.
