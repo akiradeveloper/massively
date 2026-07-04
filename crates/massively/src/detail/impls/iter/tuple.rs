@@ -1252,7 +1252,9 @@ macro_rules! impl_wide_predicate_selection_body {
         let len = $a.len;
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         if len == 0 {
-            Ok(crate::detail::primitives::select::SelectionHandles::empty($policy.client()))
+            Ok(crate::detail::primitives::select::SelectedRankControl::empty(
+                $policy.client(),
+            ))
         } else {
             let client = $policy.client();
             let flag = client.empty(len * std::mem::size_of::<u32>());
@@ -1302,13 +1304,7 @@ macro_rules! impl_wide_predicate_selection_body {
                     BufferArg::from_raw_parts(flag.clone(), len),
                 );
             }
-            crate::detail::primitives::select::handles_from_flags(
-                $policy,
-                len,
-                len_u32,
-                flag,
-                $policy.empty_handle(),
-            )
+            crate::detail::primitives::select::selected_rank_from_flags($policy, len, len_u32, flag)
         }
     }};
 }
@@ -2028,42 +2024,49 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
                 BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
             );
         }
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$first_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$second_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$third_key,
-                $end_flags.clone(),
-            )?,
-        );
-        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
             $end_flags,
-            reduced_b_handle,
         )?;
+        let value_count =
+            crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$first_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$second_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$third_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+        );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_a_handle,
+                    value_count,
+                )?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_b_handle,
+                    value_count,
+                )?,
             ),
         ))
     }};
@@ -2108,50 +2111,55 @@ macro_rules! impl_tuple_reduce_by_three_key_values_body {
                 BufferArg::from_raw_parts(reduced_c_handle.clone(), $first_key.len),
             );
         }
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$first_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$second_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$third_key,
-                $end_flags.clone(),
-            )?,
-        );
-        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_b_handle,
-        )?;
-        let value_c_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
             $end_flags,
-            reduced_c_handle,
         )?;
+        let value_count =
+            crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$first_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$second_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$third_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+        );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_a_handle,
+                    value_count,
+                )?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_b_handle,
+                    value_count,
+                )?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty2>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_c_handle,
+                    value_count,
+                )?,
             ),
         ))
     }};
@@ -2192,37 +2200,43 @@ macro_rules! impl_tuple_reduce_by_two_key_values_body {
                 BufferArg::from_raw_parts(reduced_b_handle.clone(), $first_key.len),
             );
         }
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$first_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$second_key,
-                $end_flags.clone(),
-            )?,
-        );
-        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
             $end_flags,
-            reduced_b_handle,
         )?;
+        let value_count =
+            crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$first_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$second_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+        );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_a_handle,
+                    value_count,
+                )?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_b_handle,
+                    value_count,
+                )?,
             ),
         ))
     }};
@@ -2267,45 +2281,49 @@ macro_rules! impl_tuple_reduce_by_two_key_values_body {
                 BufferArg::from_raw_parts(reduced_c_handle.clone(), $first_key.len),
             );
         }
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$first_key,
-                $end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                $policy,
-                &$second_key,
-                $end_flags.clone(),
-            )?,
-        );
-        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $first_key.len,
-            $len_u32,
-            $end_flags.clone(),
-            reduced_b_handle,
-        )?;
-        let value_c_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $first_key.len,
             $len_u32,
             $end_flags,
-            reduced_c_handle,
         )?;
+        let value_count =
+            crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$first_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                $policy,
+                &$second_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+        );
         Ok((
             key_inner,
             (
-                crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
-                crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_a_handle,
+                    value_count,
+                )?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_b_handle,
+                    value_count,
+                )?,
+                crate::detail::primitives::select::compact_value_with_count::<R, $ty2>(
+                    $policy,
+                    &value_selected_rank,
+                    reduced_c_handle,
+                    value_count,
+                )?,
             ),
         ))
     }};
@@ -2644,63 +2662,57 @@ macro_rules! impl_wide_reduce_by_single_key_tuple7_values_body {
                 BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
             );
         }
-        let value_a_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_a_handle,
-        )?;
-        let value_b_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_b_handle,
-        )?;
-        let value_c_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_c_handle,
-        )?;
-        let value_d_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_d_handle,
-        )?;
-        let value_e_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_e_handle,
-        )?;
-        let value_f_handles = crate::detail::primitives::select::handles_from_flags(
-            $policy,
-            $control.len,
-            $control.len_u32,
-            $control.end_flags.clone(),
-            reduced_f_handle,
-        )?;
-        let value_g_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             $policy,
             $control.len,
             $control.len_u32,
             $control.end_flags,
-            reduced_g_handle,
         )?;
+        let value_count =
+            crate::detail::primitives::select::selected_count($policy, &value_selected_rank)?;
         Ok((
-            crate::detail::primitives::select::compact::<R, $ty0>($policy, value_a_handles)?,
-            crate::detail::primitives::select::compact::<R, $ty1>($policy, value_b_handles)?,
-            crate::detail::primitives::select::compact::<R, $ty2>($policy, value_c_handles)?,
-            crate::detail::primitives::select::compact::<R, $ty3>($policy, value_d_handles)?,
-            crate::detail::primitives::select::compact::<R, $ty4>($policy, value_e_handles)?,
-            crate::detail::primitives::select::compact::<R, $ty5>($policy, value_f_handles)?,
-            crate::detail::primitives::select::compact::<R, $ty6>($policy, value_g_handles)?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty0>(
+                $policy,
+                &value_selected_rank,
+                reduced_a_handle,
+                value_count,
+            )?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty1>(
+                $policy,
+                &value_selected_rank,
+                reduced_b_handle,
+                value_count,
+            )?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty2>(
+                $policy,
+                &value_selected_rank,
+                reduced_c_handle,
+                value_count,
+            )?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty3>(
+                $policy,
+                &value_selected_rank,
+                reduced_d_handle,
+                value_count,
+            )?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty4>(
+                $policy,
+                &value_selected_rank,
+                reduced_e_handle,
+                value_count,
+            )?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty5>(
+                $policy,
+                &value_selected_rank,
+                reduced_f_handle,
+                value_count,
+            )?,
+            crate::detail::primitives::select::compact_value_with_count::<R, $ty6>(
+                $policy,
+                &value_selected_rank,
+                reduced_g_handle,
+                value_count,
+            )?,
         ))
     }};
 }
@@ -2813,47 +2825,75 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident) => {{
         let flags: cubecl::server::Handle =
             impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3)?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            $policy,
+            $input.0.len,
+            u32::try_from($input.0.len).map_err(|_| Error::LengthTooLarge { len: $input.0.len })?,
+            flags,
+        )?;
+        let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
         Ok((
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
         ))
     }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident) => {{
         let flags: cubecl::server::Handle =
             impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4)?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            $policy,
+            $input.0.len,
+            u32::try_from($input.0.len).map_err(|_| Error::LengthTooLarge { len: $input.0.len })?,
+            flags,
+        )?;
+        let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
         Ok((
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.4, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.4, &selected_rank, count)?,
         ))
     }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident) => {{
         let flags: cubecl::server::Handle =
             impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5)?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            $policy,
+            $input.0.len,
+            u32::try_from($input.0.len).map_err(|_| Error::LengthTooLarge { len: $input.0.len })?,
+            flags,
+        )?;
+        let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
         Ok((
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.4, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.5, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.4, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.5, &selected_rank, count)?,
         ))
     }};
     ($policy:ident, $input:ident; 0: $a:ident, 1: $b:ident, 2: $c:ident, 3: $d:ident, 4: $e:ident, 5: $f:ident, 6: $g:ident) => {{
         let flags: cubecl::server::Handle =
             impl_wide_unique_dispatch_body!($policy, $input; 0, 1, 2, 3, 4, 5, 6)?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            $policy,
+            $input.0.len,
+            u32::try_from($input.0.len).map_err(|_| Error::LengthTooLarge { len: $input.0.len })?,
+            flags,
+        )?;
+        let count = crate::detail::primitives::select::selected_count($policy, &selected_rank)?;
         Ok((
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.0, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.1, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.2, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.3, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.4, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.5, flags.clone())?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy($policy, &$input.6, flags.clone())?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.0, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.1, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.2, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.3, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.4, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.5, &selected_rank, count)?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy($policy, &$input.6, &selected_rank, count)?,
         ))
     }};
     ($policy:ident, $input:ident; $( $idx:tt : $tmp:ident ),+) => {
@@ -3165,23 +3205,35 @@ macro_rules! impl_miter_soa {
                     crate::detail::device::DeviceColumnView<R, K2>,
                     KernelOp<R, Eq>,
                 >(policy, &first_key, &second_key)?;
+                let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    first_key.len,
+                    u32::try_from(first_key.len)
+                        .map_err(|_| Error::LengthTooLarge { len: first_key.len })?,
+                    flags,
+                )?;
+                let count =
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &first_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &second_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
                 );
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &values.$idx,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?;
                 )+
                 Ok((
@@ -3219,28 +3271,41 @@ macro_rules! impl_miter_soa {
                     &second_key,
                     &third_key,
                 )?;
+                let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    first_key.len,
+                    u32::try_from(first_key.len)
+                        .map_err(|_| Error::LengthTooLarge { len: first_key.len })?,
+                    flags,
+                )?;
+                let count =
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &first_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &second_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &third_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
                 );
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &values.$idx,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?;
                 )+
                 Ok((
@@ -4248,6 +4313,7 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
+                let mask = stencil.mask();
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
@@ -4260,7 +4326,7 @@ macro_rules! impl_miter_soa {
                         policy,
                         &input.$idx,
                         &indices,
-                        stencil.control(),
+                        &mask,
                         &$tmp,
                     )?;
                 )+
@@ -4313,6 +4379,7 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
+                let mask = stencil.mask();
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
@@ -4325,7 +4392,7 @@ macro_rules! impl_miter_soa {
                         policy,
                         &input.$idx,
                         &indices,
-                        stencil.control(),
+                        &mask,
                         &$tmp,
                     )?;
                 )+
@@ -4745,11 +4812,12 @@ macro_rules! impl_miter_mut_soa {
             ) -> Result<(), Error>
             {
                 let output = self.into_inner();
+                let mask = stencil.mask();
                 $(
                     crate::detail::api::replace_where_into_with_control(
                         policy,
                         replacement.$idx,
-                        stencil.control(),
+                        &mask,
                         &output.$idx,
                     )?;
                 )+
@@ -5067,23 +5135,35 @@ macro_rules! impl_wide_miter_soa {
                     crate::detail::device::DeviceColumnView<R, K2>,
                     KernelOp<R, Eq>,
                 >(policy, &first_key, &second_key)?;
+                let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    first_key.len,
+                    u32::try_from(first_key.len)
+                        .map_err(|_| Error::LengthTooLarge { len: first_key.len })?,
+                    flags,
+                )?;
+                let count =
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &first_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &second_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
                 );
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &input.$idx,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?;
                 )+
                 Ok((
@@ -5377,12 +5457,18 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                ensure_same_len(input.0.len, stencil.control().len)?;
+                let selected_rank = stencil.selected_rank();
+                ensure_same_len(input.0.len, selected_rank.len)?;
+                let count = crate::detail::primitives::select::selected_count(
+                    policy,
+                    selected_rank,
+                )?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &input.$idx,
-                        stencil.control().flag.clone(),
+                        selected_rank,
+                        count,
                     )?;
                 )+
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
@@ -5397,12 +5483,18 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                ensure_same_len(input.0.len, stencil.control().len)?;
+                let selected_rank = stencil.selected_rank();
+                ensure_same_len(input.0.len, selected_rank.len)?;
+                let count = crate::detail::primitives::select::selected_count(
+                    policy,
+                    selected_rank,
+                )?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &input.$idx,
-                        stencil.control().flag.clone(),
+                        selected_rank,
+                        count,
                     )?;
                 )+
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
@@ -5538,6 +5630,7 @@ macro_rules! impl_wide_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
+                let mask = stencil.mask();
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
@@ -5550,7 +5643,7 @@ macro_rules! impl_wide_miter_soa {
                         policy,
                         &input.$idx,
                         &indices,
-                        stencil.control(),
+                        &mask,
                         &$tmp,
                     )?;
                 )+
@@ -5603,6 +5696,7 @@ macro_rules! impl_wide_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
+                let mask = stencil.mask();
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
                         &output,
@@ -5615,7 +5709,7 @@ macro_rules! impl_wide_miter_soa {
                         policy,
                         &input.$idx,
                         &indices,
-                        stencil.control(),
+                        &mask,
                         &$tmp,
                     )?;
                 )+
@@ -5754,30 +5848,25 @@ macro_rules! impl_wide_miter_soa {
                 Output: MVec<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
-                let matching_handles = impl_wide_predicate_selection_body!(
+                let selected_rank = impl_wide_predicate_selection_body!(
                     policy, input, _env, false; $( $ty ),+; $( $idx ),+
                 )?;
-                let matching_count =
-                    crate::detail::primitives::select::selected_count(policy, &matching_handles)?;
-                let failing_count = matching_handles.len - matching_count;
+                let (split_rank, matching_count, failing_count) =
+                    crate::detail::primitives::select::split_rank_from_selected(
+                        policy,
+                        selected_rank,
+                )?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_split_with_split_with_policy(
                         policy,
                         &input.$idx,
-                        &matching_handles,
+                        &split_rank,
                         matching_count,
-                    )?;
-                )+
-                let matching = ($($tmp,)+);
-                $(
-                    let $tmp = crate::detail::api::device_expr_compact_rejected_with_selection_with_policy(
-                        policy,
-                        &input.$idx,
-                        &matching_handles,
                         failing_count,
                     )?;
                 )+
-                let failing = ($($tmp,)+);
+                let matching = ($($tmp.0,)+);
+                let failing = ($($tmp.1,)+);
                 Ok((
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(matching),
                     array_from_inner::<R, <Self as MIter<R>>::Item, Output>(failing),
@@ -6109,16 +6198,26 @@ macro_rules! impl_wide_miter_soa {
                     $( $ty ),+;
                     $( $idx ),+
                 )?;
+                let right_extra_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    right.0.len,
+                    u32::try_from(right.0.len)
+                        .map_err(|_| Error::LengthTooLarge { len: right.0.len })?,
+                    right_extra_flags,
+                )?;
+                let right_extra_count =
+                    crate::detail::primitives::select::selected_count(policy, &right_extra_rank)?;
                 $(
                     let $tmp = {
                         let left = crate::detail::api::device_expr_collect_with_policy(
                             policy,
                             &left.$idx,
                         )?;
-                        let right_extra = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                        let right_extra = crate::detail::api::device_expr_compact_with_selection_with_policy(
                             policy,
                             &right.$idx,
-                            right_extra_flags.clone(),
+                            &right_extra_rank,
+                            right_extra_count,
                         )?;
                         crate::detail::primitives::range::concat_device_with_policy(
                             policy,
@@ -6154,11 +6253,21 @@ macro_rules! impl_wide_miter_soa {
                     $( $ty ),+;
                     $( $idx ),+
                 )?;
+                let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    left.0.len,
+                    u32::try_from(left.0.len)
+                        .map_err(|_| Error::LengthTooLarge { len: left.0.len })?,
+                    flags,
+                )?;
+                let count =
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &left.$idx,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?;
                 )+
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
@@ -6186,11 +6295,21 @@ macro_rules! impl_wide_miter_soa {
                     $( $ty ),+;
                     $( $idx ),+
                 )?;
+                let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    left.0.len,
+                    u32::try_from(left.0.len)
+                        .map_err(|_| Error::LengthTooLarge { len: left.0.len })?,
+                    flags,
+                )?;
+                let count =
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &left.$idx,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?;
                 )+
                 Ok(array_from_inner::<R, <Self as MIter<R>>::Item, Output>(($($tmp,)+)))
@@ -6317,28 +6436,41 @@ macro_rules! impl_wide_miter_soa {
                     &second_key,
                     &third_key,
                 )?;
+                let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+                    policy,
+                    first_key.len,
+                    u32::try_from(first_key.len)
+                        .map_err(|_| Error::LengthTooLarge { len: first_key.len })?,
+                    flags,
+                )?;
+                let count =
+                    crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
                 let key_inner = (
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &first_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &second_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
-                    crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &third_key,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?,
                 );
                 $(
-                    let $tmp = crate::detail::api::device_expr_compact_with_flags_with_policy(
+                    let $tmp = crate::detail::api::device_expr_compact_with_selection_with_policy(
                         policy,
                         &values.$idx,
-                        flags.clone(),
+                        &selected_rank,
+                        count,
                     )?;
                 )+
                 Ok((

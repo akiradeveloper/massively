@@ -5281,10 +5281,7 @@ pub(crate) fn unique_by_key_device_expr_flags_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
-pub(crate) fn compact_rejected_scatter_device_expr_kernel<
-    T: CubePrimitive,
-    Expr: DeviceGpuExpr<T>,
->(
+pub(crate) fn compact_split_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceGpuExpr<T>>(
     flags: &[u32],
     positions: &[u32],
     slot0: &[T],
@@ -5292,16 +5289,22 @@ pub(crate) fn compact_rejected_scatter_device_expr_kernel<
     slot2: &[T],
     slot3: &[T],
     slot_offsets: &[u32],
-    output: &mut [T],
+    selected_output: &mut [T],
+    rejected_output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
-    if global < flags.len() && flags[global] == 0u32 {
-        let selected_before_or_at = positions[global];
-        let rejected_before = (global as u32) - selected_before_or_at;
-        output[rejected_before as usize] =
-            Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+    if global < flags.len() {
+        let value = Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+        if flags[global] != 0u32 {
+            let selected_position = positions[global] - 1u32;
+            selected_output[selected_position as usize] = value;
+        } else {
+            let selected_before_or_at = positions[global];
+            let rejected_before = (global as u32) - selected_before_or_at;
+            rejected_output[rejected_before as usize] = value;
+        }
     }
 }
 

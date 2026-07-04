@@ -8,12 +8,9 @@ fn unique_by_key_control_from_flags<R: Runtime>(
     flags: cubecl::server::Handle,
 ) -> Result<UniqueByKeyControl, Error> {
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let handles = select::handles_from_flags(policy, len, len_u32, flags, policy.empty_handle())?;
-    let count = select::selected_count(policy, &handles)?;
-    Ok(UniqueByKeyControl {
-        selection: handles.control,
-        count,
-    })
+    let selection = select::selected_rank_from_flags(policy, len, len_u32, flags)?;
+    let count = select::selected_count(policy, &selection)?;
+    Ok(UniqueByKeyControl { selection, count })
 }
 
 #[allow(dead_code)]

@@ -5,25 +5,25 @@ pub(crate) trait SelectionStencil<Pred> {
     type Runtime: Runtime;
 
     fn len(&self) -> MIndex;
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error>;
+    ) -> Result<select::SelectedRankControl, Error>;
 
     fn selection_flags_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
-        self.selection_handles_with_policy(policy, invert)
+    ) -> Result<select::MaskControl, Error> {
+        Ok(self.selected_rank_with_policy(policy, invert)?.mask())
     }
 }
 
 #[doc(hidden)]
 pub struct PrecomputedSelection<R: Runtime> {
     len: MIndex,
-    handles: select::SelectionHandles,
+    selected_rank: select::SelectedRankControl,
     _runtime: std::marker::PhantomData<R>,
 }
 
@@ -38,7 +38,7 @@ impl<R: Runtime> PrecomputedSelection<R> {
     {
         Ok(Self {
             len: stencil.len(),
-            handles: stencil.selection_handles_with_policy(policy, invert)?,
+            selected_rank: stencil.selected_rank_with_policy(policy, invert)?,
             _runtime: std::marker::PhantomData,
         })
     }
@@ -51,15 +51,21 @@ impl<R: Runtime> PrecomputedSelection<R> {
     where
         Stencil: SelectionStencil<Pred, Runtime = R>,
     {
+        let len = stencil.len();
+        let mask = stencil.selection_flags_with_policy(policy, invert)?;
         Ok(Self {
-            len: stencil.len(),
-            handles: stencil.selection_flags_with_policy(policy, invert)?,
+            len,
+            selected_rank: select::SelectedRankControl::from_mask_only(policy.client(), mask),
             _runtime: std::marker::PhantomData,
         })
     }
 
-    pub(crate) fn control(&self) -> &select::SelectionControl {
-        &self.handles
+    pub(crate) fn selected_rank(&self) -> &select::SelectedRankControl {
+        &self.selected_rank
+    }
+
+    pub(crate) fn mask(&self) -> select::MaskControl {
+        self.selected_rank.mask()
     }
 }
 
@@ -73,20 +79,20 @@ where
         self.len
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         _policy: &crate::policy::CubePolicy<Self::Runtime>,
         _invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
-        Ok(self.handles.clone())
+    ) -> Result<select::SelectedRankControl, Error> {
+        Ok(self.selected_rank.clone())
     }
 
     fn selection_flags_with_policy(
         &self,
         _policy: &crate::policy::CubePolicy<Self::Runtime>,
         _invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
-        Ok(self.handles.clone())
+    ) -> Result<select::MaskControl, Error> {
+        Ok(self.mask())
     }
 }
 
@@ -104,19 +110,19 @@ where
         mindex_from_usize(KernelColumn::len(self)).expect("stencil length exceeds MIndex")
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
-        device_expr_selection_handles_with_policy::<Stencil, Pred>(policy, self, invert, ())
+    ) -> Result<select::SelectedRankControl, Error> {
+        device_expr_selected_rank_with_policy::<Stencil, Pred>(policy, self, invert, ())
     }
 
     fn selection_flags_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
+    ) -> Result<select::MaskControl, Error> {
         device_expr_selection_flags_with_policy::<Stencil, Pred>(policy, self, invert, ())
     }
 }
@@ -135,12 +141,12 @@ where
         mindex_from_usize(self.0.len()).expect("stencil length exceeds MIndex")
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
-        device_expr_selection_handles_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
+    ) -> Result<select::SelectedRankControl, Error> {
+        device_expr_selected_rank_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
             policy,
             &self.0,
             invert,
@@ -152,7 +158,7 @@ where
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
+    ) -> Result<select::MaskControl, Error> {
         device_expr_selection_flags_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
             policy,
             &self.0,
@@ -179,11 +185,11 @@ where
         mindex_from_usize(self.left.len()).expect("stencil length exceeds MIndex")
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
+    ) -> Result<select::SelectedRankControl, Error> {
         self.left.validate()?;
         self.right.validate()?;
         ensure_same_len(self.left.len(), self.right.len())?;
@@ -239,7 +245,7 @@ where
                 );
             }
         }
-        select::handles_from_flags(policy, len_usize, len_u32, flag, policy.empty_handle())
+        select::selected_rank_from_flags(policy, len_usize, len_u32, flag)
     }
 }
 
@@ -263,11 +269,11 @@ where
         mindex_from_usize(self.first.len()).expect("stencil length exceeds MIndex")
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
+    ) -> Result<select::SelectedRankControl, Error> {
         self.first.validate()?;
         self.second.validate()?;
         self.third.validate()?;
@@ -338,7 +344,7 @@ where
                 );
             }
         }
-        select::handles_from_flags(policy, len_usize, len_u32, flag, policy.empty_handle())
+        select::selected_rank_from_flags(policy, len_usize, len_u32, flag)
     }
 }
 
@@ -357,16 +363,16 @@ where
         })
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
+    ) -> Result<select::SelectedRankControl, Error> {
         SoAView2 {
             left: self.0,
             right: self.1,
         }
-        .selection_handles_with_policy(policy, invert)
+        .selected_rank_with_policy(policy, invert)
     }
 }
 
@@ -387,16 +393,16 @@ where
         })
     }
 
-    fn selection_handles_with_policy(
+    fn selected_rank_with_policy(
         &self,
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
-    ) -> Result<select::SelectionHandles, Error> {
+    ) -> Result<select::SelectedRankControl, Error> {
         SoAView3 {
             first: self.0,
             second: self.1,
             third: self.2,
         }
-        .selection_handles_with_policy(policy, invert)
+        .selected_rank_with_policy(policy, invert)
     }
 }

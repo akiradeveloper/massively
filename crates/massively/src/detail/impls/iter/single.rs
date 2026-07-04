@@ -696,29 +696,36 @@ where
             );
         }
 
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                policy,
-                &first_key,
-                end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                policy,
-                &second_key,
-                end_flags.clone(),
-            )?,
-        );
-        let value_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
             first_key.len,
             len_u32,
             end_flags,
-            reduced_handle,
         )?;
-        let value_inner = (crate::detail::primitives::select::compact::<R, T>(
-            policy,
-            value_handles,
-        )?,);
+        let value_count =
+            crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                policy,
+                &first_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                policy,
+                &second_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+        );
+        let value_inner = (
+            crate::detail::primitives::select::compact_value_with_count::<R, T>(
+                policy,
+                &value_selected_rank,
+                reduced_handle,
+                value_count,
+            )?,
+        );
         Ok((
             array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
@@ -911,34 +918,42 @@ where
             );
         }
 
-        let key_inner = (
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                policy,
-                &first_key,
-                end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                policy,
-                &second_key,
-                end_flags.clone(),
-            )?,
-            crate::detail::api::device_expr_compact_with_flags_with_policy(
-                policy,
-                &third_key,
-                end_flags.clone(),
-            )?,
-        );
-        let value_handles = crate::detail::primitives::select::handles_from_flags(
+        let value_selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
             first_key.len,
             len_u32,
             end_flags,
-            reduced_handle,
         )?;
-        let value_inner = (crate::detail::primitives::select::compact::<R, T>(
-            policy,
-            value_handles,
-        )?,);
+        let value_count =
+            crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
+        let key_inner = (
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                policy,
+                &first_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                policy,
+                &second_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+            crate::detail::api::device_expr_compact_with_selection_with_policy(
+                policy,
+                &third_key,
+                &value_selected_rank,
+                value_count,
+            )?,
+        );
+        let value_inner = (
+            crate::detail::primitives::select::compact_value_with_count::<R, T>(
+                policy,
+                &value_selected_rank,
+                reduced_handle,
+                value_count,
+            )?,
+        );
         Ok((
             array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
@@ -1436,16 +1451,13 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
+        let mask = stencil.mask();
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "gather_where output must match input shape".to_string(),
             })?;
         crate::detail::api::device_expr_gather_where_into_with_control(
-            policy,
-            &input,
-            &indices,
-            stencil.control(),
-            &output,
+            policy, &input, &indices, &mask, &output,
         )
     }
 
@@ -1484,16 +1496,13 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
+        let mask = stencil.mask();
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "scatter_where output must match input shape".to_string(),
             })?;
         crate::detail::api::device_expr_scatter_where_into_with_control(
-            policy,
-            &input,
-            &indices,
-            stencil.control(),
-            &output,
+            policy, &input, &indices, &mask, &output,
         )
     }
 
@@ -1849,12 +1858,8 @@ where
         stencil: crate::detail::api::PrecomputedSelection<R>,
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
-        crate::detail::api::replace_where_into_with_control(
-            policy,
-            replacement.0,
-            stencil.control(),
-            &output,
-        )
+        let mask = stencil.mask();
+        crate::detail::api::replace_where_into_with_control(policy, replacement.0, &mask, &output)
     }
 
     fn fill_inner(

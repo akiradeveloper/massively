@@ -205,7 +205,7 @@ pub(crate) fn device_expr_gather_where_into_with_control<InputSource, IndexSourc
     policy: &crate::policy::CubePolicy<InputSource::Runtime>,
     input: &InputSource,
     indices: &IndexSource,
-    control: &select::SelectionControl,
+    control: &select::MaskControl,
     output: &DeviceColumnMutView<InputSource::Runtime, InputSource::Item>,
 ) -> Result<(), Error>
 where
@@ -295,7 +295,7 @@ pub(crate) fn device_expr_scatter_where_into_with_control<ValueSource, IndexSour
     policy: &crate::policy::CubePolicy<ValueSource::Runtime>,
     values: &ValueSource,
     indices: &IndexSource,
-    control: &select::SelectionControl,
+    control: &select::MaskControl,
     output: &DeviceColumnMutView<ValueSource::Runtime, ValueSource::Item>,
 ) -> Result<(), Error>
 where
