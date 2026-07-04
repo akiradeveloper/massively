@@ -1,6 +1,6 @@
 use super::super::selection::unique_one_flags_read;
 use super::super::*;
-use crate::detail::control::UniqueByKeyControl;
+use crate::detail::control::{SegmentControl, UniqueByKeyControl};
 
 fn unique_by_key_control_from_flags<R: Runtime>(
     policy: &CubePolicy<R>,
@@ -8,7 +8,9 @@ fn unique_by_key_control_from_flags<R: Runtime>(
     flags: cubecl::server::Handle,
 ) -> Result<UniqueByKeyControl, Error> {
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let selection = select::selected_rank_from_flags(policy, len, len_u32, flags)?;
+    let segment: SegmentControl<R> = SegmentControl::from_head_flags(flags, len, len_u32);
+    let selection =
+        select::selected_rank_from_flags(policy, len, len_u32, segment.head_flags.clone())?;
     let count = select::selected_count(policy, &selection)?;
     Ok(UniqueByKeyControl { selection, count })
 }

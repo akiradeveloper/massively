@@ -10,7 +10,7 @@ use crate::{
     kernels::*,
     op::GpuOp,
     policy::CubePolicy,
-    primitives::{scan, search},
+    primitives::scan,
 };
 use cubecl::prelude::*;
 
@@ -27,6 +27,172 @@ struct StagedSearchColumn {
     slot2: (cubecl::server::Handle, usize),
     slot3: (cubecl::server::Handle, usize),
     slot_offsets: cubecl::server::Handle,
+}
+
+struct SearchPayloadLaunch {
+    source_len_handle: cubecl::server::Handle,
+    value_len_handle: cubecl::server::Handle,
+    output_handle: cubecl::server::Handle,
+    block_count_u32: u32,
+    value_len: usize,
+}
+
+struct SearchPayloadApply;
+
+impl SearchPayloadApply {
+    fn empty_or_zero<R: Runtime>(
+        policy: &CubePolicy<R>,
+        source_len: usize,
+        value_len: usize,
+    ) -> Option<Result<DeviceVec<R, MIndex>, Error>> {
+        if value_len == 0 {
+            return Some(Ok(policy.empty_device_vec()));
+        }
+        if source_len == 0 {
+            return Some(policy.device_filled(value_len, 0 as MIndex));
+        }
+        None
+    }
+
+    fn prepare<R: Runtime>(
+        policy: &CubePolicy<R>,
+        source_len: usize,
+        value_len: usize,
+    ) -> Result<SearchPayloadLaunch, Error> {
+        let source_len_u32 =
+            u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
+        let value_len_u32 =
+            u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
+        let client = policy.client();
+        Ok(SearchPayloadLaunch {
+            source_len_handle: client.create_from_slice(u32::as_bytes(&[source_len_u32])),
+            value_len_handle: client.create_from_slice(u32::as_bytes(&[value_len_u32])),
+            output_handle: client.empty(value_len * std::mem::size_of::<MIndex>()),
+            block_count_u32: search_block_count(value_len)?,
+            value_len,
+        })
+    }
+
+    fn finish<R: Runtime>(
+        policy: &CubePolicy<R>,
+        launch: SearchPayloadLaunch,
+    ) -> DeviceVec<R, MIndex> {
+        DeviceVec::from_handle(policy.id(), launch.output_handle, launch.value_len)
+    }
+
+    fn lower_bound_many_expr<Source, Values, Less>(
+        policy: &CubePolicy<Source::Runtime>,
+        input: &Source,
+        values: &Values,
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error>
+    where
+        Source: KernelColumn + KernelColumnAt<S0>,
+        Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+        Source::Item: CubePrimitive + CubeElement,
+        Source::Expr: DeviceGpuExpr<Source::Item>,
+        Values::Expr: DeviceGpuExpr<Values::Item>,
+        Less: BinaryPredicateOp<Source::Item>,
+    {
+        input.validate()?;
+        values.validate()?;
+        let source_len = input.len();
+        let value_len = values.len();
+        if let Some(output) = Self::empty_or_zero(policy, source_len, value_len) {
+            return output;
+        }
+
+        let launch = Self::prepare(policy, source_len, value_len)?;
+        let input = stage_search_column(policy, input)?;
+        let values = stage_search_column(policy, values)?;
+
+        unsafe {
+            lower_bound_device_expr_many_kernel::launch_unchecked::<
+                Source::Item,
+                Source::Expr,
+                Values::Expr,
+                Less,
+                Source::Runtime,
+            >(
+                policy.client(),
+                CubeCount::Static(launch.block_count_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+                unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot2.0.clone(), input.slot2.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot3.0.clone(), input.slot3.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(values.slot0.0.clone(), values.slot0.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot1.0.clone(), values.slot1.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot2.0.clone(), values.slot2.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot3.0.clone(), values.slot3.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(launch.source_len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(launch.value_len_handle.clone(), 1) },
+                unsafe {
+                    BufferArg::from_raw_parts(launch.output_handle.clone(), launch.value_len)
+                },
+            );
+        }
+
+        Ok(Self::finish(policy, launch))
+    }
+
+    fn upper_bound_many_expr<Source, Values, Less>(
+        policy: &CubePolicy<Source::Runtime>,
+        input: &Source,
+        values: &Values,
+    ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error>
+    where
+        Source: KernelColumn + KernelColumnAt<S0>,
+        Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
+        Source::Item: CubePrimitive + CubeElement,
+        Source::Expr: DeviceGpuExpr<Source::Item>,
+        Values::Expr: DeviceGpuExpr<Values::Item>,
+        Less: BinaryPredicateOp<Source::Item>,
+    {
+        input.validate()?;
+        values.validate()?;
+        let source_len = input.len();
+        let value_len = values.len();
+        if let Some(output) = Self::empty_or_zero(policy, source_len, value_len) {
+            return output;
+        }
+
+        let launch = Self::prepare(policy, source_len, value_len)?;
+        let input = stage_search_column(policy, input)?;
+        let values = stage_search_column(policy, values)?;
+
+        unsafe {
+            upper_bound_device_expr_many_kernel::launch_unchecked::<
+                Source::Item,
+                Source::Expr,
+                Values::Expr,
+                Less,
+                Source::Runtime,
+            >(
+                policy.client(),
+                CubeCount::Static(launch.block_count_u32, 1, 1),
+                CubeDim::new_1d(BLOCK_SEARCH_SIZE),
+                unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot2.0.clone(), input.slot2.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot3.0.clone(), input.slot3.1) },
+                unsafe { BufferArg::from_raw_parts(input.slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(values.slot0.0.clone(), values.slot0.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot1.0.clone(), values.slot1.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot2.0.clone(), values.slot2.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot3.0.clone(), values.slot3.1) },
+                unsafe { BufferArg::from_raw_parts(values.slot_offsets.clone(), 4) },
+                unsafe { BufferArg::from_raw_parts(launch.source_len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(launch.value_len_handle.clone(), 1) },
+                unsafe {
+                    BufferArg::from_raw_parts(launch.output_handle.clone(), launch.value_len)
+                },
+            );
+        }
+
+        Ok(Self::finish(policy, launch))
+    }
 }
 
 fn stage_search_column<Source>(
@@ -116,7 +282,8 @@ where
         );
     }
 
-    if let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? {
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, min_len, min_len);
+    if let Some(index) = super::QueryApply::first_flag(policy, control)? {
         return Ok(Some(index));
     }
 
@@ -172,7 +339,8 @@ where
         );
     }
 
-    search::first_flag(policy, flag_handle, len, len - 1)
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, len, len - 1);
+    super::QueryApply::first_flag(policy, control)
 }
 
 fn device_expr_is_sorted_until<Source, Less>(
@@ -220,7 +388,8 @@ where
         );
     }
 
-    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(mindex_from_usize(len)?))
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, len, len);
+    super::QueryApply::first_flag_or(policy, control, mindex_from_usize(len)?)
 }
 
 fn device_expr_lower_bound<Source, Less>(
@@ -271,7 +440,8 @@ where
         );
     }
 
-    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(mindex_from_usize(len)?))
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, len, len);
+    super::QueryApply::first_flag_or(policy, control, mindex_from_usize(len)?)
 }
 
 fn device_expr_upper_bound<Source, Less>(
@@ -322,147 +492,8 @@ where
         );
     }
 
-    Ok(search::first_flag(policy, flag_handle, len, len)?.unwrap_or(mindex_from_usize(len)?))
-}
-
-fn device_expr_lower_bound_many<Source, Values, Less>(
-    policy: &CubePolicy<Source::Runtime>,
-    input: &Source,
-    values: &Values,
-) -> Result<DeviceVec<Source::Runtime, MIndex>, Error>
-where
-    Source: KernelColumn + KernelColumnAt<S0>,
-    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
-    Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: DeviceGpuExpr<Source::Item>,
-    Values::Expr: DeviceGpuExpr<Values::Item>,
-    Less: BinaryPredicateOp<Source::Item>,
-{
-    input.validate()?;
-    values.validate()?;
-    let source_len = input.len();
-    let value_len = values.len();
-    let source_len_u32 =
-        u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
-    let value_len_u32 =
-        u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
-    if value_len == 0 {
-        return Ok(policy.empty_device_vec());
-    }
-    if source_len == 0 {
-        return policy.device_filled(value_len, 0 as MIndex);
-    }
-
-    let client = policy.client();
-    let block_count_u32 = search_block_count(value_len)?;
-    let output_handle = client.empty(value_len * std::mem::size_of::<MIndex>());
-    let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
-    let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
-    let input = stage_search_column(policy, input)?;
-    let values = stage_search_column(policy, values)?;
-
-    unsafe {
-        lower_bound_device_expr_many_kernel::launch_unchecked::<
-            Source::Item,
-            Source::Expr,
-            Values::Expr,
-            Less,
-            Source::Runtime,
-        >(
-            client,
-            CubeCount::Static(block_count_u32, 1, 1),
-            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-            unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot2.0.clone(), input.slot2.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot3.0.clone(), input.slot3.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(values.slot0.0.clone(), values.slot0.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot1.0.clone(), values.slot1.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot2.0.clone(), values.slot2.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot3.0.clone(), values.slot3.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
-        );
-    }
-
-    Ok(DeviceVec::from_handle(
-        policy.id(),
-        output_handle,
-        value_len,
-    ))
-}
-
-fn device_expr_upper_bound_many<Source, Values, Less>(
-    policy: &CubePolicy<Source::Runtime>,
-    input: &Source,
-    values: &Values,
-) -> Result<DeviceVec<Source::Runtime, MIndex>, Error>
-where
-    Source: KernelColumn + KernelColumnAt<S0>,
-    Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
-    Source::Item: CubePrimitive + CubeElement,
-    Source::Expr: DeviceGpuExpr<Source::Item>,
-    Values::Expr: DeviceGpuExpr<Values::Item>,
-    Less: BinaryPredicateOp<Source::Item>,
-{
-    input.validate()?;
-    values.validate()?;
-    let source_len = input.len();
-    let value_len = values.len();
-    let source_len_u32 =
-        u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
-    let value_len_u32 =
-        u32::try_from(value_len).map_err(|_| Error::LengthTooLarge { len: value_len })?;
-    if value_len == 0 {
-        return Ok(policy.empty_device_vec());
-    }
-    if source_len == 0 {
-        return policy.device_filled(value_len, 0 as MIndex);
-    }
-
-    let client = policy.client();
-    let block_count_u32 = search_block_count(value_len)?;
-    let output_handle = client.empty(value_len * std::mem::size_of::<MIndex>());
-    let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
-    let value_len_handle = client.create_from_slice(u32::as_bytes(&[value_len_u32]));
-    let input = stage_search_column(policy, input)?;
-    let values = stage_search_column(policy, values)?;
-
-    unsafe {
-        upper_bound_device_expr_many_kernel::launch_unchecked::<
-            Source::Item,
-            Source::Expr,
-            Values::Expr,
-            Less,
-            Source::Runtime,
-        >(
-            client,
-            CubeCount::Static(block_count_u32, 1, 1),
-            CubeDim::new_1d(BLOCK_SEARCH_SIZE),
-            unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot2.0.clone(), input.slot2.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot3.0.clone(), input.slot3.1) },
-            unsafe { BufferArg::from_raw_parts(input.slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(values.slot0.0.clone(), values.slot0.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot1.0.clone(), values.slot1.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot2.0.clone(), values.slot2.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot3.0.clone(), values.slot3.1) },
-            unsafe { BufferArg::from_raw_parts(values.slot_offsets.clone(), 4) },
-            unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
-        );
-    }
-
-    Ok(DeviceVec::from_handle(
-        policy.id(),
-        output_handle,
-        value_len,
-    ))
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, len, len);
+    super::QueryApply::first_flag_or(policy, control, mindex_from_usize(len)?)
 }
 
 fn device_expr_find_first_of<Left, Right, Op>(
@@ -530,7 +561,8 @@ where
         );
     }
 
-    search::first_flag(policy, flag_handle, len, len)
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, len, len);
+    super::QueryApply::first_flag(policy, control)
 }
 
 fn device_expr_lexicographical_compare<Left, Right, Less>(
@@ -594,7 +626,8 @@ where
         );
     }
 
-    let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? else {
+    let control = crate::detail::control::SearchControl::from_flags(flag_handle, min_len, min_len);
+    let Some(index) = super::QueryApply::first_flag(policy, control)? else {
         return Ok(left.len() < right.len());
     };
 
@@ -646,7 +679,7 @@ where
     ) -> Result<Option<MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(
-            super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)?
+            super::QueryApply::minmax_expr::<Source, Less>(policy, &self.source)?
                 .map(|(min, _)| min),
         )
     }
@@ -658,7 +691,7 @@ where
     ) -> Result<Option<MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         Ok(
-            super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)?
+            super::QueryApply::minmax_expr::<Source, Less>(policy, &self.source)?
                 .map(|(_, max)| max),
         )
     }
@@ -669,7 +702,7 @@ where
         _less: GpuOp<Less>,
     ) -> Result<Option<(MIndex, MIndex)>, Error> {
         ReadOnlySoA::validate(&self)?;
-        super::device_expr_minmax_element_with_policy::<Source, Less>(policy, &self.source)
+        super::QueryApply::minmax_expr::<Source, Less>(policy, &self.source)
     }
 }
 
@@ -905,7 +938,11 @@ where
     ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
-        device_expr_lower_bound_many::<Source, Values, Less>(policy, &self.source, &values.source)
+        SearchPayloadApply::lower_bound_many_expr::<Source, Values, Less>(
+            policy,
+            &self.source,
+            &values.source,
+        )
     }
 
     fn upper_bound_many_input(
@@ -916,7 +953,11 @@ where
     ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
         ReadOnlySoA::validate(&self)?;
         ReadOnlySoA::validate(&values)?;
-        device_expr_upper_bound_many::<Source, Values, Less>(policy, &self.source, &values.source)
+        SearchPayloadApply::upper_bound_many_expr::<Source, Values, Less>(
+            policy,
+            &self.source,
+            &values.source,
+        )
     }
 }
 
@@ -1715,7 +1756,12 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                search::first_flag(policy, flag_handle, len, len - 1)
+                let control = crate::detail::control::SearchControl::from_flags(
+                    flag_handle,
+                    len,
+                    len - 1,
+                );
+                super::QueryApply::first_flag(policy, control)
             }
         }
 
@@ -1806,8 +1852,12 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                Ok(search::first_flag(policy, flag_handle, len, len)?
-                    .unwrap_or(mindex_from_usize(len)?))
+                let control = crate::detail::control::SearchControl::from_flags(
+                    flag_handle,
+                    len,
+                    len,
+                );
+                super::QueryApply::first_flag_or(policy, control, mindex_from_usize(len)?)
             }
 
             fn upper_bound_input(
@@ -1870,8 +1920,12 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                Ok(search::first_flag(policy, flag_handle, len, len)?
-                    .unwrap_or(mindex_from_usize(len)?))
+                let control = crate::detail::control::SearchControl::from_flags(
+                    flag_handle,
+                    len,
+                    len,
+                );
+                super::QueryApply::first_flag_or(policy, control, mindex_from_usize(len)?)
             }
 
             fn is_sorted_until_input(
@@ -1918,8 +1972,12 @@ macro_rules! impl_tuple_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
                     );
                 }
-                Ok(search::first_flag(policy, flag_handle, len, len)?
-                    .unwrap_or(mindex_from_usize(len)?))
+                let control = crate::detail::control::SearchControl::from_flags(
+                    flag_handle,
+                    len,
+                    len,
+                );
+                super::QueryApply::first_flag_or(policy, control, mindex_from_usize(len)?)
             }
 
             fn is_sorted_input(
@@ -1971,20 +2029,12 @@ macro_rules! impl_tuple_search {
                 ReadOnlySoA::validate(&values)?;
                 let source_len = self.$first_field.len();
                 let value_len = values.$first_field.len();
-                let source_len_u32 = u32::try_from(source_len)
-                    .map_err(|_| Error::LengthTooLarge { len: source_len })?;
-                let value_len_u32 = u32::try_from(value_len)
-                    .map_err(|_| Error::LengthTooLarge { len: value_len })?;
-                if value_len == 0 {
-                    return Ok(policy.empty_device_vec());
+                if let Some(output) =
+                    SearchPayloadApply::empty_or_zero(policy, source_len, value_len)
+                {
+                    return output;
                 }
-                if source_len == 0 {
-                    return policy.device_filled(value_len, 0 as MIndex);
-                }
-                let source_len_handle = policy.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
-                let value_len_handle = policy.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
-                let output_handle = policy.client().empty(value_len * std::mem::size_of::<MIndex>());
-                let block_count_u32 = search_block_count(value_len)?;
+                let launch = SearchPayloadApply::prepare(policy, source_len, value_len)?;
                 let $first_field = (
                     stage_search_column(policy, &self.$first_field)?,
                     stage_search_column(policy, &values.$first_field)?,
@@ -2007,7 +2057,7 @@ macro_rules! impl_tuple_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         policy.client(),
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        CubeCount::Static(launch.block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot0.0.clone(), $first_field.0.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot1.0.clone(), $first_field.0.slot1.1) },
@@ -2031,12 +2081,12 @@ macro_rules! impl_tuple_search {
                             unsafe { BufferArg::from_raw_parts($field.1.slot3.0.clone(), $field.1.slot3.1) },
                             unsafe { BufferArg::from_raw_parts($field.1.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
-                        unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
-                        unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
+                        unsafe { BufferArg::from_raw_parts(launch.source_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(launch.value_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(launch.output_handle.clone(), launch.value_len) },
                     );
                 }
-                Ok(DeviceVec::from_handle(policy.id(), output_handle, value_len))
+                Ok(SearchPayloadApply::finish(policy, launch))
             }
 
             fn upper_bound_many_input(
@@ -2049,20 +2099,12 @@ macro_rules! impl_tuple_search {
                 ReadOnlySoA::validate(&values)?;
                 let source_len = self.$first_field.len();
                 let value_len = values.$first_field.len();
-                let source_len_u32 = u32::try_from(source_len)
-                    .map_err(|_| Error::LengthTooLarge { len: source_len })?;
-                let value_len_u32 = u32::try_from(value_len)
-                    .map_err(|_| Error::LengthTooLarge { len: value_len })?;
-                if value_len == 0 {
-                    return Ok(policy.empty_device_vec());
+                if let Some(output) =
+                    SearchPayloadApply::empty_or_zero(policy, source_len, value_len)
+                {
+                    return output;
                 }
-                if source_len == 0 {
-                    return policy.device_filled(value_len, 0 as MIndex);
-                }
-                let source_len_handle = policy.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
-                let value_len_handle = policy.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
-                let output_handle = policy.client().empty(value_len * std::mem::size_of::<MIndex>());
-                let block_count_u32 = search_block_count(value_len)?;
+                let launch = SearchPayloadApply::prepare(policy, source_len, value_len)?;
                 let $first_field = (
                     stage_search_column(policy, &self.$first_field)?,
                     stage_search_column(policy, &values.$first_field)?,
@@ -2085,7 +2127,7 @@ macro_rules! impl_tuple_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         policy.client(),
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        CubeCount::Static(launch.block_count_u32, 1, 1),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot0.0.clone(), $first_field.0.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot1.0.clone(), $first_field.0.slot1.1) },
@@ -2109,12 +2151,12 @@ macro_rules! impl_tuple_search {
                             unsafe { BufferArg::from_raw_parts($field.1.slot3.0.clone(), $field.1.slot3.1) },
                             unsafe { BufferArg::from_raw_parts($field.1.slot_offsets.clone(), 4) },
                         )+
-                        unsafe { BufferArg::from_raw_parts(source_len_handle.clone(), 1) },
-                        unsafe { BufferArg::from_raw_parts(value_len_handle.clone(), 1) },
-                        unsafe { BufferArg::from_raw_parts(output_handle.clone(), value_len) },
+                        unsafe { BufferArg::from_raw_parts(launch.source_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(launch.value_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(launch.output_handle.clone(), launch.value_len) },
                     );
                 }
-                Ok(DeviceVec::from_handle(policy.id(), output_handle, value_len))
+                Ok(SearchPayloadApply::finish(policy, launch))
             }
         }
 
@@ -2259,7 +2301,12 @@ macro_rules! impl_tuple_pair_search {
                     );
                 }
 
-                if let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? {
+                let control = crate::detail::control::SearchControl::from_flags(
+                    flag_handle,
+                    min_len,
+                    min_len,
+                );
+                if let Some(index) = super::QueryApply::first_flag(policy, control)? {
                     return Ok(Some(index));
                 }
                 if left_len == right_len {
@@ -2339,12 +2386,12 @@ macro_rules! impl_tuple_pair_search {
                         unsafe { BufferArg::from_raw_parts(flag_handle.clone(), input_len) },
                     );
                 }
-                search::first_flag(
-                    policy,
+                let control = crate::detail::control::SearchControl::from_flags(
                     flag_handle,
                     input_len,
                     input_len,
-                )
+                );
+                super::QueryApply::first_flag(policy, control)
             }
 
             fn lexicographical_compare_input(
@@ -2415,7 +2462,12 @@ macro_rules! impl_tuple_pair_search {
                     );
                 }
 
-                let Some(index) = search::first_flag(policy, flag_handle, min_len, min_len)? else {
+                let control = crate::detail::control::SearchControl::from_flags(
+                    flag_handle,
+                    min_len,
+                    min_len,
+                );
+                let Some(index) = super::QueryApply::first_flag(policy, control)? else {
                     return Ok(left_len < right_len);
                 };
 

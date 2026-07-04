@@ -704,28 +704,10 @@ where
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
-        let key_inner = (
-            crate::detail::api::device_expr_apply_selected_with_policy(
-                policy,
-                &first_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_apply_selected_with_policy(
-                policy,
-                &second_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-        );
-        let value_inner = (
-            crate::detail::api::device_value_apply_selected_with_policy::<R, T>(
-                policy,
-                &value_selected_rank,
-                reduced_handle,
-                value_count,
-            )?,
-        );
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let key_inner = payload_apply.apply_expr2(policy, &first_key, &second_key)?;
+        let value_inner = (payload_apply.apply_value::<R, T>(policy, reduced_handle)?,);
         Ok((
             array_from_inner::<R, (K1, K2), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
@@ -926,34 +908,10 @@ where
         )?;
         let value_count =
             crate::detail::primitives::select::selected_count(policy, &value_selected_rank)?;
-        let key_inner = (
-            crate::detail::api::device_expr_apply_selected_with_policy(
-                policy,
-                &first_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_apply_selected_with_policy(
-                policy,
-                &second_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-            crate::detail::api::device_expr_apply_selected_with_policy(
-                policy,
-                &third_key,
-                &value_selected_rank,
-                value_count,
-            )?,
-        );
-        let value_inner = (
-            crate::detail::api::device_value_apply_selected_with_policy::<R, T>(
-                policy,
-                &value_selected_rank,
-                reduced_handle,
-                value_count,
-            )?,
-        );
+        let payload_apply =
+            crate::detail::api::SelectedPayloadApply::new(&value_selected_rank, value_count);
+        let key_inner = payload_apply.apply_expr3(policy, &first_key, &second_key, &third_key)?;
+        let value_inner = (payload_apply.apply_value::<R, T>(policy, reduced_handle)?,);
         Ok((
             array_from_inner::<R, (K1, K2, K3), KeyOutput>(key_inner),
             array_from_inner::<R, (T,), ValueOutput>(value_inner),
@@ -1006,7 +964,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "gather output must match input shape".to_string(),
             })?;
-        crate::detail::api::device_expr_gather_into_with_policy(policy, &input, &indices, &output)
+        crate::detail::api::IndexedExprApply::gather_expr_into(policy, &input, &indices, &output)
     }
 
     fn permute_dispatch<Indices, Output>(
@@ -1021,7 +979,7 @@ where
         Output: MVec<R, Item = <Self as MIter<R>>::Item>,
     {
         let input = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::api::device_expr_gather_with_policy(policy, &input, &indices)?;
+        let inner = crate::detail::api::IndexedExprApply::gather_expr(policy, &input, &indices)?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
     }
 
@@ -1456,7 +1414,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "gather_where output must match input shape".to_string(),
             })?;
-        crate::detail::api::device_expr_gather_where_into_with_control(
+        crate::detail::api::MaskedIndexedExprApply::gather_where_expr_into(
             policy, &input, &indices, &mask, &output,
         )
     }
@@ -1478,7 +1436,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "scatter output must match input shape".to_string(),
             })?;
-        crate::detail::api::device_expr_scatter_into_with_policy(policy, &input, &indices, &output)
+        crate::detail::api::IndexedExprApply::scatter_expr_into(policy, &input, &indices, &output)
     }
 
     fn scatter_where_dispatch<Indices, Output>(
@@ -1501,7 +1459,7 @@ where
             .ok_or_else(|| Error::Launch {
                 message: "scatter_where output must match input shape".to_string(),
             })?;
-        crate::detail::api::device_expr_scatter_where_into_with_control(
+        crate::detail::api::MaskedIndexedExprApply::scatter_where_expr_into(
             policy, &input, &indices, &mask, &output,
         )
     }
@@ -1831,7 +1789,7 @@ where
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
         let input = crate::detail::device::DeviceColumnView::from_column(&inner.0);
-        crate::detail::api::device_expr_collect_into_with_policy(policy, &input, &output)
+        crate::detail::api::MaterializeWriteApply::new(&output).collect_expr(policy, &input)
     }
 
     fn write_where_from_inner(
@@ -1842,11 +1800,10 @@ where
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
         let input = crate::detail::device::DeviceColumnView::from_column(&inner.0);
-        crate::detail::api::device_expr_copy_where_into_with_policy(
+        crate::detail::api::MaterializeWriteApply::new(&output).copy_where_expr(
             policy,
             &input,
             &stencil,
-            &output,
             KernelOp::<R, StencilFlag>::new(),
         )
     }
@@ -1859,7 +1816,7 @@ where
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
         let mask = stencil.mask();
-        crate::detail::api::replace_where_into_with_control(policy, replacement.0, &mask, &output)
+        crate::detail::api::MaskWriteApply::new(&mask, &output).replace_value(policy, replacement.0)
     }
 
     fn fill_inner(
@@ -1868,7 +1825,7 @@ where
         value: Self::Item,
     ) -> Result<(), Error> {
         let output = self.into_inner().0;
-        crate::detail::primitives::fill_slice_with_policy(policy, value.0, &output)
+        crate::detail::api::FillWriteApply::new(&output).fill_value(policy, value.0)
     }
 }
 
