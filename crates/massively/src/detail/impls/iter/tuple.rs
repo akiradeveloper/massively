@@ -2388,9 +2388,7 @@ macro_rules! impl_miter_soa {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
-                R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+            ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
         {
@@ -2416,7 +2414,7 @@ macro_rules! impl_miter_soa {
             fn into_view_with_policy(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-            ) -> Result<<Self::Item as MItem<R>>::View, Error> {
+            ) -> Result<<Self::Item as MAlloc<R>>::View, Error> {
                 let _ = policy;
                 Ok(($( self.$idx.column_view(), )+))
             }
@@ -2426,9 +2424,7 @@ macro_rules! impl_miter_soa {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
-                R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+            ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
         {
@@ -2468,7 +2464,7 @@ macro_rules! impl_miter_soa {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R>,
+                Output: StorageFromInner<R>,
                 Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
@@ -2508,7 +2504,7 @@ macro_rules! impl_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::reverse(policy, impl_miter_view!(input; $( $idx ),+))?;
@@ -2522,7 +2518,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::sort(policy, impl_miter_view!(input; $( $idx ),+), KernelOp::<R, Less>::new())?;
@@ -2538,8 +2534,8 @@ macro_rules! impl_miter_soa {
             where
                 K: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
@@ -2560,8 +2556,8 @@ macro_rules! impl_miter_soa {
             where
                 K: Scalar + 'static,
                 Eq: op::BinaryPredicateOp<R, (K,)>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
@@ -2586,8 +2582,8 @@ macro_rules! impl_miter_soa {
                 K2: Scalar + 'static,
                 K3: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
@@ -2614,8 +2610,8 @@ macro_rules! impl_miter_soa {
                 K1: Scalar + 'static,
                 K2: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
@@ -2641,8 +2637,8 @@ macro_rules! impl_miter_soa {
                 Values: MIter<R>,
                 <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-                ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+                ValueOutput: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 impl_sort_by_key_dispatch_body!(policy, values, less, input; $( $idx ),+)
@@ -2658,8 +2654,8 @@ macro_rules! impl_miter_soa {
                 Values: MIter<R>,
                 <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-                ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+                ValueOutput: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 impl_unique_by_key_dispatch_body!(self, policy, values, eq, input; $( $idx ),+)
@@ -2676,8 +2672,8 @@ macro_rules! impl_miter_soa {
                 K1: Scalar + 'static,
                 K2: Scalar + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2)>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 ensure_same_len(values.0.len, first_key.len)?;
@@ -2723,8 +2719,8 @@ macro_rules! impl_miter_soa {
                 K2: Scalar + 'static,
                 K3: Scalar + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 ensure_same_len(values.0.len, first_key.len)?;
@@ -2776,7 +2772,7 @@ macro_rules! impl_miter_soa {
                 <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
                 KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
                 Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Values as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 impl_inclusive_scan_by_key_dispatch_body!(
@@ -2797,7 +2793,7 @@ macro_rules! impl_miter_soa {
                 K2: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -2833,7 +2829,7 @@ macro_rules! impl_miter_soa {
                 <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
                 KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
                 Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Values as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 impl_exclusive_scan_by_key_dispatch_body!(
@@ -2855,7 +2851,7 @@ macro_rules! impl_miter_soa {
                 K2: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -2893,7 +2889,7 @@ macro_rules! impl_miter_soa {
                 K3: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -2938,7 +2934,7 @@ macro_rules! impl_miter_soa {
                 K3: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -2978,7 +2974,7 @@ macro_rules! impl_miter_soa {
                 K: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
@@ -3004,7 +3000,7 @@ macro_rules! impl_miter_soa {
                 K: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let values = impl_miter_view!(values; $( $idx ),+);
@@ -3031,8 +3027,8 @@ macro_rules! impl_miter_soa {
                 K: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::reduce_by_key(
@@ -3065,8 +3061,8 @@ macro_rules! impl_miter_soa {
                 K3: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -3128,8 +3124,8 @@ macro_rules! impl_miter_soa {
                 <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
                 KeyEq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
                 Op: op::ReductionOp<R, <Values as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-                ValueOutput: MVec<R, Item = <Values as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+                ValueOutput: StorageFromInner<R, Item = <Values as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 impl_reduce_by_key_dispatch_body!(
@@ -3151,8 +3147,8 @@ macro_rules! impl_miter_soa {
                 K2: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -3203,8 +3199,8 @@ macro_rules! impl_miter_soa {
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
                 K: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
@@ -3237,8 +3233,8 @@ macro_rules! impl_miter_soa {
                 K1: Scalar + 'static,
                 K2: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
@@ -3274,8 +3270,8 @@ macro_rules! impl_miter_soa {
                 K2: Scalar + 'static,
                 K3: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
@@ -3307,8 +3303,8 @@ macro_rules! impl_miter_soa {
                 RightValues: MIter<R, Item = <LeftValues as MIter<R>>::Item>,
                 <Self as MIter<R>>::Item: cubecl::prelude::CubeType,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
-                ValueOutput: MVec<R, Item = <LeftValues as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
+                ValueOutput: StorageFromInner<R, Item = <LeftValues as MIter<R>>::Item>,
             {
                 let left_input = self.into_view_with_policy(policy)?;
                 impl_merge_by_key_dispatch_body!(
@@ -3357,7 +3353,7 @@ macro_rules! impl_miter_soa {
                     + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
                 <Indices as crate::detail::device::KernelColumn>::Expr:
                     crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
@@ -3390,7 +3386,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::inclusive_scan(
@@ -3409,7 +3405,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::exclusive_scan(
@@ -3428,7 +3424,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::adjacent_difference(
@@ -3445,7 +3441,7 @@ macro_rules! impl_miter_soa {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::copy_where(
@@ -3465,7 +3461,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::remove_if(
@@ -3483,7 +3479,7 @@ macro_rules! impl_miter_soa {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::copy_where(
@@ -3568,7 +3564,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<(Output, Output), Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (matching, failing) = crate::detail::partition(
@@ -3603,7 +3599,7 @@ macro_rules! impl_miter_soa {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::replace_where(
@@ -3623,7 +3619,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::unique(
@@ -3937,7 +3933,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -3959,7 +3955,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -3981,7 +3977,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -4003,7 +3999,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -4100,7 +4096,7 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_inner_with_policy(policy)?;
@@ -4121,7 +4117,7 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_inner_with_policy(policy)?;
@@ -4142,7 +4138,7 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_inner_with_policy(policy)?;
@@ -4163,7 +4159,7 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_inner_with_policy(policy)?;
@@ -4187,9 +4183,7 @@ macro_rules! impl_miter_mut_soa {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
-                R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+            ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
         {
@@ -4213,7 +4207,7 @@ macro_rules! impl_miter_mut_soa {
             fn write_from_inner(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                inner: <Self::Item as MItem<R>>::Inner,
+                inner: <Self::Item as MAlloc<R>>::Inner,
             ) -> Result<(), Error> {
                 let output = self.into_inner();
                 $(
@@ -4227,10 +4221,69 @@ macro_rules! impl_miter_mut_soa {
                 Ok(())
             }
 
+            fn write_prefix_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                inner: <Self::Item as MAlloc<R>>::Inner,
+            ) -> Result<(), Error> {
+                let mut output = self.into_inner();
+                $(
+                    {
+                        let input =
+                            crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        if input.len > output.$idx.len {
+                            return Err(Error::LengthMismatch {
+                                input: input.len,
+                                output: output.$idx.len,
+                            });
+                        }
+                        output.$idx.len = input.len;
+                        crate::detail::apply::MaterializeWriteApply::new(&output.$idx)
+                            .collect_expr(policy, &input)?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn write_split_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                selected: <Self::Item as MAlloc<R>>::Inner,
+                rejected: <Self::Item as MAlloc<R>>::Inner,
+            ) -> Result<(), Error> {
+                let output = self.into_inner();
+                $(
+                    {
+                        let selected_input =
+                            crate::detail::device::DeviceColumnView::from_column(&selected.$idx);
+                        let rejected_input =
+                            crate::detail::device::DeviceColumnView::from_column(&rejected.$idx);
+                        let input_len = selected_input.len + rejected_input.len;
+                        if input_len > output.$idx.len {
+                            return Err(Error::LengthMismatch {
+                                input: input_len,
+                                output: output.$idx.len,
+                            });
+                        }
+                        let mut selected_output = output.$idx.clone();
+                        selected_output.len = selected_input.len;
+                        crate::detail::apply::MaterializeWriteApply::new(&selected_output)
+                            .collect_expr(policy, &selected_input)?;
+
+                        let mut rejected_output = output.$idx.clone();
+                        rejected_output.offset += selected_input.len;
+                        rejected_output.len = rejected_input.len;
+                        crate::detail::apply::MaterializeWriteApply::new(&rejected_output)
+                            .collect_expr(policy, &rejected_input)?;
+                    }
+                )+
+                Ok(())
+            }
+
             fn write_where_from_inner(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-                inner: <Self::Item as MItem<R>>::Inner,
+                inner: <Self::Item as MAlloc<R>>::Inner,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<(), Error>
             {
@@ -4286,9 +4339,7 @@ macro_rules! impl_miter_mut_soa {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
-                R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+            ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
         {
@@ -4339,9 +4390,7 @@ macro_rules! impl_wide_miter_soa {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
-                R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+            ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
         {
@@ -4367,7 +4416,7 @@ macro_rules! impl_wide_miter_soa {
             fn into_view_with_policy(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
-            ) -> Result<<Self::Item as MItem<R>>::View, Error> {
+            ) -> Result<<Self::Item as MAlloc<R>>::View, Error> {
                 let _ = policy;
                 Ok(($( self.$idx.column_view(), )+))
             }
@@ -4377,9 +4426,7 @@ macro_rules! impl_wide_miter_soa {
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            ($( $ty, )+): MItem<
-                R,
-                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+            ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
         {
@@ -4415,7 +4462,7 @@ macro_rules! impl_wide_miter_soa {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R>,
+                Output: StorageFromInner<R>,
                 Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
@@ -4452,7 +4499,7 @@ macro_rules! impl_wide_miter_soa {
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
@@ -4468,7 +4515,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_sort_or_materialize_body!(policy, input; $( $idx: $tmp ),+)?;
@@ -4484,8 +4531,8 @@ macro_rules! impl_wide_miter_soa {
             where
                 K: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) =
@@ -4507,8 +4554,8 @@ macro_rules! impl_wide_miter_soa {
             where
                 K: Scalar + 'static,
                 Eq: op::BinaryPredicateOp<R, (K,)>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, control) =
@@ -4535,8 +4582,8 @@ macro_rules! impl_wide_miter_soa {
                 K1: Scalar + 'static,
                 K2: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) = impl_wide_sort_by_two_key_dispatch_body!(
@@ -4559,8 +4606,8 @@ macro_rules! impl_wide_miter_soa {
                 K1: Scalar + 'static,
                 K2: Scalar + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2)>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 ensure_same_len(input.0.len, first_key.len)?;
@@ -4602,7 +4649,7 @@ macro_rules! impl_wide_miter_soa {
                 K: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_inclusive_scan_by_single_key_values_body!(
@@ -4623,7 +4670,7 @@ macro_rules! impl_wide_miter_soa {
                 K: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_exclusive_scan_by_single_key_values_body!(
@@ -4644,8 +4691,8 @@ macro_rules! impl_wide_miter_soa {
                 K: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) = impl_wide_reduce_by_single_key_values_body!(
@@ -4669,8 +4716,8 @@ macro_rules! impl_wide_miter_soa {
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
                 K: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
-                KeyOutput: MVec<R, Item = (K,)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K,)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
@@ -4696,7 +4743,7 @@ macro_rules! impl_wide_miter_soa {
                 K2: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::inclusive_scan_by_key(
@@ -4723,7 +4770,7 @@ macro_rules! impl_wide_miter_soa {
                 K2: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::exclusive_scan_by_key(
@@ -4751,8 +4798,8 @@ macro_rules! impl_wide_miter_soa {
                 K2: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::reduce_by_key(
@@ -4784,8 +4831,8 @@ macro_rules! impl_wide_miter_soa {
                 K1: Scalar + 'static,
                 K2: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
-                KeyOutput: MVec<R, Item = (K1, K2)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
@@ -4816,8 +4863,8 @@ macro_rules! impl_wide_miter_soa {
                 K2: Scalar + 'static,
                 K3: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) =
@@ -4848,8 +4895,8 @@ macro_rules! impl_wide_miter_soa {
                 K2: Scalar + 'static,
                 K3: Scalar + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let left_values = self.into_view_with_policy(policy)?;
                 let right_values = right_values.into_view_with_policy(policy)?;
@@ -4873,7 +4920,7 @@ macro_rules! impl_wide_miter_soa {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let selected_rank = stencil.selected_rank();
@@ -4894,7 +4941,7 @@ macro_rules! impl_wide_miter_soa {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<Output, Error>
             where
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let selected_rank = stencil.selected_rank();
@@ -4916,7 +4963,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_unique_inner_or_materialize_body!(policy, input; $( $idx: $tmp ),+)?;
@@ -4943,7 +4990,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_scan_or_materialize_body!(
@@ -4960,7 +5007,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_exclusive_scan_or_materialize_body!(
@@ -5011,7 +5058,7 @@ macro_rules! impl_wide_miter_soa {
                     + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
                 <Indices as crate::detail::device::KernelColumn>::Expr:
                     crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 $(
@@ -5132,7 +5179,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_adjacent_difference_dispatch_body!(
@@ -5149,7 +5196,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = impl_wide_materialize_inner!(policy, input; $( $idx: $tmp ),+);
@@ -5254,7 +5301,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(Output, Output), Error>
             where
                 Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let selected_rank = impl_wide_predicate_selection_body!(
@@ -5553,7 +5600,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -5588,7 +5635,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -5642,7 +5689,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -5679,7 +5726,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<Output, Error>
             where
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
                 let left = self.into_view_with_policy(policy)?;
@@ -5723,7 +5770,7 @@ macro_rules! impl_wide_miter_soa {
                 K3: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::inclusive_scan_by_key(
@@ -5752,7 +5799,7 @@ macro_rules! impl_wide_miter_soa {
                 K3: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                Output: MVec<R, Item = <Self as MIter<R>>::Item>,
+                Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let inner = crate::detail::exclusive_scan_by_key(
@@ -5782,8 +5829,8 @@ macro_rules! impl_wide_miter_soa {
                 K3: Scalar + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let input = self.into_inner_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::reduce_by_key(
@@ -5813,8 +5860,8 @@ macro_rules! impl_wide_miter_soa {
                 K2: Scalar + 'static,
                 K3: Scalar + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
-                KeyOutput: MVec<R, Item = (K1, K2, K3)>,
-                ValueOutput: MVec<R, Item = <Self as MIter<R>>::Item>,
+                KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
+                ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
                 let values = self.into_inner_with_policy(policy)?;
                 ensure_same_len(values.0.len, first_key.len)?;

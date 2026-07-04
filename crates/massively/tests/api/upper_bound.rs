@@ -11,7 +11,8 @@ where
     Values: massively::MIter<WgpuRuntime, Item = Input::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, Input::Item>,
 {
-    let output = upper_bound(exec, input, values, less).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    upper_bound(exec, input, values, less, output.slice_mut(..)).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -20,11 +21,13 @@ fn upper_bound_handles_multiple_values() {
     let exec = exec();
     let xs = exec.to_device(&[0_u32, 0, 2, 2, 2]).unwrap();
     let vs = exec.to_device(&[0_u32, 1, 2]).unwrap();
-    let output = upper_bound(
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    upper_bound(
         &exec,
         massively::SoA1(xs.slice(..)),
         massively::SoA1(vs.slice(..)),
         LessU32,
+        output.slice_mut(..),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 2, 5]);
@@ -35,22 +38,26 @@ fn upper_bound_handles_empty_inputs() {
     let exec = exec();
     let xs = exec.to_device(&[] as &[u32]).unwrap();
     let vs = exec.to_device(&[0_u32, 1, 2]).unwrap();
-    let output = upper_bound(
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    upper_bound(
         &exec,
         massively::SoA1(xs.slice(..)),
         massively::SoA1(vs.slice(..)),
         LessU32,
+        output.slice_mut(..),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![0, 0, 0]);
 
     let xs = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let vs = exec.to_device(&[] as &[u32]).unwrap();
-    let output = upper_bound(
+    let output = exec.to_device(&[] as &[u32]).unwrap();
+    upper_bound(
         &exec,
         massively::SoA1(xs.slice(..)),
         massively::SoA1(vs.slice(..)),
         LessU32,
+        output.slice_mut(..),
     )
     .unwrap();
     assert!(exec.to_host(&output).unwrap().is_empty());
@@ -79,7 +86,8 @@ fn upper_bound_accepts_borrowed_tuple_columns() {
     let ql = exec.to_device(&[5_u32, 30, 50]).unwrap();
     let input = massively::SoA2(k.slice(..), l.slice(..));
     let values = massively::SoA2(qk.slice(..), ql.slice(..));
-    let output = upper_bound(&exec, input, values, MixedTupleLess).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    upper_bound(&exec, input, values, MixedTupleLess, output.slice_mut(..)).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![0, 3, 4]);
 }
 

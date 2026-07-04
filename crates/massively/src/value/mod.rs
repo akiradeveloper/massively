@@ -1,13 +1,10 @@
 //! Massively logical item traits.
 
-use std::ops::RangeBounds;
-
-use cubecl::prelude::{CubeType, Runtime};
+use cubecl::prelude::{CubeElement, CubePrimitive, CubeType, Runtime};
 
 use crate::Error;
 use crate::detail::dispatch;
 use crate::index::MIndex;
-use crate::iter::{MIter, MIterMut};
 use crate::runtime::Executor;
 
 /// Logical item handled by massively algorithms.
@@ -18,6 +15,14 @@ use crate::runtime::Executor;
 pub trait MItem<R: Runtime>:
     dispatch::MItemDispatch<R> + CubeType + Copy + Sized + 'static
 {
+}
+
+/// Physical element that can be stored in a device column.
+pub trait MStorageElement: CubePrimitive + CubeElement {}
+impl<T> MStorageElement for T where T: CubePrimitive + CubeElement {}
+
+/// Logical item that has an owned/writable device storage shape.
+pub trait MAlloc<R: Runtime>: MItem<R> {
     #[doc(hidden)]
     type Inner;
 
@@ -25,42 +30,27 @@ pub trait MItem<R: Runtime>:
     type View;
 
     #[doc(hidden)]
-    type Vec: MVec<R, Item = Self>;
+    type Storage: StorageFromInner<R, Item = Self>;
 
     #[doc(hidden)]
-    fn vec_from_inner(inner: Self::Inner) -> Self::Vec;
+    fn storage_from_inner(inner: Self::Inner) -> Self::Storage;
 
     #[doc(hidden)]
-    fn alloc_vec(exec: &Executor<R>, len: MIndex) -> Result<Self::Vec, Error>;
+    fn alloc_storage(exec: &Executor<R>, len: MIndex) -> Result<Self::Storage, Error>;
 }
 
-/// Owned device storage for an [`MItem`].
-///
-/// Algorithms that return owned output use this trait through `MItem::Vec`.
-/// `Executor::alloc::<Item>(len)` also returns this storage shape, and
-/// `slice` / `slice_mut` turn it into device-backed SoA views.
-pub trait MVec<R: Runtime>: Sized {
-    type Item: MItem<R>;
-    type Slice<'a>: MIter<R, Item = Self::Item>
-    where
-        Self: 'a;
-    type SliceMut<'a>: MIterMut<R, Item = Self::Item>
-    where
-        Self: 'a;
+#[doc(hidden)]
+pub trait StorageFromInner<R: Runtime>: Sized {
+    type Item: MAlloc<R>;
 
-    fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self;
+    fn from_inner(inner: <Self::Item as MAlloc<R>>::Inner) -> Self;
+
+    #[doc(hidden)]
+    fn into_inner(self) -> <Self::Item as MAlloc<R>>::Inner;
 
     fn len(&self) -> MIndex;
 
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: RangeBounds<MIndex>;
-
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-    where
-        Bounds: RangeBounds<MIndex>;
 }

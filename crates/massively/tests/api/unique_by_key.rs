@@ -7,21 +7,32 @@ fn unique_by_key_accepts_tuple_values() {
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
     let c = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+    let out_keys = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_c = exec.to_device(&[0.0_f32; 3]).unwrap();
 
-    let (keys, values) = unique_by_key(
+    let len = unique_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA3(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+        ),
     )
     .unwrap();
-    let massively::SoA1(keys) = keys;
-    let massively::SoA3(a, b, c) = values;
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 1]);
-    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 3.0]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 30]);
-    assert_eq!(exec.to_host(&c).unwrap(), vec![100.0, 300.0]);
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 1]);
+    assert_eq!(exec.to_host(&out_a.slice(..len)).unwrap(), vec![1.0, 3.0]);
+    assert_eq!(exec.to_host(&out_b.slice(..len)).unwrap(), vec![10, 30]);
+    assert_eq!(
+        exec.to_host(&out_c.slice(..len)).unwrap(),
+        vec![100.0, 300.0]
+    );
 }
 
 #[test]
@@ -33,21 +44,35 @@ fn unique_by_key_accepts_tuple_values_with_multiple_runs() {
     let c = exec
         .to_device(&[100.0_f32, 200.0, 300.0, 400.0, 500.0, 600.0])
         .unwrap();
+    let out_keys = exec.to_device(&[0_u32; 6]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 6]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 6]).unwrap();
+    let out_c = exec.to_device(&[0.0_f32; 6]).unwrap();
 
-    let (keys, values) = unique_by_key(
+    let len = unique_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA3(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+        ),
     )
     .unwrap();
-    let massively::SoA1(keys) = keys;
-    let massively::SoA3(a, b, c) = values;
 
-    assert_eq!(exec.to_host(&keys).unwrap(), vec![0, 2, 3]);
-    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 4.0, 5.0]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 40, 50]);
-    assert_eq!(exec.to_host(&c).unwrap(), vec![100.0, 400.0, 500.0]);
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 2, 3]);
+    assert_eq!(
+        exec.to_host(&out_a.slice(..len)).unwrap(),
+        vec![1.0, 4.0, 5.0]
+    );
+    assert_eq!(exec.to_host(&out_b.slice(..len)).unwrap(), vec![10, 40, 50]);
+    assert_eq!(
+        exec.to_host(&out_c.slice(..len)).unwrap(),
+        vec![100.0, 400.0, 500.0]
+    );
 }
 
 #[test]
@@ -59,21 +84,41 @@ fn unique_by_key_accepts_three_column_keys() {
         .to_device(&[100.0_f32, 100.0, 100.0, 200.0, 200.0])
         .unwrap();
     let values = exec.to_device(&[1000_u32, 1001, 1002, 2000, 2001]).unwrap();
+    let out_k0 = exec.to_device(&[0.0_f32; 5]).unwrap();
+    let out_k1 = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_k2 = exec.to_device(&[0.0_f32; 5]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 5]).unwrap();
 
-    let (keys, values) = unique_by_key(
+    let len = unique_by_key(
         &exec,
         massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
         massively::SoA1(values.slice(..)),
         MixedTuple3Equal,
+        massively::SoA3(
+            out_k0.slice_mut(..),
+            out_k1.slice_mut(..),
+            out_k2.slice_mut(..),
+        ),
+        massively::SoA1(out_values.slice_mut(..)),
     )
     .unwrap();
-    let massively::SoA3(k0, k1, k2) = keys;
-    let massively::SoA1(values) = values;
 
-    assert_eq!(exec.to_host(&k0).unwrap(), vec![1.0, 1.0, 2.0]);
-    assert_eq!(exec.to_host(&k1).unwrap(), vec![10, 11, 10]);
-    assert_eq!(exec.to_host(&k2).unwrap(), vec![100.0, 100.0, 200.0]);
-    assert_eq!(exec.to_host(&values).unwrap(), vec![1000, 1002, 2000]);
+    assert_eq!(
+        exec.to_host(&out_k0.slice(..len)).unwrap(),
+        vec![1.0, 1.0, 2.0]
+    );
+    assert_eq!(
+        exec.to_host(&out_k1.slice(..len)).unwrap(),
+        vec![10, 11, 10]
+    );
+    assert_eq!(
+        exec.to_host(&out_k2.slice(..len)).unwrap(),
+        vec![100.0, 100.0, 200.0]
+    );
+    assert_eq!(
+        exec.to_host(&out_values.slice(..len)).unwrap(),
+        vec![1000, 1002, 2000]
+    );
 }
 
 #[test]
@@ -91,8 +136,18 @@ fn unique_by_key_accepts_three_column_keys_and_seven_column_values() {
     let e = exec.to_device(&[410_u32, 411, 412, 420, 421]).unwrap();
     let f = exec.to_device(&[510_u32, 511, 512, 520, 521]).unwrap();
     let g = exec.to_device(&[610_u32, 611, 612, 620, 621]).unwrap();
+    let out_k0 = exec.to_device(&[0.0_f32; 5]).unwrap();
+    let out_k1 = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_k2 = exec.to_device(&[0.0_f32; 5]).unwrap();
+    let out_a = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_c = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_d = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_e = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_f = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_g = exec.to_device(&[0_u32; 5]).unwrap();
 
-    let (keys, values) = unique_by_key(
+    let len = unique_by_key(
         &exec,
         massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
         massively::SoA7(
@@ -105,19 +160,58 @@ fn unique_by_key_accepts_three_column_keys_and_seven_column_values() {
             g.slice(..),
         ),
         MixedTuple3Equal,
+        massively::SoA3(
+            out_k0.slice_mut(..),
+            out_k1.slice_mut(..),
+            out_k2.slice_mut(..),
+        ),
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
     )
     .unwrap();
-    let massively::SoA3(k0, k1, k2) = keys;
-    let massively::SoA7(a, b, c, d, e, f, g) = values;
 
-    assert_eq!(exec.to_host(&k0).unwrap(), vec![1.0, 1.0, 2.0]);
-    assert_eq!(exec.to_host(&k1).unwrap(), vec![10, 11, 10]);
-    assert_eq!(exec.to_host(&k2).unwrap(), vec![100.0, 100.0, 200.0]);
-    assert_eq!(exec.to_host(&a).unwrap(), vec![10, 12, 20]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![110, 112, 120]);
-    assert_eq!(exec.to_host(&c).unwrap(), vec![210, 212, 220]);
-    assert_eq!(exec.to_host(&d).unwrap(), vec![310, 312, 320]);
-    assert_eq!(exec.to_host(&e).unwrap(), vec![410, 412, 420]);
-    assert_eq!(exec.to_host(&f).unwrap(), vec![510, 512, 520]);
-    assert_eq!(exec.to_host(&g).unwrap(), vec![610, 612, 620]);
+    assert_eq!(
+        exec.to_host(&out_k0.slice(..len)).unwrap(),
+        vec![1.0, 1.0, 2.0]
+    );
+    assert_eq!(
+        exec.to_host(&out_k1.slice(..len)).unwrap(),
+        vec![10, 11, 10]
+    );
+    assert_eq!(
+        exec.to_host(&out_k2.slice(..len)).unwrap(),
+        vec![100.0, 100.0, 200.0]
+    );
+    assert_eq!(exec.to_host(&out_a.slice(..len)).unwrap(), vec![10, 12, 20]);
+    assert_eq!(
+        exec.to_host(&out_b.slice(..len)).unwrap(),
+        vec![110, 112, 120]
+    );
+    assert_eq!(
+        exec.to_host(&out_c.slice(..len)).unwrap(),
+        vec![210, 212, 220]
+    );
+    assert_eq!(
+        exec.to_host(&out_d.slice(..len)).unwrap(),
+        vec![310, 312, 320]
+    );
+    assert_eq!(
+        exec.to_host(&out_e.slice(..len)).unwrap(),
+        vec![410, 412, 420]
+    );
+    assert_eq!(
+        exec.to_host(&out_f.slice(..len)).unwrap(),
+        vec![510, 512, 520]
+    );
+    assert_eq!(
+        exec.to_host(&out_g.slice(..len)).unwrap(),
+        vec![610, 612, 620]
+    );
 }

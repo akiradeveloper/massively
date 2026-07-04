@@ -64,8 +64,15 @@ fn map_returns_owned_single_column_output() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let massively::SoA1(output) =
-        map(&exec, massively::SoA1(input.slice(..)), AddOneU32, ()).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        AddOneU32,
+        (),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -75,8 +82,15 @@ fn stateful_unary_op_carries_value() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let massively::SoA1(output) =
-        map(&exec, massively::SoA1(input.slice(..)), AddOffset, 10_u32).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        AddOffset,
+        10_u32,
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![11, 12, 13]);
 }
@@ -86,7 +100,15 @@ fn stateless_unary_op_uses_unit_env() {
     let exec = exec();
     let input = exec.to_device(&[2_u32, 3, 4]).unwrap();
 
-    let massively::SoA1(output) = map(&exec, massively::SoA1(input.slice(..)), Square, ()).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        Square,
+        (),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![4, 9, 16]);
 }
@@ -97,8 +119,15 @@ fn composed_unary_op_uses_paired_env() {
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let op = massively::op::compose(AddOffset, Square);
 
-    let massively::SoA1(output) =
-        map(&exec, massively::SoA1(input.slice(..)), op, (2_u32, ())).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        op,
+        (2_u32, ()),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![9, 16, 25]);
 }
@@ -108,11 +137,13 @@ fn constant_unary_op_returns_env_for_single_column() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let massively::SoA1(output) = map(
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
         &exec,
         massively::SoA1(input.slice(..)),
         massively::op::constant::<(u32,)>(),
         (42_u32,),
+        massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -124,11 +155,14 @@ fn constant_unary_op_returns_env_for_multi_column() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    let massively::SoA2(values, tags) = map(
+    let values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tags = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
         &exec,
         massively::SoA1(input.slice(..)),
         massively::op::Constant::<(f32, u32)>::new(),
         (1.5_f32, 9_u32),
+        massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
 
@@ -158,11 +192,13 @@ fn map_returns_owned_output_from_multi_column_input() {
     let left = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let right = exec.to_device(&[4_u32, 5, 6]).unwrap();
 
-    let massively::SoA1(output) = map(
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
         PairToU32,
         (),
+        massively::SoA1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -175,8 +211,14 @@ fn permute_returns_owned_single_column_output() {
     let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let indices = exec.to_device(&[3_u32, 1, 0]).unwrap();
 
-    let massively::SoA1(output) =
-        permute(&exec, massively::SoA1(input.slice(..)), indices.slice(..)).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    gather(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        indices.slice(..),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![40, 20, 10]);
 }
@@ -188,10 +230,13 @@ fn permute_returns_owned_two_column_output() {
     let right = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 3]).unwrap();
 
-    let massively::SoA2(out_left, out_right) = permute(
+    let out_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 3]).unwrap();
+    gather(
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
         indices.slice(..),
+        massively::SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -207,10 +252,18 @@ fn permute_returns_owned_three_column_output() {
     let c = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let indices = exec.to_device(&[1_u32, 3]).unwrap();
 
-    let massively::SoA3(out_a, out_b, out_c) = permute(
+    let out_a = exec.to_device(&[0_u32; 2]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 2]).unwrap();
+    let out_c = exec.to_device(&[0_u32; 2]).unwrap();
+    gather(
         &exec,
         massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
         indices.slice(..),
+        massively::SoA3(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+        ),
     )
     .unwrap();
 
@@ -225,9 +278,18 @@ fn where_algorithms_accept_device_slice_stencil() {
     let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
 
-    let massively::SoA1(copied) =
-        copy_where(&exec, massively::SoA1(input.slice(..)), stencil.slice(..)).unwrap();
-    assert_eq!(exec.to_host(&copied).unwrap(), vec![20, 40]);
+    let copied = exec.to_device(&[0_u32; 4]).unwrap();
+    let copied_len = copy_where(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        stencil.slice(..),
+        massively::SoA1(copied.slice_mut(..)),
+    )
+    .unwrap();
+    assert_eq!(
+        exec.to_host(&copied.slice(..copied_len)).unwrap(),
+        vec![20, 40]
+    );
 
     let transformed = exec.constant(4, 0_u32).unwrap();
     transform_where(
@@ -247,8 +309,23 @@ fn owned_soa_result_can_feed_next_algorithm() {
     let exec = exec();
     let input = exec.to_device(&[4_u32, 1, 3, 2]).unwrap();
 
-    let sorted = sort(&exec, massively::SoA1(input.slice(..)), LessU32).unwrap();
-    let massively::SoA1(output) = map(&exec, sorted.slice(..), AddOneU32, ()).unwrap();
+    let sorted = exec.to_device(&[0_u32; 4]).unwrap();
+    sort(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        LessU32,
+        massively::SoA1(sorted.slice_mut(..)),
+    )
+    .unwrap();
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+    transform(
+        &exec,
+        massively::SoA1(sorted.slice(..)),
+        AddOneU32,
+        (),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4, 5]);
 }
@@ -258,8 +335,23 @@ fn owned_soa_result_can_be_sliced_before_next_algorithm() {
     let exec = exec();
     let input = exec.to_device(&[4_u32, 1, 3, 2]).unwrap();
 
-    let sorted = sort(&exec, massively::SoA1(input.slice(..)), LessU32).unwrap();
-    let massively::SoA1(output) = map(&exec, sorted.slice(1..3), AddOneU32, ()).unwrap();
+    let sorted = exec.to_device(&[0_u32; 4]).unwrap();
+    sort(
+        &exec,
+        massively::SoA1(input.slice(..)),
+        LessU32,
+        massively::SoA1(sorted.slice_mut(..)),
+    )
+    .unwrap();
+    let output = exec.to_device(&[0_u32; 2]).unwrap();
+    transform(
+        &exec,
+        massively::SoA1(sorted.slice(1..3)),
+        AddOneU32,
+        (),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![3, 4]);
 }
@@ -272,17 +364,28 @@ fn permuted_owned_soa_can_feed_selection_algorithm() {
     let indices = exec.to_device(&[3_u32, 1, 0]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
 
-    let permuted: massively::SoA2<_, _> = permute(
+    let permuted_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let permuted_right = exec.to_device(&[0_u32; 3]).unwrap();
+    let permuted = massively::SoA2(permuted_left, permuted_right);
+    gather(
         &exec,
         massively::SoA2(left.slice(..), right.slice(..)),
         indices.slice(..),
+        permuted.slice_mut(..),
     )
     .unwrap();
-    let massively::SoA2(out_left, out_right) =
-        copy_where(&exec, permuted.slice(..), stencil.slice(..)).unwrap();
+    let out_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 3]).unwrap();
+    let len = copy_where(
+        &exec,
+        permuted.slice(..),
+        stencil.slice(..),
+        massively::SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
 
-    assert_eq!(exec.to_host(&out_left).unwrap(), vec![40, 10]);
-    assert_eq!(exec.to_host(&out_right).unwrap(), vec![4, 1]);
+    assert_eq!(exec.to_host(&out_left.slice(..len)).unwrap(), vec![40, 10]);
+    assert_eq!(exec.to_host(&out_right.slice(..len)).unwrap(), vec![4, 1]);
 }
 
 #[test]

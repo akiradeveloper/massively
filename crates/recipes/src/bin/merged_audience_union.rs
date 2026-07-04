@@ -22,13 +22,15 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA1(out) = set_union(
+    let out = exec.constant(left.len() + right.len(), 0_u32)?;
+    let len = set_union(
         exec,
         SoA1(left.slice(..)),
         SoA1(right.slice(..)),
         common::LessU32,
+        SoA1(out.slice_mut(..)),
     )?;
-    Ok(out)
+    Ok(exec.to_device(&exec.to_host(&out.slice(..len))?)?)
 }
 
 fn main() -> common::Result {

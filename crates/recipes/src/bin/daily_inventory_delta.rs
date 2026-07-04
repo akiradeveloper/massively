@@ -13,11 +13,12 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, merge_by_key, reduce_by_key};
+use massively::{DeviceVec, Executor, MIndex, SoA1, merge_by_key, reduce_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     sku: DeviceVec<B, u32>,
     delta: DeviceVec<B, f32>,
+    len: MIndex,
 }
 
 fn solve<B>(
@@ -30,23 +31,36 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (SoA1(sku), SoA1(delta)) = merge_by_key(
+    let merged_len = (left_sku.len() + right_sku.len()) as usize;
+    let sku = exec.to_device(&vec![0_u32; merged_len])?;
+    let delta = exec.to_device(&vec![0.0_f32; merged_len])?;
+    merge_by_key(
         exec,
         SoA1(left_sku.slice(..)),
         SoA1(left_delta.slice(..)),
         SoA1(right_sku.slice(..)),
         SoA1(right_delta.slice(..)),
         common::LessU32,
+        SoA1(sku.slice_mut(..)),
+        SoA1(delta.slice_mut(..)),
     )?;
-    let (SoA1(sku), SoA1(delta)) = reduce_by_key(
+    let out_sku = exec.to_device(&vec![0_u32; merged_len])?;
+    let out_delta = exec.to_device(&vec![0.0_f32; merged_len])?;
+    let len = reduce_by_key(
         exec,
         SoA1(sku.slice(..)),
         SoA1(delta.slice(..)),
         common::EqualU32,
         (0.0_f32,),
         common::SumF32,
+        SoA1(out_sku.slice_mut(..)),
+        SoA1(out_delta.slice_mut(..)),
     )?;
-    Ok(Output { sku, delta })
+    Ok(Output {
+        sku: out_sku,
+        delta: out_delta,
+        len,
+    })
 }
 
 fn main() -> common::Result {
@@ -58,7 +72,13 @@ fn main() -> common::Result {
         exec.to_device(&[2, 3, 4])?,
         exec.to_device(&[2.0, 7.0, -3.0])?,
     )?;
-    assert_eq!(exec.to_host(&output.sku)?, vec![1, 2, 3, 4]);
-    assert_eq!(exec.to_host(&output.delta)?, vec![5.0, 1.0, 7.0, 6.0]);
+    assert_eq!(
+        exec.to_host(&output.sku.slice(..output.len))?,
+        vec![1, 2, 3, 4]
+    );
+    assert_eq!(
+        exec.to_host(&output.delta.slice(..output.len))?,
+        vec![5.0, 1.0, 7.0, 6.0]
+    );
     Ok(())
 }

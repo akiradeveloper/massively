@@ -48,6 +48,39 @@ macro_rules! soa_value {
     };
 }
 
+macro_rules! soa_into_inner {
+    ($value:expr; $a:ident) => {{
+        let SoA1($a) = $value;
+        ($a.inner,)
+    }};
+    ($value:expr; $a:ident, $b:ident) => {{
+        let SoA2($a, $b) = $value;
+        ($a.inner, $b.inner)
+    }};
+    ($value:expr; $a:ident, $b:ident, $c:ident) => {{
+        let SoA3($a, $b, $c) = $value;
+        ($a.inner, $b.inner, $c.inner)
+    }};
+    ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident) => {{
+        let SoA4($a, $b, $c, $d) = $value;
+        ($a.inner, $b.inner, $c.inner, $d.inner)
+    }};
+    ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident) => {{
+        let SoA5($a, $b, $c, $d, $e) = $value;
+        ($a.inner, $b.inner, $c.inner, $d.inner, $e.inner)
+    }};
+    ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident) => {{
+        let SoA6($a, $b, $c, $d, $e, $f) = $value;
+        ($a.inner, $b.inner, $c.inner, $d.inner, $e.inner, $f.inner)
+    }};
+    ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident, $g:ident) => {{
+        let SoA7($a, $b, $c, $d, $e, $f, $g) = $value;
+        (
+            $a.inner, $b.inner, $c.inner, $d.inner, $e.inner, $f.inner, $g.inner,
+        )
+    }};
+}
+
 macro_rules! alloc_inner {
     ($exec:expr, $len:expr; $( $ty:ty ),+) => {{
         let len = $len;
@@ -75,57 +108,44 @@ macro_rules! impl_mitem_tuple {
             R: Runtime,
             $( $ty: Scalar, )+
         {
+        }
+
+        impl<R, $( $ty ),+> MAlloc<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: Scalar, )+
+        {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Vec = soa_type!($( DeviceVec<R, $ty> ),+);
+            type Storage = soa_type!($( DeviceVec<R, $ty> ),+);
 
-            fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
+            fn storage_from_inner(inner: Self::Inner) -> Self::Storage {
                 let ($( $var, )+) = inner;
                 soa_value!($( DeviceVec::from_inner($var) ),+)
             }
 
-            fn alloc_vec(exec: &Executor<R>, len: MIndex) -> Result<Self::Vec, Error> {
-                Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
+            fn alloc_storage(exec: &Executor<R>, len: MIndex) -> Result<Self::Storage, Error> {
+                Ok(Self::storage_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
             }
         }
 
-        impl<R, $( $ty ),+> MVec<R> for soa_type!($( DeviceVec<R, $ty> ),+)
+        impl<R, $( $ty ),+> StorageFromInner<R> for soa_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            for<'a> soa_type!($( DeviceSlice<'a, R, $ty> ),+): MIter<R, Item = ($( $ty, )+)>,
-            for<'a> soa_type!($( DeviceSliceMut<'a, R, $ty> ),+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
-            type Slice<'a>
-                = soa_type!($( DeviceSlice<'a, R, $ty> ),+)
-            where
-                Self: 'a;
-            type SliceMut<'a>
-                = soa_type!($( DeviceSliceMut<'a, R, $ty> ),+)
-            where
-                Self: 'a;
 
-            fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-                <Self::Item as MItem<R>>::vec_from_inner(inner)
+            fn from_inner(inner: <Self::Item as MAlloc<R>>::Inner) -> Self {
+                <Self::Item as MAlloc<R>>::storage_from_inner(inner)
+            }
+
+            fn into_inner(self) -> <Self::Item as MAlloc<R>>::Inner {
+                soa_into_inner!(self; $( $var ),+)
             }
 
             fn len(&self) -> MIndex {
                 self.0.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice(self, range)
-            }
-
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice_mut(self, range)
             }
         }
 
@@ -142,7 +162,7 @@ macro_rules! impl_mitem_tuple {
                 >,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: Scalar,
                 Op: op::UnaryOp<R, (Input,), Output = Self>,
@@ -177,7 +197,7 @@ macro_rules! impl_mitem_tuple {
                 >,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Left: Scalar,
                 Right: Scalar,
@@ -218,7 +238,7 @@ macro_rules! impl_mitem_tuple {
                 >,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -253,7 +273,7 @@ macro_rules! impl_mitem_tuple {
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -291,7 +311,7 @@ macro_rules! impl_mitem_tuple {
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -333,7 +353,7 @@ macro_rules! impl_mitem_tuple {
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -378,7 +398,7 @@ macro_rules! impl_mitem_tuple {
                 seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -419,7 +439,7 @@ macro_rules! impl_mitem_tuple {
 
             fn reduce_inner<Op>(
                 policy: &crate::detail::CubePolicy<R>,
-                input: <Self as MItem<R>>::Inner,
+                input: <Self as MAlloc<R>>::Inner,
                 init: Self,
                 op: Op,
             ) -> Result<Self, Error>
@@ -445,57 +465,44 @@ macro_rules! impl_wide_mitem_tuple {
             R: Runtime,
             $( $ty: Scalar, )+
         {
+        }
+
+        impl<R, $( $ty ),+> MAlloc<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: Scalar, )+
+        {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Vec = soa_type!($( DeviceVec<R, $ty> ),+);
+            type Storage = soa_type!($( DeviceVec<R, $ty> ),+);
 
-            fn vec_from_inner(inner: Self::Inner) -> Self::Vec {
+            fn storage_from_inner(inner: Self::Inner) -> Self::Storage {
                 let ($( $var, )+) = inner;
                 soa_value!($( DeviceVec::from_inner($var) ),+)
             }
 
-            fn alloc_vec(exec: &Executor<R>, len: MIndex) -> Result<Self::Vec, Error> {
-                Ok(Self::vec_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
+            fn alloc_storage(exec: &Executor<R>, len: MIndex) -> Result<Self::Storage, Error> {
+                Ok(Self::storage_from_inner(alloc_inner!(exec, len; $( $ty ),+)?))
             }
         }
 
-        impl<R, $( $ty ),+> MVec<R> for soa_type!($( DeviceVec<R, $ty> ),+)
+        impl<R, $( $ty ),+> StorageFromInner<R> for soa_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
             $( $ty: Scalar + 'static, )+
-            for<'a> soa_type!($( DeviceSlice<'a, R, $ty> ),+): MIter<R, Item = ($( $ty, )+)>,
-            for<'a> soa_type!($( DeviceSliceMut<'a, R, $ty> ),+): MIterMut<R, Item = ($( $ty, )+)>,
         {
             type Item = ($( $ty, )+);
-            type Slice<'a>
-                = soa_type!($( DeviceSlice<'a, R, $ty> ),+)
-            where
-                Self: 'a;
-            type SliceMut<'a>
-                = soa_type!($( DeviceSliceMut<'a, R, $ty> ),+)
-            where
-                Self: 'a;
 
-            fn from_inner(inner: <Self::Item as MItem<R>>::Inner) -> Self {
-                <Self::Item as MItem<R>>::vec_from_inner(inner)
+            fn from_inner(inner: <Self::Item as MAlloc<R>>::Inner) -> Self {
+                <Self::Item as MAlloc<R>>::storage_from_inner(inner)
+            }
+
+            fn into_inner(self) -> <Self::Item as MAlloc<R>>::Inner {
+                soa_into_inner!(self; $( $var ),+)
             }
 
             fn len(&self) -> MIndex {
                 self.0.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice(self, range)
-            }
-
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                <soa_type!($( DeviceVec<R, $ty> ),+)>::slice_mut(self, range)
             }
         }
 
@@ -512,7 +519,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: Scalar,
                 Op: op::UnaryOp<R, (Input,), Output = Self>,
@@ -547,7 +554,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Left: Scalar,
                 Right: Scalar,
@@ -588,7 +595,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -623,7 +630,7 @@ macro_rules! impl_wide_mitem_tuple {
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -661,7 +668,7 @@ macro_rules! impl_wide_mitem_tuple {
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -703,7 +710,7 @@ macro_rules! impl_wide_mitem_tuple {
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,
@@ -748,7 +755,7 @@ macro_rules! impl_wide_mitem_tuple {
                 seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
                 op: Op,
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-            ) -> Result<<Self as MItem<R>>::Inner, Error>
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: Scalar,
                 Second: Scalar,

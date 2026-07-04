@@ -2,14 +2,27 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 mod common;
 
 use massively::prelude::*;
-use massively::{Executor, map, sort};
+use massively::{Executor, sort, transform};
 
 fn main() -> common::Result {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
     let values = exec.to_device(&[3.0_f32, 1.0, 2.0])?;
 
-    let sorted = sort(&exec, SoA1(values.slice(..)), common::LessF32)?;
-    let SoA1(output) = map(&exec, sorted.slice(..), common::AddOne, ())?;
+    let sorted = exec.to_device(&[0.0_f32; 3])?;
+    sort(
+        &exec,
+        SoA1(values.slice(..)),
+        common::LessF32,
+        SoA1(sorted.slice_mut(..)),
+    )?;
+    let output = exec.to_device(&[0.0_f32; 3])?;
+    transform(
+        &exec,
+        SoA1(sorted.slice(..)),
+        common::AddOne,
+        (),
+        SoA1(output.slice_mut(..)),
+    )?;
 
     assert_eq!(exec.to_host(&output)?, vec![2.0, 3.0, 4.0]);
     Ok(())

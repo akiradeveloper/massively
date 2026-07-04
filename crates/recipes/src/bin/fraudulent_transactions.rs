@@ -81,30 +81,47 @@ where
         (),
         SoA1(flag.slice_mut(..)),
     )?;
-    let SoA3(account_id, amount, risk_score) = copy_where(
+    let suspicious_account_id = exec.constant(account_id.len(), 0_u32)?;
+    let suspicious_amount = exec.constant(amount.len(), 0.0_f32)?;
+    let suspicious_risk_score = exec.constant(risk_score.len(), 0_u32)?;
+    let suspicious_len = copy_where(
         exec,
         SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         flag.slice(..),
+        SoA3(
+            suspicious_account_id.slice_mut(..),
+            suspicious_amount.slice_mut(..),
+            suspicious_risk_score.slice_mut(..),
+        ),
     )?;
-    let (
-        SoA3(high_account, high_amount, high_risk_score),
-        SoA3(review_account, review_amount, review_risk_score),
-    ) = partition(
+    let account_id = exec.constant(suspicious_len, 0_u32)?;
+    let amount = exec.constant(suspicious_len, 0.0_f32)?;
+    let risk_score = exec.constant(suspicious_len, 0_u32)?;
+    let split = partition(
         exec,
-        SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
+        SoA3(
+            suspicious_account_id.slice(..suspicious_len),
+            suspicious_amount.slice(..suspicious_len),
+            suspicious_risk_score.slice(..suspicious_len),
+        ),
         HighRiskTransaction,
         (),
+        SoA3(
+            account_id.slice_mut(..),
+            amount.slice_mut(..),
+            risk_score.slice_mut(..),
+        ),
     )?;
     Ok(Output {
         high_risk: Group {
-            account_id: high_account,
-            amount: high_amount,
-            risk_score: high_risk_score,
+            account_id: exec.to_device(&exec.to_host(&account_id.slice(..split))?)?,
+            amount: exec.to_device(&exec.to_host(&amount.slice(..split))?)?,
+            risk_score: exec.to_device(&exec.to_host(&risk_score.slice(..split))?)?,
         },
         review_needed: Group {
-            account_id: review_account,
-            amount: review_amount,
-            risk_score: review_risk_score,
+            account_id: exec.to_device(&exec.to_host(&account_id.slice(split..suspicious_len))?)?,
+            amount: exec.to_device(&exec.to_host(&amount.slice(split..suspicious_len))?)?,
+            risk_score: exec.to_device(&exec.to_host(&risk_score.slice(split..suspicious_len))?)?,
         },
     })
 }

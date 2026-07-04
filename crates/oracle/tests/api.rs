@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op as gpu_op;
-use massively::{DeviceVec, Executor, MIndex};
+use massively::{Executor, MIndex};
 use oracle::op as host_op;
 use proptest::prelude::*;
 use std::sync::{Mutex, MutexGuard};
@@ -610,56 +610,6 @@ macro_rules! make_soa {
     }};
 }
 
-macro_rules! owned_soa_type {
-    (SoA1, ($a:ty)) => {
-        massively::SoA1<DeviceVec<ApiRuntime, $a>>
-    };
-    (SoA2, ($a:ty, $b:ty)) => {
-        massively::SoA2<DeviceVec<ApiRuntime, $a>, DeviceVec<ApiRuntime, $b>>
-    };
-    (SoA3, ($a:ty, $b:ty, $c:ty)) => {
-        massively::SoA3<DeviceVec<ApiRuntime, $a>, DeviceVec<ApiRuntime, $b>, DeviceVec<ApiRuntime, $c>>
-    };
-    (SoA4, ($a:ty, $b:ty, $c:ty, $d:ty)) => {
-        massively::SoA4<
-            DeviceVec<ApiRuntime, $a>,
-            DeviceVec<ApiRuntime, $b>,
-            DeviceVec<ApiRuntime, $c>,
-            DeviceVec<ApiRuntime, $d>,
-        >
-    };
-    (SoA5, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty)) => {
-        massively::SoA5<
-            DeviceVec<ApiRuntime, $a>,
-            DeviceVec<ApiRuntime, $b>,
-            DeviceVec<ApiRuntime, $c>,
-            DeviceVec<ApiRuntime, $d>,
-            DeviceVec<ApiRuntime, $e>,
-        >
-    };
-    (SoA6, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty)) => {
-        massively::SoA6<
-            DeviceVec<ApiRuntime, $a>,
-            DeviceVec<ApiRuntime, $b>,
-            DeviceVec<ApiRuntime, $c>,
-            DeviceVec<ApiRuntime, $d>,
-            DeviceVec<ApiRuntime, $e>,
-            DeviceVec<ApiRuntime, $f>,
-        >
-    };
-    (SoA7, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty)) => {
-        massively::SoA7<
-            DeviceVec<ApiRuntime, $a>,
-            DeviceVec<ApiRuntime, $b>,
-            DeviceVec<ApiRuntime, $c>,
-            DeviceVec<ApiRuntime, $d>,
-            DeviceVec<ApiRuntime, $e>,
-            DeviceVec<ApiRuntime, $f>,
-            DeviceVec<ApiRuntime, $g>,
-        >
-    };
-}
-
 macro_rules! map_arity_case {
     ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _ = $init;
@@ -667,8 +617,8 @@ macro_rules! map_arity_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
-        let gpu_output: owned_soa_type!($output_soa, ($($output_ty),+)) =
-            massively::map(&exec, gpu_input.slice(..), $op, ()).unwrap();
+        let gpu_output = make_soa!(&exec, &vec![$init; input.len()], $output_soa, ($($output_ty),+));
+        massively::transform(&exec, gpu_input.slice(..), $op, (), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
         let host = oracle::map(&input, $op, ());
         prop_assert_eq!(gpu, host);
@@ -730,8 +680,9 @@ macro_rules! sort_by_key_only_case {
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
         let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
         let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let (out_keys, out_values) =
-            massively::sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less).unwrap();
+        let out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
+        let out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        massively::sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
         let (host_keys, host_values) = oracle::sort_by_key(&keys, &values, $less);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_soa), host_keys);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_soa), host_values);
@@ -746,8 +697,9 @@ macro_rules! stable_sort_by_key_case {
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
         let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
         let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let (out_keys, out_values) =
-            massively::stable_sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less).unwrap();
+        let out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
+        let out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        massively::stable_sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
         let (host_keys, host_values) = oracle::stable_sort_by_key(&keys, &values, $less);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_soa), host_keys);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_soa), host_values);
@@ -762,12 +714,14 @@ macro_rules! scan_by_key_case {
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
         let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
         let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let gpu_output = massively::inclusive_scan_by_key(
+        let gpu_output = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        massively::inclusive_scan_by_key(
             &exec,
             gpu_keys.slice(..),
             gpu_values.slice(..),
             EqTuple,
             MaxTuple,
+            gpu_output.slice_mut(..),
         )
         .unwrap();
         prop_assert_eq!(
@@ -782,13 +736,15 @@ macro_rules! scan_by_key_case {
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
         let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
         let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let gpu_output = massively::exclusive_scan_by_key(
+        let gpu_output = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        massively::exclusive_scan_by_key(
             &exec,
             gpu_keys.slice(..),
             gpu_values.slice(..),
             EqTuple,
             $init,
             MaxTuple,
+            gpu_output.slice_mut(..),
         )
         .unwrap();
         prop_assert_eq!(
@@ -803,19 +759,23 @@ macro_rules! scan_by_key_case {
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
         let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
         let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let (gpu_out_keys, gpu_out_values) = massively::reduce_by_key(
+        let gpu_out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
+        let gpu_out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let len = massively::reduce_by_key(
             &exec,
             gpu_keys.slice(..),
             gpu_values.slice(..),
             EqTuple,
             $init,
             MaxTuple,
+            gpu_out_keys.slice_mut(..),
+            gpu_out_values.slice_mut(..),
         )
         .unwrap();
         let (host_keys, host_values) =
             oracle::reduce_by_key(&keys, &values, EqTuple, $init, MaxTuple);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys.slice(..len)).unwrap(), $key_soa), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_soa), host_values);
     }};
     (unique_by_key, $pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
@@ -824,12 +784,20 @@ macro_rules! scan_by_key_case {
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
         let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
         let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let (gpu_out_keys, gpu_out_values) =
-            massively::unique_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), EqTuple)
-                .unwrap();
+        let gpu_out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
+        let gpu_out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let len = massively::unique_by_key(
+            &exec,
+            gpu_keys.slice(..),
+            gpu_values.slice(..),
+            EqTuple,
+            gpu_out_keys.slice_mut(..),
+            gpu_out_values.slice_mut(..),
+        )
+        .unwrap();
         let (host_keys, host_values) = oracle::unique_by_key(&keys, &values, EqTuple);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys.slice(..len)).unwrap(), $key_soa), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_soa), host_values);
     }};
 }
 
@@ -852,13 +820,17 @@ macro_rules! merge_by_key_case {
         let gpu_left_values = make_soa!(&exec, &left_values, $value_soa, ($($value_ty),+));
         let gpu_right_values = make_soa!(&exec, &right_values, $value_soa, ($($value_ty),+));
 
-        let (gpu_keys, gpu_values) = massively::merge_by_key(
+        let gpu_keys = make_soa!(&exec, &pairs.iter().map(|pair| pair.0).collect::<Vec<_>>(), $key_soa, ($($key_ty),+));
+        let gpu_values = make_soa!(&exec, &pairs.iter().map(|pair| pair.1).collect::<Vec<_>>(), $value_soa, ($($value_ty),+));
+        massively::merge_by_key(
             &exec,
             gpu_left_keys.slice(..),
             gpu_left_values.slice(..),
             gpu_right_keys.slice(..),
             gpu_right_values.slice(..),
             $less,
+            gpu_keys.slice_mut(..),
+            gpu_values.slice_mut(..),
         )
         .unwrap();
         let (host_keys, host_values) = oracle::merge_by_key(
@@ -900,7 +872,8 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = massively::inclusive_scan(&exec, gpu_input.slice(..), MaxTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::inclusive_scan(&exec, gpu_input.slice(..), MaxTuple, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
         let host = oracle::inclusive_scan(&input, MaxTuple);
         prop_assert_eq!(gpu, host);
@@ -910,7 +883,8 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = massively::exclusive_scan(&exec, gpu_input.slice(..), $init, MaxTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::exclusive_scan(&exec, gpu_input.slice(..), $init, MaxTuple, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
         let host = oracle::exclusive_scan(&input, $init, MaxTuple);
         prop_assert_eq!(gpu, host);
@@ -920,7 +894,8 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = massively::adjacent_difference(&exec, gpu_input.slice(..), MaxTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::adjacent_difference(&exec, gpu_input.slice(..), MaxTuple, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
         let host = oracle::adjacent_difference(&input, MaxTuple);
         prop_assert_eq!(gpu, host);
@@ -932,8 +907,9 @@ macro_rules! value_case {
         let stencil = stencil_for!(input.len());
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = massively::copy_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let len = massively::copy_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..), gpu_output.slice_mut(..)).unwrap();
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa);
         let host = oracle::copy_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
     }};
@@ -944,8 +920,9 @@ macro_rules! value_case {
         let stencil = stencil_for!(input.len());
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = massively::remove_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let len = massively::remove_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..), gpu_output.slice_mut(..)).unwrap();
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa);
         let host = oracle::remove_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
     }};
@@ -954,7 +931,8 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = massively::reverse(&exec, gpu_input.slice(..)).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::reverse(&exec, gpu_input.slice(..), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
         let host = oracle::reverse(&input);
         prop_assert_eq!(gpu, host);
@@ -1024,10 +1002,11 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let (gpu_yes, gpu_no) = massively::partition(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, (), gpu_output.slice_mut(..)).unwrap();
         let (host_yes, host_no) = oracle::partition(&input, KeepTuple, ());
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_yes).unwrap(), $soa), host_yes);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_no).unwrap(), $soa), host_no);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $soa), host_yes);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $soa), host_no);
     }};
     (predicate, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
@@ -1058,10 +1037,11 @@ macro_rules! value_case {
             massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             oracle::is_partitioned(&input, KeepTuple, ())
         );
-        let (gpu_yes, gpu_no) = massively::partition(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, (), gpu_output.slice_mut(..)).unwrap();
         let (host_yes, host_no) = oracle::partition(&input, KeepTuple, ());
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_yes).unwrap(), $soa), host_yes);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_no).unwrap(), $soa), host_no);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $soa), host_yes);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $soa), host_no);
     }};
     (indexed, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
@@ -1073,8 +1053,8 @@ macro_rules! value_case {
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_stencil = exec.to_device(&stencil).unwrap();
 
-        let gpu_output: owned_soa_type!($soa, ($($ty),+)) =
-            massively::permute(&exec, gpu_input.slice(..), gpu_indices.slice(..)).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
@@ -1124,8 +1104,8 @@ macro_rules! value_case {
         let indices = reverse_indices_for!(input.len());
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
-        let gpu_output: owned_soa_type!($soa, ($($ty),+)) =
-            massively::permute(&exec, gpu_input.slice(..), gpu_indices.slice(..)).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
@@ -1373,16 +1353,20 @@ macro_rules! value_case {
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
 
-        let gpu_output = massively::sort(&exec, gpu_input.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), sorted.clone());
 
-        let gpu_output = massively::stable_sort(&exec, gpu_input.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::stable_sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
             oracle::stable_sort(&input, LessTuple)
         );
 
-        let gpu_output = massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
+        let gpu_output = make_soa!(&exec, &merge_init, $soa, ($($ty),+));
+        massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
             oracle::merge(&sorted, &right, LessTuple)
@@ -1413,29 +1397,36 @@ macro_rules! value_case {
             opt_pair_mindex(oracle::minmax_element(&input, LessTuple))
         );
 
-        let gpu_bounds = massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
+        massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::lower_bound(&sorted, &right, LessTuple));
-        let gpu_bounds = massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
+        massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
 
-        let gpu_output = massively::unique(&exec, gpu_sorted.slice(..), EqTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let len = massively::unique(&exec, gpu_sorted.slice(..), EqTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::unique(&sorted, EqTuple)
         );
-        let gpu_output = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
+        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let len = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::set_union(&sorted, &right, LessTuple)
         );
-        let gpu_output = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let len = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::set_intersection(&sorted, &right, LessTuple)
         );
-        let gpu_output = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let len = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::set_difference(&sorted, &right, LessTuple)
         );
     }};
@@ -1444,7 +1435,8 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = massively::sort(&exec, gpu_input.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
             oracle::sort(&input, LessTuple)
@@ -1455,7 +1447,8 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = massively::stable_sort(&exec, gpu_input.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        massively::stable_sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
             oracle::stable_sort(&input, LessTuple)
@@ -1474,7 +1467,9 @@ macro_rules! value_case {
         let right = oracle::sort(&other, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_output = massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
+        let gpu_output = make_soa!(&exec, &merge_init, $soa, ($($ty),+));
+        massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
             oracle::merge(&sorted, &right, LessTuple)
@@ -1556,7 +1551,8 @@ macro_rules! value_case {
         let right = oracle::sort(&other, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_bounds = massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
+        massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::lower_bound(&sorted, &right, LessTuple));
     }};
     (upper_bound, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1569,7 +1565,8 @@ macro_rules! value_case {
         let right = oracle::sort(&other, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_bounds = massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
+        massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
     }};
     (unique, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1578,9 +1575,10 @@ macro_rules! value_case {
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_output = massively::unique(&exec, gpu_sorted.slice(..), EqTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let len = massively::unique(&exec, gpu_sorted.slice(..), EqTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::unique(&sorted, EqTuple)
         );
     }};
@@ -1594,9 +1592,11 @@ macro_rules! value_case {
         let right = oracle::sort(&other, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_output = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
+        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let len = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::set_union(&sorted, &right, LessTuple)
         );
     }};
@@ -1610,9 +1610,11 @@ macro_rules! value_case {
         let right = oracle::sort(&other, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_output = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
+        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let len = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::set_intersection(&sorted, &right, LessTuple)
         );
     }};
@@ -1626,9 +1628,10 @@ macro_rules! value_case {
         let right = oracle::sort(&other, LessTuple);
         let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
         let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_output = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple).unwrap();
+        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let len = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
             oracle::set_difference(&sorted, &right, LessTuple)
         );
     }};

@@ -1,55 +1,80 @@
 use super::*;
 
 /// Computes the sorted set difference of two sorted inputs.
-pub fn set_difference<R, Left, Right, Less>(
+pub fn set_difference<R, Left, Right, Less, Output>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     less: Less,
-) -> Result<<Left::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item>,
-    Less: op::BinaryPredicateOp<R, Left::Item>,
+    Output: MIterMut<R>,
+    Left: MIter<R, Item = Output::Item>,
+    Right: MIter<R, Item = Output::Item>,
+    Less: op::BinaryPredicateOp<R, Output::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left as sealed::MIterDispatch<R>>::set_difference_dispatch(left, exec.policy(), right, less)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Left as sealed::MIterDispatch<R>>::set_difference_dispatch(
+            left,
+            exec.policy(),
+            right,
+            less,
+        )?;
+    write_owned_prefix(exec.policy(), owned, out)
 }
 
 /// Computes the sorted set intersection of two sorted inputs.
-pub fn set_intersection<R, Left, Right, Less>(
+pub fn set_intersection<R, Left, Right, Less, Output>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     less: Less,
-) -> Result<<Left::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item>,
-    Less: op::BinaryPredicateOp<R, Left::Item>,
+    Output: MIterMut<R>,
+    Left: MIter<R, Item = Output::Item>,
+    Right: MIter<R, Item = Output::Item>,
+    Less: op::BinaryPredicateOp<R, Output::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left as sealed::MIterDispatch<R>>::set_intersection_dispatch(left, exec.policy(), right, less)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Left as sealed::MIterDispatch<R>>::set_intersection_dispatch(
+            left,
+            exec.policy(),
+            right,
+            less,
+        )?;
+    write_owned_prefix(exec.policy(), owned, out)
 }
 
 /// Computes the sorted set union of two sorted inputs.
-pub fn set_union<R, Left, Right, Less>(
+pub fn set_union<R, Left, Right, Less, Output>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     less: Less,
-) -> Result<<Left::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Left: MIter<R>,
-    Right: MIter<R, Item = Left::Item>,
-    Less: op::BinaryPredicateOp<R, Left::Item>,
+    Output: MIterMut<R>,
+    Left: MIter<R, Item = Output::Item>,
+    Right: MIter<R, Item = Output::Item>,
+    Less: op::BinaryPredicateOp<R, Output::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left as sealed::MIterDispatch<R>>::set_union_dispatch(left, exec.policy(), right, less)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Left as sealed::MIterDispatch<R>>::set_union_dispatch(left, exec.policy(), right, less)?;
+    write_owned_prefix(exec.policy(), owned, out)
 }

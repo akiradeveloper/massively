@@ -29,7 +29,14 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let SoA1(offset) = exclusive_scan(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
+    let offset = exec.constant(slot_count.len(), 0_u32)?;
+    exclusive_scan(
+        exec,
+        SoA1(slot_count.slice(..)),
+        (0_u32,),
+        common::SumU32,
+        SoA1(offset.slice_mut(..)),
+    )?;
     let (total_slots,) = reduce(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
     Ok(Output {
         offset,

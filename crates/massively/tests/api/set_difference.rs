@@ -1,17 +1,20 @@
 use crate::common::*;
 
-fn set_difference_with_generic_right<Left, Right, Less>(
+fn set_difference_with_generic_right<Left, Right, Less, Output>(
     exec: &Executor<WgpuRuntime>,
     left: Left,
     right: Right,
     less: Less,
-) -> Result<<Left::Item as massively::MItem<WgpuRuntime>>::Vec, massively::Error>
+    out: Output,
+) -> Result<massively::MIndex, massively::Error>
 where
     Left: massively::MIter<WgpuRuntime>,
     Right: massively::MIter<WgpuRuntime, Item = Left::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, Left::Item>,
+    Output: massively::MIterMut<WgpuRuntime, Item = Left::Item>,
+    Left::Item: massively::MAlloc<WgpuRuntime>,
 {
-    set_difference(exec, left, right, less)
+    set_difference(exec, left, right, less, out)
 }
 
 #[test]
@@ -21,17 +24,20 @@ fn set_difference_accepts_generic_right_without_inner_equality_bound() {
     let left_b = exec.to_device(&[10_u32, 20, 40]).unwrap();
     let right_a = exec.to_device(&[2.0_f32, 3.0]).unwrap();
     let right_b = exec.to_device(&[20_u32, 30]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let massively::SoA2(a, b) = set_difference_with_generic_right(
+    let len = set_difference_with_generic_right(
         &exec,
         massively::SoA2(left_a.slice(..), left_b.slice(..)),
         massively::SoA2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
+        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 4.0]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 40]);
+    assert_eq!(exec.to_host(&out_a.slice(..len)).unwrap(), vec![1.0, 4.0]);
+    assert_eq!(exec.to_host(&out_b.slice(..len)).unwrap(), vec![10, 40]);
 }
 
 #[test]
@@ -41,16 +47,18 @@ fn set_difference_accepts_borrowed_tuple_columns() {
     let left_b = exec.to_device(&[10_u32, 20, 40]).unwrap();
     let right_a = exec.to_device(&[2.0_f32, 3.0]).unwrap();
     let right_b = exec.to_device(&[20_u32, 30]).unwrap();
+    let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let output = set_difference(
+    let len = set_difference(
         &exec,
         massively::SoA2(left_a.slice(..), left_b.slice(..)),
         massively::SoA2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
+        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
-    let massively::SoA2(a, b) = output;
 
-    assert_eq!(exec.to_host(&a).unwrap(), vec![1.0, 4.0]);
-    assert_eq!(exec.to_host(&b).unwrap(), vec![10, 40]);
+    assert_eq!(exec.to_host(&out_a.slice(..len)).unwrap(), vec![1.0, 4.0]);
+    assert_eq!(exec.to_host(&out_b.slice(..len)).unwrap(), vec![10, 40]);
 }

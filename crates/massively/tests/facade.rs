@@ -230,28 +230,30 @@ where
     massively::transform(exec, source, AddOne, (), out)
 }
 
-fn reverse2<R, S1>(
-    exec: &Executor<R>,
-    source: S1,
-) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
+fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1, out: S2) -> Result<(), massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
 {
-    massively::reverse(exec, source)
+    massively::reverse(exec, source, out)
 }
 
-fn sort2<R, S1, Less>(
+fn sort2<R, S1, S2, Less>(
     exec: &Executor<R>,
     source: S1,
     less: Less,
-) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
+    out: S2,
+) -> Result<(), massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
-    massively::sort(exec, source, less)
+    massively::sort(exec, source, less, out)
 }
 
 fn minmax_element2<R, S1, Less>(
@@ -285,14 +287,15 @@ fn lower_bound2<R, S1, Values, Less>(
     source: S1,
     values: Values,
     less: Less,
-) -> Result<massively::DeviceVec<R, massively::MIndex>, massively::Error>
+    out: DeviceSliceMut<'_, R, massively::MIndex>,
+) -> Result<(), massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
     Values: MIter<R, Item = S1::Item>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
-    massively::lower_bound(exec, source, values, less)
+    massively::lower_bound(exec, source, values, less, out)
 }
 
 fn is_sorted2<R, S1, Less>(
@@ -318,20 +321,24 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
 {
     massively::gather(exec, source, indices, out)
 }
 
-fn copy_where2<R, S1>(
+fn copy_where2<R, S1, S2>(
     exec: &Executor<R>,
     source: S1,
     stencil: DeviceSlice<'_, R, u32>,
-) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
+    out: S2,
+) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
 {
-    massively::copy_where(exec, source, stencil)
+    massively::copy_where(exec, source, stencil, out)
 }
 
 fn replace_where2<R, S2>(
@@ -373,29 +380,35 @@ where
     massively::find_if(exec, source, pred, ())
 }
 
-fn remove_where2<'a, R, S1>(
+fn remove_where2<'a, R, S1, S2>(
     exec: &Executor<R>,
     source: S1,
     stencil: DeviceSlice<'a, R, u32>,
-) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
+    out: S2,
+) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
 {
-    massively::remove_where(exec, source, stencil)
+    massively::remove_where(exec, source, stencil, out)
 }
 
-fn partition2<R, S1, Pred>(
+fn partition2<R, S1, S2, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<(<S1::Item as MItem<R>>::Vec, <S1::Item as MItem<R>>::Vec), massively::Error>
+    out: S2,
+) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
-    massively::partition(exec, source, pred, ())
+    massively::partition(exec, source, pred, (), out)
 }
 
 fn is_partitioned2<R, S1, Pred>(
@@ -411,30 +424,36 @@ where
     massively::is_partitioned(exec, source, pred, ())
 }
 
-fn unique2<R, S1, Pred>(
+fn unique2<R, S1, S2, Pred>(
     exec: &Executor<R>,
     source: S1,
     pred: Pred,
-) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
+    out: S2,
+) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
     Pred: BinaryPredicateOp<R, S1::Item>,
 {
-    massively::unique(exec, source, pred)
+    massively::unique(exec, source, pred, out)
 }
 
-fn adjacent_difference2<R, S1, Op>(
+fn adjacent_difference2<R, S1, S2, Op>(
     exec: &Executor<R>,
     source: S1,
     op: Op,
-) -> Result<<S1::Item as MItem<R>>::Vec, massively::Error>
+    out: S2,
+) -> Result<(), massively::Error>
 where
     R: Runtime,
     S1: MIter<R>,
+    S2: MIterMut<R, Item = S1::Item>,
+    S1::Item: MAlloc<R>,
     Op: ReductionOp<R, S1::Item>,
 {
-    massively::adjacent_difference(exec, source, op)
+    massively::adjacent_difference(exec, source, op, out)
 }
 
 #[test]
@@ -458,8 +477,9 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
 fn reverse2_wraps_reverse_with_slice_array_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let massively::SoA1(output) = reverse2(&exec, SoA1(input.slice(..))).unwrap();
+    reverse2(&exec, SoA1(input.slice(..)), SoA1(output.slice_mut(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![3, 2, 1]);
 }
@@ -468,8 +488,15 @@ fn reverse2_wraps_reverse_with_slice_array_signature() {
 fn sort2_wraps_sort_with_slice_array_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[3_u32, 1, 2]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let massively::SoA1(output) = sort2(&exec, SoA1(input.slice(..)), TupleU32Less).unwrap();
+    sort2(
+        &exec,
+        SoA1(input.slice(..)),
+        TupleU32Less,
+        SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 }
@@ -545,9 +572,16 @@ fn sort2_wraps_two_column_sort_with_slice_array_signature() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[3_u32, 1, 2]).unwrap();
     let right = exec.to_device(&[30_u32, 10, 20]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let SoA2(out_left, out_right) =
-        sort2(&exec, SoA2(left.slice(..), right.slice(..)), PairU32Less).unwrap();
+    sort2(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        PairU32Less,
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![10, 20, 30]);
@@ -586,11 +620,19 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
     let first = exec.to_device(&[3_u32, 1, 2]).unwrap();
     let second = exec.to_device(&[30_u32, 10, 20]).unwrap();
     let third = exec.to_device(&[300_u32, 100, 200]).unwrap();
+    let out_first = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_second = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_third = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let massively::SoA3(out_first, out_second, out_third) = sort2(
+    sort2(
         &exec,
         SoA3(first.slice(..), second.slice(..), third.slice(..)),
         TripleU32Less,
+        SoA3(
+            out_first.slice_mut(..),
+            out_second.slice_mut(..),
+            out_third.slice_mut(..),
+        ),
     )
     .unwrap();
 
@@ -632,16 +674,18 @@ fn search_queries_wrap_two_column_tuple_inputs() {
     let right = exec.to_device(&[10_u32, 20, 20, 40]).unwrap();
     let query_left = exec.to_device(&[2_u32, 5]).unwrap();
     let query_right = exec.to_device(&[0_u32, 50]).unwrap();
+    let lower = exec.to_device(&[0_u32; 2]).unwrap();
 
     assert_eq!(
         adjacent_find2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap(),
         Some(1)
     );
-    let lower = lower_bound2(
+    lower_bound2(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
         SoA2(query_left.slice(..), query_right.slice(..)),
         PairU32Less,
+        lower.slice_mut(..),
     )
     .unwrap();
     assert_eq!(exec.to_host(&lower).unwrap(), vec![1, 4]);
@@ -701,16 +745,23 @@ fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 4]).unwrap();
 
-    let SoA2(out_left, out_right) = copy_where2(
+    let len = copy_where2(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
         stencil.slice(..),
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 30]);
-    assert_eq!(exec.to_host(&out_right).unwrap(), vec![100, 300]);
+    assert_eq!(len, 2);
+    assert_eq!(exec.to_host(&out_left.slice(..len)).unwrap(), vec![10, 30]);
+    assert_eq!(
+        exec.to_host(&out_right.slice(..len)).unwrap(),
+        vec![100, 300]
+    );
 }
 
 #[test]
@@ -751,16 +802,23 @@ fn remove_where2_wraps_two_column_remove_where_with_stencil() {
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 4]).unwrap();
 
-    let SoA2(out_left, out_right) = remove_where2(
+    let len = remove_where2(
         &exec,
         SoA2(left.slice(..), right.slice(..)),
         stencil.slice(..),
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 30]);
-    assert_eq!(exec.to_host(&out_right).unwrap(), vec![100, 300]);
+    assert_eq!(len, 2);
+    assert_eq!(exec.to_host(&out_left.slice(..len)).unwrap(), vec![10, 30]);
+    assert_eq!(
+        exec.to_host(&out_right.slice(..len)).unwrap(),
+        vec![100, 300]
+    );
 }
 
 #[test]
@@ -768,14 +826,34 @@ fn partition2_wraps_two_column_partition_with_tuple_predicate() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 4]).unwrap();
 
-    let (SoA2(true_left, true_right), SoA2(false_left, false_right)) =
-        partition2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let split = partition2(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        PairFirstOdd,
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
 
-    assert_eq!(exec.to_host(&true_left).unwrap(), vec![21, 43]);
-    assert_eq!(exec.to_host(&true_right).unwrap(), vec![200, 400]);
-    assert_eq!(exec.to_host(&false_left).unwrap(), vec![10, 30]);
-    assert_eq!(exec.to_host(&false_right).unwrap(), vec![100, 300]);
+    assert_eq!(split, 2);
+    assert_eq!(
+        exec.to_host(&out_left.slice(..split)).unwrap(),
+        vec![21, 43]
+    );
+    assert_eq!(
+        exec.to_host(&out_right.slice(..split)).unwrap(),
+        vec![200, 400]
+    );
+    assert_eq!(
+        exec.to_host(&out_left.slice(split..)).unwrap(),
+        vec![10, 30]
+    );
+    assert_eq!(
+        exec.to_host(&out_right.slice(split..)).unwrap(),
+        vec![100, 300]
+    );
 }
 
 #[test]
@@ -809,12 +887,26 @@ fn unique2_wraps_two_column_unique_with_tuple_predicate() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[1_u32, 1, 2, 2, 2, 3]).unwrap();
     let right = exec.to_device(&[10_u32, 10, 20, 21, 21, 30]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 6]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 6]).unwrap();
 
-    let SoA2(out_left, out_right) =
-        unique2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap();
+    let len = unique2(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        PairEqual,
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
 
-    assert_eq!(exec.to_host(&out_left).unwrap(), vec![1, 2, 2, 3]);
-    assert_eq!(exec.to_host(&out_right).unwrap(), vec![10, 20, 21, 30]);
+    assert_eq!(len, 4);
+    assert_eq!(
+        exec.to_host(&out_left.slice(..len)).unwrap(),
+        vec![1, 2, 2, 3]
+    );
+    assert_eq!(
+        exec.to_host(&out_right.slice(..len)).unwrap(),
+        vec![10, 20, 21, 30]
+    );
 }
 
 #[test]
@@ -822,9 +914,16 @@ fn adjacent_difference2_wraps_two_column_tuple_op() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 13, 20]).unwrap();
     let right = exec.to_device(&[100_u32, 107, 120]).unwrap();
+    let out_left = exec.to_device(&[0_u32; 3]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 3]).unwrap();
 
-    let SoA2(out_left, out_right) =
-        adjacent_difference2(&exec, SoA2(left.slice(..), right.slice(..)), PairDifference).unwrap();
+    adjacent_difference2(
+        &exec,
+        SoA2(left.slice(..), right.slice(..)),
+        PairDifference,
+        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![10, 3, 7]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![100, 7, 13]);

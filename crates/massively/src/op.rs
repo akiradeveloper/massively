@@ -63,7 +63,7 @@ where
 /// # }
 /// let op = massively::op::compose(AddOffset, Square);
 /// # let _ = op;
-/// // map(&exec, input, op, (3_u32, ()))
+/// // transform(&exec, input, op, (3_u32, ()), out)
 /// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Compose<First, Second> {
@@ -84,20 +84,21 @@ pub fn compose<First, Second>(_first: First, _second: Second) -> Compose<First, 
 
 /// Unary operator that ignores its input and returns the captured environment.
 ///
-/// This is useful with [`map`](crate::map) or [`transform`](crate::transform)
-/// when an algorithm needs a constant item stream without defining a custom
-/// operation marker.
+/// This is useful with [`transform`](crate::transform) when an algorithm needs
+/// a constant item stream without defining a custom operation marker.
 ///
 /// ```no_run
 /// # use cubecl::prelude::*;
 /// # use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 /// # let exec = massively::Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
 /// # let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
-/// let massively::SoA1(output) = massively::map(
+/// let output = exec.to_device(&[0_u32; 3]).unwrap();
+/// massively::transform(
 ///     &exec,
 ///     massively::SoA1(input.slice(..)),
 ///     massively::op::Constant::<(u32,)>::new(),
 ///     (42_u32,),
+///     massively::SoA1(output.slice_mut(..)),
 /// )
 /// .unwrap();
 /// # let _ = output;

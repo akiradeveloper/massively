@@ -4,13 +4,13 @@ pub(crate) use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 pub(crate) use cubecl::prelude::*;
 pub(crate) use massively::algorithm::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 pub(crate) use massively::{
-    Executor, adjacent_difference, adjacent_find, copy_where, count_if, equal, exclusive_scan,
-    exclusive_scan_by_key, fill, find_first_of, find_if, gather, gather_where, inclusive_scan,
-    inclusive_scan_by_key, is_partitioned, is_sorted, is_sorted_until, lexicographical_compare,
-    lower_bound, map, max_element, merge, merge_by_key, min_element, minmax_element, mismatch,
-    partition, permute, reduce, reduce_by_key, remove_where, replace_where, reverse, scatter,
-    scatter_where, set_difference, set_intersection, set_union, sort, sort_by_key, transform,
-    transform_where, unique, unique_by_key, upper_bound,
+    Executor, ToSlice, ToSliceMut, adjacent_difference, adjacent_find, copy_where, count_if, equal,
+    exclusive_scan, exclusive_scan_by_key, fill, find_first_of, find_if, gather, gather_where,
+    inclusive_scan, inclusive_scan_by_key, is_partitioned, is_sorted, is_sorted_until,
+    lexicographical_compare, lower_bound, max_element, merge, merge_by_key, min_element,
+    minmax_element, mismatch, partition, reduce, reduce_by_key, remove_where, replace_where,
+    reverse, scatter, scatter_where, set_difference, set_intersection, set_union, sort,
+    sort_by_key, transform, transform_where, unique, unique_by_key, upper_bound,
 };
 
 pub(crate) fn exec() -> Executor<WgpuRuntime> {

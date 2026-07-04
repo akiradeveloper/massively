@@ -1,101 +1,135 @@
 use super::*;
 
 /// Computes adjacent differences.
-pub fn adjacent_difference<R, Input, Op>(
+pub fn adjacent_difference<R, Input, Op, Output>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
-) -> Result<<Input::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Op: op::ReductionOp<R, Input::Item>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
+    Op: op::ReductionOp<R, Output::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::adjacent_difference_dispatch(source, exec.policy(), op)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Input as sealed::MIterDispatch<R>>::adjacent_difference_dispatch(
+            source,
+            exec.policy(),
+            op,
+        )?;
+    write_owned_output(exec.policy(), owned, out)
 }
 
 /// Computes an exclusive scan.
-pub fn exclusive_scan<R, Input, Op>(
+pub fn exclusive_scan<R, Input, Op, Output>(
     exec: &Executor<R>,
     source: Input,
-    init: Input::Item,
+    init: Output::Item,
     op: Op,
-) -> Result<<Input::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Op: op::ReductionOp<R, Input::Item>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
+    Op: op::ReductionOp<R, Output::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::exclusive_scan_dispatch(source, exec.policy(), init, op)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Input as sealed::MIterDispatch<R>>::exclusive_scan_dispatch(
+            source,
+            exec.policy(),
+            init,
+            op,
+        )?;
+    write_owned_output(exec.policy(), owned, out)
 }
 
 /// Exclusive scan by key.
-pub fn exclusive_scan_by_key<R, Keys, Values, KeyEq, Op>(
+pub fn exclusive_scan_by_key<R, Keys, Values, KeyEq, Op, Output>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
-    init: Values::Item,
+    init: Output::Item,
     op: Op,
-) -> Result<<Values::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     R: Runtime,
     Keys: MIter<R>,
-    Values: MIter<R>,
+    Output: MIterMut<R>,
+    Values: MIter<R, Item = Output::Item>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
-    Op: op::ReductionOp<R, Values::Item>,
+    Op: op::ReductionOp<R, Output::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
-    <Keys as sealed::MIterDispatch<R>>::exclusive_scan_by_key_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        key_eq,
-        init,
-        op,
-    )
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Keys as sealed::MIterDispatch<R>>::exclusive_scan_by_key_dispatch(
+            keys,
+            exec.policy(),
+            values,
+            key_eq,
+            init,
+            op,
+        )?;
+    write_owned_output(exec.policy(), owned, out)
 }
 
 /// Computes an inclusive scan.
-pub fn inclusive_scan<R, Input, Op>(
+pub fn inclusive_scan<R, Input, Op, Output>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
-) -> Result<<Input::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Op: op::ReductionOp<R, Input::Item>,
+    Output: MIterMut<R>,
+    Input: MIter<R, Item = Output::Item>,
+    Op: op::ReductionOp<R, Output::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::inclusive_scan_dispatch(source, exec.policy(), op)
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Input as sealed::MIterDispatch<R>>::inclusive_scan_dispatch(source, exec.policy(), op)?;
+    write_owned_output(exec.policy(), owned, out)
 }
 
 /// Inclusive scan by key.
-pub fn inclusive_scan_by_key<R, Keys, Values, KeyEq, Op>(
+pub fn inclusive_scan_by_key<R, Keys, Values, KeyEq, Op, Output>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
     op: Op,
-) -> Result<<Values::Item as MItem<R>>::Vec, Error>
+    out: Output,
+) -> Result<(), Error>
 where
     R: Runtime,
     Keys: MIter<R>,
-    Values: MIter<R>,
+    Output: MIterMut<R>,
+    Values: MIter<R, Item = Output::Item>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
-    Op: op::ReductionOp<R, Values::Item>,
+    Op: op::ReductionOp<R, Output::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
-    <Keys as sealed::MIterDispatch<R>>::inclusive_scan_by_key_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        key_eq,
-        op,
-    )
+    validate_output(exec, &out)?;
+    let owned: <Output::Item as MAlloc<R>>::Storage =
+        <Keys as sealed::MIterDispatch<R>>::inclusive_scan_by_key_dispatch(
+            keys,
+            exec.policy(),
+            values,
+            key_eq,
+            op,
+        )?;
+    write_owned_output(exec.policy(), owned, out)
 }

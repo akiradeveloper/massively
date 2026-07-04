@@ -14,11 +14,12 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, reduce_by_key, sort_by_key};
+use massively::{DeviceVec, Executor, MIndex, SoA1, reduce_by_key, sort_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     racer_id: DeviceVec<B, u32>,
     total_time_ms: DeviceVec<B, u32>,
+    len: MIndex,
 }
 
 fn solve<B>(
@@ -29,29 +30,43 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let (SoA1(racer_id), SoA1(lap_time_ms)) = sort_by_key(
+    let len = racer_id.len() as usize;
+    let sorted_racer_id = exec.to_device(&vec![0_u32; len])?;
+    let sorted_lap_time_ms = exec.to_device(&vec![0_u32; len])?;
+    sort_by_key(
         exec,
         SoA1(racer_id.slice(..)),
         SoA1(lap_time_ms.slice(..)),
         common::LessU32,
+        SoA1(sorted_racer_id.slice_mut(..)),
+        SoA1(sorted_lap_time_ms.slice_mut(..)),
     )?;
-    let (SoA1(racer_id), SoA1(total_time_ms)) = reduce_by_key(
+    let racer_id = exec.to_device(&vec![0_u32; len])?;
+    let total_time_ms = exec.to_device(&vec![0_u32; len])?;
+    let len = reduce_by_key(
         exec,
-        SoA1(racer_id.slice(..)),
-        SoA1(lap_time_ms.slice(..)),
+        SoA1(sorted_racer_id.slice(..)),
+        SoA1(sorted_lap_time_ms.slice(..)),
         common::EqualU32,
         (0_u32,),
         common::SumU32,
+        SoA1(racer_id.slice_mut(..)),
+        SoA1(total_time_ms.slice_mut(..)),
     )?;
-    let (SoA1(total_time_ms), SoA1(racer_id)) = sort_by_key(
+    let ranked_total_time_ms = exec.to_device(&vec![0_u32; len as usize])?;
+    let ranked_racer_id = exec.to_device(&vec![0_u32; len as usize])?;
+    sort_by_key(
         exec,
-        SoA1(total_time_ms.slice(..)),
-        SoA1(racer_id.slice(..)),
+        SoA1(total_time_ms.slice(..len)),
+        SoA1(racer_id.slice(..len)),
         common::LessU32,
+        SoA1(ranked_total_time_ms.slice_mut(..)),
+        SoA1(ranked_racer_id.slice_mut(..)),
     )?;
     Ok(Output {
-        racer_id,
-        total_time_ms,
+        racer_id: ranked_racer_id,
+        total_time_ms: ranked_total_time_ms,
+        len,
     })
 }
 
@@ -62,7 +77,13 @@ fn main() -> common::Result {
         exec.to_device(&[2, 1, 2, 1, 3])?,
         exec.to_device(&[50, 40, 45, 42, 100])?,
     )?;
-    assert_eq!(exec.to_host(&output.racer_id)?, vec![1, 2, 3]);
-    assert_eq!(exec.to_host(&output.total_time_ms)?, vec![82, 95, 100]);
+    assert_eq!(
+        exec.to_host(&output.racer_id.slice(..output.len))?,
+        vec![1, 2, 3]
+    );
+    assert_eq!(
+        exec.to_host(&output.total_time_ms.slice(..output.len))?,
+        vec![82, 95, 100]
+    );
     Ok(())
 }
