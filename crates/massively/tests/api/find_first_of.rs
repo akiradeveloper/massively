@@ -25,8 +25,8 @@ fn find_first_of_accepts_borrowed_tuple_columns() {
     assert_eq!(
         find_first_of(
             &exec,
-            massively::SoA2(a.slice(..), b.slice(..)),
-            massively::SoA2(needle_a.slice(..), needle_b.slice(..)),
+            massively::Zip2(a.slice(..), b.slice(..)),
+            massively::Zip2(needle_a.slice(..), needle_b.slice(..)),
             MixedTupleEqual
         )
         .unwrap(),
@@ -45,8 +45,8 @@ fn find_first_of_accepts_generic_needles_without_inner_equality_bound() {
     assert_eq!(
         find_first_of_with_generic_needles(
             &exec,
-            massively::SoA2(a.slice(..), b.slice(..)),
-            massively::SoA2(needle_a.slice(..), needle_b.slice(..)),
+            massively::Zip2(a.slice(..), b.slice(..)),
+            massively::Zip2(needle_a.slice(..), needle_b.slice(..)),
             MixedTupleEqual,
         ),
         Some(2)

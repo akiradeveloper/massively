@@ -12,10 +12,10 @@ fn merge_accepts_borrowed_tuple_columns() {
 
     merge(
         &exec,
-        massively::SoA2(left_a.slice(..), left_b.slice(..)),
-        massively::SoA2(right_a.slice(..), right_b.slice(..)),
+        massively::Zip2(left_a.slice(..), left_b.slice(..)),
+        massively::Zip2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
-        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
+        massively::Zip2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
 

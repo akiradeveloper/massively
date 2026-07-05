@@ -6,7 +6,7 @@ use crate::{
         control::ScanByKeyControl,
         device::{
             DeviceColumnMutView, DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt,
-            KernelColumnBindings, S0, SoA1 as DeviceSoA1, SoA2 as DeviceSoA2, SoA3 as DeviceSoA3,
+            KernelColumnBindings, S0, Zip1 as DeviceZip1, Zip2 as DeviceZip2, Zip3 as DeviceZip3,
         },
         op::kernel::BinaryOp,
         primitives::{range as primitive_range, scan as primitive_scan},
@@ -34,7 +34,7 @@ impl LinearScanApply {
         policy: &CubePolicy<R>,
         input: &KernelColumnBindings,
         len: usize,
-    ) -> Result<DeviceSoA1<DeviceVec<R, T>>, Error>
+    ) -> Result<DeviceZip1<DeviceVec<R, T>>, Error>
     where
         R: Runtime,
         T: MStorageElement + 'static,
@@ -50,7 +50,7 @@ impl LinearScanApply {
         input: &KernelColumnBindings,
         len: usize,
         init: (T,),
-    ) -> Result<DeviceSoA1<DeviceVec<R, T>>, Error>
+    ) -> Result<DeviceZip1<DeviceVec<R, T>>, Error>
     where
         R: Runtime,
         T: MStorageElement + 'static,
@@ -66,7 +66,7 @@ impl LinearScanApply {
     pub(in crate::detail) fn adjacent_expr1<Source, Op>(
         policy: &CubePolicy<Source::Runtime>,
         source: &Source,
-    ) -> Result<DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>, Error>
+    ) -> Result<DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>, Error>
     where
         Source: KernelColumn + KernelColumnAt<S0>,
         Source::Item: MStorageElement + 'static,
@@ -76,7 +76,7 @@ impl LinearScanApply {
         let source = crate::detail::api::device_expr_adjacent_difference_with_policy::<Source, Op>(
             policy, source,
         )?;
-        Ok(DeviceSoA1 { source })
+        Ok(DeviceZip1 { source })
     }
 
     pub(in crate::detail) fn inclusive_expr2<R, A, C, AExpr, CExpr, Op>(
@@ -84,7 +84,7 @@ impl LinearScanApply {
         left: &KernelColumnBindings,
         right: &KernelColumnBindings,
         len: usize,
-    ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
+    ) -> Result<DeviceZip2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
     where
         R: Runtime,
         A: MStorageElement + 'static,
@@ -105,7 +105,7 @@ impl LinearScanApply {
         right: &KernelColumnBindings,
         len: usize,
         init: (A, C),
-    ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
+    ) -> Result<DeviceZip2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
     where
         R: Runtime,
         A: MStorageElement + 'static,
@@ -125,7 +125,7 @@ impl LinearScanApply {
         left: &KernelColumnBindings,
         right: &KernelColumnBindings,
         len: usize,
-    ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
+    ) -> Result<DeviceZip2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
     where
         R: Runtime,
         A: MStorageElement + 'static,
@@ -146,7 +146,7 @@ impl LinearScanApply {
         second: &KernelColumnBindings,
         third: &KernelColumnBindings,
         len: usize,
-    ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
+    ) -> Result<DeviceZip3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
     where
         R: Runtime,
         A: MStorageElement + 'static,
@@ -170,7 +170,7 @@ impl LinearScanApply {
         third: &KernelColumnBindings,
         len: usize,
         init: (A, C, D),
-    ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
+    ) -> Result<DeviceZip3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
     where
         R: Runtime,
         A: MStorageElement + 'static,
@@ -193,7 +193,7 @@ impl LinearScanApply {
         second: &KernelColumnBindings,
         third: &KernelColumnBindings,
         len: usize,
-    ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
+    ) -> Result<DeviceZip3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
     where
         R: Runtime,
         A: MStorageElement + 'static,
@@ -769,7 +769,7 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         policy: &CubePolicy<R>,
         a: &A,
         c: &C,
-    ) -> Result<DeviceSoA2<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>>, Error>
+    ) -> Result<DeviceZip2<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>>, Error>
     where
         A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
@@ -789,7 +789,7 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         a: &A,
         c: &C,
         init: (A::Item, C::Item),
-    ) -> Result<DeviceSoA2<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>>, Error>
+    ) -> Result<DeviceZip2<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>>, Error>
     where
         A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
@@ -853,7 +853,7 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         c: &C,
         d: &D,
     ) -> Result<
-        DeviceSoA3<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>, DeviceVec<R, D::Item>>,
+        DeviceZip3<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>, DeviceVec<R, D::Item>>,
         Error,
     >
     where
@@ -880,7 +880,7 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         d: &D,
         init: (A::Item, C::Item, D::Item),
     ) -> Result<
-        DeviceSoA3<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>, DeviceVec<R, D::Item>>,
+        DeviceZip3<DeviceVec<R, A::Item>, DeviceVec<R, C::Item>, DeviceVec<R, D::Item>>,
         Error,
     >
     where

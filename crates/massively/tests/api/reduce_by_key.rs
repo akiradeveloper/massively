@@ -2,7 +2,7 @@ use crate::common::*;
 
 fn count_reduced_values_after_allocated_slice<Values, Op, Pred>(
     exec: &massively::Executor<WgpuRuntime>,
-    keys: massively::SoA1<massively::DeviceSlice<'_, WgpuRuntime, u32>>,
+    keys: massively::Zip1<massively::DeviceSlice<'_, WgpuRuntime, u32>>,
     values: Values,
     init: Values::Item,
     op: Op,
@@ -41,13 +41,13 @@ fn reduce_by_key_uses_supplied_key_equality() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         SameParityU32,
         (0.0,),
         Sum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![4, 3]);
@@ -67,13 +67,13 @@ fn reduce_by_key_handles_singleton_runs() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -97,13 +97,13 @@ fn reduce_by_key_handles_one_run() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -124,13 +124,13 @@ fn reduce_by_key_handles_all_same_key_long_run() {
     let out_values = exec.to_device(&vec![0_u32; len]).unwrap();
     let out_len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -155,13 +155,13 @@ fn reduce_by_key_handles_block_boundary_runs() {
     let out_values = exec.to_device(&vec![0_u32; values.len() as usize]).unwrap();
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -184,13 +184,13 @@ fn reduce_by_key_accepts_tuple_values() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         EqualU32,
         (0.0_f32, 0_u32),
         TupleSum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![1, 2]);
@@ -209,8 +209,8 @@ fn reduce_by_key_output_values_support_generic_allocated_slice_for_single_column
 
     let count = count_reduced_values_after_allocated_slice(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         (0_u32,),
         Sum,
         NonZero,
@@ -228,8 +228,8 @@ fn reduce_by_key_output_values_support_generic_allocated_slice_for_multi_column(
 
     let count = count_reduced_values_after_allocated_slice(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         (0.0_f32, 0_u32),
         TupleSum,
         PairMixedFirstPositive,
@@ -254,13 +254,13 @@ fn reduce_by_key_accepts_three_tuple_values() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
         (0.0_f32, 0_u32, 0.0_f32),
         TupleSum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA3(
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -290,17 +290,17 @@ fn reduce_by_key_accepts_three_column_keys() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip1(values.slice(..)),
         MixedTuple3Equal,
         (0_u32,),
         Sum,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -344,17 +344,17 @@ fn reduce_by_key_accepts_three_column_keys_and_tuple_values() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         MixedTuple3Equal,
         (0.0_f32, 0_u32, 0.0_f32),
         TupleSum,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -420,8 +420,8 @@ fn reduce_by_key_accepts_three_column_keys_and_seven_column_values() {
 
     let len = reduce_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA7(
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -433,12 +433,12 @@ fn reduce_by_key_accepts_three_column_keys_and_seven_column_values() {
         MixedTuple3Equal,
         (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32),
         TupleSum,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

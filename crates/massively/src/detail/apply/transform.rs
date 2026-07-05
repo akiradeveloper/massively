@@ -1,8 +1,8 @@
 use crate::{
     detail::{
         api::{
-            MItemStorage, TransformSoA2Output, TransformSoA3Output, TransformSoA4Output,
-            TransformSoA5Output, TransformSoA6Output, TransformSoA7Output, TransformUnaryOutput,
+            MItemStorage, TransformUnaryOutput, TransformZip2Output, TransformZip3Output,
+            TransformZip4Output, TransformZip5Output, TransformZip6Output, TransformZip7Output,
         },
         device::DeviceColumnView,
         op::kernel::UnaryOp,
@@ -29,7 +29,7 @@ impl TransformPayloadApply {
         Output::run(policy, input, env)
     }
 
-    pub(in crate::detail) fn soa2<Output, R, A, B, Op>(
+    pub(in crate::detail) fn zip2<Output, R, A, B, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
@@ -39,13 +39,13 @@ impl TransformPayloadApply {
         R: Runtime,
         A: CubePrimitive + CubeElement,
         B: CubePrimitive + CubeElement,
-        Output: TransformSoA2Output<R, A, B, Op>,
+        Output: TransformZip2Output<R, A, B, Op>,
         Op: UnaryOp<(A, B), Output = Output>,
     {
         Output::run(policy, a, b, env)
     }
 
-    pub(in crate::detail) fn soa3<Output, R, A, B, C, Op>(
+    pub(in crate::detail) fn zip3<Output, R, A, B, C, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
@@ -57,14 +57,14 @@ impl TransformPayloadApply {
         A: CubePrimitive + CubeElement,
         B: CubePrimitive + CubeElement,
         C: CubePrimitive + CubeElement,
-        Output: TransformSoA3Output<R, A, B, C, Op>,
+        Output: TransformZip3Output<R, A, B, C, Op>,
         Op: UnaryOp<(A, B, C), Output = Output>,
     {
         Output::run(policy, a, b, c, env)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(in crate::detail) fn soa4<Output, R, A, B, C, D, Op>(
+    pub(in crate::detail) fn zip4<Output, R, A, B, C, D, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
@@ -78,14 +78,14 @@ impl TransformPayloadApply {
         B: CubePrimitive + CubeElement,
         C: CubePrimitive + CubeElement,
         D: CubePrimitive + CubeElement,
-        Output: TransformSoA4Output<R, A, B, C, D, Op>,
+        Output: TransformZip4Output<R, A, B, C, D, Op>,
         Op: UnaryOp<(A, B, C, D), Output = Output>,
     {
         Output::run(policy, a, b, c, d, env)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(in crate::detail) fn soa5<Output, R, A, B, C, D, E, Op>(
+    pub(in crate::detail) fn zip5<Output, R, A, B, C, D, E, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
@@ -101,14 +101,14 @@ impl TransformPayloadApply {
         C: CubePrimitive + CubeElement,
         D: CubePrimitive + CubeElement,
         E: CubePrimitive + CubeElement,
-        Output: TransformSoA5Output<R, A, B, C, D, E, Op>,
+        Output: TransformZip5Output<R, A, B, C, D, E, Op>,
         Op: UnaryOp<(A, B, C, D, E), Output = Output>,
     {
         Output::run(policy, a, b, c, d, e, env)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(in crate::detail) fn soa6<Output, R, A, B, C, D, E, F, Op>(
+    pub(in crate::detail) fn zip6<Output, R, A, B, C, D, E, F, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
@@ -126,14 +126,14 @@ impl TransformPayloadApply {
         D: CubePrimitive + CubeElement,
         E: CubePrimitive + CubeElement,
         F: CubePrimitive + CubeElement,
-        Output: TransformSoA6Output<R, A, B, C, D, E, F, Op>,
+        Output: TransformZip6Output<R, A, B, C, D, E, F, Op>,
         Op: UnaryOp<(A, B, C, D, E, F), Output = Output>,
     {
         Output::run(policy, a, b, c, d, e, f, env)
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(in crate::detail) fn soa7<Output, R, A, B, C, D, E, F, G, Op>(
+    pub(in crate::detail) fn zip7<Output, R, A, B, C, D, E, F, G, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
@@ -153,7 +153,7 @@ impl TransformPayloadApply {
         E: CubePrimitive + CubeElement,
         F: CubePrimitive + CubeElement,
         G: CubePrimitive + CubeElement,
-        Output: TransformSoA7Output<R, A, B, C, D, E, F, G, Op>,
+        Output: TransformZip7Output<R, A, B, C, D, E, F, G, Op>,
         Op: UnaryOp<(A, B, C, D, E, F, G), Output = Output>,
     {
         Output::run(policy, a, b, c, d, e, f, g, env)

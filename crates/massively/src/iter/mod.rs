@@ -1,4 +1,4 @@
-//! Massively iterator traits and Structure-of-Arrays wrappers.
+//! Massively iterator traits and Zip wrappers.
 
 use std::ops::{Bound, Range, RangeBounds};
 
@@ -10,71 +10,71 @@ use crate::index::MIndex;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 use crate::value::{MAlloc, MItem, StorageFromInner};
 
-/// Single-column structure-of-arrays container.
+/// Single-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA1<A>(pub A);
+pub struct Zip1<A>(pub A);
 
-/// Two-column structure-of-arrays container.
+/// Two-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA2<A, B>(pub A, pub B);
+pub struct Zip2<A, B>(pub A, pub B);
 
-/// Three-column structure-of-arrays container.
+/// Three-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA3<A, B, C>(pub A, pub B, pub C);
+pub struct Zip3<A, B, C>(pub A, pub B, pub C);
 
-/// Four-column structure-of-arrays container.
+/// Four-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA4<A, B, C, D>(pub A, pub B, pub C, pub D);
+pub struct Zip4<A, B, C, D>(pub A, pub B, pub C, pub D);
 
-/// Five-column structure-of-arrays container.
+/// Five-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA5<A, B, C, D, E>(pub A, pub B, pub C, pub D, pub E);
+pub struct Zip5<A, B, C, D, E>(pub A, pub B, pub C, pub D, pub E);
 
-/// Six-column structure-of-arrays container.
+/// Six-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA6<A, B, C, D, E, F>(pub A, pub B, pub C, pub D, pub E, pub F);
+pub struct Zip6<A, B, C, D, E, F>(pub A, pub B, pub C, pub D, pub E, pub F);
 
-/// Seven-column structure-of-arrays container.
+/// Seven-column Zip container.
 #[derive(Clone, Copy, Debug)]
-pub struct SoA7<A, B, C, D, E, F, G>(pub A, pub B, pub C, pub D, pub E, pub F, pub G);
+pub struct Zip7<A, B, C, D, E, F, G>(pub A, pub B, pub C, pub D, pub E, pub F, pub G);
 
-impl<A> From<(A,)> for SoA1<A> {
+impl<A> From<(A,)> for Zip1<A> {
     fn from(value: (A,)) -> Self {
         Self(value.0)
     }
 }
 
-impl<A, B> From<(A, B)> for SoA2<A, B> {
+impl<A, B> From<(A, B)> for Zip2<A, B> {
     fn from(value: (A, B)) -> Self {
         Self(value.0, value.1)
     }
 }
 
-impl<A, B, C> From<(A, B, C)> for SoA3<A, B, C> {
+impl<A, B, C> From<(A, B, C)> for Zip3<A, B, C> {
     fn from(value: (A, B, C)) -> Self {
         Self(value.0, value.1, value.2)
     }
 }
 
-impl<A, B, C, D> From<(A, B, C, D)> for SoA4<A, B, C, D> {
+impl<A, B, C, D> From<(A, B, C, D)> for Zip4<A, B, C, D> {
     fn from(value: (A, B, C, D)) -> Self {
         Self(value.0, value.1, value.2, value.3)
     }
 }
 
-impl<A, B, C, D, E> From<(A, B, C, D, E)> for SoA5<A, B, C, D, E> {
+impl<A, B, C, D, E> From<(A, B, C, D, E)> for Zip5<A, B, C, D, E> {
     fn from(value: (A, B, C, D, E)) -> Self {
         Self(value.0, value.1, value.2, value.3, value.4)
     }
 }
 
-impl<A, B, C, D, E, F> From<(A, B, C, D, E, F)> for SoA6<A, B, C, D, E, F> {
+impl<A, B, C, D, E, F> From<(A, B, C, D, E, F)> for Zip6<A, B, C, D, E, F> {
     fn from(value: (A, B, C, D, E, F)) -> Self {
         Self(value.0, value.1, value.2, value.3, value.4, value.5)
     }
 }
 
-impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for SoA7<A, B, C, D, E, F, G> {
+impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for Zip7<A, B, C, D, E, F, G> {
     fn from(value: (A, B, C, D, E, F, G)) -> Self {
         Self(
             value.0, value.1, value.2, value.3, value.4, value.5, value.6,
@@ -189,7 +189,7 @@ where
     }
 }
 
-pub(crate) fn normalize_soa_range<Bounds>(len: MIndex, range: Bounds) -> Range<MIndex>
+pub(crate) fn normalize_zip_range<Bounds>(len: MIndex, range: Bounds) -> Range<MIndex>
 where
     Bounds: RangeBounds<MIndex>,
 {
@@ -209,12 +209,12 @@ where
     );
     assert!(
         end <= len,
-        "slice end ({end}) is out of bounds for SoA of length {len}"
+        "slice end ({end}) is out of bounds for Zip of length {len}"
     );
     start..end
 }
 
-macro_rules! impl_soa_slice_api {
+macro_rules! impl_zip_slice_api {
     ($name:ident < $( $ty:ident : $idx:tt ),+ >) => {
         impl<R, $( $ty ),+> $name<$( DeviceVec<R, $ty> ),+>
         where
@@ -225,7 +225,7 @@ macro_rules! impl_soa_slice_api {
             where
                 Bounds: RangeBounds<MIndex>,
             {
-                let range = normalize_soa_range(self.0.len(), range);
+                let range = normalize_zip_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
             }
 
@@ -234,7 +234,7 @@ macro_rules! impl_soa_slice_api {
             where
                 Bounds: RangeBounds<MIndex>,
             {
-                let range = normalize_soa_range(self.0.len(), range);
+                let range = normalize_zip_range(self.0.len(), range);
                 $name($( self.$idx.slice_mut(range.clone()) ),+)
             }
         }
@@ -282,7 +282,7 @@ macro_rules! impl_soa_slice_api {
             where
                 Bounds: RangeBounds<MIndex>,
             {
-                let range = normalize_soa_range(self.0.len(), range);
+                let range = normalize_zip_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
             }
         }
@@ -313,7 +313,7 @@ macro_rules! impl_soa_slice_api {
             where
                 Bounds: RangeBounds<MIndex>,
             {
-                let range = normalize_soa_range(self.0.len(), range);
+                let range = normalize_zip_range(self.0.len(), range);
                 $name($( self.$idx.slice(range.clone()) ),+)
             }
 
@@ -322,7 +322,7 @@ macro_rules! impl_soa_slice_api {
             where
                 Bounds: RangeBounds<MIndex>,
             {
-                let range = normalize_soa_range(self.0.len(), range);
+                let range = normalize_zip_range(self.0.len(), range);
                 $name($( self.$idx.slice_mut(range.clone()) ),+)
             }
         }
@@ -387,13 +387,13 @@ macro_rules! impl_soa_slice_api {
     };
 }
 
-impl_soa_slice_api!(SoA1<A: 0>);
-impl_soa_slice_api!(SoA2<A: 0, B: 1>);
-impl_soa_slice_api!(SoA3<A: 0, B: 1, C: 2>);
-impl_soa_slice_api!(SoA4<A: 0, B: 1, C: 2, D: 3>);
-impl_soa_slice_api!(SoA5<A: 0, B: 1, C: 2, D: 3, E: 4>);
-impl_soa_slice_api!(SoA6<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5>);
-impl_soa_slice_api!(SoA7<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6>);
+impl_zip_slice_api!(Zip1<A: 0>);
+impl_zip_slice_api!(Zip2<A: 0, B: 1>);
+impl_zip_slice_api!(Zip3<A: 0, B: 1, C: 2>);
+impl_zip_slice_api!(Zip4<A: 0, B: 1, C: 2, D: 3>);
+impl_zip_slice_api!(Zip5<A: 0, B: 1, C: 2, D: 3, E: 4>);
+impl_zip_slice_api!(Zip6<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5>);
+impl_zip_slice_api!(Zip7<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6>);
 
 /// Allocated device storage that can be sliced back into algorithm views.
 pub trait MAllocStorage<R: Runtime>: StorageFromInner<R> + ToSlice + ToSliceMut

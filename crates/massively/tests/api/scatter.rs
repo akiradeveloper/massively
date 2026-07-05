@@ -11,9 +11,9 @@ fn scatter_accepts_heterogeneous_columns() {
     let out_ids = exec.to_device(&[0_u32; 4]).unwrap();
     scatter(
         &exec,
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         indices.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
 

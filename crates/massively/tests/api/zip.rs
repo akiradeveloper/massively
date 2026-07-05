@@ -11,14 +11,35 @@ fn tuple_flattens_single_column_inputs() {
     let out_right = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA2(left.slice(..), right.slice(..)),
+        massively::Zip2(left.slice(..), right.slice(..)),
         indices.slice(..),
-        massively::SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        massively::Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
     assert_eq!(exec.to_host(&out_left).unwrap(), vec![1.0, 2.0, 3.0]);
     assert_eq!(exec.to_host(&out_right).unwrap(), vec![10, 20, 30]);
+}
+
+#[test]
+fn zip_input_writes_to_zip_output() {
+    let exec = exec();
+    let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let indices = exec.to_device(&[2_u32, 0, 1]).unwrap();
+
+    let out_left = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let out_right = exec.to_device(&[0_u32; 3]).unwrap();
+    gather(
+        &exec,
+        massively::Zip2(left.slice(..), right.slice(..)),
+        indices.slice(..),
+        massively::Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_left).unwrap(), vec![3.0, 1.0, 2.0]);
+    assert_eq!(exec.to_host(&out_right).unwrap(), vec![30, 10, 20]);
 }
 
 #[test]
@@ -32,9 +53,9 @@ fn tuple_materializes_heterogeneous_columns() {
     let out_ids = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         indices.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
 
@@ -53,9 +74,9 @@ fn tuple_gather_accepts_borrowed_heterogeneous_columns() {
     let out_ids = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         indices.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
 
@@ -74,9 +95,9 @@ fn tuple_gather_accepts_heterogeneous_columns() {
     let out_ids = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         indices.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
 
@@ -97,9 +118,9 @@ fn tuple_concatenates_borrowed_columns() {
     let out_c = exec.to_device(&[0.0_f32; 2]).unwrap();
     gather(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         indices.slice(..),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -125,9 +146,9 @@ fn tuple_concatenates_column_and_columns() {
     let out_c = exec.to_device(&[0.0_f32; 2]).unwrap();
     gather(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         indices.slice(..),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -141,7 +162,7 @@ fn tuple_concatenates_column_and_columns() {
 }
 
 #[test]
-fn soa7_gather_and_scatter_move_all_columns() {
+fn zip7_gather_and_scatter_move_all_columns() {
     let exec = exec();
     let a = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let b = exec.to_device(&[11_u32, 21, 31, 41]).unwrap();
@@ -161,7 +182,7 @@ fn soa7_gather_and_scatter_move_all_columns() {
     let out_g = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -171,7 +192,7 @@ fn soa7_gather_and_scatter_move_all_columns() {
             g.slice(..),
         ),
         indices.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -200,7 +221,7 @@ fn soa7_gather_and_scatter_move_all_columns() {
     let scatter_g = exec.to_device(&[0_u32; 4]).unwrap();
     scatter(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice(..),
             out_b.slice(..),
             out_c.slice(..),
@@ -210,7 +231,7 @@ fn soa7_gather_and_scatter_move_all_columns() {
             out_g.slice(..),
         ),
         indices.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             scatter_a.slice_mut(..),
             scatter_b.slice_mut(..),
             scatter_c.slice_mut(..),
@@ -232,7 +253,7 @@ fn soa7_gather_and_scatter_move_all_columns() {
 }
 
 #[test]
-fn soa7_gather_where_and_scatter_where_move_selected_columns() {
+fn zip7_gather_where_and_scatter_where_move_selected_columns() {
     let exec = exec();
     let a = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let b = exec.to_device(&[11_u32, 21, 31, 41]).unwrap();
@@ -253,7 +274,7 @@ fn soa7_gather_where_and_scatter_where_move_selected_columns() {
     let out_g = exec.to_device(&[100_u32; 3]).unwrap();
     gather_where(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -264,7 +285,7 @@ fn soa7_gather_where_and_scatter_where_move_selected_columns() {
         ),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -293,7 +314,7 @@ fn soa7_gather_where_and_scatter_where_move_selected_columns() {
     let scatter_g = exec.to_device(&[0_u32; 4]).unwrap();
     scatter_where(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice(..),
             out_b.slice(..),
             out_c.slice(..),
@@ -304,7 +325,7 @@ fn soa7_gather_where_and_scatter_where_move_selected_columns() {
         ),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             scatter_a.slice_mut(..),
             scatter_b.slice_mut(..),
             scatter_c.slice_mut(..),
@@ -326,7 +347,7 @@ fn soa7_gather_where_and_scatter_where_move_selected_columns() {
 }
 
 #[test]
-fn soa7_reverse_returns_all_columns() {
+fn zip7_reverse_returns_all_columns() {
     let exec = exec();
     let a = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let b = exec.to_device(&[11_u32, 12, 13]).unwrap();
@@ -345,7 +366,7 @@ fn soa7_reverse_returns_all_columns() {
     let out_g = exec.to_device(&[0_u32; 3]).unwrap();
     reverse(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -354,7 +375,7 @@ fn soa7_reverse_returns_all_columns() {
             f.slice(..),
             g.slice(..),
         ),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

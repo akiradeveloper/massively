@@ -18,7 +18,7 @@ mod common;
 use cubecl::prelude::*;
 use massively::op::{PredicateOp, UnaryOp};
 use massively::prelude::*;
-use massively::{DeviceVec, Executor, SoA3, copy_where, partition, transform};
+use massively::{DeviceVec, Executor, Zip3, copy_where, partition, transform};
 
 struct SuspiciousTransaction;
 
@@ -76,19 +76,19 @@ where
     let flag = exec.constant(account_id.len(), 0_u32)?;
     transform(
         exec,
-        SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
+        Zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         SuspiciousTransaction,
         (),
-        SoA1(flag.slice_mut(..)),
+        Zip1(flag.slice_mut(..)),
     )?;
     let suspicious_account_id = exec.constant(account_id.len(), 0_u32)?;
     let suspicious_amount = exec.constant(amount.len(), 0.0_f32)?;
     let suspicious_risk_score = exec.constant(risk_score.len(), 0_u32)?;
     let suspicious_len = copy_where(
         exec,
-        SoA3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
+        Zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         flag.slice(..),
-        SoA3(
+        Zip3(
             suspicious_account_id.slice_mut(..),
             suspicious_amount.slice_mut(..),
             suspicious_risk_score.slice_mut(..),
@@ -99,14 +99,14 @@ where
     let risk_score = exec.constant(suspicious_len, 0_u32)?;
     let split = partition(
         exec,
-        SoA3(
+        Zip3(
             suspicious_account_id.slice(..suspicious_len),
             suspicious_amount.slice(..suspicious_len),
             suspicious_risk_score.slice(..suspicious_len),
         ),
         HighRiskTransaction,
         (),
-        SoA3(
+        Zip3(
             account_id.slice_mut(..),
             amount.slice_mut(..),
             risk_score.slice_mut(..),

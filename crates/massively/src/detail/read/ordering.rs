@@ -56,12 +56,12 @@ where
     S::Expr: DeviceGpuExpr<S::Item>,
 {
     type Runtime = S::Runtime;
-    type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+    type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
     fn reverse_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         let control = crate::detail::control::RangeControl::reverse(self.len())?;
         let apply = crate::detail::apply::RangePayloadApply::new(&control);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: apply.apply_expr(policy, &self)?,
         })
     }
@@ -76,7 +76,7 @@ macro_rules! impl_kernel_reverse_tuple1 {
             S::Expr: DeviceGpuExpr<S::Item>,
         {
             type Runtime = S::Runtime;
-            type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+            type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
             fn reverse_read(
                 self,
@@ -84,7 +84,7 @@ macro_rules! impl_kernel_reverse_tuple1 {
             ) -> Result<Self::Output, Error> {
                 let control = crate::detail::control::RangeControl::reverse(self.$field.len())?;
                 let apply = crate::detail::apply::RangePayloadApply::new(&control);
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: apply.apply_expr(policy, &self.$field)?,
                 })
             }
@@ -93,8 +93,8 @@ macro_rules! impl_kernel_reverse_tuple1 {
 }
 
 impl_kernel_reverse_tuple1!((S,), 0);
-impl_kernel_reverse_tuple1!(SoAView1<S>, source);
-impl_kernel_reverse_tuple1!(DeviceSoA1<S>, source);
+impl_kernel_reverse_tuple1!(ZipView1<S>, source);
+impl_kernel_reverse_tuple1!(DeviceZip1<S>, source);
 
 macro_rules! impl_kernel_reverse_tuple2 {
     ($target:ty, $left:tt, $right:tt) => {
@@ -109,7 +109,7 @@ macro_rules! impl_kernel_reverse_tuple2 {
         {
             type Runtime = A::Runtime;
             type Output =
-                DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
+                DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
 
             fn reverse_read(
                 self,
@@ -119,25 +119,25 @@ macro_rules! impl_kernel_reverse_tuple2 {
                 let control = crate::detail::control::RangeControl::reverse(self.$left.len())?;
                 let apply = crate::detail::apply::RangePayloadApply::new(&control);
                 let (left, right) = apply.apply_expr2(policy, &self.$left, &self.$right)?;
-                Ok(DeviceSoA2 { left, right })
+                Ok(DeviceZip2 { left, right })
             }
         }
     };
 }
 
-impl_kernel_reverse_tuple2!(SoAView2<A, C>, left, right);
-impl_kernel_reverse_tuple2!(DeviceSoA2<A, C>, left, right);
+impl_kernel_reverse_tuple2!(ZipView2<A, C>, left, right);
+impl_kernel_reverse_tuple2!(DeviceZip2<A, C>, left, right);
 
 impl<Left, Right> KernelReverseInput for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelReverseInput,
+    ZipView2<Left, Right>: KernelReverseInput,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelReverseInput>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelReverseInput>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelReverseInput>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelReverseInput>::Output;
 
     fn reverse_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelReverseInput>::reverse_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelReverseInput>::reverse_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -161,7 +161,7 @@ macro_rules! impl_kernel_reverse_tuple3 {
             D::Expr: DeviceGpuExpr<D::Item>,
         {
             type Runtime = A::Runtime;
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<A::Runtime, A::Item>,
                 DeviceVec<A::Runtime, C::Item>,
                 DeviceVec<A::Runtime, D::Item>,
@@ -176,7 +176,7 @@ macro_rules! impl_kernel_reverse_tuple3 {
                 let apply = crate::detail::apply::RangePayloadApply::new(&control);
                 let (first, second, third) =
                     apply.apply_expr3(policy, &self.$first, &self.$second, &self.$third)?;
-                Ok(DeviceSoA3 {
+                Ok(DeviceZip3 {
                     first,
                     second,
                     third,
@@ -186,19 +186,19 @@ macro_rules! impl_kernel_reverse_tuple3 {
     };
 }
 
-impl_kernel_reverse_tuple3!(SoAView3<A, C, D>, first, second, third);
-impl_kernel_reverse_tuple3!(DeviceSoA3<A, C, D>, first, second, third);
+impl_kernel_reverse_tuple3!(ZipView3<A, C, D>, first, second, third);
+impl_kernel_reverse_tuple3!(DeviceZip3<A, C, D>, first, second, third);
 
 impl<First, Second, Third> KernelReverseInput for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelReverseInput,
+    ZipView3<First, Second, Third>: KernelReverseInput,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelReverseInput>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelReverseInput>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelReverseInput>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelReverseInput>::Output;
 
     fn reverse_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelReverseInput>::reverse_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelReverseInput>::reverse_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -216,10 +216,10 @@ where
     Less: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: crate::detail::apply::SortApply::apply_expr::<Source, Less>(policy, &self)?,
         })
     }
@@ -235,10 +235,10 @@ macro_rules! impl_kernel_sort_tuple1 {
             Less: BinaryPredicateOp<Source::Item>,
         {
             type Runtime = Source::Runtime;
-            type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
             fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: crate::detail::apply::SortApply::apply_expr::<Source, Less>(
                         policy,
                         &self.$field,
@@ -249,8 +249,8 @@ macro_rules! impl_kernel_sort_tuple1 {
     };
 }
 
-impl_kernel_sort_tuple1!(SoAView1<Source>, source);
-impl_kernel_sort_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_sort_tuple1!(ZipView1<Source>, source);
+impl_kernel_sort_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Less> KernelSortInput<Less> for (Source,)
 where
@@ -260,11 +260,11 @@ where
     Less: BinaryPredicateOp<(Source::Item,)>,
 {
     type Runtime = Source::Runtime;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <DeviceSoA1<Source> as KernelSortInput<crate::detail::api::Tuple1Less<Less>>>::sort_read(
-            DeviceSoA1 { source: self.0 },
+        <DeviceZip1<Source> as KernelSortInput<crate::detail::api::Tuple1Less<Less>>>::sort_read(
+            DeviceZip1 { source: self.0 },
             policy,
         )
     }
@@ -283,7 +283,7 @@ macro_rules! impl_kernel_sort_tuple2 {
             Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
         {
             type Runtime = Left::Runtime;
-            type Output = DeviceSoA2<
+            type Output = DeviceZip2<
                 DeviceVec<Left::Runtime, Left::Item>,
                 DeviceVec<Left::Runtime, Right::Item>,
             >;
@@ -294,25 +294,25 @@ macro_rules! impl_kernel_sort_tuple2 {
                     Right,
                     Less,
                 >(policy, &self.$left, &self.$right)?;
-                Ok(DeviceSoA2 { left, right })
+                Ok(DeviceZip2 { left, right })
             }
         }
     };
 }
 
-impl_kernel_sort_tuple2!(SoAView2<Left, Right>, left, right);
-impl_kernel_sort_tuple2!(DeviceSoA2<Left, Right>, left, right);
+impl_kernel_sort_tuple2!(ZipView2<Left, Right>, left, right);
+impl_kernel_sort_tuple2!(DeviceZip2<Left, Right>, left, right);
 
 impl<Left, Right, Less> KernelSortInput<Less> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelSortInput<Less>,
+    ZipView2<Left, Right>: KernelSortInput<Less>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelSortInput<Less>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelSortInput<Less>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelSortInput<Less>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelSortInput<Less>>::Output;
 
     fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelSortInput<Less>>::sort_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelSortInput<Less>>::sort_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -337,7 +337,7 @@ macro_rules! impl_kernel_sort_tuple3 {
             Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
         {
             type Runtime = First::Runtime;
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<First::Runtime, First::Item>,
                 DeviceVec<First::Runtime, Second::Item>,
                 DeviceVec<First::Runtime, Third::Item>,
@@ -351,7 +351,7 @@ macro_rules! impl_kernel_sort_tuple3 {
                         &self.$second,
                         &self.$third,
                     )?;
-                Ok(DeviceSoA3 {
+                Ok(DeviceZip3 {
                     first,
                     second,
                     third,
@@ -361,19 +361,19 @@ macro_rules! impl_kernel_sort_tuple3 {
     };
 }
 
-impl_kernel_sort_tuple3!(SoAView3<First, Second, Third>, first, second, third);
-impl_kernel_sort_tuple3!(DeviceSoA3<First, Second, Third>, first, second, third);
+impl_kernel_sort_tuple3!(ZipView3<First, Second, Third>, first, second, third);
+impl_kernel_sort_tuple3!(DeviceZip3<First, Second, Third>, first, second, third);
 
 impl<First, Second, Third, Less> KernelSortInput<Less> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelSortInput<Less>,
+    ZipView3<First, Second, Third>: KernelSortInput<Less>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelSortInput<Less>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelSortInput<Less>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelSortInput<Less>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelSortInput<Less>>::Output;
 
     fn sort_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelSortInput<Less>>::sort_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelSortInput<Less>>::sort_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

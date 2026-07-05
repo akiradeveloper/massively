@@ -11,12 +11,12 @@ fn exclusive_scan_by_key_uses_supplied_key_equality() {
 
     exclusive_scan_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         NeverEqualU32,
         (100.0_f32, 1000_u32),
         TupleSum,
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -35,12 +35,12 @@ fn exclusive_scan_by_key_handles_one_run() {
 
     exclusive_scan_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -60,12 +60,12 @@ fn exclusive_scan_by_key_handles_all_same_key_long_run() {
     let output = exec.to_device(&vec![0_u32; len]).unwrap();
     exclusive_scan_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -88,12 +88,12 @@ fn exclusive_scan_by_key_handles_block_boundary_runs() {
     let output = exec.to_device(&vec![0_u32; values.len() as usize]).unwrap();
     exclusive_scan_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualU32,
         (0_u32,),
         Sum,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -115,12 +115,12 @@ fn exclusive_scan_by_key_accepts_tuple_values() {
 
     exclusive_scan_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         EqualU32,
         (0.0_f32, 0_u32, 0.0_f32),
         TupleSum,
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -149,12 +149,12 @@ fn exclusive_scan_by_key_accepts_three_column_keys() {
 
     exclusive_scan_by_key(
         &exec,
-        massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
+        massively::Zip1(values.slice(..)),
         MixedTuple3Equal,
         (0_u32,),
         Sum,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -178,12 +178,12 @@ fn exclusive_scan_by_key_accepts_three_column_keys_and_tuple_values() {
 
     exclusive_scan_by_key(
         &exec,
-        massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         MixedTuple3Equal,
         (0.0_f32, 0_u32, 0.0_f32),
         TupleSum,
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -229,8 +229,8 @@ fn exclusive_scan_by_key_accepts_three_column_keys_and_seven_column_values() {
 
     exclusive_scan_by_key(
         &exec,
-        massively::SoA3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
-        massively::SoA7(
+        massively::Zip3(key_a.slice(..), key_b.slice(..), key_c.slice(..)),
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -242,7 +242,7 @@ fn exclusive_scan_by_key_accepts_three_column_keys_and_seven_column_values() {
         MixedTuple3Equal,
         (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32),
         TupleSum,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

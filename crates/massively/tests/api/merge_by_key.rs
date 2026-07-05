@@ -54,13 +54,13 @@ fn merge_by_key_accepts_generic_right_without_inner_equality_bound() {
 
     merge_by_key_with_generic_right(
         &exec,
-        massively::SoA1(left_keys.slice(..)),
-        massively::SoA2(left_values.slice(..), left_ids.slice(..)),
-        massively::SoA1(right_keys.slice(..)),
-        massively::SoA2(right_values.slice(..), right_ids.slice(..)),
+        massively::Zip1(left_keys.slice(..)),
+        massively::Zip2(left_values.slice(..), left_ids.slice(..)),
+        massively::Zip1(right_keys.slice(..)),
+        massively::Zip2(right_values.slice(..), right_ids.slice(..)),
         LessU32,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
 
@@ -90,13 +90,13 @@ fn merge_by_key_accepts_tuple_values() {
 
     merge_by_key(
         &exec,
-        massively::SoA1(left_keys.slice(..)),
-        massively::SoA2(left_values.slice(..), left_ids.slice(..)),
-        massively::SoA1(right_keys.slice(..)),
-        massively::SoA2(right_values.slice(..), right_ids.slice(..)),
+        massively::Zip1(left_keys.slice(..)),
+        massively::Zip2(left_values.slice(..), left_ids.slice(..)),
+        massively::Zip1(right_keys.slice(..)),
+        massively::Zip2(right_values.slice(..), right_ids.slice(..)),
         LessU32,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
 
@@ -129,17 +129,17 @@ fn merge_by_key_accepts_three_column_keys() {
 
     merge_by_key(
         &exec,
-        massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
-        massively::SoA1(left_values.slice(..)),
-        massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
-        massively::SoA1(right_values.slice(..)),
+        massively::Zip3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
+        massively::Zip1(left_values.slice(..)),
+        massively::Zip3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
+        massively::Zip1(right_values.slice(..)),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -182,17 +182,17 @@ fn merge_by_key_accepts_three_column_keys_and_tuple_values() {
 
     merge_by_key(
         &exec,
-        massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
-        massively::SoA3(la.slice(..), lb.slice(..), lc.slice(..)),
-        massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
-        massively::SoA3(ra.slice(..), rb.slice(..), rc.slice(..)),
+        massively::Zip3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
+        massively::Zip3(la.slice(..), lb.slice(..), lc.slice(..)),
+        massively::Zip3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
+        massively::Zip3(ra.slice(..), rb.slice(..), rc.slice(..)),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -259,8 +259,8 @@ fn merge_by_key_accepts_three_column_keys_and_seven_column_values() {
 
     merge_by_key(
         &exec,
-        massively::SoA3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
-        massively::SoA7(
+        massively::Zip3(lk0.slice(..), lk1.slice(..), lk2.slice(..)),
+        massively::Zip7(
             la.slice(..),
             lb.slice(..),
             lc.slice(..),
@@ -269,8 +269,8 @@ fn merge_by_key_accepts_three_column_keys_and_seven_column_values() {
             lf.slice(..),
             lg.slice(..),
         ),
-        massively::SoA3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
-        massively::SoA7(
+        massively::Zip3(rk0.slice(..), rk1.slice(..), rk2.slice(..)),
+        massively::Zip7(
             ra.slice(..),
             rb.slice(..),
             rc.slice(..),
@@ -280,12 +280,12 @@ fn merge_by_key_accepts_three_column_keys_and_seven_column_values() {
             rg.slice(..),
         ),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

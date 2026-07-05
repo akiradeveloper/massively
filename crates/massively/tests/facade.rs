@@ -4,23 +4,39 @@ use massively::algorithm::op::{BinaryPredicateOp, PredicateOp, ReductionOp, Unar
 use massively::prelude::*;
 
 #[test]
-fn wide_soa_types_are_exported() {
-    let _ = massively::SoA4(1_u32, 2_u32, 3_u32, 4_u32);
-    let _ = massively::SoA5(1_u32, 2_u32, 3_u32, 4_u32, 5_u32);
-    let _ = massively::SoA6(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32);
-    let _ = massively::SoA7(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32);
+fn wide_zip_types_are_exported() {
+    let _ = massively::Zip4(1_u32, 2_u32, 3_u32, 4_u32);
+    let _ = massively::Zip5(1_u32, 2_u32, 3_u32, 4_u32, 5_u32);
+    let _ = massively::Zip6(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32);
+    let _ = massively::Zip7(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32);
 
-    let _: massively::algorithm::SoA4<_, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32).into();
-    let _: massively::algorithm::SoA5<_, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32).into();
-    let _: massively::algorithm::SoA6<_, _, _, _, _, _> =
+    let _: massively::algorithm::Zip4<_, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32).into();
+    let _: massively::algorithm::Zip5<_, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32).into();
+    let _: massively::algorithm::Zip6<_, _, _, _, _, _> =
         (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32).into();
-    let _: massively::algorithm::SoA7<_, _, _, _, _, _, _> =
+    let _: massively::algorithm::Zip7<_, _, _, _, _, _, _> =
         (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32).into();
 
-    let _: SoA4<_, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32).into();
-    let _: SoA5<_, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32).into();
-    let _: SoA6<_, _, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32).into();
-    let _: SoA7<_, _, _, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32).into();
+    let _: Zip4<_, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32).into();
+    let _: Zip5<_, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32).into();
+    let _: Zip6<_, _, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32).into();
+    let _: Zip7<_, _, _, _, _, _, _> = (1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32).into();
+}
+
+#[test]
+fn zip_types_are_exported() {
+    let _: massively::Zip1<_> = massively::Zip1(1_u32);
+    let _: massively::Zip2<_, _> = massively::Zip2(1_u32, 2_u32);
+    let _: massively::Zip3<_, _, _> = massively::Zip3(1_u32, 2_u32, 3_u32);
+    let _: massively::Zip4<_, _, _, _> = massively::Zip4(1_u32, 2_u32, 3_u32, 4_u32);
+    let _: massively::Zip5<_, _, _, _, _> = massively::Zip5(1_u32, 2_u32, 3_u32, 4_u32, 5_u32);
+    let _: massively::Zip6<_, _, _, _, _, _> =
+        massively::Zip6(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32);
+    let _: massively::Zip7<_, _, _, _, _, _, _> =
+        massively::Zip7(1_u32, 2_u32, 3_u32, 4_u32, 5_u32, 6_u32, 7_u32);
+
+    let _: massively::algorithm::Zip2<_, _> = massively::algorithm::Zip2(1_u32, 2_u32);
+    let _: Zip2<_, _> = Zip2(1_u32, 2_u32);
 }
 
 struct AddOne;
@@ -456,9 +472,9 @@ fn transform2_wraps_tuple1_transform_without_cubecl_runtime_in_signature() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform2(
         &exec,
-        SoA1(input.slice(..)),
+        Zip1(input.slice(..)),
         AddOne,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -471,7 +487,7 @@ fn reverse2_wraps_reverse_with_slice_array_signature() {
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let output = exec.to_device(&[0_u32; 3]).unwrap();
 
-    reverse2(&exec, SoA1(input.slice(..)), SoA1(output.slice_mut(..))).unwrap();
+    reverse2(&exec, Zip1(input.slice(..)), Zip1(output.slice_mut(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![3, 2, 1]);
 }
@@ -484,9 +500,9 @@ fn sort2_wraps_sort_with_slice_array_signature() {
 
     sort2(
         &exec,
-        SoA1(input.slice(..)),
+        Zip1(input.slice(..)),
         TupleU32Less,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -502,9 +518,9 @@ fn gather2_wraps_gather_with_slice_array_signature() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     gather2(
         &exec,
-        SoA1(input.slice(..)),
+        Zip1(input.slice(..)),
         indices.slice(..),
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -519,9 +535,9 @@ fn transform3_can_fix_concrete_input_and_output_types() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform3(
         &exec,
-        SoA1(input.slice(..)),
+        Zip1(input.slice(..)),
         AddOne,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -534,7 +550,7 @@ fn transform_can_hide_op_inside_wrapper() {
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
-    transform_without_op(&exec, SoA1(input.slice(..)), SoA1(output.slice_mut(..))).unwrap();
+    transform_without_op(&exec, Zip1(input.slice(..)), Zip1(output.slice_mut(..))).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 }
@@ -549,9 +565,9 @@ fn transform4_can_fix_concrete_two_column_input_and_output_types() {
     let out_right = exec.to_device(&[0_u32; 3]).unwrap();
     transform4(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         PairShift,
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -569,9 +585,9 @@ fn sort2_wraps_two_column_sort_with_slice_array_signature() {
 
     sort2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         PairU32Less,
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -591,9 +607,9 @@ fn transform5_can_fix_concrete_three_column_input_and_output_types() {
     let out_third = exec.to_device(&[0_u32; 3]).unwrap();
     transform5(
         &exec,
-        SoA3(first.slice(..), second.slice(..), third.slice(..)),
+        Zip3(first.slice(..), second.slice(..), third.slice(..)),
         TripleShift,
-        SoA3(
+        Zip3(
             out_first.slice_mut(..),
             out_second.slice_mut(..),
             out_third.slice_mut(..),
@@ -618,9 +634,9 @@ fn sort2_wraps_three_column_sort_with_slice_array_signature() {
 
     sort2(
         &exec,
-        SoA3(first.slice(..), second.slice(..), third.slice(..)),
+        Zip3(first.slice(..), second.slice(..), third.slice(..)),
         TripleU32Less,
-        SoA3(
+        Zip3(
             out_first.slice_mut(..),
             out_second.slice_mut(..),
             out_third.slice_mut(..),
@@ -640,7 +656,7 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
     let tags = exec.to_device(&[20_u32, 30, 10, 40]).unwrap();
 
     assert_eq!(
-        minmax_element2(&exec, SoA2(values.slice(..), tags.slice(..)), PairU32Less).unwrap(),
+        minmax_element2(&exec, Zip2(values.slice(..), tags.slice(..)), PairU32Less).unwrap(),
         Some((1, 3))
     );
 
@@ -651,7 +667,7 @@ fn minmax_element2_wraps_two_and_three_column_tuple_inputs() {
     assert_eq!(
         minmax_element2(
             &exec,
-            SoA3(first.slice(..), second.slice(..), third.slice(..)),
+            Zip3(first.slice(..), second.slice(..), third.slice(..)),
             TripleU32Less
         )
         .unwrap(),
@@ -669,19 +685,19 @@ fn search_queries_wrap_two_column_tuple_inputs() {
     let lower = exec.to_device(&[0_u32; 2]).unwrap();
 
     assert_eq!(
-        adjacent_find2(&exec, SoA2(left.slice(..), right.slice(..)), PairEqual).unwrap(),
+        adjacent_find2(&exec, Zip2(left.slice(..), right.slice(..)), PairEqual).unwrap(),
         Some(1)
     );
     lower_bound2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
-        SoA2(query_left.slice(..), query_right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
+        Zip2(query_left.slice(..), query_right.slice(..)),
         PairU32Less,
         lower.slice_mut(..),
     )
     .unwrap();
     assert_eq!(exec.to_host(&lower).unwrap(), vec![1, 4]);
-    assert!(is_sorted2(&exec, SoA2(left.slice(..), right.slice(..)), PairU32Less).unwrap());
+    assert!(is_sorted2(&exec, Zip2(left.slice(..), right.slice(..)), PairU32Less).unwrap());
 }
 
 #[test]
@@ -697,9 +713,9 @@ fn gather2_wraps_three_column_gather_with_slice_array_signature() {
     let out_third = exec.to_device(&[0_u32; 3]).unwrap();
     gather2(
         &exec,
-        SoA3(first.slice(..), second.slice(..), third.slice(..)),
+        Zip3(first.slice(..), second.slice(..), third.slice(..)),
         indices.slice(..),
-        SoA3(
+        Zip3(
             out_first.slice_mut(..),
             out_second.slice_mut(..),
             out_third.slice_mut(..),
@@ -721,9 +737,9 @@ fn transform2_wraps_tuple_output() {
     let right = exec.to_device(&[0_u32; 3]).unwrap();
     transform2(
         &exec,
-        SoA1(input.slice(..)),
+        Zip1(input.slice(..)),
         Split,
-        SoA2(left.slice_mut(..), right.slice_mut(..)),
+        Zip2(left.slice_mut(..), right.slice_mut(..)),
     )
     .unwrap();
 
@@ -742,9 +758,9 @@ fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
 
     let len = copy_where2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         stencil.slice(..),
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -767,7 +783,7 @@ fn replace_where2_wraps_two_column_replace_where_with_tuple_replacement() {
         &exec,
         (7_u32, 70_u32),
         stencil.slice(..),
-        SoA2(left.slice_mut(..), right.slice_mut(..)),
+        Zip2(left.slice_mut(..), right.slice_mut(..)),
     )
     .unwrap();
 
@@ -781,8 +797,8 @@ fn predicate_queries_wrap_two_column_tuple_predicates() {
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
 
-    let count = count_if2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
-    let found = find_if2(&exec, SoA2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let count = count_if2(&exec, Zip2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
+    let found = find_if2(&exec, Zip2(left.slice(..), right.slice(..)), PairFirstOdd).unwrap();
 
     assert_eq!(count, 2);
     assert_eq!(found, Some(1));
@@ -799,9 +815,9 @@ fn remove_where2_wraps_two_column_remove_where_with_stencil() {
 
     let len = remove_where2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         stencil.slice(..),
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -823,9 +839,9 @@ fn partition2_wraps_two_column_partition_with_tuple_predicate() {
 
     let split = partition2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         PairFirstOdd,
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -859,7 +875,7 @@ fn is_partitioned2_wraps_two_column_partition_query() {
     assert!(
         is_partitioned2(
             &exec,
-            SoA2(partitioned_left.slice(..), partitioned_right.slice(..)),
+            Zip2(partitioned_left.slice(..), partitioned_right.slice(..)),
             PairFirstOdd
         )
         .unwrap()
@@ -867,7 +883,7 @@ fn is_partitioned2_wraps_two_column_partition_query() {
     assert!(
         !is_partitioned2(
             &exec,
-            SoA2(mixed_left.slice(..), mixed_right.slice(..)),
+            Zip2(mixed_left.slice(..), mixed_right.slice(..)),
             PairFirstOdd
         )
         .unwrap()
@@ -884,9 +900,9 @@ fn unique2_wraps_two_column_unique_with_tuple_predicate() {
 
     let len = unique2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         PairEqual,
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -911,9 +927,9 @@ fn adjacent_difference2_wraps_two_column_tuple_op() {
 
     adjacent_difference2(
         &exec,
-        SoA2(left.slice(..), right.slice(..)),
+        Zip2(left.slice(..), right.slice(..)),
         PairDifference,
-        SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 

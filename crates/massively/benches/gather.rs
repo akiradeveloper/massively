@@ -11,9 +11,9 @@ fn check_gather(exec: &Executor<WgpuRuntime>) {
     let output = exec.to_device(&[0.0_f32; 4]).unwrap();
     gather(
         exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![40.0, 30.0, 20.0, 10.0]);
@@ -34,9 +34,9 @@ fn bench_gather(c: &mut Criterion) {
                 iter_gpu(b, || {
                     gather(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
-                        massively::SoA1(output.slice_mut(..)),
+                        massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);

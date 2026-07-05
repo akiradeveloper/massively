@@ -28,10 +28,10 @@ fn set_union_accepts_generic_right_without_inner_equality_bound() {
 
     let len = set_union_with_generic_right(
         &exec,
-        massively::SoA2(left_a.slice(..), left_b.slice(..)),
-        massively::SoA2(right_a.slice(..), right_b.slice(..)),
+        massively::Zip2(left_a.slice(..), left_b.slice(..)),
+        massively::Zip2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
-        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
+        massively::Zip2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
 
@@ -57,10 +57,10 @@ fn set_union_accepts_borrowed_tuple_columns() {
 
     let len = set_union(
         &exec,
-        massively::SoA2(left_a.slice(..), left_b.slice(..)),
-        massively::SoA2(right_a.slice(..), right_b.slice(..)),
+        massively::Zip2(left_a.slice(..), left_b.slice(..)),
+        massively::Zip2(right_a.slice(..), right_b.slice(..)),
         MixedTupleLess,
-        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
+        massively::Zip2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
 

@@ -17,7 +17,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, SoA1, SoA2, copy_where, reverse, sort_by_key, transform};
+use massively::{DeviceVec, Executor, Zip1, Zip2, copy_where, reverse, sort_by_key, transform};
 
 struct InventoryUrgency;
 
@@ -58,37 +58,37 @@ where
     let urgency = exec.constant(stock.len(), 0_u32)?;
     transform(
         exec,
-        SoA2(stock.slice(..), daily_sales.slice(..)),
+        Zip2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
         (),
-        SoA1(urgency.slice_mut(..)),
+        Zip1(urgency.slice_mut(..)),
     )?;
     let filtered_sku = exec.constant(sku.len(), 0_u32)?;
     let filtered_urgency = exec.constant(urgency.len(), 0_u32)?;
     let len = copy_where(
         exec,
-        SoA2(sku.slice(..), urgency.slice(..)),
+        Zip2(sku.slice(..), urgency.slice(..)),
         urgency.slice(..),
-        SoA2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
+        Zip2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
     )?;
     let sorted_urgency = exec.constant(len, 0_u32)?;
     let sorted_sku = exec.constant(len, 0_u32)?;
     sort_by_key(
         exec,
-        SoA1(filtered_urgency.slice(..len)),
-        SoA1(filtered_sku.slice(..len)),
+        Zip1(filtered_urgency.slice(..len)),
+        Zip1(filtered_sku.slice(..len)),
         common::LessU32,
-        SoA1(sorted_urgency.slice_mut(..)),
-        SoA1(sorted_sku.slice_mut(..)),
+        Zip1(sorted_urgency.slice_mut(..)),
+        Zip1(sorted_sku.slice_mut(..)),
     )?;
     let urgency = exec.constant(len, 0_u32)?;
     let sku = exec.constant(len, 0_u32)?;
     reverse(
         exec,
-        SoA1(sorted_urgency.slice(..)),
-        SoA1(urgency.slice_mut(..)),
+        Zip1(sorted_urgency.slice(..)),
+        Zip1(urgency.slice_mut(..)),
     )?;
-    reverse(exec, SoA1(sorted_sku.slice(..)), SoA1(sku.slice_mut(..)))?;
+    reverse(exec, Zip1(sorted_sku.slice(..)), Zip1(sku.slice_mut(..)))?;
     Ok(Output { sku, urgency })
 }
 

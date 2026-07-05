@@ -12,9 +12,9 @@ fn adjacent_difference_accepts_three_tuple_columns() {
     let c_out = exec.to_device(&[0.0_f32; 4]).unwrap();
     adjacent_difference(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         TupleSum,
-        massively::SoA3(
+        massively::Zip3(
             a_out.slice_mut(..),
             b_out.slice_mut(..),
             c_out.slice_mut(..),

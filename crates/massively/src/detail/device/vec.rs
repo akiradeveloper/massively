@@ -12,7 +12,7 @@ use std::marker::PhantomData;
 /// multiple algorithm calls. The vector carries only storage identity; host
 /// transfers and kernel launches use an explicitly supplied executor.
 ///
-/// Algorithms take `DeviceSlice<T>` as a one-column SoA input and return
+/// Algorithms take `DeviceSlice<T>` as a one-column Zip input and return
 /// `DeviceVec<T>` as one-column owned output storage.
 #[derive(Clone)]
 pub struct DeviceVec<R: Runtime, T> {

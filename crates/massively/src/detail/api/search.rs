@@ -1,8 +1,8 @@
 use crate::{
     detail::op::kernel::BinaryPredicateOp,
     device::{
-        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA2, SoA3, SoAView1, SoAView2,
-        SoAView3, SoAView4, SoAView5, SoAView6, SoAView7,
+        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyZip, S0, Zip2, Zip3, ZipView1, ZipView2,
+        ZipView3, ZipView4, ZipView5, ZipView6, ZipView7,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -496,9 +496,9 @@ where
     Ok(scan::read_u32_scalar::<Left::Runtime>(client, output_handle)? != 0)
 }
 
-impl<Source, Less> crate::detail::read::KernelMinMaxInput<Less> for SoAView1<Source>
+impl<Source, Less> crate::detail::read::KernelMinMaxInput<Less> for ZipView1<Source>
 where
-    Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Self: ReadOnlyZip<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
@@ -511,7 +511,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<Option<MIndex>, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         Ok(
             crate::detail::apply::QueryApply::minmax_expr::<Source, Less>(policy, &self.source)?
                 .map(|(min, _)| min),
@@ -523,7 +523,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<Option<MIndex>, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         Ok(
             crate::detail::apply::QueryApply::minmax_expr::<Source, Less>(policy, &self.source)?
                 .map(|(_, max)| max),
@@ -535,7 +535,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<Option<(MIndex, MIndex)>, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         crate::detail::apply::QueryApply::minmax_expr::<Source, Less>(policy, &self.source)
     }
 }
@@ -554,8 +554,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::min_element_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::min_element_input(
+            ZipView1 { source: self },
             policy,
             less,
         )
@@ -566,8 +566,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::max_element_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::max_element_input(
+            ZipView1 { source: self },
             policy,
             less,
         )
@@ -578,8 +578,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<Option<(MIndex, MIndex)>, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelMinMaxInput<Less>>::minmax_element_input(
+            ZipView1 { source: self },
             policy,
             less,
         )
@@ -632,9 +632,9 @@ where
     }
 }
 
-impl<Source, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for SoAView1<Source>
+impl<Source, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for ZipView1<Source>
 where
-    Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Self: ReadOnlyZip<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
@@ -647,7 +647,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _pred: GpuOp<Pred>,
     ) -> Result<Option<MIndex>, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         crate::detail::apply::SearchControlApply::adjacent_find_expr::<Source, Pred>(
             policy,
             &self.source,
@@ -669,8 +669,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         pred: GpuOp<Pred>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelAdjacentFindInput<Pred>>::adjacent_find_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelAdjacentFindInput<Pred>>::adjacent_find_input(
+            ZipView1 { source: self },
             policy,
             pred,
         )
@@ -699,9 +699,9 @@ where
     }
 }
 
-impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for SoAView1<Source>
+impl<Source, Less> crate::detail::read::KernelSortedSearchInput<Less> for ZipView1<Source>
 where
-    Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Self: ReadOnlyZip<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
@@ -716,7 +716,7 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<MIndex, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         crate::detail::apply::SearchControlApply::lower_bound_expr::<Source, Less>(
             policy,
             &self.source,
@@ -730,7 +730,7 @@ where
         value: Self::Item,
         _less: GpuOp<Less>,
     ) -> Result<MIndex, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         crate::detail::apply::SearchControlApply::upper_bound_expr::<Source, Less>(
             policy,
             &self.source,
@@ -743,7 +743,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         _less: GpuOp<Less>,
     ) -> Result<MIndex, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         crate::detail::apply::SearchControlApply::is_sorted_until_expr::<Source, Less>(
             policy,
             &self.source,
@@ -755,7 +755,7 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<bool, Error> {
-        let len = ReadOnlySoA::len(&self);
+        let len = ReadOnlyZip::len(&self);
         Ok(
             <Self as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
                 self, policy, less,
@@ -764,11 +764,11 @@ where
     }
 }
 
-impl<Source, Values, Less> crate::detail::read::KernelSortedSearchManyInput<SoAView1<Values>, Less>
-    for SoAView1<Source>
+impl<Source, Values, Less> crate::detail::read::KernelSortedSearchManyInput<ZipView1<Values>, Less>
+    for ZipView1<Source>
 where
-    Self: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
-    SoAView1<Values>: ReadOnlySoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Self: ReadOnlyZip<Item = (Source::Item,), Scalar = Source::Item>,
+    ZipView1<Values>: ReadOnlyZip<Item = (Source::Item,), Scalar = Source::Item>,
     Source: KernelColumn + KernelColumnAt<S0>,
     Values: KernelColumn<Runtime = Source::Runtime, Item = Source::Item> + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
@@ -781,11 +781,11 @@ where
     fn lower_bound_many_input(
         self,
         policy: &CubePolicy<Source::Runtime>,
-        values: SoAView1<Values>,
+        values: ZipView1<Values>,
         _less: GpuOp<Less>,
     ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&values)?;
         crate::detail::apply::SearchPayloadApply::lower_bound_many_expr::<Source, Values, Less>(
             policy,
             &self.source,
@@ -796,11 +796,11 @@ where
     fn upper_bound_many_input(
         self,
         policy: &CubePolicy<Source::Runtime>,
-        values: SoAView1<Values>,
+        values: ZipView1<Values>,
         _less: GpuOp<Less>,
     ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&values)?;
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&values)?;
         crate::detail::apply::SearchPayloadApply::upper_bound_many_expr::<Source, Values, Less>(
             policy,
             &self.source,
@@ -825,8 +825,8 @@ where
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<MIndex, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::lower_bound_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::lower_bound_input(
+            ZipView1 { source: self },
             policy,
             value,
             less,
@@ -839,8 +839,8 @@ where
         value: Self::Item,
         less: GpuOp<Less>,
     ) -> Result<MIndex, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::upper_bound_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::upper_bound_input(
+            ZipView1 { source: self },
             policy,
             value,
             less,
@@ -852,8 +852,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<MIndex, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
+            ZipView1 { source: self },
             policy,
             less,
         )
@@ -864,8 +864,8 @@ where
         policy: &CubePolicy<Source::Runtime>,
         less: GpuOp<Less>,
     ) -> Result<bool, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_input(
-            SoAView1 { source: self },
+        <ZipView1<Source> as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_input(
+            ZipView1 { source: self },
             policy,
             less,
         )
@@ -889,13 +889,13 @@ where
         values: Values,
         less: GpuOp<Less>,
     ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
-            SoAView1<Values>,
+        <ZipView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
+            ZipView1<Values>,
             Less,
         >>::lower_bound_many_input(
-            SoAView1 { source: self },
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: values },
+            ZipView1 { source: values },
             less,
         )
     }
@@ -906,13 +906,13 @@ where
         values: Values,
         less: GpuOp<Less>,
     ) -> Result<DeviceVec<Source::Runtime, MIndex>, Error> {
-        <SoAView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
-            SoAView1<Values>,
+        <ZipView1<Source> as crate::detail::read::KernelSortedSearchManyInput<
+            ZipView1<Values>,
             Less,
         >>::upper_bound_many_input(
-            SoAView1 { source: self },
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: values },
+            ZipView1 { source: values },
             less,
         )
     }
@@ -1092,14 +1092,14 @@ macro_rules! impl_sorted_search_tuple_input {
     };
 }
 
-impl_sorted_search_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
-impl_sorted_search_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
+impl_sorted_search_tuple_input!(ZipView2<A, B> { left: 0, right: 1 });
+impl_sorted_search_tuple_input!(ZipView3<A, B, C> { first: 0, second: 1, third: 2 });
 
-impl<Left, Right, Op> crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>
-    for SoAView1<Left>
+impl<Left, Right, Op> crate::detail::read::KernelPairSearchInput<ZipView1<Right>, Op>
+    for ZipView1<Left>
 where
-    Self: ReadOnlySoA<Item = (Left::Item,), Scalar = Left::Item>,
-    SoAView1<Right>: ReadOnlySoA<Item = (Right::Item,), Scalar = Right::Item>,
+    Self: ReadOnlyZip<Item = (Left::Item,), Scalar = Left::Item>,
+    ZipView1<Right>: ReadOnlyZip<Item = (Right::Item,), Scalar = Right::Item>,
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
     Left::Item: CubePrimitive + CubeElement,
@@ -1112,7 +1112,7 @@ where
     fn equal_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
         if self.source.len() != other.source.len() {
@@ -1131,7 +1131,7 @@ where
     fn mismatch_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<Option<MIndex>, Error> {
         crate::detail::apply::SearchControlApply::mismatch_expr::<Left, Right, Op>(
@@ -1144,11 +1144,11 @@ where
     fn find_first_of_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<Option<MIndex>, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&other)?;
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&other)?;
         crate::detail::apply::SearchControlApply::find_first_of_expr::<Left, Right, Op>(
             policy,
             &self.source,
@@ -1159,11 +1159,11 @@ where
     fn lexicographical_compare_input(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&other)?;
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&other)?;
         crate::detail::apply::SearchControlApply::lexicographical_compare_expr::<Left, Right, Op>(
             policy,
             &self.source,
@@ -1189,10 +1189,10 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::equal_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairSearchInput<ZipView1<Right>, Op>>::equal_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             op,
         )
     }
@@ -1203,10 +1203,10 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::mismatch_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairSearchInput<ZipView1<Right>, Op>>::mismatch_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             op,
         )
     }
@@ -1217,10 +1217,10 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::find_first_of_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairSearchInput<ZipView1<Right>, Op>>::find_first_of_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             op,
         )
     }
@@ -1231,10 +1231,10 @@ where
         other: Right,
         op: GpuOp<Op>,
     ) -> Result<bool, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairSearchInput<SoAView1<Right>, Op>>::lexicographical_compare_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairSearchInput<ZipView1<Right>, Op>>::lexicographical_compare_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             op,
         )
     }
@@ -1382,8 +1382,8 @@ macro_rules! impl_pair_search_tuple_input {
     };
 }
 
-impl_pair_search_tuple_input!(SoAView2<A, B; RA, RB> { left: 0 / 0, right: 1 / 1 });
-impl_pair_search_tuple_input!(SoAView3<A, B, C; RA, RB, RC> { first: 0 / 0, second: 1 / 1, third: 2 / 2 });
+impl_pair_search_tuple_input!(ZipView2<A, B; RA, RB> { left: 0 / 0, right: 1 / 1 });
+impl_pair_search_tuple_input!(ZipView3<A, B, C; RA, RB, RC> { first: 0 / 0, second: 1 / 1, third: 2 / 2 });
 
 macro_rules! impl_tuple_search {
     (@item_ty $field:ident) => {
@@ -1406,7 +1406,7 @@ macro_rules! impl_tuple_search {
     ) => {
         impl<$first, $( $rest ),+, Less> crate::detail::read::KernelMinMaxInput<Less> for $name<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
@@ -1457,7 +1457,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 _less: GpuOp<Less>,
             ) -> Result<Option<(MIndex, MIndex)>, Error> {
-                ReadOnlySoA::validate(&self)?;
+                ReadOnlyZip::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
@@ -1559,7 +1559,7 @@ macro_rules! impl_tuple_search {
 
         impl<$first, $( $rest ),+, Pred> crate::detail::read::KernelAdjacentFindInput<Pred> for $name<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
@@ -1584,7 +1584,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 _pred: GpuOp<Pred>,
             ) -> Result<Option<MIndex>, Error> {
-                ReadOnlySoA::validate(&self)?;
+                ReadOnlyZip::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
@@ -1634,7 +1634,7 @@ macro_rules! impl_tuple_search {
 
         impl<$first, $( $rest ),+, Less> crate::detail::read::KernelSortedSearchInput<Less> for $name<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
@@ -1665,7 +1665,7 @@ macro_rules! impl_tuple_search {
                 value: Self::Item,
                 _less: GpuOp<Less>,
             ) -> Result<MIndex, Error> {
-                ReadOnlySoA::validate(&self)?;
+                ReadOnlyZip::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
@@ -1733,7 +1733,7 @@ macro_rules! impl_tuple_search {
                 value: Self::Item,
                 _less: GpuOp<Less>,
             ) -> Result<MIndex, Error> {
-                ReadOnlySoA::validate(&self)?;
+                ReadOnlyZip::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
@@ -1800,7 +1800,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 _less: GpuOp<Less>,
             ) -> Result<MIndex, Error> {
-                ReadOnlySoA::validate(&self)?;
+                ReadOnlyZip::validate(&self)?;
                 let len = self.$first_field.len();
                 let $first_field = stage_search_column(policy, &self.$first_field)?;
                 $(
@@ -1852,7 +1852,7 @@ macro_rules! impl_tuple_search {
                 policy: &CubePolicy<<$first as KernelColumn>::Runtime>,
                 less: GpuOp<Less>,
             ) -> Result<bool, Error> {
-                let len = ReadOnlySoA::len(&self);
+                let len = ReadOnlyZip::len(&self);
                 Ok(
                     <Self as crate::detail::read::KernelSortedSearchInput<Less>>::is_sorted_until_input(
                         self, policy, less,
@@ -1866,7 +1866,7 @@ macro_rules! impl_tuple_search {
             crate::detail::read::KernelSortedSearchManyInput<$name<$first, $( $rest ),+>, Less>
             for $name<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
@@ -1932,8 +1932,8 @@ macro_rules! impl_tuple_pair_search {
             crate::detail::read::KernelPairSearchInput<$name<$right_first, $( $right_rest ),+>, Op>
             for $name<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
-            $name<$right_first, $( $right_rest ),+>: ReadOnlySoA<Scalar = <$right_first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
+            $name<$right_first, $( $right_rest ),+>: ReadOnlyZip<Scalar = <$right_first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $right_first: KernelColumn<
                     Runtime = <$first as KernelColumn>::Runtime,
@@ -1968,7 +1968,7 @@ macro_rules! impl_tuple_pair_search {
                 other: $name<$right_first, $( $right_rest ),+>,
                 op: GpuOp<Op>,
             ) -> Result<bool, Error> {
-                if ReadOnlySoA::len(&self) != ReadOnlySoA::len(&other) {
+                if ReadOnlyZip::len(&self) != ReadOnlyZip::len(&other) {
                     return Ok(false);
                 }
                 Ok(
@@ -1986,8 +1986,8 @@ macro_rules! impl_tuple_pair_search {
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
             ) -> Result<Option<MIndex>, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let left_len = self.$first_field.len();
                 let right_len = other.$first_field.len();
                 let min_len = left_len.min(right_len);
@@ -2073,8 +2073,8 @@ macro_rules! impl_tuple_pair_search {
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
             ) -> Result<Option<MIndex>, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let input_len = self.$first_field.len();
                 let needle_len = other.$first_field.len();
                 if input_len == 0 || needle_len == 0 {
@@ -2151,8 +2151,8 @@ macro_rules! impl_tuple_pair_search {
                 other: $name<$right_first, $( $right_rest ),+>,
                 _op: GpuOp<Op>,
             ) -> Result<bool, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let left_len = self.$first_field.len();
                 let right_len = other.$first_field.len();
                 let min_len = left_len.min(right_len);
@@ -2277,23 +2277,23 @@ macro_rules! impl_tuple_pair_search {
     };
 }
 
-impl_tuple_search!(SoAView2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_lower_bound_device_expr_many_kernel, tuple2_upper_bound_device_expr_many_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_lower_bound_device_expr_many_kernel, tuple3_upper_bound_device_expr_many_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoAView4<A, B, C, D> { a: 0, b: 1, c: 2, d: 3 }, tuple4_adjacent_device_expr_flags_kernel, tuple4_sorted_break_device_expr_flags_kernel, tuple4_lower_bound_device_expr_flags_kernel, tuple4_upper_bound_device_expr_flags_kernel, tuple4_lower_bound_device_expr_many_kernel, tuple4_upper_bound_device_expr_many_kernel, tuple4_minmax_element_device_expr_partials_kernel, tuple4_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoAView5<A, B, C, D, E> { a: 0, b: 1, c: 2, d: 3, e: 4 }, tuple5_adjacent_device_expr_flags_kernel, tuple5_sorted_break_device_expr_flags_kernel, tuple5_lower_bound_device_expr_flags_kernel, tuple5_upper_bound_device_expr_flags_kernel, tuple5_lower_bound_device_expr_many_kernel, tuple5_upper_bound_device_expr_many_kernel, tuple5_minmax_element_device_expr_partials_kernel, tuple5_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoAView6<A, B, C, D, E, F> { a: 0, b: 1, c: 2, d: 3, e: 4, f: 5 }, tuple6_adjacent_device_expr_flags_kernel, tuple6_sorted_break_device_expr_flags_kernel, tuple6_lower_bound_device_expr_flags_kernel, tuple6_upper_bound_device_expr_flags_kernel, tuple6_lower_bound_device_expr_many_kernel, tuple6_upper_bound_device_expr_many_kernel, tuple6_minmax_element_device_expr_partials_kernel, tuple6_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoAView7<A, B, C, D, E, F, G> { a: 0, b: 1, c: 2, d: 3, e: 4, f: 5, g: 6 }, tuple7_adjacent_device_expr_flags_kernel, tuple7_sorted_break_device_expr_flags_kernel, tuple7_lower_bound_device_expr_flags_kernel, tuple7_upper_bound_device_expr_flags_kernel, tuple7_lower_bound_device_expr_many_kernel, tuple7_upper_bound_device_expr_many_kernel, tuple7_minmax_element_device_expr_partials_kernel, tuple7_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(ZipView2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_lower_bound_device_expr_many_kernel, tuple2_upper_bound_device_expr_many_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(ZipView3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_lower_bound_device_expr_many_kernel, tuple3_upper_bound_device_expr_many_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(ZipView4<A, B, C, D> { a: 0, b: 1, c: 2, d: 3 }, tuple4_adjacent_device_expr_flags_kernel, tuple4_sorted_break_device_expr_flags_kernel, tuple4_lower_bound_device_expr_flags_kernel, tuple4_upper_bound_device_expr_flags_kernel, tuple4_lower_bound_device_expr_many_kernel, tuple4_upper_bound_device_expr_many_kernel, tuple4_minmax_element_device_expr_partials_kernel, tuple4_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(ZipView5<A, B, C, D, E> { a: 0, b: 1, c: 2, d: 3, e: 4 }, tuple5_adjacent_device_expr_flags_kernel, tuple5_sorted_break_device_expr_flags_kernel, tuple5_lower_bound_device_expr_flags_kernel, tuple5_upper_bound_device_expr_flags_kernel, tuple5_lower_bound_device_expr_many_kernel, tuple5_upper_bound_device_expr_many_kernel, tuple5_minmax_element_device_expr_partials_kernel, tuple5_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(ZipView6<A, B, C, D, E, F> { a: 0, b: 1, c: 2, d: 3, e: 4, f: 5 }, tuple6_adjacent_device_expr_flags_kernel, tuple6_sorted_break_device_expr_flags_kernel, tuple6_lower_bound_device_expr_flags_kernel, tuple6_upper_bound_device_expr_flags_kernel, tuple6_lower_bound_device_expr_many_kernel, tuple6_upper_bound_device_expr_many_kernel, tuple6_minmax_element_device_expr_partials_kernel, tuple6_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(ZipView7<A, B, C, D, E, F, G> { a: 0, b: 1, c: 2, d: 3, e: 4, f: 5, g: 6 }, tuple7_adjacent_device_expr_flags_kernel, tuple7_sorted_break_device_expr_flags_kernel, tuple7_lower_bound_device_expr_flags_kernel, tuple7_upper_bound_device_expr_flags_kernel, tuple7_lower_bound_device_expr_many_kernel, tuple7_upper_bound_device_expr_many_kernel, tuple7_minmax_element_device_expr_partials_kernel, tuple7_minmax_index_device_expr_partials_kernel);
 
-impl_tuple_pair_search!(SoAView2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_pair_search!(SoAView3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_pair_search!(SoAView4<A, B, C, D; RA, RB, RC, RD> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d }, tuple4_mismatch_device_expr_flags_kernel, tuple4_find_first_of_device_expr_flags_kernel, tuple4_lexicographical_diff_device_expr_flags_kernel, tuple4_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_pair_search!(SoAView5<A, B, C, D, E; RA, RB, RC, RD, RE> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d, e: left_e / right_e }, tuple5_mismatch_device_expr_flags_kernel, tuple5_find_first_of_device_expr_flags_kernel, tuple5_lexicographical_diff_device_expr_flags_kernel, tuple5_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_pair_search!(SoAView6<A, B, C, D, E, F; RA, RB, RC, RD, RE, RF> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d, e: left_e / right_e, f: left_f / right_f }, tuple6_mismatch_device_expr_flags_kernel, tuple6_find_first_of_device_expr_flags_kernel, tuple6_lexicographical_diff_device_expr_flags_kernel, tuple6_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_pair_search!(SoAView7<A, B, C, D, E, F, G; RA, RB, RC, RD, RE, RF, RG> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d, e: left_e / right_e, f: left_f / right_f, g: left_g / right_g }, tuple7_mismatch_device_expr_flags_kernel, tuple7_find_first_of_device_expr_flags_kernel, tuple7_lexicographical_diff_device_expr_flags_kernel, tuple7_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_search!(SoA2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_lower_bound_device_expr_many_kernel, tuple2_upper_bound_device_expr_many_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
-impl_tuple_search!(SoA3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_lower_bound_device_expr_many_kernel, tuple3_upper_bound_device_expr_many_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
-impl_tuple_pair_search!(SoA2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
-impl_tuple_pair_search!(SoA3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(ZipView2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(ZipView3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(ZipView4<A, B, C, D; RA, RB, RC, RD> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d }, tuple4_mismatch_device_expr_flags_kernel, tuple4_find_first_of_device_expr_flags_kernel, tuple4_lexicographical_diff_device_expr_flags_kernel, tuple4_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(ZipView5<A, B, C, D, E; RA, RB, RC, RD, RE> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d, e: left_e / right_e }, tuple5_mismatch_device_expr_flags_kernel, tuple5_find_first_of_device_expr_flags_kernel, tuple5_lexicographical_diff_device_expr_flags_kernel, tuple5_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(ZipView6<A, B, C, D, E, F; RA, RB, RC, RD, RE, RF> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d, e: left_e / right_e, f: left_f / right_f }, tuple6_mismatch_device_expr_flags_kernel, tuple6_find_first_of_device_expr_flags_kernel, tuple6_lexicographical_diff_device_expr_flags_kernel, tuple6_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(ZipView7<A, B, C, D, E, F, G; RA, RB, RC, RD, RE, RF, RG> { a: left_a / right_a, b: left_b / right_b, c: left_c / right_c, d: left_d / right_d, e: left_e / right_e, f: left_f / right_f, g: left_g / right_g }, tuple7_mismatch_device_expr_flags_kernel, tuple7_find_first_of_device_expr_flags_kernel, tuple7_lexicographical_diff_device_expr_flags_kernel, tuple7_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_search!(Zip2<A, B> { left: 0, right: 1 }, tuple2_adjacent_device_expr_flags_kernel, tuple2_sorted_break_device_expr_flags_kernel, tuple2_lower_bound_device_expr_flags_kernel, tuple2_upper_bound_device_expr_flags_kernel, tuple2_lower_bound_device_expr_many_kernel, tuple2_upper_bound_device_expr_many_kernel, tuple2_minmax_element_device_expr_partials_kernel, tuple2_minmax_index_device_expr_partials_kernel);
+impl_tuple_search!(Zip3<A, B, C> { first: 0, second: 1, third: 2 }, tuple3_adjacent_device_expr_flags_kernel, tuple3_sorted_break_device_expr_flags_kernel, tuple3_lower_bound_device_expr_flags_kernel, tuple3_upper_bound_device_expr_flags_kernel, tuple3_lower_bound_device_expr_many_kernel, tuple3_upper_bound_device_expr_many_kernel, tuple3_minmax_element_device_expr_partials_kernel, tuple3_minmax_index_device_expr_partials_kernel);
+impl_tuple_pair_search!(Zip2<A, B; RA, RB> { left: left_a / right_a, right: left_b / right_b }, tuple2_mismatch_device_expr_flags_kernel, tuple2_find_first_of_device_expr_flags_kernel, tuple2_lexicographical_diff_device_expr_flags_kernel, tuple2_lexicographical_compare_at_device_expr_kernel);
+impl_tuple_pair_search!(Zip3<A, B, C; RA, RB, RC> { first: left_a / right_a, second: left_b / right_b, third: left_c / right_c }, tuple3_mismatch_device_expr_flags_kernel, tuple3_find_first_of_device_expr_flags_kernel, tuple3_lexicographical_diff_device_expr_flags_kernel, tuple3_lexicographical_compare_at_device_expr_kernel);
 
 /// Finds the minimum element index according to `Less`.
 pub fn min_element<Input, Less>(

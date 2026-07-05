@@ -12,7 +12,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, find_first_of};
+use massively::{DeviceVec, Executor, MIndex, Zip1, find_first_of};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -24,8 +24,8 @@ where
 {
     find_first_of(
         exec,
-        SoA1(token_id.slice(..)),
-        SoA1(blocked_keyword_id.slice(..)),
+        Zip1(token_id.slice(..)),
+        Zip1(blocked_keyword_id.slice(..)),
         common::EqualU32,
     )
 }

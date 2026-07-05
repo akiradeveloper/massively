@@ -59,7 +59,7 @@ where
     Eq: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
 
     fn unique_by_key_control(
         self,
@@ -72,7 +72,7 @@ where
         let payload_apply =
             crate::detail::apply::SelectedPayloadApply::new(&control.selection, control.count);
         let out_keys = payload_apply.apply_expr(policy, &self)?;
-        Ok((DeviceSoA1 { source: out_keys }, control))
+        Ok((DeviceZip1 { source: out_keys }, control))
     }
 }
 
@@ -86,7 +86,7 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple1 {
             Eq: BinaryPredicateOp<KeySource::Item>,
         {
             type Runtime = KeySource::Runtime;
-            type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+            type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
 
             fn unique_by_key_control(
                 self,
@@ -98,8 +98,8 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple1 {
     };
 }
 
-impl_kernel_unique_by_key_keys_tuple1!(SoAView1<KeySource>, source);
-impl_kernel_unique_by_key_keys_tuple1!(DeviceSoA1<KeySource>, source);
+impl_kernel_unique_by_key_keys_tuple1!(ZipView1<KeySource>, source);
+impl_kernel_unique_by_key_keys_tuple1!(DeviceZip1<KeySource>, source);
 
 impl<KeySource, Eq> KernelUniqueByKeyKeys<Eq> for (KeySource,)
 where
@@ -110,7 +110,7 @@ where
     crate::detail::api::Tuple1Less<Eq>: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
 
     fn unique_by_key_control(
         self,
@@ -163,22 +163,22 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple2 {
     };
 }
 
-impl_kernel_unique_by_key_keys_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_unique_by_key_keys_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_unique_by_key_keys_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_unique_by_key_keys_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, Eq> KernelUniqueByKeyKeys<Eq> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelUniqueByKeyKeys<Eq>,
+    ZipView2<Left, Right>: KernelUniqueByKeyKeys<Eq>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::Runtime;
-    type OutputKeys = <SoAView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::OutputKeys;
+    type Runtime = <ZipView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::Runtime;
+    type OutputKeys = <ZipView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::OutputKeys;
 
     fn unique_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, UniqueByKeyControl), Error> {
-        <SoAView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::unique_by_key_control(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelUniqueByKeyKeys<Eq>>::unique_by_key_control(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -243,15 +243,15 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
 }
 
 impl_kernel_unique_by_key_keys_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_unique_by_key_keys_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -259,17 +259,17 @@ impl_kernel_unique_by_key_keys_tuple3!(
 
 impl<First, Second, Third, Eq> KernelUniqueByKeyKeys<Eq> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelUniqueByKeyKeys<Eq>,
+    ZipView3<First, Second, Third>: KernelUniqueByKeyKeys<Eq>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::Runtime;
-    type OutputKeys = <SoAView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::OutputKeys;
+    type Runtime = <ZipView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::Runtime;
+    type OutputKeys = <ZipView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::OutputKeys;
 
     fn unique_by_key_control(
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<(Self::OutputKeys, UniqueByKeyControl), Error> {
-        <SoAView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::unique_by_key_control(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelUniqueByKeyKeys<Eq>>::unique_by_key_control(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -286,7 +286,7 @@ where
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
 {
     type Runtime = ValueSource::Runtime;
-    type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+    type OutputValues = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn unique_by_key_values(
         self,
@@ -300,7 +300,7 @@ where
         )?;
         let payload_apply =
             crate::detail::apply::SelectedPayloadApply::new(&control.selection, control.count);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: payload_apply.apply_expr(policy, &self)?,
         })
     }
@@ -315,7 +315,7 @@ macro_rules! impl_kernel_unique_by_key_values_tuple1 {
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
         {
             type Runtime = ValueSource::Runtime;
-            type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+            type OutputValues = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
             fn unique_by_key_values(
                 self,
@@ -328,8 +328,8 @@ macro_rules! impl_kernel_unique_by_key_values_tuple1 {
     };
 }
 
-impl_kernel_unique_by_key_values_tuple1!(SoAView1<ValueSource>, source);
-impl_kernel_unique_by_key_values_tuple1!(DeviceSoA1<ValueSource>, source);
+impl_kernel_unique_by_key_values_tuple1!(ZipView1<ValueSource>, source);
+impl_kernel_unique_by_key_values_tuple1!(DeviceZip1<ValueSource>, source);
 
 impl<ValueSource> KernelUniqueByKeyValues for (ValueSource,)
 where
@@ -384,23 +384,23 @@ macro_rules! impl_kernel_unique_by_key_values_tuple2 {
     };
 }
 
-impl_kernel_unique_by_key_values_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_unique_by_key_values_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_unique_by_key_values_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_unique_by_key_values_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right> KernelUniqueByKeyValues for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelUniqueByKeyValues,
+    ZipView2<Left, Right>: KernelUniqueByKeyValues,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelUniqueByKeyValues>::Runtime;
-    type OutputValues = <SoAView2<Left, Right> as KernelUniqueByKeyValues>::OutputValues;
+    type Runtime = <ZipView2<Left, Right> as KernelUniqueByKeyValues>::Runtime;
+    type OutputValues = <ZipView2<Left, Right> as KernelUniqueByKeyValues>::OutputValues;
 
     fn unique_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
         control: &UniqueByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
-        <SoAView2<Left, Right> as KernelUniqueByKeyValues>::unique_by_key_values(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelUniqueByKeyValues>::unique_by_key_values(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -459,15 +459,15 @@ macro_rules! impl_kernel_unique_by_key_values_tuple3 {
 }
 
 impl_kernel_unique_by_key_values_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_unique_by_key_values_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -475,18 +475,18 @@ impl_kernel_unique_by_key_values_tuple3!(
 
 impl<First, Second, Third> KernelUniqueByKeyValues for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelUniqueByKeyValues,
+    ZipView3<First, Second, Third>: KernelUniqueByKeyValues,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelUniqueByKeyValues>::Runtime;
-    type OutputValues = <SoAView3<First, Second, Third> as KernelUniqueByKeyValues>::OutputValues;
+    type Runtime = <ZipView3<First, Second, Third> as KernelUniqueByKeyValues>::Runtime;
+    type OutputValues = <ZipView3<First, Second, Third> as KernelUniqueByKeyValues>::OutputValues;
 
     fn unique_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
         control: &UniqueByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
-        <SoAView3<First, Second, Third> as KernelUniqueByKeyValues>::unique_by_key_values(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelUniqueByKeyValues>::unique_by_key_values(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

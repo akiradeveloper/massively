@@ -14,7 +14,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::ReductionOp;
-use massively::{DeviceVec, Executor, SoA1, adjacent_difference};
+use massively::{DeviceVec, Executor, Zip1, adjacent_difference};
 
 struct PriceDelta;
 
@@ -35,9 +35,9 @@ where
     let delta = exec.constant(price.len(), 0.0_f32)?;
     adjacent_difference(
         exec,
-        SoA1(price.slice(..)),
+        Zip1(price.slice(..)),
         PriceDelta,
-        SoA1(delta.slice_mut(..)),
+        Zip1(delta.slice_mut(..)),
     )?;
     Ok(delta)
 }

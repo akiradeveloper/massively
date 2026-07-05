@@ -14,7 +14,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::PredicateOp;
-use massively::{DeviceVec, Executor, MIndex, SoA1, count_if};
+use massively::{DeviceVec, Executor, MIndex, Zip1, count_if};
 
 struct PassingScore;
 
@@ -34,7 +34,7 @@ fn solve<B>(exec: &Executor<B>, score: DeviceVec<B, u32>) -> common::Result<MInd
 where
     B: cubecl::prelude::Runtime,
 {
-    count_if(exec, SoA1(score.slice(..)), PassingScore, ())
+    count_if(exec, Zip1(score.slice(..)), PassingScore, ())
 }
 
 fn main() -> common::Result {

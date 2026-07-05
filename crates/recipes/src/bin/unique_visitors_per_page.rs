@@ -16,7 +16,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, SoA1, SoA2, reduce_by_key, sort, unique};
+use massively::{DeviceVec, Executor, Zip1, Zip2, reduce_by_key, sort, unique};
 
 struct LessVisitPair;
 
@@ -60,30 +60,30 @@ where
     let sorted_user_id = exec.constant(len, 0_u32)?;
     sort(
         exec,
-        SoA2(page_id.slice(..), user_id.slice(..)),
+        Zip2(page_id.slice(..), user_id.slice(..)),
         LessVisitPair,
-        SoA2(sorted_page_id.slice_mut(..), sorted_user_id.slice_mut(..)),
+        Zip2(sorted_page_id.slice_mut(..), sorted_user_id.slice_mut(..)),
     )?;
     let page_id = exec.constant(len, 0_u32)?;
     let user_id = exec.constant(len, 0_u32)?;
     let unique_len = unique(
         exec,
-        SoA2(sorted_page_id.slice(..), sorted_user_id.slice(..)),
+        Zip2(sorted_page_id.slice(..), sorted_user_id.slice(..)),
         EqualVisitPair,
-        SoA2(page_id.slice_mut(..), user_id.slice_mut(..)),
+        Zip2(page_id.slice_mut(..), user_id.slice_mut(..)),
     )?;
     let ones = exec.constant(unique_len, 1_u32)?;
     let out_page_id = exec.constant(unique_len, 0_u32)?;
     let unique_count = exec.constant(unique_len, 0_u32)?;
     let len = reduce_by_key(
         exec,
-        SoA1(page_id.slice(..unique_len)),
-        SoA1(ones.slice(..)),
+        Zip1(page_id.slice(..unique_len)),
+        Zip1(ones.slice(..)),
         common::EqualU32,
         (0_u32,),
         common::SumU32,
-        SoA1(out_page_id.slice_mut(..)),
-        SoA1(unique_count.slice_mut(..)),
+        Zip1(out_page_id.slice_mut(..)),
+        Zip1(unique_count.slice_mut(..)),
     )?;
     Ok(Output {
         page_id: exec.to_device(&exec.to_host(&out_page_id.slice(..len))?)?,

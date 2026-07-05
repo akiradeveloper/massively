@@ -12,7 +12,7 @@ use crate::{
                 tuple3_membership_expr_flags_with_policy,
             },
         },
-        device::{DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0, SoA2, SoA3},
+        device::{DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0, Zip2, Zip3},
         primitives::{ordering as primitive_ordering, range as primitive_range},
     },
     error::Error,
@@ -280,7 +280,7 @@ impl MergeByKeyControlApply {
         right_b: &RightB,
     ) -> Result<
         (
-            SoA2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>,
+            Zip2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>,
             primitive_ordering::MergeByKeyControl,
         ),
         Error,
@@ -314,7 +314,7 @@ impl MergeByKeyControlApply {
         right_c: &RightC,
     ) -> Result<
         (
-            SoA3<
+            Zip3<
                 DeviceVec<LeftA::Runtime, LeftA::Item>,
                 DeviceVec<LeftA::Runtime, LeftB::Item>,
                 DeviceVec<LeftA::Runtime, LeftC::Item>,

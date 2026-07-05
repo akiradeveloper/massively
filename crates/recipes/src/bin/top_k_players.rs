@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, reverse, sort_by_key};
+use massively::{DeviceVec, Executor, MIndex, Zip1, reverse, sort_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     player_id: DeviceVec<B, u32>,
@@ -35,23 +35,23 @@ where
     let sorted_player_id = exec.constant(len, 0_u32)?;
     sort_by_key(
         exec,
-        SoA1(score.slice(..)),
-        SoA1(player_id.slice(..)),
+        Zip1(score.slice(..)),
+        Zip1(player_id.slice(..)),
         common::LessF32,
-        SoA1(sorted_score.slice_mut(..)),
-        SoA1(sorted_player_id.slice_mut(..)),
+        Zip1(sorted_score.slice_mut(..)),
+        Zip1(sorted_player_id.slice_mut(..)),
     )?;
     let score = exec.constant(len, 0.0_f32)?;
     let player_id = exec.constant(len, 0_u32)?;
     reverse(
         exec,
-        SoA1(sorted_score.slice(..)),
-        SoA1(score.slice_mut(..)),
+        Zip1(sorted_score.slice(..)),
+        Zip1(score.slice_mut(..)),
     )?;
     reverse(
         exec,
-        SoA1(sorted_player_id.slice(..)),
-        SoA1(player_id.slice_mut(..)),
+        Zip1(sorted_player_id.slice(..)),
+        Zip1(player_id.slice_mut(..)),
     )?;
     Ok(Output {
         player_id: exec.to_device(&exec.to_host(&player_id.slice(..k))?)?,

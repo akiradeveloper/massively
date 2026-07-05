@@ -14,11 +14,11 @@ fn sort_by_key_accepts_tuple_values() {
 
     sort_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         LessU32,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA3(
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -53,8 +53,8 @@ fn sort_by_key_accepts_seven_column_values() {
 
     sort_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA7(
+        massively::Zip1(keys.slice(..)),
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -64,8 +64,8 @@ fn sort_by_key_accepts_seven_column_values() {
             g.slice(..),
         ),
         LessU32,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA7(
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -100,15 +100,15 @@ fn sort_by_key_accepts_three_column_keys() {
 
     sort_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip1(values.slice(..)),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
 
@@ -138,15 +138,15 @@ fn sort_by_key_accepts_three_column_keys_and_tuple_values() {
 
     sort_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -193,8 +193,8 @@ fn sort_by_key_accepts_three_column_keys_and_seven_column_values() {
 
     sort_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA7(
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -204,12 +204,12 @@ fn sort_by_key_accepts_three_column_keys_and_seven_column_values() {
             g.slice(..),
         ),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -264,8 +264,8 @@ fn stable_sort_by_key_accepts_three_column_keys_and_seven_values() {
 
     massively::stable_sort_by_key(
         &exec,
-        massively::SoA3(k0.slice(..), k1.slice(..), k2.slice(..)),
-        massively::SoA7(
+        massively::Zip3(k0.slice(..), k1.slice(..), k2.slice(..)),
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -275,12 +275,12 @@ fn stable_sort_by_key_accepts_three_column_keys_and_seven_values() {
             g.slice(..),
         ),
         MixedTuple3LexLess,
-        massively::SoA3(
+        massively::Zip3(
             out_k0.slice_mut(..),
             out_k1.slice_mut(..),
             out_k2.slice_mut(..),
         ),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

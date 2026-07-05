@@ -9,9 +9,9 @@ fn inclusive_scan_accepts_tuple_columns() {
     let out_b = exec.to_device(&[0_u32; 3]).unwrap();
     inclusive_scan(
         &exec,
-        massively::SoA2(a.slice(..), b.slice(..)),
+        massively::Zip2(a.slice(..), b.slice(..)),
         TupleSum,
-        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
+        massively::Zip2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&out_a).unwrap(), vec![1.0, 3.0, 6.0]);
@@ -26,9 +26,9 @@ fn inclusive_scan_accepts_tuple_max_u32() {
 
     inclusive_scan(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         MaxU32,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -43,9 +43,9 @@ fn inclusive_scan_accepts_single_column_as_tuple_item() {
 
     inclusive_scan(
         &exec,
-        massively::SoA1(a.slice(..)),
+        massively::Zip1(a.slice(..)),
         TupleSum,
-        massively::SoA1(out.slice_mut(..)),
+        massively::Zip1(out.slice_mut(..)),
     )
     .unwrap();
 
@@ -64,9 +64,9 @@ fn inclusive_scan_accepts_three_column_tuple_item_op() {
 
     inclusive_scan(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         TupleSum,
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -99,7 +99,7 @@ fn inclusive_scan_accepts_seven_tuple_columns() {
 
     inclusive_scan(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -109,7 +109,7 @@ fn inclusive_scan_accepts_seven_tuple_columns() {
             g.slice(..),
         ),
         TupleSum,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

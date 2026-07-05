@@ -1,6 +1,6 @@
 //! Full CPU reference implementations for `massively` property tests.
 //!
-//! The crate uses AoS values (`Vec<(...)>`) while `massively` uses SoA device
+//! The crate uses AoS values (`Vec<(...)>`) while `massively` uses Zip device
 //! columns. Operation traits live in [`op`] and intentionally mirror the public
 //! GPU operation traits without CubeCL runtime constraints.
 

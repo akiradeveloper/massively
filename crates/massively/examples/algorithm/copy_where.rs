@@ -12,9 +12,9 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     let len = copy_where(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         stencil.slice(..),
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output.slice(..len))?, vec![2.0, 4.0]);

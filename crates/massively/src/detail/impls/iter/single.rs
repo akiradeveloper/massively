@@ -32,7 +32,7 @@ where
         Self::Item: MAlloc<R>,
     {
         let _ = policy;
-        unreachable!("scalar DeviceSlice is not an allocatable SoA view")
+        unreachable!("scalar DeviceSlice is not an allocatable Zip view")
     }
 }
 
@@ -344,18 +344,20 @@ where
     }
 }
 
-impl<'a, R, T> MIter<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
-where
-    R: Runtime,
-    T: MStorageElement + 'static,
-    (T,): MAlloc<
-            R,
-            Inner = (crate::detail::DeviceVec<R, T>,),
-            View = (crate::detail::device::DeviceColumnView<R, T>,),
-        >,
-{
-    type Item = (T,);
-    type Inner = (crate::detail::device::DeviceColumnView<R, T>,);
+macro_rules! impl_single_zip_miter {
+    ($name:ident) => {
+        impl<'a, R, T> MIter<R> for $name<crate::runtime::DeviceSlice<'a, R, T>>
+        where
+            R: Runtime,
+            T: MStorageElement + 'static,
+            (T,): MAlloc<
+                    R,
+                    Inner = (crate::detail::DeviceVec<R, T>,),
+                    View = (crate::detail::device::DeviceColumnView<R, T>,),
+                >,
+        {
+            type Item = (T,);
+            type Inner = (crate::detail::device::DeviceColumnView<R, T>,);
 
     fn len(&self) -> MIndex {
         self.0.len()
@@ -382,16 +384,16 @@ where
     }
 }
 
-impl<'a, R, T> sealed::MIterDispatch<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
-where
-    R: Runtime,
-    T: MStorageElement + 'static,
-    (T,): MAlloc<
-            R,
-            Inner = (crate::detail::DeviceVec<R, T>,),
-            View = (crate::detail::device::DeviceColumnView<R, T>,),
-        >,
-{
+        impl<'a, R, T> sealed::MIterDispatch<R> for $name<crate::runtime::DeviceSlice<'a, R, T>>
+        where
+            R: Runtime,
+            T: MStorageElement + 'static,
+            (T,): MAlloc<
+                    R,
+                    Inner = (crate::detail::DeviceVec<R, T>,),
+                    View = (crate::detail::device::DeviceColumnView<R, T>,),
+                >,
+        {
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
         exec.ensure_policy_id(self.0.policy_id())
     }
@@ -913,12 +915,12 @@ where
     {
         let (key_inner, value_inner) = crate::detail::unique_by_key(
             policy,
-            crate::detail::device::SoAView3 {
+            crate::detail::device::ZipView3 {
                 first: first_key,
                 second: second_key,
                 third: third_key,
             },
-            crate::detail::device::SoAView1 {
+            crate::detail::device::ZipView1 {
                 source: self.into_inner_with_policy(policy)?.0,
             },
             KernelOp::<R, Eq>::new(),
@@ -1108,7 +1110,7 @@ where
         let inner = crate::detail::inclusive_scan_by_key(
             policy,
             keys,
-            crate::detail::device::SoAView1 { source: values },
+            crate::detail::device::ZipView1 { source: values },
             KernelTuple1Op::<R, KeyEq>::new(),
             KernelOp::<R, Op>::new(),
         )?;
@@ -1130,7 +1132,7 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let values = crate::detail::device::SoAView1 { source: values };
+        let values = crate::detail::device::ZipView1 { source: values };
         let output_view =
             <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
                 .ok_or_else(|| Error::Launch {
@@ -1347,7 +1349,7 @@ where
         let inner = crate::detail::exclusive_scan_by_key(
             policy,
             keys,
-            crate::detail::device::SoAView1 { source: values },
+            crate::detail::device::ZipView1 { source: values },
             KernelTuple1Op::<R, KeyEq>::new(),
             init.0,
             KernelOp::<R, Op>::new(),
@@ -1371,7 +1373,7 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let values = crate::detail::device::SoAView1 { source: values };
+        let values = crate::detail::device::ZipView1 { source: values };
         let output_view =
             <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
                 .ok_or_else(|| Error::Launch {
@@ -1897,10 +1899,10 @@ where
         let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
-            crate::detail::device::SoAView1 { source: left_keys },
-            crate::detail::device::SoAView1 { source: left_value },
-            crate::detail::device::SoAView1 { source: right_keys },
-            crate::detail::device::SoAView1 {
+            crate::detail::device::ZipView1 { source: left_keys },
+            crate::detail::device::ZipView1 { source: left_value },
+            crate::detail::device::ZipView1 { source: right_keys },
+            crate::detail::device::ZipView1 {
                 source: right_value,
             },
             KernelTuple1Op::<R, Less>::new(),
@@ -1977,9 +1979,9 @@ where
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key, left_third_key),
-            crate::detail::device::SoAView1 { source: left_value },
+            crate::detail::device::ZipView1 { source: left_value },
             (right_first_key, right_second_key, right_third_key),
-            crate::detail::device::SoAView1 {
+            crate::detail::device::ZipView1 {
                 source: right_value,
             },
             KernelOp::<R, Less>::new(),
@@ -2100,9 +2102,9 @@ where
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key),
-            crate::detail::device::SoAView1 { source: left_value },
+            crate::detail::device::ZipView1 { source: left_value },
             (right_first_key, right_second_key),
-            crate::detail::device::SoAView1 {
+            crate::detail::device::ZipView1 {
                 source: right_value,
             },
             KernelOp::<R, Less>::new(),
@@ -3457,7 +3459,12 @@ where
     }
 }
 
-impl<'a, R, T> MIterMut<R> for SoA1<DeviceSliceMut<'a, R, T>>
+    };
+}
+
+impl_single_zip_miter!(Zip1);
+
+impl<'a, R, T> MIterMut<R> for Zip1<DeviceSliceMut<'a, R, T>>
 where
     R: Runtime,
     T: MStorageElement + 'static,
@@ -3571,7 +3578,7 @@ where
     }
 }
 
-impl<'a, R, T> sealed::MIterMutDispatch<R> for SoA1<DeviceSliceMut<'a, R, T>>
+impl<'a, R, T> sealed::MIterMutDispatch<R> for Zip1<DeviceSliceMut<'a, R, T>>
 where
     R: Runtime,
     T: MStorageElement + 'static,

@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, exclusive_scan, reduce};
+use massively::{DeviceVec, Executor, Zip1, exclusive_scan, reduce};
 
 struct Output<B: cubecl::prelude::Runtime> {
     offset: DeviceVec<B, u32>,
@@ -32,12 +32,12 @@ where
     let offset = exec.constant(slot_count.len(), 0_u32)?;
     exclusive_scan(
         exec,
-        SoA1(slot_count.slice(..)),
+        Zip1(slot_count.slice(..)),
         (0_u32,),
         common::SumU32,
-        SoA1(offset.slice_mut(..)),
+        Zip1(offset.slice_mut(..)),
     )?;
-    let (total_slots,) = reduce(exec, SoA1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
+    let (total_slots,) = reduce(exec, Zip1(slot_count.slice(..)), (0_u32,), common::SumU32)?;
     Ok(Output {
         offset,
         total_slots,

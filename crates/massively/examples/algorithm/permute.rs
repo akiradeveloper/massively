@@ -12,17 +12,17 @@ fn main() -> common::Result {
     let permuted = exec.to_device(&[0.0_f32; 3])?;
     gather(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         indices.slice(..),
-        SoA1(permuted.slice_mut(..)),
+        Zip1(permuted.slice_mut(..)),
     )?;
     let output = exec.to_device(&[0.0_f32; 3])?;
     transform(
         &exec,
-        SoA1(permuted.slice(..)),
+        Zip1(permuted.slice(..)),
         common::AddOne,
         (),
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![31.0, 11.0, 21.0]);

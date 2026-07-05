@@ -25,8 +25,8 @@ fn mismatch_accepts_borrowed_tuple_columns() {
     assert_eq!(
         mismatch(
             &exec,
-            massively::SoA2(a.slice(..), b.slice(..)),
-            massively::SoA2(c.slice(..), d.slice(..)),
+            massively::Zip2(a.slice(..), b.slice(..)),
+            massively::Zip2(c.slice(..), d.slice(..)),
             MixedTupleEqual
         )
         .unwrap(),
@@ -45,8 +45,8 @@ fn mismatch_accepts_generic_right_without_inner_equality_bound() {
     assert_eq!(
         mismatch_with_generic_right(
             &exec,
-            massively::SoA2(a.slice(..), b.slice(..)),
-            massively::SoA2(c.slice(..), d.slice(..)),
+            massively::Zip2(a.slice(..), b.slice(..)),
+            massively::Zip2(c.slice(..), d.slice(..)),
             MixedTupleEqual,
         ),
         Some(2)

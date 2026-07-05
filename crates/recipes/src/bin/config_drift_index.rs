@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, mismatch};
+use massively::{DeviceVec, Executor, MIndex, Zip1, mismatch};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,8 +25,8 @@ where
 {
     mismatch(
         exec,
-        SoA1(expected.slice(..)),
-        SoA1(actual.slice(..)),
+        Zip1(expected.slice(..)),
+        Zip1(actual.slice(..)),
         common::EqualU32,
     )
 }

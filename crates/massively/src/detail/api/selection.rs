@@ -1,8 +1,8 @@
 use super::memory::{MaterializeOutput, materialize};
 use crate::{
     device::{
-        KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA, SoA1, SoA2, SoA3, SoAView2, SoAView3,
-        StorageKernelColumn,
+        KernelColumn, KernelColumnAt, ReadOnlyZip, S0, StorageKernelColumn, Zip, Zip1, Zip2, Zip3,
+        ZipView2, ZipView3,
     },
     error::Error,
     index::MIndex,
@@ -13,9 +13,9 @@ use cubecl::prelude::*;
 #[doc(hidden)]
 pub(crate) trait OwnedSelectionInput {}
 
-impl<Source> OwnedSelectionInput for SoA1<Source>
+impl<Source> OwnedSelectionInput for Zip1<Source>
 where
-    Self: SoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Self: Zip<Item = (Source::Item,), Scalar = Source::Item>,
     Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
 {
@@ -45,14 +45,14 @@ macro_rules! impl_selection_tuple_input {
     };
 }
 
-impl_selection_tuple_input!(SoAView2<A, B> { left: 0, right: 1 });
-impl_selection_tuple_input!(SoAView3<A, B, C> { first: 0, second: 1, third: 2 });
+impl_selection_tuple_input!(ZipView2<A, B> { left: 0, right: 1 });
+impl_selection_tuple_input!(ZipView3<A, B, C> { first: 0, second: 1, third: 2 });
 
 macro_rules! impl_owned_selection_tuple {
     ($name:ident < $first:ident, $( $rest:ident ),+ >) => {
         impl<$first, $( $rest ),+> OwnedSelectionInput for $name<$first, $( $rest ),+>
         where
-            Self: SoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: Zip<Scalar = <$first as KernelColumn>::Item>,
             $first: StorageKernelColumn + KernelColumnAt<S0>,
             $(
                 $rest: StorageKernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
@@ -66,12 +66,12 @@ macro_rules! impl_owned_selection_tuple {
     };
 }
 
-impl_owned_selection_tuple!(SoA2<A, B>);
-impl_owned_selection_tuple!(SoA3<A, B, C>);
+impl_owned_selection_tuple!(Zip2<A, B>);
+impl_owned_selection_tuple!(Zip3<A, B, C>);
 
-impl<Left, Right> OwnedSelectionInput for SoAView2<Left, Right>
+impl<Left, Right> OwnedSelectionInput for ZipView2<Left, Right>
 where
-    Self: ReadOnlySoA<Scalar = Left::Item>,
+    Self: ReadOnlyZip<Scalar = Left::Item>,
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
     Left::Item: CubePrimitive + CubeElement,
@@ -79,9 +79,9 @@ where
 {
 }
 
-impl<First, Second, Third> OwnedSelectionInput for SoAView3<First, Second, Third>
+impl<First, Second, Third> OwnedSelectionInput for ZipView3<First, Second, Third>
 where
-    Self: ReadOnlySoA<Scalar = First::Item>,
+    Self: ReadOnlyZip<Scalar = First::Item>,
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
     Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
@@ -93,7 +93,7 @@ where
 
 /// Keeps values whose staged stencil flag satisfies `Pred`.
 ///
-/// This is a borrowing algorithm. It reads the input and returns newly owned SoA
+/// This is a borrowing algorithm. It reads the input and returns newly owned Zip
 /// storage containing the selected values.
 pub fn copy_where<Source, Stencil, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelCopyWhereInput<Stencil, Pred>>::Runtime>,
@@ -116,7 +116,7 @@ where
 
 /// Removes values satisfying `Pred`.
 ///
-/// This is a borrowing algorithm. It reads the input and returns newly owned SoA
+/// This is a borrowing algorithm. It reads the input and returns newly owned Zip
 /// storage for the remaining values.
 pub fn remove_if<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelSelectInput<Pred>>::Runtime>,

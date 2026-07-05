@@ -21,7 +21,7 @@ pub trait MItem<R: Runtime>:
 pub trait MStorageElement: CubePrimitive + CubeElement {}
 impl<T> MStorageElement for T where T: CubePrimitive + CubeElement {}
 
-/// Logical item that has an owned/writable SoA device storage shape.
+/// Logical item that has an owned/writable Zip device storage shape.
 pub trait MAlloc<R: Runtime>: MItem<R>
 where
     for<'a> <<Self as MAlloc<R>>::Storage as ToSlice>::Slice<'a>: MIter<R, Item = Self>,

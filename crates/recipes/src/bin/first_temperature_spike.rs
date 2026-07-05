@@ -15,7 +15,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, MIndex, SoA1, adjacent_find};
+use massively::{DeviceVec, Executor, MIndex, Zip1, adjacent_find};
 
 struct TemperatureSpike;
 
@@ -33,7 +33,7 @@ fn solve<B>(exec: &Executor<B>, temperature: DeviceVec<B, f32>) -> common::Resul
 where
     B: cubecl::prelude::Runtime,
 {
-    adjacent_find(exec, SoA1(temperature.slice(..)), TemperatureSpike)
+    adjacent_find(exec, Zip1(temperature.slice(..)), TemperatureSpike)
 }
 
 fn main() -> common::Result {

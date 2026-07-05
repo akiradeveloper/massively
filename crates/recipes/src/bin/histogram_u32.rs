@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, reduce_by_key, sort};
+use massively::{DeviceVec, Executor, MIndex, Zip1, reduce_by_key, sort};
 
 struct Output<B: cubecl::prelude::Runtime> {
     category_id: DeviceVec<B, u32>,
@@ -30,22 +30,22 @@ where
     let sorted = exec.to_device(&vec![0_u32; len])?;
     sort(
         exec,
-        SoA1(category_id.slice(..)),
+        Zip1(category_id.slice(..)),
         common::LessU32,
-        SoA1(sorted.slice_mut(..)),
+        Zip1(sorted.slice_mut(..)),
     )?;
     let ones = exec.constant(sorted.len(), 1_u32)?;
     let category_id = exec.to_device(&vec![0_u32; len])?;
     let count = exec.to_device(&vec![0_u32; len])?;
     let len = reduce_by_key(
         exec,
-        SoA1(sorted.slice(..)),
-        SoA1(ones.slice(..)),
+        Zip1(sorted.slice(..)),
+        Zip1(ones.slice(..)),
         common::EqualU32,
         (0_u32,),
         common::SumU32,
-        SoA1(category_id.slice_mut(..)),
-        SoA1(count.slice_mut(..)),
+        Zip1(category_id.slice_mut(..)),
+        Zip1(count.slice_mut(..)),
     )?;
     Ok(Output {
         category_id,

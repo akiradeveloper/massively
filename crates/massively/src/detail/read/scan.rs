@@ -41,7 +41,7 @@ macro_rules! impl_kernel_inclusive_scan_tuple1 {
             Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
-            type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+            type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
             fn inclusive_scan_read(
                 self,
@@ -61,8 +61,8 @@ macro_rules! impl_kernel_inclusive_scan_tuple1 {
 }
 
 impl_kernel_inclusive_scan_tuple1!((S,), 0);
-impl_kernel_inclusive_scan_tuple1!(SoAView1<S>, source);
-impl_kernel_inclusive_scan_tuple1!(DeviceSoA1<S>, source);
+impl_kernel_inclusive_scan_tuple1!(ZipView1<S>, source);
+impl_kernel_inclusive_scan_tuple1!(DeviceZip1<S>, source);
 
 macro_rules! impl_kernel_exclusive_scan_tuple1 {
     ($target:ty, $field:tt) => {
@@ -76,7 +76,7 @@ macro_rules! impl_kernel_exclusive_scan_tuple1 {
         {
             type Runtime = S::Runtime;
             type Init = (S::Item,);
-            type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+            type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
             fn exclusive_scan_read(
                 self,
@@ -97,8 +97,8 @@ macro_rules! impl_kernel_exclusive_scan_tuple1 {
 }
 
 impl_kernel_exclusive_scan_tuple1!((S,), 0);
-impl_kernel_exclusive_scan_tuple1!(SoAView1<S>, source);
-impl_kernel_exclusive_scan_tuple1!(DeviceSoA1<S>, source);
+impl_kernel_exclusive_scan_tuple1!(ZipView1<S>, source);
+impl_kernel_exclusive_scan_tuple1!(DeviceZip1<S>, source);
 
 impl<S, Op> KernelAdjacentDifferenceInput<Op> for S
 where
@@ -108,7 +108,7 @@ where
     Op: BinaryOp<S::Item>,
 {
     type Runtime = S::Runtime;
-    type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+    type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
     fn adjacent_difference_read(
         self,
@@ -129,7 +129,7 @@ macro_rules! impl_kernel_adjacent_difference_tuple1 {
             Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
-            type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+            type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
             fn adjacent_difference_read(
                 self,
@@ -145,8 +145,8 @@ macro_rules! impl_kernel_adjacent_difference_tuple1 {
 }
 
 impl_kernel_adjacent_difference_tuple1!((S,), 0);
-impl_kernel_adjacent_difference_tuple1!(SoAView1<S>, source);
-impl_kernel_adjacent_difference_tuple1!(DeviceSoA1<S>, source);
+impl_kernel_adjacent_difference_tuple1!(ZipView1<S>, source);
+impl_kernel_adjacent_difference_tuple1!(DeviceZip1<S>, source);
 
 macro_rules! impl_kernel_scan_tuple2 {
     ($target:ty, $left:tt, $right:tt) => {
@@ -163,7 +163,7 @@ macro_rules! impl_kernel_scan_tuple2 {
         {
             type Runtime = A::Runtime;
             type Output =
-                DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
+                DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
 
             fn inclusive_scan_read(
                 self,
@@ -197,7 +197,7 @@ macro_rules! impl_kernel_scan_tuple2 {
             type Runtime = A::Runtime;
             type Init = (A::Item, C::Item);
             type Output =
-                DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
+                DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
 
             fn exclusive_scan_read(
                 self,
@@ -237,7 +237,7 @@ macro_rules! impl_kernel_scan_tuple2 {
         {
             type Runtime = A::Runtime;
             type Output =
-                DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
+                DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
 
             fn adjacent_difference_read(
                 self,
@@ -259,8 +259,8 @@ macro_rules! impl_kernel_scan_tuple2 {
     };
 }
 
-impl_kernel_scan_tuple2!(SoAView2<A, C>, left, right);
-impl_kernel_scan_tuple2!(DeviceSoA2<A, C>, left, right);
+impl_kernel_scan_tuple2!(ZipView2<A, C>, left, right);
+impl_kernel_scan_tuple2!(DeviceZip2<A, C>, left, right);
 
 macro_rules! impl_kernel_scan_tuple3 {
     ($target:ty, $first:tt, $second:tt, $third:tt) => {
@@ -279,7 +279,7 @@ macro_rules! impl_kernel_scan_tuple3 {
             Op: BinaryOp<(A::Item, C::Item, D::Item)>,
         {
             type Runtime = A::Runtime;
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<A::Runtime, A::Item>,
                 DeviceVec<A::Runtime, C::Item>,
                 DeviceVec<A::Runtime, D::Item>,
@@ -328,7 +328,7 @@ macro_rules! impl_kernel_scan_tuple3 {
         {
             type Runtime = A::Runtime;
             type Init = (A::Item, C::Item, D::Item);
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<A::Runtime, A::Item>,
                 DeviceVec<A::Runtime, C::Item>,
                 DeviceVec<A::Runtime, D::Item>,
@@ -378,7 +378,7 @@ macro_rules! impl_kernel_scan_tuple3 {
             Op: BinaryOp<(A::Item, C::Item, D::Item)>,
         {
             type Runtime = A::Runtime;
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<A::Runtime, A::Item>,
                 DeviceVec<A::Runtime, C::Item>,
                 DeviceVec<A::Runtime, D::Item>,
@@ -413,22 +413,22 @@ macro_rules! impl_kernel_scan_tuple3 {
     };
 }
 
-impl_kernel_scan_tuple3!(SoAView3<A, C, D>, first, second, third);
-impl_kernel_scan_tuple3!(DeviceSoA3<A, C, D>, first, second, third);
+impl_kernel_scan_tuple3!(ZipView3<A, C, D>, first, second, third);
+impl_kernel_scan_tuple3!(DeviceZip3<A, C, D>, first, second, third);
 
 impl<Left, Right, Op> KernelInclusiveScanInput<Op> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelInclusiveScanInput<Op>,
+    ZipView2<Left, Right>: KernelInclusiveScanInput<Op>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelInclusiveScanInput<Op>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelInclusiveScanInput<Op>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelInclusiveScanInput<Op>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelInclusiveScanInput<Op>>::Output;
 
     fn inclusive_scan_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelInclusiveScanInput<Op>>::inclusive_scan_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelInclusiveScanInput<Op>>::inclusive_scan_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -439,19 +439,19 @@ where
 
 impl<Left, Right, Op> KernelExclusiveScanInput<Op> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelExclusiveScanInput<Op>,
+    ZipView2<Left, Right>: KernelExclusiveScanInput<Op>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelExclusiveScanInput<Op>>::Runtime;
-    type Init = <SoAView2<Left, Right> as KernelExclusiveScanInput<Op>>::Init;
-    type Output = <SoAView2<Left, Right> as KernelExclusiveScanInput<Op>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelExclusiveScanInput<Op>>::Runtime;
+    type Init = <ZipView2<Left, Right> as KernelExclusiveScanInput<Op>>::Init;
+    type Output = <ZipView2<Left, Right> as KernelExclusiveScanInput<Op>>::Output;
 
     fn exclusive_scan_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         init: Self::Init,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelExclusiveScanInput<Op>>::exclusive_scan_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelExclusiveScanInput<Op>>::exclusive_scan_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -463,17 +463,17 @@ where
 
 impl<Left, Right, Op> KernelAdjacentDifferenceInput<Op> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelAdjacentDifferenceInput<Op>,
+    ZipView2<Left, Right>: KernelAdjacentDifferenceInput<Op>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelAdjacentDifferenceInput<Op>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelAdjacentDifferenceInput<Op>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelAdjacentDifferenceInput<Op>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelAdjacentDifferenceInput<Op>>::Output;
 
     fn adjacent_difference_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelAdjacentDifferenceInput<Op>>::adjacent_difference_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelAdjacentDifferenceInput<Op>>::adjacent_difference_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -484,17 +484,17 @@ where
 
 impl<First, Second, Third, Op> KernelInclusiveScanInput<Op> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelInclusiveScanInput<Op>,
+    ZipView3<First, Second, Third>: KernelInclusiveScanInput<Op>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelInclusiveScanInput<Op>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelInclusiveScanInput<Op>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelInclusiveScanInput<Op>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelInclusiveScanInput<Op>>::Output;
 
     fn inclusive_scan_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelInclusiveScanInput<Op>>::inclusive_scan_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelInclusiveScanInput<Op>>::inclusive_scan_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -506,19 +506,19 @@ where
 
 impl<First, Second, Third, Op> KernelExclusiveScanInput<Op> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelExclusiveScanInput<Op>,
+    ZipView3<First, Second, Third>: KernelExclusiveScanInput<Op>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::Runtime;
-    type Init = <SoAView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::Init;
-    type Output = <SoAView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::Runtime;
+    type Init = <ZipView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::Init;
+    type Output = <ZipView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::Output;
 
     fn exclusive_scan_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         init: Self::Init,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::exclusive_scan_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelExclusiveScanInput<Op>>::exclusive_scan_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -531,17 +531,17 @@ where
 
 impl<First, Second, Third, Op> KernelAdjacentDifferenceInput<Op> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelAdjacentDifferenceInput<Op>,
+    ZipView3<First, Second, Third>: KernelAdjacentDifferenceInput<Op>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelAdjacentDifferenceInput<Op>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelAdjacentDifferenceInput<Op>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelAdjacentDifferenceInput<Op>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelAdjacentDifferenceInput<Op>>::Output;
 
     fn adjacent_difference_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelAdjacentDifferenceInput<Op>>::adjacent_difference_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelAdjacentDifferenceInput<Op>>::adjacent_difference_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

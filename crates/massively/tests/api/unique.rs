@@ -8,9 +8,9 @@ fn unique_keeps_one_value_when_all_values_are_equal() {
 
     let len = unique(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualF32,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -25,9 +25,9 @@ fn unique_keeps_all_values_when_no_adjacent_values_are_equal() {
 
     let len = unique(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         EqualF32,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -65,7 +65,7 @@ fn unique_accepts_seven_tuple_columns() {
 
     let len = unique(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -75,7 +75,7 @@ fn unique_accepts_seven_tuple_columns() {
             g.slice(..),
         ),
         Tuple7MixedEqual,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

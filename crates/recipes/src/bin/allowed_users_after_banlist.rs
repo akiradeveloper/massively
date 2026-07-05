@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, set_difference};
+use massively::{DeviceVec, Executor, Zip1, set_difference};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -26,10 +26,10 @@ where
     let out = exec.constant(allowlist.len(), 0_u32)?;
     let len = set_difference(
         exec,
-        SoA1(allowlist.slice(..)),
-        SoA1(banlist.slice(..)),
+        Zip1(allowlist.slice(..)),
+        Zip1(banlist.slice(..)),
         common::LessU32,
-        SoA1(out.slice_mut(..)),
+        Zip1(out.slice_mut(..)),
     )?;
     Ok(exec.to_device(&exec.to_host(&out.slice(..len))?)?)
 }

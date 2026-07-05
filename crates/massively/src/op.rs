@@ -95,10 +95,10 @@ pub fn compose<First, Second>(_first: First, _second: Second) -> Compose<First, 
 /// let output = exec.to_device(&[0_u32; 3]).unwrap();
 /// massively::transform(
 ///     &exec,
-///     massively::SoA1(input.slice(..)),
+///     massively::Zip1(input.slice(..)),
 ///     massively::op::Constant::<(u32,)>::new(),
 ///     (42_u32,),
-///     massively::SoA1(output.slice_mut(..)),
+///     massively::Zip1(output.slice_mut(..)),
 /// )
 /// .unwrap();
 /// # let _ = output;

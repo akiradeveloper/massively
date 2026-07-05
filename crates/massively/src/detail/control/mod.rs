@@ -1,7 +1,7 @@
 //! Internal GPU control streams.
 //!
 //! A control stream describes where rows move or where logical segments begin.
-//! Algorithms build a control stream once, then apply it to every carried SoA
+//! Algorithms build a control stream once, then apply it to every carried Zip
 //! column so row semantics stay synchronized.
 
 mod ordering;

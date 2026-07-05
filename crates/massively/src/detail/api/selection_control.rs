@@ -168,7 +168,7 @@ where
     }
 }
 
-impl<A, B, Pred> SelectionStencil<Pred> for SoAView2<A, B>
+impl<A, B, Pred> SelectionStencil<Pred> for ZipView2<A, B>
 where
     A: KernelColumn + KernelColumnAt<S0>,
     B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -249,7 +249,7 @@ where
     }
 }
 
-impl<A, B, C, Pred> SelectionStencil<Pred> for SoAView3<A, B, C>
+impl<A, B, C, Pred> SelectionStencil<Pred> for ZipView3<A, B, C>
 where
     A: KernelColumn + KernelColumnAt<S0>,
     B: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -352,12 +352,12 @@ impl<Left, Right, Pred> SelectionStencil<Pred> for (Left, Right)
 where
     Left: Copy,
     Right: Copy,
-    SoAView2<Left, Right>: SelectionStencil<Pred>,
+    ZipView2<Left, Right>: SelectionStencil<Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as SelectionStencil<Pred>>::Runtime;
+    type Runtime = <ZipView2<Left, Right> as SelectionStencil<Pred>>::Runtime;
 
     fn len(&self) -> MIndex {
-        <SoAView2<Left, Right> as SelectionStencil<Pred>>::len(&SoAView2 {
+        <ZipView2<Left, Right> as SelectionStencil<Pred>>::len(&ZipView2 {
             left: self.0,
             right: self.1,
         })
@@ -368,7 +368,7 @@ where
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
     ) -> Result<select::SelectedRankControl, Error> {
-        SoAView2 {
+        ZipView2 {
             left: self.0,
             right: self.1,
         }
@@ -381,12 +381,12 @@ where
     First: Copy,
     Second: Copy,
     Third: Copy,
-    SoAView3<First, Second, Third>: SelectionStencil<Pred>,
+    ZipView3<First, Second, Third>: SelectionStencil<Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as SelectionStencil<Pred>>::Runtime;
+    type Runtime = <ZipView3<First, Second, Third> as SelectionStencil<Pred>>::Runtime;
 
     fn len(&self) -> MIndex {
-        <SoAView3<First, Second, Third> as SelectionStencil<Pred>>::len(&SoAView3 {
+        <ZipView3<First, Second, Third> as SelectionStencil<Pred>>::len(&ZipView3 {
             first: self.0,
             second: self.1,
             third: self.2,
@@ -398,7 +398,7 @@ where
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
     ) -> Result<select::SelectedRankControl, Error> {
-        SoAView3 {
+        ZipView3 {
             first: self.0,
             second: self.1,
             third: self.2,

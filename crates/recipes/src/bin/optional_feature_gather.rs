@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, gather_where};
+use massively::{DeviceVec, Executor, MIndex, Zip1, gather_where};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -27,10 +27,10 @@ where
     let out = exec.constant(index.len(), -1.0_f32)?;
     gather_where(
         exec,
-        SoA1(value.slice(..)),
+        Zip1(value.slice(..)),
         index.slice(..),
         available.slice(..),
-        SoA1(out.slice_mut(..)),
+        Zip1(out.slice_mut(..)),
     )?;
     Ok(out)
 }

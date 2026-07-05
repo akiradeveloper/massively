@@ -2,14 +2,14 @@ use super::*;
 
 macro_rules! impl_miter_view {
     ($input:ident; 0, 1) => {
-        crate::detail::device::SoAView2 {
+        crate::detail::device::ZipView2 {
             left: $input.0,
             right: $input.1,
         }
     };
 
     ($input:ident; 0, 1, 2) => {
-        crate::detail::device::SoAView3 {
+        crate::detail::device::ZipView3 {
             first: $input.0,
             second: $input.1,
             third: $input.2,
@@ -17,7 +17,7 @@ macro_rules! impl_miter_view {
     };
 
     ($input:ident; 0, 1, 2, 3) => {
-        crate::detail::device::SoAView4 {
+        crate::detail::device::ZipView4 {
             a: $input.0,
             b: $input.1,
             c: $input.2,
@@ -26,7 +26,7 @@ macro_rules! impl_miter_view {
     };
 
     ($input:ident; 0, 1, 2, 3, 4) => {
-        crate::detail::device::SoAView5 {
+        crate::detail::device::ZipView5 {
             a: $input.0,
             b: $input.1,
             c: $input.2,
@@ -36,7 +36,7 @@ macro_rules! impl_miter_view {
     };
 
     ($input:ident; 0, 1, 2, 3, 4, 5) => {
-        crate::detail::device::SoAView6 {
+        crate::detail::device::ZipView6 {
             a: $input.0,
             b: $input.1,
             c: $input.2,
@@ -47,7 +47,7 @@ macro_rules! impl_miter_view {
     };
 
     ($input:ident; 0, 1, 2, 3, 4, 5, 6) => {
-        crate::detail::device::SoAView7 {
+        crate::detail::device::ZipView7 {
             a: $input.0,
             b: $input.1,
             c: $input.2,
@@ -3588,7 +3588,7 @@ macro_rules! impl_wide_unique_inner_or_materialize_body {
     };
 }
 
-macro_rules! impl_miter_soa {
+macro_rules! impl_miter_zip {
     ($name:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+ => $transform:ident) => {
         impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
@@ -5319,9 +5319,9 @@ macro_rules! impl_miter_soa {
                 let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
-                    crate::detail::device::SoAView1 { source: left_keys },
+                    crate::detail::device::ZipView1 { source: left_keys },
                     impl_miter_view!(left_values; $( $idx ),+),
-                    crate::detail::device::SoAView1 { source: right_keys },
+                    crate::detail::device::ZipView1 { source: right_keys },
                     impl_miter_view!(right_values; $( $idx ),+),
                     KernelTuple1Op::<R, Less>::new(),
                 )?;
@@ -6748,7 +6748,7 @@ macro_rules! impl_miter_soa {
     };
 }
 
-macro_rules! impl_miter_mut_soa {
+macro_rules! impl_miter_mut_zip {
     ($name:ident; $( $ty:ident : $idx:tt ),+) => {
         impl<'a, R, $( $ty ),+> MIterMut<R> for $name<$( DeviceSliceMut<'a, R, $ty> ),+>
         where
@@ -6955,7 +6955,7 @@ macro_rules! impl_miter_mut_soa {
     };
 }
 
-macro_rules! impl_wide_miter_soa {
+macro_rules! impl_wide_miter_zip {
     ($name:ident; $selected_apply:ident; $( $ty:ident : $idx:tt : $tmp:ident ),+) => {
         impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
@@ -9715,15 +9715,15 @@ macro_rules! impl_wide_miter_soa {
     };
 }
 
-impl_miter_soa!(SoA2; A: 0: a, C: 1: c => transform_binary);
-impl_miter_soa!(SoA3; A: 0: a, C: 1: c, D: 2: d => transform_ternary);
-impl_wide_miter_soa!(SoA4; apply_expr4; A: 0: a, C: 1: c, D: 2: d, E: 3: e);
-impl_wide_miter_soa!(SoA5; apply_expr5; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f);
-impl_wide_miter_soa!(SoA6; apply_expr6; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g);
-impl_wide_miter_soa!(SoA7; apply_expr7; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g, H: 6: h);
-impl_miter_mut_soa!(SoA2; A: 0, C: 1);
-impl_miter_mut_soa!(SoA3; A: 0, C: 1, D: 2);
-impl_miter_mut_soa!(SoA4; A: 0, C: 1, D: 2, E: 3);
-impl_miter_mut_soa!(SoA5; A: 0, C: 1, D: 2, E: 3, F: 4);
-impl_miter_mut_soa!(SoA6; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5);
-impl_miter_mut_soa!(SoA7; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5, H: 6);
+impl_miter_zip!(Zip2; A: 0: a, C: 1: c => transform_binary);
+impl_miter_zip!(Zip3; A: 0: a, C: 1: c, D: 2: d => transform_ternary);
+impl_wide_miter_zip!(Zip4; apply_expr4; A: 0: a, C: 1: c, D: 2: d, E: 3: e);
+impl_wide_miter_zip!(Zip5; apply_expr5; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f);
+impl_wide_miter_zip!(Zip6; apply_expr6; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g);
+impl_wide_miter_zip!(Zip7; apply_expr7; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g, H: 6: h);
+impl_miter_mut_zip!(Zip2; A: 0, C: 1);
+impl_miter_mut_zip!(Zip3; A: 0, C: 1, D: 2);
+impl_miter_mut_zip!(Zip4; A: 0, C: 1, D: 2, E: 3);
+impl_miter_mut_zip!(Zip5; A: 0, C: 1, D: 2, E: 3, F: 4);
+impl_miter_mut_zip!(Zip6; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5);
+impl_miter_mut_zip!(Zip7; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5, H: 6);

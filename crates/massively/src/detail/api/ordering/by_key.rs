@@ -50,7 +50,7 @@ where
     }
 }
 
-/// Sorts read-only key-value pairs by key and returns owned SoA outputs.
+/// Sorts read-only key-value pairs by key and returns owned Zip outputs.
 pub fn sort_by_key<R, Keys, Values, Less>(
     policy: &CubePolicy<R>,
     keys: Keys,

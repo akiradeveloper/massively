@@ -11,17 +11,17 @@ fn main() -> common::Result {
     let sorted = exec.to_device(&[0.0_f32; 3])?;
     sort(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         common::LessF32,
-        SoA1(sorted.slice_mut(..)),
+        Zip1(sorted.slice_mut(..)),
     )?;
     let output = exec.to_device(&[0.0_f32; 3])?;
     transform(
         &exec,
-        SoA1(sorted.slice(..)),
+        Zip1(sorted.slice(..)),
         common::AddOne,
         (),
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![2.0, 3.0, 4.0]);

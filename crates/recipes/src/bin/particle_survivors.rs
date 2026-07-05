@@ -17,7 +17,7 @@ mod common;
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
 use massively::prelude::*;
-use massively::{DeviceVec, Executor, SoA3, remove_where, transform};
+use massively::{DeviceVec, Executor, Zip3, remove_where, transform};
 
 struct AdvanceParticle;
 
@@ -75,10 +75,10 @@ where
     let next_vx = exec.constant(vx.len(), 0.0_f32)?;
     transform(
         exec,
-        SoA3(x.slice(..), y.slice(..), vx.slice(..)),
+        Zip3(x.slice(..), y.slice(..), vx.slice(..)),
         AdvanceParticle,
         (),
-        SoA3(
+        Zip3(
             next_x.slice_mut(..),
             next_y.slice_mut(..),
             next_vx.slice_mut(..),
@@ -87,19 +87,19 @@ where
     let stencil = exec.constant(next_x.len(), 0_u32)?;
     transform(
         exec,
-        SoA3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
+        Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         OutsideParticleBox,
         (),
-        SoA1(stencil.slice_mut(..)),
+        Zip1(stencil.slice_mut(..)),
     )?;
     let x = exec.constant(next_x.len(), 0.0_f32)?;
     let y = exec.constant(next_y.len(), 0.0_f32)?;
     let vx = exec.constant(next_vx.len(), 0.0_f32)?;
     let len = remove_where(
         exec,
-        SoA3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
+        Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         stencil.slice(..),
-        SoA3(x.slice_mut(..), y.slice_mut(..), vx.slice_mut(..)),
+        Zip3(x.slice_mut(..), y.slice_mut(..), vx.slice_mut(..)),
     )?;
     Ok(Output {
         x: exec.to_device(&exec.to_host(&x.slice(..len))?)?,

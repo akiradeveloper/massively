@@ -5,7 +5,7 @@ fn fill_accepts_single_column() {
     let exec = exec();
     let values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
 
-    fill(&exec, (99_u32,), massively::SoA1(values.slice_mut(..))).unwrap();
+    fill(&exec, (99_u32,), massively::Zip1(values.slice_mut(..))).unwrap();
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![99, 99, 99, 99]);
 }
@@ -20,7 +20,7 @@ fn fill_accepts_tuple_columns() {
     fill(
         &exec,
         (9.0_f32, 99_u32, -9.0_f32),
-        massively::SoA3(a.slice_mut(..), b.slice_mut(..), c.slice_mut(..)),
+        massively::Zip3(a.slice_mut(..), b.slice_mut(..), c.slice_mut(..)),
     )
     .unwrap();
 
@@ -34,7 +34,7 @@ fn fill_accepts_sliced_output() {
     let exec = exec();
     let values = exec.to_device(&[1_u32, 10, 20, 30, 5]).unwrap();
 
-    fill(&exec, (99_u32,), massively::SoA1(values.slice_mut(1..4))).unwrap();
+    fill(&exec, (99_u32,), massively::Zip1(values.slice_mut(1..4))).unwrap();
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![1, 99, 99, 99, 5]);
 }
@@ -44,7 +44,7 @@ fn fill_accepts_empty_output() {
     let exec = exec();
     let values = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
-    fill(&exec, (99_u32,), massively::SoA1(values.slice_mut(1..1))).unwrap();
+    fill(&exec, (99_u32,), massively::Zip1(values.slice_mut(1..1))).unwrap();
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![1, 2, 3]);
 }
@@ -65,7 +65,7 @@ fn fill_accepts_seven_tuple_columns() {
         (
             101_u32, 102_u32, 103_u32, 104_u32, 105_u32, 106_u32, 107_u32,
         ),
-        massively::SoA7(
+        massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
             c.slice_mut(..),

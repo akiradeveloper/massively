@@ -1,8 +1,8 @@
 use crate::{
     detail::op::kernel::UnaryOp,
     device::{
-        DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, S0, SoA, SoA1, SoA2, SoA3,
-        StorageKernelColumn,
+        DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, S0, StorageKernelColumn, Zip,
+        Zip1, Zip2, Zip3,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -30,7 +30,7 @@ where
     R: Runtime,
     A: CubePrimitive + CubeElement,
 {
-    type Storage = SoA1<DeviceVec<R, A>>;
+    type Storage = Zip1<DeviceVec<R, A>>;
 }
 
 impl<R, A, B> MItemStorage<R> for (A, B)
@@ -39,7 +39,7 @@ where
     A: CubePrimitive + CubeElement,
     B: CubePrimitive + CubeElement,
 {
-    type Storage = SoA2<DeviceVec<R, A>, DeviceVec<R, B>>;
+    type Storage = Zip2<DeviceVec<R, A>, DeviceVec<R, B>>;
 }
 
 impl<R, A, B, C> MItemStorage<R> for (A, B, C)
@@ -49,7 +49,7 @@ where
     B: CubePrimitive + CubeElement,
     C: CubePrimitive + CubeElement,
 {
-    type Storage = SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>;
+    type Storage = Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>;
 }
 
 macro_rules! impl_wide_mitem_storage {
@@ -123,7 +123,7 @@ where
                 );
             }
         }
-        Ok(SoA1 {
+        Ok(Zip1 {
             source: DeviceVec::from_handle(policy.id(), output_a, len),
         })
     }
@@ -172,7 +172,7 @@ where
                 );
             }
         }
-        Ok(SoA2 {
+        Ok(Zip2 {
             left: DeviceVec::from_handle(policy.id(), output_a, len),
             right: DeviceVec::from_handle(policy.id(), output_b, len),
         })
@@ -225,7 +225,7 @@ where
                 );
             }
         }
-        Ok(SoA3 {
+        Ok(Zip3 {
             first: DeviceVec::from_handle(policy.id(), output_a, len),
             second: DeviceVec::from_handle(policy.id(), output_b, len),
             third: DeviceVec::from_handle(policy.id(), output_c, len),
@@ -305,7 +305,7 @@ macro_rules! impl_transform_tuple_output {
     (
         ($trait_name:ident < $first_in:ident : $first_arg:ident, $( $in_ty:ident : $arg:ident ),+ >),
         $kernel:ident,
-        $soa:ident,
+        $zip:ident,
         ($( $out_ty:ident : $out_handle:ident : $out_field:ident ),+)
     ) => {
         impl<R, $first_in, $( $in_ty, )+ $( $out_ty, )+ Op>
@@ -371,7 +371,7 @@ macro_rules! impl_transform_tuple_output {
                         );
                     }
                 }
-                Ok($soa {
+                Ok($zip {
                     $(
                         $out_field: DeviceVec::from_handle(policy.id(), $out_handle, len),
                     )+
@@ -383,13 +383,13 @@ macro_rules! impl_transform_tuple_output {
 
 macro_rules! impl_transform_tuple_output_arity {
     ($input:tt, 1, $kernel:ident) => {
-        impl_transform_tuple_output!($input, $kernel, SoA1, (OutA: out_a: source));
+        impl_transform_tuple_output!($input, $kernel, Zip1, (OutA: out_a: source));
     };
     ($input:tt, 2, $kernel:ident) => {
         impl_transform_tuple_output!(
             $input,
             $kernel,
-            SoA2,
+            Zip2,
             (OutA: out_a: left, OutB: out_b: right)
         );
     };
@@ -397,7 +397,7 @@ macro_rules! impl_transform_tuple_output_arity {
         impl_transform_tuple_output!(
             $input,
             $kernel,
-            SoA3,
+            Zip3,
             (OutA: out_a: first, OutB: out_b: second, OutC: out_c: third)
         );
     };
@@ -430,7 +430,7 @@ macro_rules! impl_transform_tuple_outputs {
 }
 
 #[doc(hidden)]
-pub trait TransformSoA2Output<R, InA, InB, Op>: CubeType + MItemStorage<R>
+pub trait TransformZip2Output<R, InA, InB, Op>: CubeType + MItemStorage<R>
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -445,7 +445,7 @@ where
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
-impl<R, InA, InB, OutA, Op> TransformSoA2Output<R, InA, InB, Op> for (OutA,)
+impl<R, InA, InB, OutA, Op> TransformZip2Output<R, InA, InB, Op> for (OutA,)
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -490,13 +490,13 @@ where
                 );
             }
         }
-        Ok(SoA1 {
+        Ok(Zip1 {
             source: DeviceVec::from_handle(policy.id(), output_a, len),
         })
     }
 }
 
-impl<R, InA, InB, OutA, OutB, Op> TransformSoA2Output<R, InA, InB, Op> for (OutA, OutB)
+impl<R, InA, InB, OutA, OutB, Op> TransformZip2Output<R, InA, InB, Op> for (OutA, OutB)
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -544,7 +544,7 @@ where
                 );
             }
         }
-        Ok(SoA2 {
+        Ok(Zip2 {
             left: DeviceVec::from_handle(policy.id(), output_a, len),
             right: DeviceVec::from_handle(policy.id(), output_b, len),
         })
@@ -552,7 +552,7 @@ where
 }
 
 #[doc(hidden)]
-pub trait TransformSoA3Output<R, InA, InB, InC, Op>: CubeType + MItemStorage<R>
+pub trait TransformZip3Output<R, InA, InB, InC, Op>: CubeType + MItemStorage<R>
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -569,7 +569,7 @@ where
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
-impl<R, InA, InB, InC, OutA, Op> TransformSoA3Output<R, InA, InB, InC, Op> for (OutA,)
+impl<R, InA, InB, InC, OutA, Op> TransformZip3Output<R, InA, InB, InC, Op> for (OutA,)
 where
     R: Runtime,
     InA: CubePrimitive + CubeElement,
@@ -621,13 +621,13 @@ where
                 );
             }
         }
-        Ok(SoA1 {
+        Ok(Zip1 {
             source: DeviceVec::from_handle(policy.id(), output_a, len),
         })
     }
 }
 
-impl<R, InA, InB, InC, OutA, OutB, OutC, Op> TransformSoA3Output<R, InA, InB, InC, Op>
+impl<R, InA, InB, InC, OutA, OutB, OutC, Op> TransformZip3Output<R, InA, InB, InC, Op>
     for (OutA, OutB, OutC)
 where
     R: Runtime,
@@ -695,7 +695,7 @@ where
                 );
             }
         }
-        Ok(SoA3 {
+        Ok(Zip3 {
             first: DeviceVec::from_handle(policy.id(), output_a, len),
             second: DeviceVec::from_handle(policy.id(), output_b, len),
             third: DeviceVec::from_handle(policy.id(), output_c, len),
@@ -704,11 +704,11 @@ where
 }
 
 impl_transform_tuple_outputs!(
-    TransformSoA2Output<A: a, B: b>,
+    TransformZip2Output<A: a, B: b>,
     3 => transform_tuple2_to_tuple3_kernel,
 );
 
-macro_rules! define_transform_soa_output_trait {
+macro_rules! define_transform_zip_output_trait {
     ($trait_name:ident < $( $in_ty:ident : $arg:ident ),+ >) => {
         #[doc(hidden)]
         pub trait $trait_name<R, $( $in_ty, )+ Op>: CubeType + MItemStorage<R>
@@ -726,41 +726,41 @@ macro_rules! define_transform_soa_output_trait {
     };
 }
 
-define_transform_soa_output_trait!(TransformSoA4Output<InA: a, InB: b, InC: c, InD: d>);
-define_transform_soa_output_trait!(TransformSoA5Output<InA: a, InB: b, InC: c, InD: d, InE: e>);
-define_transform_soa_output_trait!(
-    TransformSoA6Output<InA: a, InB: b, InC: c, InD: d, InE: e, InF: f>
+define_transform_zip_output_trait!(TransformZip4Output<InA: a, InB: b, InC: c, InD: d>);
+define_transform_zip_output_trait!(TransformZip5Output<InA: a, InB: b, InC: c, InD: d, InE: e>);
+define_transform_zip_output_trait!(
+    TransformZip6Output<InA: a, InB: b, InC: c, InD: d, InE: e, InF: f>
 );
 
 impl_transform_tuple_outputs!(
-    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    TransformZip4Output<A: a, B: b, C: c, D: d>,
     1 => transform_tuple4_to_tuple1_kernel,
 );
 impl_transform_tuple_outputs!(
-    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    TransformZip5Output<A: a, B: b, C: c, D: d, E: e>,
     1 => transform_tuple5_to_tuple1_kernel,
 );
 impl_transform_tuple_outputs!(
-    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    TransformZip6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     1 => transform_tuple6_to_tuple1_kernel,
 );
 impl_transform_tuple_outputs!(
-    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+    TransformZip4Output<A: a, B: b, C: c, D: d>,
     2 => transform_tuple4_to_tuple2_kernel,
     3 => transform_tuple4_to_tuple3_kernel,
 );
 impl_transform_tuple_outputs!(
-    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+    TransformZip5Output<A: a, B: b, C: c, D: d, E: e>,
     2 => transform_tuple5_to_tuple2_kernel,
     3 => transform_tuple5_to_tuple3_kernel,
 );
 impl_transform_tuple_outputs!(
-    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+    TransformZip6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     2 => transform_tuple6_to_tuple2_kernel,
     3 => transform_tuple6_to_tuple3_kernel,
 );
 
-macro_rules! impl_wide_transform_soa_output {
+macro_rules! impl_wide_transform_zip_output {
     (
         $trait_name:ident < $first_in:ident : $first_arg:ident $(, $in_ty:ident : $arg:ident )+ >,
         $kernel:ident,
@@ -824,123 +824,123 @@ macro_rules! impl_wide_transform_soa_output {
     };
 }
 
-impl_wide_transform_soa_output!(
-    TransformSoA2Output<A: a, B: b>,
+impl_wide_transform_zip_output!(
+    TransformZip2Output<A: a, B: b>,
     transform_tuple2_to_tuple4_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA2Output<A: a, B: b>,
+impl_wide_transform_zip_output!(
+    TransformZip2Output<A: a, B: b>,
     transform_tuple2_to_tuple5_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA2Output<A: a, B: b>,
+impl_wide_transform_zip_output!(
+    TransformZip2Output<A: a, B: b>,
     transform_tuple2_to_tuple6_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA2Output<A: a, B: b>,
+impl_wide_transform_zip_output!(
+    TransformZip2Output<A: a, B: b>,
     transform_tuple2_to_tuple7_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
 impl_transform_tuple_outputs!(
-    TransformSoA3Output<A: a, B: b, C: c>,
+    TransformZip3Output<A: a, B: b, C: c>,
     2 => transform_tuple3_to_tuple2_kernel,
 );
-impl_wide_transform_soa_output!(
-    TransformSoA3Output<A: a, B: b, C: c>,
+impl_wide_transform_zip_output!(
+    TransformZip3Output<A: a, B: b, C: c>,
     transform_tuple3_to_tuple4_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA3Output<A: a, B: b, C: c>,
+impl_wide_transform_zip_output!(
+    TransformZip3Output<A: a, B: b, C: c>,
     transform_tuple3_to_tuple5_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA3Output<A: a, B: b, C: c>,
+impl_wide_transform_zip_output!(
+    TransformZip3Output<A: a, B: b, C: c>,
     transform_tuple3_to_tuple6_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA3Output<A: a, B: b, C: c>,
+impl_wide_transform_zip_output!(
+    TransformZip3Output<A: a, B: b, C: c>,
     transform_tuple3_to_tuple7_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+impl_wide_transform_zip_output!(
+    TransformZip4Output<A: a, B: b, C: c, D: d>,
     transform_tuple4_to_tuple4_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+impl_wide_transform_zip_output!(
+    TransformZip4Output<A: a, B: b, C: c, D: d>,
     transform_tuple4_to_tuple5_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+impl_wide_transform_zip_output!(
+    TransformZip4Output<A: a, B: b, C: c, D: d>,
     transform_tuple4_to_tuple6_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA4Output<A: a, B: b, C: c, D: d>,
+impl_wide_transform_zip_output!(
+    TransformZip4Output<A: a, B: b, C: c, D: d>,
     transform_tuple4_to_tuple7_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+impl_wide_transform_zip_output!(
+    TransformZip5Output<A: a, B: b, C: c, D: d, E: e>,
     transform_tuple5_to_tuple4_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+impl_wide_transform_zip_output!(
+    TransformZip5Output<A: a, B: b, C: c, D: d, E: e>,
     transform_tuple5_to_tuple5_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+impl_wide_transform_zip_output!(
+    TransformZip5Output<A: a, B: b, C: c, D: d, E: e>,
     transform_tuple5_to_tuple6_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA5Output<A: a, B: b, C: c, D: d, E: e>,
+impl_wide_transform_zip_output!(
+    TransformZip5Output<A: a, B: b, C: c, D: d, E: e>,
     transform_tuple5_to_tuple7_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+impl_wide_transform_zip_output!(
+    TransformZip6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     transform_tuple6_to_tuple4_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+impl_wide_transform_zip_output!(
+    TransformZip6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     transform_tuple6_to_tuple5_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+impl_wide_transform_zip_output!(
+    TransformZip6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     transform_tuple6_to_tuple6_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
 );
-impl_wide_transform_soa_output!(
-    TransformSoA6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
+impl_wide_transform_zip_output!(
+    TransformZip6Output<A: a, B: b, C: c, D: d, E: e, F: f>,
     transform_tuple6_to_tuple7_kernel,
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5, OutG: output_g: 6)
 );
 
-define_transform_soa_output_trait!(
-    TransformSoA7Output<InA: a, InB: b, InC: c, InD: d, InE: e, InF: f, InG: g>
+define_transform_zip_output_trait!(
+    TransformZip7Output<InA: a, InB: b, InC: c, InD: d, InE: e, InF: f, InG: g>
 );
 
-macro_rules! impl_transform_soa7_output {
+macro_rules! impl_transform_zip7_output {
     (
         $kernel:ident,
         $return_expr:expr,
         ($( $out_ty:ident : $out_handle:ident : $out_field:tt ),+)
     ) => {
         impl<R, InA, InB, InC, InD, InE, InF, InG, $( $out_ty, )+ Op>
-            TransformSoA7Output<R, InA, InB, InC, InD, InE, InF, InG, Op>
+            TransformZip7Output<R, InA, InB, InC, InD, InE, InF, InG, Op>
             for ($( $out_ty, )+)
         where
             R: Runtime,
@@ -1028,31 +1028,31 @@ macro_rules! impl_transform_soa7_output {
     };
 }
 
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple1_kernel,
-    |policy: &CubePolicy<R>, len, output_a| SoA1 {
+    |policy: &CubePolicy<R>, len, output_a| Zip1 {
         source: DeviceVec::from_handle(policy.id(), output_a, len),
     },
     (OutA: output_a: source)
 );
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple2_kernel,
-    |policy: &CubePolicy<R>, len, output_a, output_b| SoA2 {
+    |policy: &CubePolicy<R>, len, output_a, output_b| Zip2 {
         left: DeviceVec::from_handle(policy.id(), output_a, len),
         right: DeviceVec::from_handle(policy.id(), output_b, len),
     },
     (OutA: output_a: left, OutB: output_b: right)
 );
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple3_kernel,
-    |policy: &CubePolicy<R>, len, output_a, output_b, output_c| SoA3 {
+    |policy: &CubePolicy<R>, len, output_a, output_b, output_c| Zip3 {
         first: DeviceVec::from_handle(policy.id(), output_a, len),
         second: DeviceVec::from_handle(policy.id(), output_b, len),
         third: DeviceVec::from_handle(policy.id(), output_c, len),
     },
     (OutA: output_a: first, OutB: output_b: second, OutC: output_c: third)
 );
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple4_kernel,
     |policy: &CubePolicy<R>, len, output_a, output_b, output_c, output_d| (
         DeviceVec::from_handle(policy.id(), output_a, len),
@@ -1062,7 +1062,7 @@ impl_transform_soa7_output!(
     ),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple5_kernel,
     |policy: &CubePolicy<R>, len, output_a, output_b, output_c, output_d, output_e| (
         DeviceVec::from_handle(policy.id(), output_a, len),
@@ -1073,7 +1073,7 @@ impl_transform_soa7_output!(
     ),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4)
 );
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple6_kernel,
     |policy: &CubePolicy<R>, len, output_a, output_b, output_c, output_d, output_e, output_f| (
         DeviceVec::from_handle(policy.id(), output_a, len),
@@ -1085,7 +1085,7 @@ impl_transform_soa7_output!(
     ),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3, OutE: output_e: 4, OutF: output_f: 5)
 );
-impl_transform_soa7_output!(
+impl_transform_zip7_output!(
     transform_tuple7_to_tuple7_kernel,
     |policy: &CubePolicy<R>, len, output_a, output_b, output_c, output_d, output_e, output_f, output_g| (
         DeviceVec::from_handle(policy.id(), output_a, len),
@@ -1111,9 +1111,9 @@ pub trait MaterializeOutput {
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error>;
 }
 
-impl<Left, Right> MaterializeOutput for SoA2<Left, Right>
+impl<Left, Right> MaterializeOutput for Zip2<Left, Right>
 where
-    Self: SoA<Item = (Left::Item, Right::Item), Scalar = Left::Item>,
+    Self: Zip<Item = (Left::Item, Right::Item), Scalar = Left::Item>,
     Left: StorageKernelColumn + KernelColumnAt<S0>,
     Right: StorageKernelColumn<Runtime = Left::Runtime>
         + KernelColumnAt<S0>
@@ -1130,7 +1130,7 @@ where
     );
 
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        SoA::validate(&self)?;
+        Zip::validate(&self)?;
         let left = crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.left)?;
         let right =
             crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.right)?;
@@ -1138,9 +1138,9 @@ where
     }
 }
 
-impl<Source> MaterializeOutput for SoA1<Source>
+impl<Source> MaterializeOutput for Zip1<Source>
 where
-    Self: SoA<Item = (Source::Item,), Scalar = Source::Item>,
+    Self: Zip<Item = (Source::Item,), Scalar = Source::Item>,
     Source: StorageKernelColumn + KernelColumnAt<S0>,
     Source::Item: CubePrimitive + CubeElement,
     Source::Expr: DeviceGpuExpr<Source::Item>,
@@ -1149,7 +1149,7 @@ where
     type Output = (DeviceVec<Source::Runtime, Source::Item>,);
 
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        SoA::validate(&self)?;
+        Zip::validate(&self)?;
         let source =
             crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.source)?;
         Ok((source,))
@@ -1197,9 +1197,9 @@ impl_wide_device_vec_materialize_output!(A: 0, B: 1, C: 2, D: 3, E: 4);
 impl_wide_device_vec_materialize_output!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
 impl_wide_device_vec_materialize_output!(A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6);
 
-impl<First, Second, Third> MaterializeOutput for SoA3<First, Second, Third>
+impl<First, Second, Third> MaterializeOutput for Zip3<First, Second, Third>
 where
-    Self: SoA<Item = (First::Item, Second::Item, Third::Item), Scalar = First::Item>,
+    Self: Zip<Item = (First::Item, Second::Item, Third::Item), Scalar = First::Item>,
     First: StorageKernelColumn + KernelColumnAt<S0>,
     Second: StorageKernelColumn<Runtime = First::Runtime>
         + KernelColumnAt<S0>
@@ -1222,7 +1222,7 @@ where
     );
 
     fn materialize_output(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        SoA::validate(&self)?;
+        Zip::validate(&self)?;
         let first =
             crate::detail::apply::MaterializePayloadApply::collect_expr(policy, &self.first)?;
         let second =

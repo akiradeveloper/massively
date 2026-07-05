@@ -7,8 +7,8 @@ use crate::{
             search_block_count, stage_search_column,
         },
         device::{
-            DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA2, SoA3, SoAView2,
-            SoAView3, SoAView4, SoAView5, SoAView6, SoAView7,
+            DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyZip, S0, Zip2, Zip3, ZipView2,
+            ZipView3, ZipView4, ZipView5, ZipView6, ZipView7,
         },
         op::kernel::BinaryPredicateOp,
     },
@@ -321,7 +321,7 @@ macro_rules! impl_tuple_search_payload_apply {
             TupleSearchPayloadApply<$name<$first, $( $rest ),+>, Less>
             for $name<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $(
                 $rest: KernelColumn<Runtime = <$first as KernelColumn>::Runtime> + KernelColumnAt<S0>,
@@ -346,8 +346,8 @@ macro_rules! impl_tuple_search_payload_apply {
                 policy: &CubePolicy<Self::Runtime>,
                 values: $name<$first, $( $rest ),+>,
             ) -> Result<DeviceVec<Self::Runtime, MIndex>, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&values)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&values)?;
                 let source_len = self.$first_field.len();
                 let value_len = values.$first_field.len();
                 if let Some(output) =
@@ -415,8 +415,8 @@ macro_rules! impl_tuple_search_payload_apply {
                 policy: &CubePolicy<Self::Runtime>,
                 values: $name<$first, $( $rest ),+>,
             ) -> Result<DeviceVec<Self::Runtime, MIndex>, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&values)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&values)?;
                 let source_len = self.$first_field.len();
                 let value_len = values.$first_field.len();
                 if let Some(output) =
@@ -483,42 +483,42 @@ macro_rules! impl_tuple_search_payload_apply {
 }
 
 impl_tuple_search_payload_apply!(
-    SoAView2<A, B> { left, right },
+    ZipView2<A, B> { left, right },
     tuple2_lower_bound_device_expr_many_kernel,
     tuple2_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoAView3<A, B, C> { first, second, third },
+    ZipView3<A, B, C> { first, second, third },
     tuple3_lower_bound_device_expr_many_kernel,
     tuple3_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoAView4<A, B, C, D> { a, b, c, d },
+    ZipView4<A, B, C, D> { a, b, c, d },
     tuple4_lower_bound_device_expr_many_kernel,
     tuple4_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoAView5<A, B, C, D, E> { a, b, c, d, e },
+    ZipView5<A, B, C, D, E> { a, b, c, d, e },
     tuple5_lower_bound_device_expr_many_kernel,
     tuple5_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoAView6<A, B, C, D, E, F> { a, b, c, d, e, f },
+    ZipView6<A, B, C, D, E, F> { a, b, c, d, e, f },
     tuple6_lower_bound_device_expr_many_kernel,
     tuple6_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoAView7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g },
+    ZipView7<A, B, C, D, E, F, G> { a, b, c, d, e, f, g },
     tuple7_lower_bound_device_expr_many_kernel,
     tuple7_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoA2<A, B> { left, right },
+    Zip2<A, B> { left, right },
     tuple2_lower_bound_device_expr_many_kernel,
     tuple2_upper_bound_device_expr_many_kernel
 );
 impl_tuple_search_payload_apply!(
-    SoA3<A, B, C> { first, second, third },
+    Zip3<A, B, C> { first, second, third },
     tuple3_lower_bound_device_expr_many_kernel,
     tuple3_upper_bound_device_expr_many_kernel
 );

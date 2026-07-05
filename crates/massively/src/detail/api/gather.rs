@@ -5,8 +5,8 @@ use cubecl::prelude::*;
 /// Gathers `input[indices[i]]` into new owned device storage.
 ///
 /// This is a borrowing algorithm: `input` and `indices` are read-only. For
-/// multiple value columns, pass borrowed columns as `SoA2` or `SoA3`.
-/// Indices may be passed as `SoA1(indices.slice(..))`.
+/// multiple value columns, pass borrowed columns as `Zip2` or `Zip3`.
+/// Indices may be passed as `Zip1(indices.slice(..))`.
 pub fn gather<Input, Indices>(
     policy: &CubePolicy<<Indices as crate::detail::read::KernelIndexRead>::Runtime>,
     input: Input,

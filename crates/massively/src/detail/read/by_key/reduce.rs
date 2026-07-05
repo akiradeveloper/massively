@@ -79,7 +79,7 @@ where
     KeyEq: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
     type Control = ReduceByKeyControl<KeySource::Runtime>;
 
     fn reduce_by_key_control(
@@ -90,7 +90,7 @@ where
         let len = <KeySource as KernelColumn>::len(&self);
         if len == 0 {
             return Ok((
-                DeviceSoA1 {
+                DeviceZip1 {
                     source: policy.empty_device_vec(),
                 },
                 empty_reduce_by_key_control(policy, len),
@@ -139,7 +139,7 @@ where
             crate::detail::apply::SelectedPayloadApply::new(&output_selection, output_count);
         let out_keys = payload_apply.apply_expr(policy, &self)?;
         Ok((
-            DeviceSoA1 { source: out_keys },
+            DeviceZip1 { source: out_keys },
             ReduceByKeyControl::from_segment(
                 SegmentControl::from_head_end_flags(head_flags, end_flags, len, len_u32),
                 output_selection,
@@ -158,7 +158,7 @@ where
     crate::detail::api::Tuple1Less<KeyEq>: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
     type Control = ReduceByKeyControl<KeySource::Runtime>;
 
     fn reduce_by_key_control(
@@ -184,7 +184,7 @@ where
 {
     type Runtime = First::Runtime;
     type OutputKeys =
-        DeviceSoA2<DeviceVec<First::Runtime, First::Item>, DeviceVec<First::Runtime, Second::Item>>;
+        DeviceZip2<DeviceVec<First::Runtime, First::Item>, DeviceVec<First::Runtime, Second::Item>>;
     type Control = ReduceByKeyControl<First::Runtime>;
 
     fn reduce_by_key_control(
@@ -203,7 +203,7 @@ where
         }
         if len == 0 {
             return Ok((
-                DeviceSoA2 {
+                DeviceZip2 {
                     left: policy.empty_device_vec(),
                     right: policy.empty_device_vec(),
                 },
@@ -224,7 +224,7 @@ where
         let left = payload_apply.apply_expr(policy, &self.0)?;
         let right = payload_apply.apply_expr(policy, &self.1)?;
         Ok((
-            DeviceSoA2 { left, right },
+            DeviceZip2 { left, right },
             ReduceByKeyControl::from_segment(
                 SegmentControl::from_head_end_flags(head_flags, end_flags, len, len_u32),
                 output_selection,
@@ -248,7 +248,7 @@ where
     KeyEq: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
-    type OutputKeys = DeviceSoA3<
+    type OutputKeys = DeviceZip3<
         DeviceVec<First::Runtime, First::Item>,
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
@@ -279,7 +279,7 @@ where
         }
         if len == 0 {
             return Ok((
-                DeviceSoA3 {
+                DeviceZip3 {
                     first: policy.empty_device_vec(),
                     second: policy.empty_device_vec(),
                     third: policy.empty_device_vec(),
@@ -303,7 +303,7 @@ where
         let second = payload_apply.apply_expr(policy, &self.1)?;
         let third = payload_apply.apply_expr(policy, &self.2)?;
         Ok((
-            DeviceSoA3 {
+            DeviceZip3 {
                 first,
                 second,
                 third,
@@ -327,7 +327,7 @@ where
 {
     type Runtime = ValueSource::Runtime;
     type Init = (ValueSource::Item,);
-    type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+    type OutputValues = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn reduce_by_key_values(
         self,
@@ -338,13 +338,13 @@ where
         <ValueSource as KernelColumn>::validate(&self.0)?;
         ensure_same_len(<ValueSource as KernelColumn>::len(&self.0), control.len)?;
         if control.len == 0 {
-            return Ok(DeviceSoA1 {
+            return Ok(DeviceZip1 {
                 source: policy.empty_device_vec(),
             });
         }
 
         let apply = crate::detail::apply::SegmentedReduceApply::new(control);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: apply.apply_expr::<ValueSource, Op>(policy, &self.0, init.0)?,
         })
     }
@@ -363,7 +363,7 @@ where
 {
     type Runtime = ValueA::Runtime;
     type Init = (ValueA::Item, ValueB::Item);
-    type OutputValues = DeviceSoA2<
+    type OutputValues = DeviceZip2<
         DeviceVec<ValueA::Runtime, ValueA::Item>,
         DeviceVec<ValueA::Runtime, ValueB::Item>,
     >;
@@ -377,7 +377,7 @@ where
         validate_columns2(&self.0, &self.1)?;
         ensure_same_len(<ValueA as KernelColumn>::len(&self.0), control.len)?;
         if control.len == 0 {
-            return Ok(DeviceSoA2 {
+            return Ok(DeviceZip2 {
                 left: policy.empty_device_vec(),
                 right: policy.empty_device_vec(),
             });
@@ -405,7 +405,7 @@ where
 {
     type Runtime = ValueA::Runtime;
     type Init = (ValueA::Item, ValueB::Item, ValueC::Item);
-    type OutputValues = DeviceSoA3<
+    type OutputValues = DeviceZip3<
         DeviceVec<ValueA::Runtime, ValueA::Item>,
         DeviceVec<ValueA::Runtime, ValueB::Item>,
         DeviceVec<ValueA::Runtime, ValueC::Item>,
@@ -420,7 +420,7 @@ where
         validate_columns3(&self.0, &self.1, &self.2)?;
         ensure_same_len(<ValueA as KernelColumn>::len(&self.0), control.len)?;
         if control.len == 0 {
-            return Ok(DeviceSoA3 {
+            return Ok(DeviceZip3 {
                 first: policy.empty_device_vec(),
                 second: policy.empty_device_vec(),
                 third: policy.empty_device_vec(),

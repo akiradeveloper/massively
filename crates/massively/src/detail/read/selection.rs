@@ -95,7 +95,7 @@ where
     Source::Expr: DeviceGpuExpr<Source::Item>,
 {
     type Runtime = Source::Runtime;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn copy_where_read(
         self,
@@ -107,7 +107,7 @@ where
         let selected_rank = stencil.selected_rank_with_policy(policy, false)?;
         let count = select::selected_count(policy, &selected_rank)?;
         let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: payload_apply.apply_expr(policy, &self)?,
         })
     }
@@ -123,7 +123,7 @@ macro_rules! impl_kernel_copy_where_tuple1 {
             Source::Expr: DeviceGpuExpr<Source::Item>,
         {
             type Runtime = Source::Runtime;
-            type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
             fn copy_where_read(
                 self,
@@ -136,7 +136,7 @@ macro_rules! impl_kernel_copy_where_tuple1 {
                 let count = select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
                     crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: payload_apply.apply_expr(policy, &self.$field)?,
                 })
             }
@@ -144,24 +144,24 @@ macro_rules! impl_kernel_copy_where_tuple1 {
     };
 }
 
-impl_kernel_copy_where_tuple1!(SoAView1<Source>, source);
-impl_kernel_copy_where_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_copy_where_tuple1!(ZipView1<Source>, source);
+impl_kernel_copy_where_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Stencil, Pred> KernelCopyWhereInput<Stencil, Pred> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    SoAView1<Source>: KernelCopyWhereInput<Stencil, Pred, Runtime = Source::Runtime>,
+    ZipView1<Source>: KernelCopyWhereInput<Stencil, Pred, Runtime = Source::Runtime>,
 {
     type Runtime = Source::Runtime;
-    type Output = <SoAView1<Source> as KernelCopyWhereInput<Stencil, Pred>>::Output;
+    type Output = <ZipView1<Source> as KernelCopyWhereInput<Stencil, Pred>>::Output;
 
     fn copy_where_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Source> as KernelCopyWhereInput<Stencil, Pred>>::copy_where_read(
-            SoAView1 { source: self.0 },
+        <ZipView1<Source> as KernelCopyWhereInput<Stencil, Pred>>::copy_where_read(
+            ZipView1 { source: self.0 },
             policy,
             stencil,
         )
@@ -202,23 +202,23 @@ macro_rules! impl_kernel_copy_where_tuple2 {
     };
 }
 
-impl_kernel_copy_where_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_copy_where_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_copy_where_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_copy_where_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, Stencil, Pred> KernelCopyWhereInput<Stencil, Pred> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelCopyWhereInput<Stencil, Pred>,
+    ZipView2<Left, Right>: KernelCopyWhereInput<Stencil, Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelCopyWhereInput<Stencil, Pred>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelCopyWhereInput<Stencil, Pred>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelCopyWhereInput<Stencil, Pred>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelCopyWhereInput<Stencil, Pred>>::Output;
 
     fn copy_where_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelCopyWhereInput<Stencil, Pred>>::copy_where_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelCopyWhereInput<Stencil, Pred>>::copy_where_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -274,15 +274,15 @@ macro_rules! impl_kernel_copy_where_tuple3 {
 }
 
 impl_kernel_copy_where_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_copy_where_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -291,18 +291,18 @@ impl_kernel_copy_where_tuple3!(
 impl<First, Second, Third, Stencil, Pred> KernelCopyWhereInput<Stencil, Pred>
     for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelCopyWhereInput<Stencil, Pred>,
+    ZipView3<First, Second, Third>: KernelCopyWhereInput<Stencil, Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelCopyWhereInput<Stencil, Pred>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelCopyWhereInput<Stencil, Pred>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelCopyWhereInput<Stencil, Pred>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelCopyWhereInput<Stencil, Pred>>::Output;
 
     fn copy_where_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         stencil: Stencil,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelCopyWhereInput<Stencil, Pred>>::copy_where_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelCopyWhereInput<Stencil, Pred>>::copy_where_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -397,7 +397,7 @@ where
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn replace_where_read(
         self,
@@ -408,7 +408,7 @@ where
         <Source as KernelColumn>::validate(&self)?;
         ensure_same_len(<Source as KernelColumn>::len(&self), stencil.len())?;
         let flags = stencil.selected_rank_with_policy(policy, false)?;
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: replace_one_with_flags_read(policy, &self, replacement, &flags.flag)?,
         })
     }
@@ -425,7 +425,7 @@ macro_rules! impl_kernel_replace_where_tuple1 {
         {
             type Runtime = Source::Runtime;
             type Item = (Source::Item,);
-            type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
             fn replace_where_read(
                 self,
@@ -436,7 +436,7 @@ macro_rules! impl_kernel_replace_where_tuple1 {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 ensure_same_len(<Source as KernelColumn>::len(&self.$field), stencil.len())?;
                 let flags = stencil.selected_rank_with_policy(policy, false)?;
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: replace_one_with_flags_read(
                         policy,
                         &self.$field,
@@ -449,17 +449,17 @@ macro_rules! impl_kernel_replace_where_tuple1 {
     };
 }
 
-impl_kernel_replace_where_tuple1!(SoAView1<Source>, source);
-impl_kernel_replace_where_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_replace_where_tuple1!(ZipView1<Source>, source);
+impl_kernel_replace_where_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Stencil, Pred> KernelReplaceWhereInput<Stencil, Pred> for (Source,)
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    SoAView1<Source>: KernelReplaceWhereInput<Stencil, Pred, Runtime = Source::Runtime>,
+    ZipView1<Source>: KernelReplaceWhereInput<Stencil, Pred, Runtime = Source::Runtime>,
 {
     type Runtime = Source::Runtime;
-    type Item = <SoAView1<Source> as KernelReplaceWhereInput<Stencil, Pred>>::Item;
-    type Output = <SoAView1<Source> as KernelReplaceWhereInput<Stencil, Pred>>::Output;
+    type Item = <ZipView1<Source> as KernelReplaceWhereInput<Stencil, Pred>>::Item;
+    type Output = <ZipView1<Source> as KernelReplaceWhereInput<Stencil, Pred>>::Output;
 
     fn replace_where_read(
         self,
@@ -467,8 +467,8 @@ where
         replacement: Self::Item,
         stencil: Stencil,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Source> as KernelReplaceWhereInput<Stencil, Pred>>::replace_where_read(
-            SoAView1 { source: self.0 },
+        <ZipView1<Source> as KernelReplaceWhereInput<Stencil, Pred>>::replace_where_read(
+            ZipView1 { source: self.0 },
             policy,
             replacement,
             stencil,
@@ -521,16 +521,16 @@ macro_rules! impl_kernel_replace_where_tuple2 {
     };
 }
 
-impl_kernel_replace_where_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_replace_where_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_replace_where_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_replace_where_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, Stencil, Pred> KernelReplaceWhereInput<Stencil, Pred> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelReplaceWhereInput<Stencil, Pred>,
+    ZipView2<Left, Right>: KernelReplaceWhereInput<Stencil, Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::Runtime;
-    type Item = <SoAView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::Item;
-    type Output = <SoAView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::Runtime;
+    type Item = <ZipView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::Item;
+    type Output = <ZipView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::Output;
 
     fn replace_where_read(
         self,
@@ -538,8 +538,8 @@ where
         replacement: Self::Item,
         stencil: Stencil,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::replace_where_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelReplaceWhereInput<Stencil, Pred>>::replace_where_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -608,15 +608,15 @@ macro_rules! impl_kernel_replace_where_tuple3 {
 }
 
 impl_kernel_replace_where_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_replace_where_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -625,13 +625,13 @@ impl_kernel_replace_where_tuple3!(
 impl<First, Second, Third, Stencil, Pred> KernelReplaceWhereInput<Stencil, Pred>
     for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelReplaceWhereInput<Stencil, Pred>,
+    ZipView3<First, Second, Third>: KernelReplaceWhereInput<Stencil, Pred>,
 {
     type Runtime =
-        <SoAView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::Runtime;
-    type Item = <SoAView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::Item;
+        <ZipView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::Runtime;
+    type Item = <ZipView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::Item;
     type Output =
-        <SoAView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::Output;
+        <ZipView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::Output;
 
     fn replace_where_read(
         self,
@@ -639,8 +639,8 @@ where
         replacement: Self::Item,
         stencil: Stencil,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::replace_where_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelReplaceWhereInput<Stencil, Pred>>::replace_where_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -820,7 +820,7 @@ where
     Pred: PredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
     type Env = Pred::Env;
 
     fn select_read(
@@ -830,7 +830,7 @@ where
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <Source as KernelColumn>::validate(&self)?;
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: selected_expr_with_predicate::<Source, Pred>(policy, &self, invert, env)?,
         })
     }
@@ -846,7 +846,7 @@ macro_rules! impl_kernel_select_tuple1 {
             Pred: PredicateOp<Source::Item>,
         {
             type Runtime = Source::Runtime;
-            type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
             type Env = Pred::Env;
 
             fn select_read(
@@ -856,7 +856,7 @@ macro_rules! impl_kernel_select_tuple1 {
                 env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: selected_expr_with_predicate::<Source, Pred>(
                         policy,
                         &self.$field,
@@ -869,8 +869,8 @@ macro_rules! impl_kernel_select_tuple1 {
     };
 }
 
-impl_kernel_select_tuple1!(SoAView1<Source>, source);
-impl_kernel_select_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_select_tuple1!(ZipView1<Source>, source);
+impl_kernel_select_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Pred> KernelSelectInput<Pred> for (Source,)
 where
@@ -934,16 +934,16 @@ macro_rules! impl_kernel_select_tuple2 {
     };
 }
 
-impl_kernel_select_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_select_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_select_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_select_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, Pred> KernelSelectInput<Pred> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelSelectInput<Pred>,
+    ZipView2<Left, Right>: KernelSelectInput<Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelSelectInput<Pred>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelSelectInput<Pred>>::Output;
-    type Env = <SoAView2<Left, Right> as KernelSelectInput<Pred>>::Env;
+    type Runtime = <ZipView2<Left, Right> as KernelSelectInput<Pred>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelSelectInput<Pred>>::Output;
+    type Env = <ZipView2<Left, Right> as KernelSelectInput<Pred>>::Env;
 
     fn select_read(
         self,
@@ -951,8 +951,8 @@ where
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelSelectInput<Pred>>::select_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelSelectInput<Pred>>::select_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -1015,15 +1015,15 @@ macro_rules! impl_kernel_select_tuple3 {
 }
 
 impl_kernel_select_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_select_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -1031,11 +1031,11 @@ impl_kernel_select_tuple3!(
 
 impl<First, Second, Third, Pred> KernelSelectInput<Pred> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelSelectInput<Pred>,
+    ZipView3<First, Second, Third>: KernelSelectInput<Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::Output;
-    type Env = <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::Env;
+    type Runtime = <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::Output;
+    type Env = <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::Env;
 
     fn select_read(
         self,
@@ -1043,8 +1043,8 @@ where
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelSelectInput<Pred>>::select_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::select_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -1132,8 +1132,8 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
     };
 }
 
-impl_kernel_predicate_query_tuple1!(SoAView1<Source>, source);
-impl_kernel_predicate_query_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_predicate_query_tuple1!(ZipView1<Source>, source);
+impl_kernel_predicate_query_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Pred> KernelPredicateQueryInput<Pred> for (Source,)
 where
@@ -1217,15 +1217,15 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
     };
 }
 
-impl_kernel_predicate_query_tuple2!(SoAView2<Left, Right>, left, right);
-impl_kernel_predicate_query_tuple2!(DeviceSoA2<Left, Right>, left, right);
+impl_kernel_predicate_query_tuple2!(ZipView2<Left, Right>, left, right);
+impl_kernel_predicate_query_tuple2!(DeviceZip2<Left, Right>, left, right);
 
 impl<Left, Right, Pred> KernelPredicateQueryInput<Pred> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelPredicateQueryInput<Pred>,
+    ZipView2<Left, Right>: KernelPredicateQueryInput<Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Runtime;
-    type Env = <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Env;
+    type Runtime = <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Runtime;
+    type Env = <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Env;
 
     fn count_read(
         self,
@@ -1233,8 +1233,8 @@ where
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<MIndex, Error> {
-        <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::count_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::count_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -1250,8 +1250,8 @@ where
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView2<Left, Right> as KernelPredicateQueryInput<Pred>>::find_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::find_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -1317,15 +1317,15 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
     };
 }
 
-impl_kernel_predicate_query_tuple3!(SoAView3<First, Second, Third>, first, second, third);
-impl_kernel_predicate_query_tuple3!(DeviceSoA3<First, Second, Third>, first, second, third);
+impl_kernel_predicate_query_tuple3!(ZipView3<First, Second, Third>, first, second, third);
+impl_kernel_predicate_query_tuple3!(DeviceZip3<First, Second, Third>, first, second, third);
 
 impl<First, Second, Third, Pred> KernelPredicateQueryInput<Pred> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelPredicateQueryInput<Pred>,
+    ZipView3<First, Second, Third>: KernelPredicateQueryInput<Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Runtime;
-    type Env = <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Env;
+    type Runtime = <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Runtime;
+    type Env = <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Env;
 
     fn count_read(
         self,
@@ -1333,8 +1333,8 @@ where
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<MIndex, Error> {
-        <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::count_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::count_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -1351,8 +1351,8 @@ where
         invert: bool,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error> {
-        <SoAView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::find_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::find_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -1430,7 +1430,7 @@ where
     Pred: PredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
     type SplitOutput = (Self::Output, Self::Output);
     type Env = Pred::Env;
 
@@ -1466,8 +1466,8 @@ where
         );
         let (matching, failing) = payload_apply.apply_expr(policy, &self)?;
         Ok((
-            DeviceSoA1 { source: matching },
-            DeviceSoA1 { source: failing },
+            DeviceZip1 { source: matching },
+            DeviceZip1 { source: failing },
         ))
     }
 }
@@ -1482,7 +1482,7 @@ macro_rules! impl_kernel_partition_tuple1 {
             Pred: PredicateOp<Source::Item>,
         {
             type Runtime = Source::Runtime;
-            type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
             type SplitOutput = (Self::Output, Self::Output);
             type Env = Pred::Env;
 
@@ -1518,16 +1518,16 @@ macro_rules! impl_kernel_partition_tuple1 {
                 );
                 let (matching, failing) = payload_apply.apply_expr(policy, &self.$field)?;
                 Ok((
-                    DeviceSoA1 { source: matching },
-                    DeviceSoA1 { source: failing },
+                    DeviceZip1 { source: matching },
+                    DeviceZip1 { source: failing },
                 ))
             }
         }
     };
 }
 
-impl_kernel_partition_tuple1!(SoAView1<Source>, source);
-impl_kernel_partition_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_partition_tuple1!(ZipView1<Source>, source);
+impl_kernel_partition_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Pred> KernelPartitionInput<Pred> for (Source,)
 where
@@ -1631,25 +1631,25 @@ macro_rules! impl_kernel_partition_tuple2 {
     };
 }
 
-impl_kernel_partition_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_partition_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_partition_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_partition_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, Pred> KernelPartitionInput<Pred> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelPartitionInput<Pred>,
+    ZipView2<Left, Right>: KernelPartitionInput<Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::Output;
-    type SplitOutput = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::SplitOutput;
-    type Env = <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::Env;
+    type Runtime = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::Output;
+    type SplitOutput = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::SplitOutput;
+    type Env = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::Env;
 
     fn is_partitioned_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<bool, Error> {
-        <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::is_partitioned_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::is_partitioned_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -1663,8 +1663,8 @@ where
         policy: &CubePolicy<Self::Runtime>,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
-        <SoAView2<Left, Right> as KernelPartitionInput<Pred>>::partition_copy_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::partition_copy_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -1756,15 +1756,15 @@ macro_rules! impl_kernel_partition_tuple3 {
 }
 
 impl_kernel_partition_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_partition_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -1772,20 +1772,20 @@ impl_kernel_partition_tuple3!(
 
 impl<First, Second, Third, Pred> KernelPartitionInput<Pred> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelPartitionInput<Pred>,
+    ZipView3<First, Second, Third>: KernelPartitionInput<Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::Output;
-    type SplitOutput = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::SplitOutput;
-    type Env = <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::Env;
+    type Runtime = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::Output;
+    type SplitOutput = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::SplitOutput;
+    type Env = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::Env;
 
     fn is_partitioned_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<bool, Error> {
-        <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::is_partitioned_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::is_partitioned_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -1800,8 +1800,8 @@ where
         policy: &CubePolicy<Self::Runtime>,
         env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
-        <SoAView3<First, Second, Third> as KernelPartitionInput<Pred>>::partition_copy_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::partition_copy_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -2158,7 +2158,7 @@ where
     Pred: BinaryPredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
-    type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+    type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
     fn unique_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
         let flags = unique_one_flags_read::<Source, Pred>(policy, &self)?;
@@ -2167,7 +2167,7 @@ where
         let selected_rank = select::selected_rank_from_flags(policy, len, len_u32, flags)?;
         let count = select::selected_count(policy, &selected_rank)?;
         let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: payload_apply.apply_expr(policy, &self)?,
         })
     }
@@ -2183,7 +2183,7 @@ macro_rules! impl_kernel_unique_tuple1 {
             Pred: BinaryPredicateOp<Source::Item>,
         {
             type Runtime = Source::Runtime;
-            type Output = DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>;
+            type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
 
             fn unique_read(
                 self,
@@ -2196,7 +2196,7 @@ macro_rules! impl_kernel_unique_tuple1 {
                 let count = select::selected_count(policy, &selected_rank)?;
                 let payload_apply =
                     crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: payload_apply.apply_expr(policy, &self.$field)?,
                 })
             }
@@ -2204,8 +2204,8 @@ macro_rules! impl_kernel_unique_tuple1 {
     };
 }
 
-impl_kernel_unique_tuple1!(SoAView1<Source>, source);
-impl_kernel_unique_tuple1!(DeviceSoA1<Source>, source);
+impl_kernel_unique_tuple1!(ZipView1<Source>, source);
+impl_kernel_unique_tuple1!(DeviceZip1<Source>, source);
 
 impl<Source, Pred> KernelUniqueInput<Pred> for (Source,)
 where
@@ -2288,19 +2288,19 @@ macro_rules! impl_kernel_unique_tuple2 {
     };
 }
 
-impl_kernel_unique_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_unique_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_unique_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_unique_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, Pred> KernelUniqueInput<Pred> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelUniqueInput<Pred>,
+    ZipView2<Left, Right>: KernelUniqueInput<Pred>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelUniqueInput<Pred>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelUniqueInput<Pred>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelUniqueInput<Pred>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelUniqueInput<Pred>>::Output;
 
     fn unique_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelUniqueInput<Pred>>::unique_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelUniqueInput<Pred>>::unique_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -2395,19 +2395,19 @@ macro_rules! impl_kernel_unique_tuple3 {
     };
 }
 
-impl_kernel_unique_tuple3!(SoAView3<First, Second, Third>, DeviceSoA3, first, second, third);
-impl_kernel_unique_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, second, third);
+impl_kernel_unique_tuple3!(ZipView3<First, Second, Third>, DeviceZip3, first, second, third);
+impl_kernel_unique_tuple3!(DeviceZip3<First, Second, Third>, DeviceZip3, first, second, third);
 
 impl<First, Second, Third, Pred> KernelUniqueInput<Pred> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelUniqueInput<Pred>,
+    ZipView3<First, Second, Third>: KernelUniqueInput<Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelUniqueInput<Pred>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelUniqueInput<Pred>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelUniqueInput<Pred>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelUniqueInput<Pred>>::Output;
 
     fn unique_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelUniqueInput<Pred>>::unique_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelUniqueInput<Pred>>::unique_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

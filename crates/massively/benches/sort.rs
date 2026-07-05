@@ -23,11 +23,11 @@ fn check_sort_by_key(exec: &Executor<WgpuRuntime>) {
     let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
     sort_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         Less,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&out_keys).unwrap(), vec![0, 1, 2]);
@@ -50,11 +50,11 @@ fn bench_sort(c: &mut Criterion) {
                 iter_gpu(b, || {
                     sort_by_key(
                         &exec,
-                        massively::SoA1(black_box(keys.slice(..))),
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(keys.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         Less,
-                        massively::SoA1(black_box(out_keys.slice_mut(..))),
-                        massively::SoA1(black_box(out_values.slice_mut(..))),
+                        massively::Zip1(black_box(out_keys.slice_mut(..))),
+                        massively::Zip1(black_box(out_values.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);

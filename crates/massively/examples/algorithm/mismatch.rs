@@ -11,8 +11,8 @@ fn main() -> common::Result {
 
     let index = mismatch(
         &exec,
-        SoA1(left.slice(..)),
-        SoA1(right.slice(..)),
+        Zip1(left.slice(..)),
+        Zip1(right.slice(..)),
         common::EqualF32,
     )?;
 

@@ -42,7 +42,7 @@ where
     IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     type Runtime = InputSource::Runtime;
-    type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
+    type Output = DeviceZip1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
 
     fn gather_read(
         self,
@@ -53,7 +53,7 @@ where
             crate::detail::apply::MaterializePayloadApply::collect_expr(policy, indices)?;
         let control = crate::detail::control::PermutationControl::from_indices(&index_values)?;
         let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: apply.apply_expr(policy, &self)?,
         })
     }
@@ -71,7 +71,7 @@ macro_rules! impl_kernel_gather_tuple1 {
             IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = InputSource::Runtime;
-            type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
+            type Output = DeviceZip1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
 
             fn gather_read(
                 self,
@@ -88,8 +88,8 @@ macro_rules! impl_kernel_gather_tuple1 {
     };
 }
 
-impl_kernel_gather_tuple1!(SoAView1<InputSource>, source);
-impl_kernel_gather_tuple1!(DeviceSoA1<InputSource>, source);
+impl_kernel_gather_tuple1!(ZipView1<InputSource>, source);
+impl_kernel_gather_tuple1!(DeviceZip1<InputSource>, source);
 
 impl<InputSource, IndexSource> KernelGatherInput<IndexSource> for (InputSource,)
 where
@@ -143,24 +143,24 @@ macro_rules! impl_kernel_gather_tuple2 {
     };
 }
 
-impl_kernel_gather_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_gather_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_gather_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_gather_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, IndexSource> KernelGatherInput<IndexSource> for (Left, Right)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView2<Left, Right>: KernelGatherInput<IndexSource>,
+    ZipView2<Left, Right>: KernelGatherInput<IndexSource>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelGatherInput<IndexSource>>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelGatherInput<IndexSource>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelGatherInput<IndexSource>>::Runtime;
+    type Output = <ZipView2<Left, Right> as KernelGatherInput<IndexSource>>::Output;
 
     fn gather_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: &IndexSource,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelGatherInput<IndexSource>>::gather_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelGatherInput<IndexSource>>::gather_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -216,24 +216,24 @@ macro_rules! impl_kernel_gather_tuple3 {
     };
 }
 
-impl_kernel_gather_tuple3!(SoAView3<First, Second, Third>, DeviceSoA3, first, second, third);
-impl_kernel_gather_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, second, third);
+impl_kernel_gather_tuple3!(ZipView3<First, Second, Third>, DeviceZip3, first, second, third);
+impl_kernel_gather_tuple3!(DeviceZip3<First, Second, Third>, DeviceZip3, first, second, third);
 
 impl<First, Second, Third, IndexSource> KernelGatherInput<IndexSource> for (First, Second, Third)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView3<First, Second, Third>: KernelGatherInput<IndexSource>,
+    ZipView3<First, Second, Third>: KernelGatherInput<IndexSource>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelGatherInput<IndexSource>>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelGatherInput<IndexSource>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelGatherInput<IndexSource>>::Runtime;
+    type Output = <ZipView3<First, Second, Third> as KernelGatherInput<IndexSource>>::Output;
 
     fn gather_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         indices: &IndexSource,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelGatherInput<IndexSource>>::gather_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelGatherInput<IndexSource>>::gather_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -325,7 +325,7 @@ where
     IndexSource::Expr: DeviceGpuExpr<MIndex>,
 {
     type Runtime = InputSource::Runtime;
-    type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
+    type Output = DeviceZip1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
     type Default = InputSource::Item;
 
     fn gather_where_read(
@@ -335,7 +335,7 @@ where
         stencil: Stencil,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: gather_where_one_read::<InputSource, IndexSource, Stencil, Pred>(
                 policy, &self, indices, &stencil, default,
             )?,
@@ -357,7 +357,7 @@ macro_rules! impl_kernel_gather_where_tuple1 {
             IndexSource::Expr: DeviceGpuExpr<MIndex>,
         {
             type Runtime = InputSource::Runtime;
-            type Output = DeviceSoA1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
+            type Output = DeviceZip1<DeviceVec<InputSource::Runtime, InputSource::Item>>;
             type Default = (InputSource::Item,);
 
             fn gather_where_read(
@@ -367,7 +367,7 @@ macro_rules! impl_kernel_gather_where_tuple1 {
                 stencil: Stencil,
                 default: Self::Default,
             ) -> Result<Self::Output, Error> {
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: gather_where_one_read::<InputSource, IndexSource, Stencil, Pred>(
                         policy,
                         &self.$field,
@@ -381,22 +381,22 @@ macro_rules! impl_kernel_gather_where_tuple1 {
     };
 }
 
-impl_kernel_gather_where_tuple1!(SoAView1<InputSource>, source);
-impl_kernel_gather_where_tuple1!(DeviceSoA1<InputSource>, source);
+impl_kernel_gather_where_tuple1!(ZipView1<InputSource>, source);
+impl_kernel_gather_where_tuple1!(DeviceZip1<InputSource>, source);
 
 impl<InputSource, IndexSource, Stencil, Pred> KernelGatherWhereInput<IndexSource, Stencil, Pred>
     for (InputSource,)
 where
     InputSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
-    SoAView1<InputSource>:
+    ZipView1<InputSource>:
         KernelGatherWhereInput<IndexSource, Stencil, Pred, Runtime = InputSource::Runtime>,
 {
     type Runtime = InputSource::Runtime;
     type Output =
-        <SoAView1<InputSource> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Output;
+        <ZipView1<InputSource> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Output;
     type Default =
-        <SoAView1<InputSource> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Default;
+        <ZipView1<InputSource> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Default;
 
     fn gather_where_read(
         self,
@@ -405,8 +405,8 @@ where
         stencil: Stencil,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<InputSource> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::gather_where_read(
-            SoAView1 { source: self.0 },
+        <ZipView1<InputSource> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::gather_where_read(
+            ZipView1 { source: self.0 },
             policy,
             indices,
             stencil,
@@ -463,21 +463,21 @@ macro_rules! impl_kernel_gather_where_tuple2 {
     };
 }
 
-impl_kernel_gather_where_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_gather_where_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_gather_where_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_gather_where_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, IndexSource, Stencil, Pred> KernelGatherWhereInput<IndexSource, Stencil, Pred>
     for (Left, Right)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView2<Left, Right>: KernelGatherWhereInput<IndexSource, Stencil, Pred>,
+    ZipView2<Left, Right>: KernelGatherWhereInput<IndexSource, Stencil, Pred>,
 {
     type Runtime =
-        <SoAView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Runtime;
+        <ZipView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Runtime;
     type Output =
-        <SoAView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Output;
+        <ZipView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Output;
     type Default =
-        <SoAView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Default;
+        <ZipView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::Default;
 
     fn gather_where_read(
         self,
@@ -486,8 +486,8 @@ where
         stencil: Stencil,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::gather_where_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::gather_where_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -564,26 +564,26 @@ macro_rules! impl_kernel_gather_where_tuple3 {
     };
 }
 
-impl_kernel_gather_where_tuple3!(SoAView3<First, Second, Third>, DeviceSoA3, first, second, third);
-impl_kernel_gather_where_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, second, third);
+impl_kernel_gather_where_tuple3!(ZipView3<First, Second, Third>, DeviceZip3, first, second, third);
+impl_kernel_gather_where_tuple3!(DeviceZip3<First, Second, Third>, DeviceZip3, first, second, third);
 
 impl<First, Second, Third, IndexSource, Stencil, Pred>
     KernelGatherWhereInput<IndexSource, Stencil, Pred> for (First, Second, Third)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView3<First, Second, Third>: KernelGatherWhereInput<IndexSource, Stencil, Pred>,
+    ZipView3<First, Second, Third>: KernelGatherWhereInput<IndexSource, Stencil, Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelGatherWhereInput<
+    type Runtime = <ZipView3<First, Second, Third> as KernelGatherWhereInput<
         IndexSource,
         Stencil,
         Pred,
     >>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelGatherWhereInput<
+    type Output = <ZipView3<First, Second, Third> as KernelGatherWhereInput<
         IndexSource,
         Stencil,
         Pred,
     >>::Output;
-    type Default = <SoAView3<First, Second, Third> as KernelGatherWhereInput<
+    type Default = <ZipView3<First, Second, Third> as KernelGatherWhereInput<
         IndexSource,
         Stencil,
         Pred,
@@ -596,8 +596,8 @@ where
         stencil: Stencil,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::gather_where_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelGatherWhereInput<IndexSource, Stencil, Pred>>::gather_where_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

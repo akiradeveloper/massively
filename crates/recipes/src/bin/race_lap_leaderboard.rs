@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, reduce_by_key, sort_by_key};
+use massively::{DeviceVec, Executor, MIndex, Zip1, reduce_by_key, sort_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     racer_id: DeviceVec<B, u32>,
@@ -35,33 +35,33 @@ where
     let sorted_lap_time_ms = exec.to_device(&vec![0_u32; len])?;
     sort_by_key(
         exec,
-        SoA1(racer_id.slice(..)),
-        SoA1(lap_time_ms.slice(..)),
+        Zip1(racer_id.slice(..)),
+        Zip1(lap_time_ms.slice(..)),
         common::LessU32,
-        SoA1(sorted_racer_id.slice_mut(..)),
-        SoA1(sorted_lap_time_ms.slice_mut(..)),
+        Zip1(sorted_racer_id.slice_mut(..)),
+        Zip1(sorted_lap_time_ms.slice_mut(..)),
     )?;
     let racer_id = exec.to_device(&vec![0_u32; len])?;
     let total_time_ms = exec.to_device(&vec![0_u32; len])?;
     let len = reduce_by_key(
         exec,
-        SoA1(sorted_racer_id.slice(..)),
-        SoA1(sorted_lap_time_ms.slice(..)),
+        Zip1(sorted_racer_id.slice(..)),
+        Zip1(sorted_lap_time_ms.slice(..)),
         common::EqualU32,
         (0_u32,),
         common::SumU32,
-        SoA1(racer_id.slice_mut(..)),
-        SoA1(total_time_ms.slice_mut(..)),
+        Zip1(racer_id.slice_mut(..)),
+        Zip1(total_time_ms.slice_mut(..)),
     )?;
     let ranked_total_time_ms = exec.to_device(&vec![0_u32; len as usize])?;
     let ranked_racer_id = exec.to_device(&vec![0_u32; len as usize])?;
     sort_by_key(
         exec,
-        SoA1(total_time_ms.slice(..len)),
-        SoA1(racer_id.slice(..len)),
+        Zip1(total_time_ms.slice(..len)),
+        Zip1(racer_id.slice(..len)),
         common::LessU32,
-        SoA1(ranked_total_time_ms.slice_mut(..)),
-        SoA1(ranked_racer_id.slice_mut(..)),
+        Zip1(ranked_total_time_ms.slice_mut(..)),
+        Zip1(ranked_racer_id.slice_mut(..)),
     )?;
     Ok(Output {
         racer_id: ranked_racer_id,

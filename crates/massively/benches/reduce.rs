@@ -31,7 +31,7 @@ fn keys(len: usize) -> Vec<u32> {
 
 fn check_reduce(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
-    let output = reduce(&exec, massively::SoA1(values.slice(..)), (0.0,), Sum).unwrap();
+    let output = reduce(&exec, massively::Zip1(values.slice(..)), (0.0,), Sum).unwrap();
     assert_eq!(output, (10.0,));
 }
 
@@ -42,13 +42,13 @@ fn check_reduce_by_key(exec: &Executor<WgpuRuntime>) {
     let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
     let len = reduce_by_key(
         &exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         KeyEq,
         (0.0,),
         Sum,
-        massively::SoA1(out_keys.slice_mut(..)),
-        massively::SoA1(out_values.slice_mut(..)),
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(len, 2);
@@ -72,7 +72,7 @@ fn bench_reduce(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output = reduce(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         (0.0,),
                         Sum,
                     )
@@ -100,13 +100,13 @@ fn bench_reduce(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output_len = reduce_by_key(
                         &exec,
-                        massively::SoA1(black_box(keys.slice(..))),
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(keys.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         KeyEq,
                         (0.0,),
                         Sum,
-                        massively::SoA1(black_box(out_keys.slice_mut(..))),
-                        massively::SoA1(black_box(out_values.slice_mut(..))),
+                        massively::Zip1(black_box(out_keys.slice_mut(..))),
+                        massively::Zip1(black_box(out_values.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);

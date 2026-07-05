@@ -11,10 +11,10 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     exclusive_scan(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         (0.0,),
         common::TupleSumF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![0.0, 1.0, 3.0, 6.0]);

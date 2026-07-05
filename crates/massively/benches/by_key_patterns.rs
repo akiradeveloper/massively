@@ -41,11 +41,11 @@ fn check_by_key(exec: &Executor<WgpuRuntime>) {
     let inclusive = exec.to_device(&[0.0_f32; 4]).unwrap();
     inclusive_scan_by_key(
         exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         KeyEq,
         Sum,
-        massively::SoA1(inclusive.slice_mut(..)),
+        massively::Zip1(inclusive.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -56,12 +56,12 @@ fn check_by_key(exec: &Executor<WgpuRuntime>) {
     let exclusive = exec.to_device(&[0.0_f32; 4]).unwrap();
     exclusive_scan_by_key(
         exec,
-        massively::SoA1(keys.slice(..)),
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
         KeyEq,
         (0.0,),
         Sum,
-        massively::SoA1(exclusive.slice_mut(..)),
+        massively::Zip1(exclusive.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0.0, 1.0, 0.0, 10.0]);
@@ -85,11 +85,11 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                         iter_gpu(b, || {
                             inclusive_scan_by_key(
                                 &exec,
-                                massively::SoA1(black_box(keys.slice(..))),
-                                massively::SoA1(black_box(values.slice(..))),
+                                massively::Zip1(black_box(keys.slice(..))),
+                                massively::Zip1(black_box(values.slice(..))),
                                 KeyEq,
                                 Sum,
-                                massively::SoA1(black_box(output.slice_mut(..))),
+                                massively::Zip1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);
@@ -119,12 +119,12 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                         iter_gpu(b, || {
                             exclusive_scan_by_key(
                                 &exec,
-                                massively::SoA1(black_box(keys.slice(..))),
-                                massively::SoA1(black_box(values.slice(..))),
+                                massively::Zip1(black_box(keys.slice(..))),
+                                massively::Zip1(black_box(values.slice(..))),
                                 KeyEq,
                                 (0.0,),
                                 Sum,
-                                massively::SoA1(black_box(output.slice_mut(..))),
+                                massively::Zip1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);
@@ -155,13 +155,13 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                         iter_gpu(b, || {
                             let len = reduce_by_key(
                                 &exec,
-                                massively::SoA1(black_box(keys.slice(..))),
-                                massively::SoA1(black_box(values.slice(..))),
+                                massively::Zip1(black_box(keys.slice(..))),
+                                massively::Zip1(black_box(values.slice(..))),
                                 KeyEq,
                                 (0.0,),
                                 Sum,
-                                massively::SoA1(black_box(out_keys.slice_mut(..))),
-                                massively::SoA1(black_box(out_values.slice_mut(..))),
+                                massively::Zip1(black_box(out_keys.slice_mut(..))),
+                                massively::Zip1(black_box(out_values.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);

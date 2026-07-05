@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, lower_bound};
+use massively::{DeviceVec, Executor, MIndex, Zip1, lower_bound};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -28,8 +28,8 @@ where
     let indices = exec.constant(2, 0_u32)?;
     lower_bound(
         exec,
-        SoA1(timestamp.slice(..)),
-        SoA1(queries.slice(..)),
+        Zip1(timestamp.slice(..)),
+        Zip1(queries.slice(..)),
         common::LessU32,
         indices.slice_mut(..),
     )?;

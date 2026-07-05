@@ -102,7 +102,7 @@ fn public_api_is_available_from_massively() {
 
     let sum = massively::algorithm::reduce(
         &exec,
-        massively::algorithm::SoA1(input.slice(..)),
+        massively::algorithm::Zip1(input.slice(..)),
         (0_u32,),
         common::Sum,
     )
