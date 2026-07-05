@@ -80,7 +80,7 @@ pub(super) fn scan_by_key_head_flags_read<KeySource, KeyEq>(
 ) -> Result<cubecl::server::Handle, Error>
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     KeyEq: BinaryPredicateOp<KeySource::Item>,
 {
@@ -135,7 +135,7 @@ pub(crate) fn inclusive_scan_by_flags_one<Source, Op>(
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    Source::Item: Scalar + 'static,
+    Source::Item: MStorageElement + 'static,
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<(Source::Item,)>,
 {
@@ -193,7 +193,7 @@ pub(crate) fn exclusive_scan_by_flags_one<Source, Op>(
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
-    Source::Item: Scalar + 'static,
+    Source::Item: MStorageElement + 'static,
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Op: BinaryOp<(Source::Item,)>,
 {
@@ -254,8 +254,8 @@ pub(crate) fn inclusive_scan_by_flags_two<A, C, Op>(
 where
     A: KernelColumn + KernelColumnAt<S0>,
     C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    A::Item: Scalar + 'static,
-    C::Item: Scalar + 'static,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
     A::Expr: DeviceGpuExpr<A::Item>,
     C::Expr: DeviceGpuExpr<C::Item>,
     Op: BinaryOp<(A::Item, C::Item)>,
@@ -337,8 +337,8 @@ pub(crate) fn exclusive_scan_by_flags_two<A, C, Op>(
 where
     A: KernelColumn + KernelColumnAt<S0>,
     C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    A::Item: Scalar + 'static,
-    C::Item: Scalar + 'static,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
     A::Expr: DeviceGpuExpr<A::Item>,
     C::Expr: DeviceGpuExpr<C::Item>,
     Op: BinaryOp<(A::Item, C::Item)>,
@@ -432,9 +432,9 @@ where
     A: KernelColumn + KernelColumnAt<S0>,
     C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    A::Item: Scalar + 'static,
-    C::Item: Scalar + 'static,
-    D::Item: Scalar + 'static,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    D::Item: MStorageElement + 'static,
     A::Expr: DeviceGpuExpr<A::Item>,
     C::Expr: DeviceGpuExpr<C::Item>,
     D::Expr: DeviceGpuExpr<D::Item>,
@@ -543,9 +543,9 @@ where
     A: KernelColumn + KernelColumnAt<S0>,
     C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    A::Item: Scalar + 'static,
-    C::Item: Scalar + 'static,
-    D::Item: Scalar + 'static,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    D::Item: MStorageElement + 'static,
     A::Expr: DeviceGpuExpr<A::Item>,
     C::Expr: DeviceGpuExpr<C::Item>,
     D::Expr: DeviceGpuExpr<D::Item>,
@@ -665,13 +665,13 @@ pub(crate) fn inclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, Op>(
 >
 where
     R: Runtime,
-    A: Scalar + 'static,
-    B: Scalar + 'static,
-    C: Scalar + 'static,
-    D: Scalar + 'static,
-    E: Scalar + 'static,
-    F: Scalar + 'static,
-    G: Scalar + 'static,
+    A: MStorageElement + 'static,
+    B: MStorageElement + 'static,
+    C: MStorageElement + 'static,
+    D: MStorageElement + 'static,
+    E: MStorageElement + 'static,
+    F: MStorageElement + 'static,
+    G: MStorageElement + 'static,
     Op: BinaryOp<(A, B, C, D, E, F, G)>,
 {
     ensure_same_len(a.len, control.len)?;
@@ -780,13 +780,13 @@ pub(crate) fn exclusive_scan_by_flags_seven_views<R, A, B, C, D, E, F, G, Op>(
 >
 where
     R: Runtime,
-    A: Scalar + 'static,
-    B: Scalar + 'static,
-    C: Scalar + 'static,
-    D: Scalar + 'static,
-    E: Scalar + 'static,
-    F: Scalar + 'static,
-    G: Scalar + 'static,
+    A: MStorageElement + 'static,
+    B: MStorageElement + 'static,
+    C: MStorageElement + 'static,
+    D: MStorageElement + 'static,
+    E: MStorageElement + 'static,
+    F: MStorageElement + 'static,
+    G: MStorageElement + 'static,
     Op: BinaryOp<(A, B, C, D, E, F, G)>,
 {
     ensure_same_len(a.len, control.len)?;
@@ -886,7 +886,7 @@ where
 impl<KeySource, KeyEq> KernelScanByKeyKeys<KeyEq> for KeySource
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     KeyEq: BinaryPredicateOp<KeySource::Item>,
 {
@@ -911,7 +911,7 @@ macro_rules! impl_kernel_scan_by_key_keys_tuple1 {
         impl<KeySource, KeyEq> KernelScanByKeyKeys<KeyEq> for $target
         where
             KeySource: KernelColumn + KernelColumnAt<S0>,
-            KeySource::Item: Scalar + 'static,
+            KeySource::Item: MStorageElement + 'static,
             KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             KeyEq: BinaryPredicateOp<KeySource::Item>,
         {
@@ -934,7 +934,7 @@ impl_kernel_scan_by_key_keys_tuple1!(DeviceSoA1<KeySource>, source);
 impl<KeySource, KeyEq> KernelScanByKeyKeys<KeyEq> for (KeySource,)
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
     crate::detail::api::Tuple1Less<KeyEq>: BinaryPredicateOp<KeySource::Item>,
@@ -957,8 +957,8 @@ impl<First, Second, KeyEq> KernelScanByKeyKeys<KeyEq> for (First, Second)
 where
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-    First::Item: Scalar + 'static,
-    Second::Item: Scalar + 'static,
+    First::Item: MStorageElement + 'static,
+    Second::Item: MStorageElement + 'static,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     KeyEq: BinaryPredicateOp<(First::Item, Second::Item)>,
@@ -993,9 +993,9 @@ where
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
     Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-    First::Item: Scalar + 'static,
-    Second::Item: Scalar + 'static,
-    Third::Item: Scalar + 'static,
+    First::Item: MStorageElement + 'static,
+    Second::Item: MStorageElement + 'static,
+    Third::Item: MStorageElement + 'static,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
@@ -1042,7 +1042,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
             Op: BinaryOp<(S::Item,)>,
         {
@@ -1065,7 +1065,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
             Op: BinaryOp<(S::Item,)>,
         {
@@ -1099,8 +1099,8 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             (A::Item, C::Item): MItem<A::Runtime>,
@@ -1125,8 +1125,8 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             (A::Item, C::Item): MItem<A::Runtime>,
@@ -1161,9 +1161,9 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
@@ -1198,9 +1198,9 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
@@ -1249,10 +1249,10 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D)>,
         {
             type Runtime = R;
@@ -1283,10 +1283,10 @@ macro_rules! impl_kernel_scan_by_key_tuple4_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D)>,
         {
             type Runtime = R;
@@ -1326,11 +1326,11 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E)>,
         {
             type Runtime = R;
@@ -1365,11 +1365,11 @@ macro_rules! impl_kernel_scan_by_key_tuple5_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E)>,
         {
             type Runtime = R;
@@ -1411,12 +1411,12 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
-            F: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
+            F: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E, F)>,
         {
             type Runtime = R;
@@ -1453,12 +1453,12 @@ macro_rules! impl_kernel_scan_by_key_tuple6_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
-            F: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
+            F: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E, F)>,
         {
             type Runtime = R;
@@ -1502,13 +1502,13 @@ macro_rules! impl_kernel_scan_by_key_tuple7_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
-            F: Scalar + 'static,
-            G: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
+            F: MStorageElement + 'static,
+            G: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E, F, G)>,
         {
             type Runtime = R;
@@ -1547,13 +1547,13 @@ macro_rules! impl_kernel_scan_by_key_tuple7_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
-            F: Scalar + 'static,
-            G: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
+            F: MStorageElement + 'static,
+            G: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E, F, G)>,
         {
             type Runtime = R;

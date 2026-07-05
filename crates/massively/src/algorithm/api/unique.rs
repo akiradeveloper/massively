@@ -11,7 +11,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Pred: op::BinaryPredicateOp<R, Output::Item>,
+    Pred: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
@@ -33,7 +33,7 @@ where
     ValueOutput: MIterMut<R>,
     Keys: MIter<R, Item = KeyOutput::Item>,
     Values: MIter<R, Item = ValueOutput::Item>,
-    Eq: op::BinaryPredicateOp<R, KeyOutput::Item>,
+    Eq: op::BinaryPredicateOp<R, Keys::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;

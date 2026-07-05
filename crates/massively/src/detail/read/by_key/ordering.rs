@@ -79,7 +79,7 @@ pub(crate) trait KernelMergeByKeyCall<LeftValues, RightKeys, RightValues, Less>:
 impl<KeySource, Less> KernelSortByKeyKeys<Less> for KeySource
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Less: BinaryPredicateOp<KeySource::Item>,
 {
@@ -101,7 +101,7 @@ macro_rules! impl_kernel_sort_by_key_keys_tuple1 {
         impl<KeySource, Less> KernelSortByKeyKeys<Less> for $target
         where
             KeySource: KernelColumn + KernelColumnAt<S0>,
-            KeySource::Item: Scalar + 'static,
+            KeySource::Item: MStorageElement + 'static,
             KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             Less: BinaryPredicateOp<KeySource::Item>,
         {
@@ -124,7 +124,7 @@ impl_kernel_sort_by_key_keys_tuple1!(DeviceSoA1<KeySource>, source);
 impl<KeySource, Less> KernelSortByKeyKeys<Less> for (KeySource,)
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Less: BinaryPredicateOp<(KeySource::Item,)>,
     crate::detail::api::Tuple1Less<Less>: BinaryPredicateOp<KeySource::Item>,
@@ -147,8 +147,8 @@ impl<First, Second, Less> KernelSortByKeyKeys<Less> for (First, Second)
 where
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-    First::Item: Scalar + 'static,
-    Second::Item: Scalar + 'static,
+    First::Item: MStorageElement + 'static,
+    Second::Item: MStorageElement + 'static,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Less: BinaryPredicateOp<(First::Item, Second::Item)>,
@@ -182,9 +182,9 @@ where
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
     Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-    First::Item: Scalar + 'static,
-    Second::Item: Scalar + 'static,
-    Third::Item: Scalar + 'static,
+    First::Item: MStorageElement + 'static,
+    Second::Item: MStorageElement + 'static,
+    Third::Item: MStorageElement + 'static,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
@@ -219,7 +219,7 @@ where
 impl<ValueSource> KernelSortByKeyValues for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    ValueSource::Item: Scalar + 'static,
+    ValueSource::Item: MStorageElement + 'static,
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
 {
     type Runtime = ValueSource::Runtime;
@@ -243,7 +243,7 @@ macro_rules! impl_kernel_sort_by_key_values_tuple1 {
         impl<ValueSource> KernelSortByKeyValues for $target
         where
             ValueSource: KernelColumn + KernelColumnAt<S0>,
-            ValueSource::Item: Scalar + 'static,
+            ValueSource::Item: MStorageElement + 'static,
             ValueSource::Expr: GpuExpr<ValueSource::Item>,
         {
             type Runtime = ValueSource::Runtime;
@@ -285,8 +285,8 @@ macro_rules! impl_kernel_sort_by_key_values_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            Left::Item: Scalar + 'static,
-            Right::Item: Scalar + 'static,
+            Left::Item: MStorageElement + 'static,
+            Right::Item: MStorageElement + 'static,
             Left::Expr: GpuExpr<Left::Item>,
             Right::Expr: GpuExpr<Right::Item>,
         {
@@ -342,9 +342,9 @@ macro_rules! impl_kernel_sort_by_key_values_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            First::Item: Scalar + 'static,
-            Second::Item: Scalar + 'static,
-            Third::Item: Scalar + 'static,
+            First::Item: MStorageElement + 'static,
+            Second::Item: MStorageElement + 'static,
+            Third::Item: MStorageElement + 'static,
             First::Expr: GpuExpr<First::Item>,
             Second::Expr: GpuExpr<Second::Item>,
             Third::Expr: GpuExpr<Third::Item>,
@@ -412,11 +412,11 @@ macro_rules! impl_kernel_sort_by_key_values_wide_tuple {
             $(
                 $ty: KernelColumn<Runtime = $first_ty::Runtime> + KernelColumnAt<S0>,
             )+
-            $first_ty::Item: Scalar + 'static,
+            $first_ty::Item: MStorageElement + 'static,
             $first_ty::Expr: GpuExpr<$first_ty::Item>,
             $(
                 $ty::Runtime: Runtime,
-                $ty::Item: Scalar + 'static,
+                $ty::Item: MStorageElement + 'static,
                 $ty::Expr: GpuExpr<$ty::Item>,
             )+
         {
@@ -454,13 +454,13 @@ where
     E: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     F: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
     G: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-    A::Item: Scalar + 'static,
-    B::Item: Scalar + 'static,
-    C::Item: Scalar + 'static,
-    D::Item: Scalar + 'static,
-    E::Item: Scalar + 'static,
-    F::Item: Scalar + 'static,
-    G::Item: Scalar + 'static,
+    A::Item: MStorageElement + 'static,
+    B::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    D::Item: MStorageElement + 'static,
+    E::Item: MStorageElement + 'static,
+    F::Item: MStorageElement + 'static,
+    G::Item: MStorageElement + 'static,
     A::Expr: GpuExpr<A::Item>,
     B::Expr: GpuExpr<B::Item>,
     C::Expr: GpuExpr<C::Item>,
@@ -510,7 +510,7 @@ impl<LeftKey, RightKey, Less> KernelMergeByKeyKeys<RightKey, Less> for LeftKey
 where
     LeftKey: KernelColumn + KernelColumnAt<S0>,
     RightKey: KernelColumn<Runtime = LeftKey::Runtime, Item = LeftKey::Item> + KernelColumnAt<S0>,
-    LeftKey::Item: Scalar + 'static,
+    LeftKey::Item: MStorageElement + 'static,
     LeftKey::Expr: DeviceGpuExpr<LeftKey::Item>,
     RightKey::Expr: DeviceGpuExpr<RightKey::Item>,
     Less: BinaryPredicateOp<LeftKey::Item>,
@@ -560,7 +560,7 @@ impl<LeftKey, RightKey, Less> KernelMergeByKeyKeys<(RightKey,), Less> for (LeftK
 where
     LeftKey: KernelColumn + KernelColumnAt<S0>,
     RightKey: KernelColumn<Runtime = LeftKey::Runtime, Item = LeftKey::Item> + KernelColumnAt<S0>,
-    LeftKey::Item: Scalar + 'static,
+    LeftKey::Item: MStorageElement + 'static,
     LeftKey::Expr: DeviceGpuExpr<LeftKey::Item>,
     RightKey::Expr: DeviceGpuExpr<RightKey::Item>,
     Less: BinaryPredicateOp<(LeftKey::Item,)>,
@@ -588,8 +588,8 @@ where
     LeftB: KernelColumn<Runtime = LeftA::Runtime> + KernelColumnAt<S0>,
     RightA: KernelColumn<Runtime = LeftA::Runtime, Item = LeftA::Item> + KernelColumnAt<S0>,
     RightB: KernelColumn<Runtime = LeftA::Runtime, Item = LeftB::Item> + KernelColumnAt<S0>,
-    LeftA::Item: Scalar + 'static,
-    LeftB::Item: Scalar + 'static,
+    LeftA::Item: MStorageElement + 'static,
+    LeftB::Item: MStorageElement + 'static,
     LeftA::Expr: DeviceGpuExpr<LeftA::Item>,
     LeftB::Expr: DeviceGpuExpr<LeftB::Item>,
     RightA::Expr: DeviceGpuExpr<RightA::Item>,
@@ -624,9 +624,9 @@ where
     RightA: KernelColumn<Runtime = LeftA::Runtime, Item = LeftA::Item> + KernelColumnAt<S0>,
     RightB: KernelColumn<Runtime = LeftA::Runtime, Item = LeftB::Item> + KernelColumnAt<S0>,
     RightC: KernelColumn<Runtime = LeftA::Runtime, Item = LeftC::Item> + KernelColumnAt<S0>,
-    LeftA::Item: Scalar + 'static,
-    LeftB::Item: Scalar + 'static,
-    LeftC::Item: Scalar + 'static,
+    LeftA::Item: MStorageElement + 'static,
+    LeftB::Item: MStorageElement + 'static,
+    LeftC::Item: MStorageElement + 'static,
     LeftA::Expr: DeviceGpuExpr<LeftA::Item>,
     LeftB::Expr: DeviceGpuExpr<LeftB::Item>,
     LeftC::Expr: DeviceGpuExpr<LeftC::Item>,
@@ -672,7 +672,7 @@ where
     LeftValue: KernelColumn + KernelColumnAt<S0>,
     RightValue:
         KernelColumn<Runtime = LeftValue::Runtime, Item = LeftValue::Item> + KernelColumnAt<S0>,
-    LeftValue::Item: Scalar + 'static,
+    LeftValue::Item: MStorageElement + 'static,
     LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
 {
@@ -698,7 +698,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple1 {
             LeftValue: KernelColumn + KernelColumnAt<S0>,
             RightValue: KernelColumn<Runtime = LeftValue::Runtime, Item = LeftValue::Item>
                 + KernelColumnAt<S0>,
-            LeftValue::Item: Scalar + 'static,
+            LeftValue::Item: MStorageElement + 'static,
             LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
             RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
         {
@@ -751,8 +751,8 @@ macro_rules! impl_kernel_merge_by_key_values_tuple2 {
             LeftB: KernelColumn<Runtime = LeftA::Runtime> + KernelColumnAt<S0>,
             RightA: KernelColumn<Runtime = LeftA::Runtime, Item = LeftA::Item> + KernelColumnAt<S0>,
             RightB: KernelColumn<Runtime = LeftA::Runtime, Item = LeftB::Item> + KernelColumnAt<S0>,
-            LeftA::Item: Scalar + 'static,
-            LeftB::Item: Scalar + 'static,
+            LeftA::Item: MStorageElement + 'static,
+            LeftB::Item: MStorageElement + 'static,
             LeftA::Expr: DeviceGpuExpr<LeftA::Item>,
             LeftB::Expr: DeviceGpuExpr<LeftB::Item>,
             RightA::Expr: DeviceGpuExpr<RightA::Item>,
@@ -830,9 +830,9 @@ macro_rules! impl_kernel_merge_by_key_values_tuple3 {
             RightA: KernelColumn<Runtime = LeftA::Runtime, Item = LeftA::Item> + KernelColumnAt<S0>,
             RightB: KernelColumn<Runtime = LeftA::Runtime, Item = LeftB::Item> + KernelColumnAt<S0>,
             RightC: KernelColumn<Runtime = LeftA::Runtime, Item = LeftC::Item> + KernelColumnAt<S0>,
-            LeftA::Item: Scalar + 'static,
-            LeftB::Item: Scalar + 'static,
-            LeftC::Item: Scalar + 'static,
+            LeftA::Item: MStorageElement + 'static,
+            LeftB::Item: MStorageElement + 'static,
+            LeftC::Item: MStorageElement + 'static,
             LeftA::Expr: DeviceGpuExpr<LeftA::Item>,
             LeftB::Expr: DeviceGpuExpr<LeftB::Item>,
             LeftC::Expr: DeviceGpuExpr<LeftC::Item>,
@@ -928,7 +928,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple_wide {
                 Runtime = $first_left::Runtime,
                 Item = $first_left::Item,
             > + KernelColumnAt<S0>,
-            $first_left::Item: Scalar + 'static,
+            $first_left::Item: MStorageElement + 'static,
             $first_left::Expr: DeviceGpuExpr<$first_left::Item>,
             $first_right::Expr: DeviceGpuExpr<$first_right::Item>,
             $(
@@ -937,7 +937,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple_wide {
                     Runtime = $first_left::Runtime,
                     Item = $left::Item,
                 > + KernelColumnAt<S0>,
-                $left::Item: Scalar + 'static,
+                $left::Item: MStorageElement + 'static,
                 $left::Expr: DeviceGpuExpr<$left::Item>,
                 $right::Expr: DeviceGpuExpr<$right::Item>,
             )+
@@ -1023,13 +1023,13 @@ where
     RE: KernelColumn<Runtime = LA::Runtime, Item = LE::Item> + KernelColumnAt<S0>,
     RF: KernelColumn<Runtime = LA::Runtime, Item = LF::Item> + KernelColumnAt<S0>,
     RG: KernelColumn<Runtime = LA::Runtime, Item = LG::Item> + KernelColumnAt<S0>,
-    LA::Item: Scalar + 'static,
-    LB::Item: Scalar + 'static,
-    LC::Item: Scalar + 'static,
-    LD::Item: Scalar + 'static,
-    LE::Item: Scalar + 'static,
-    LF::Item: Scalar + 'static,
-    LG::Item: Scalar + 'static,
+    LA::Item: MStorageElement + 'static,
+    LB::Item: MStorageElement + 'static,
+    LC::Item: MStorageElement + 'static,
+    LD::Item: MStorageElement + 'static,
+    LE::Item: MStorageElement + 'static,
+    LF::Item: MStorageElement + 'static,
+    LG::Item: MStorageElement + 'static,
     LA::Expr: DeviceGpuExpr<LA::Item>,
     LB::Expr: DeviceGpuExpr<LB::Item>,
     LC::Expr: DeviceGpuExpr<LC::Item>,

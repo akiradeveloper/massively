@@ -10,10 +10,6 @@ use crate::index::{MIndex, usize_from_mindex};
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
 use crate::value::{MAlloc, MStorageElement};
 
-/// Scalar value that can be stored in one device column.
-pub trait Scalar: MStorageElement {}
-impl<T> Scalar for T where T: MStorageElement {}
-
 /// Device-resident data that can be copied back to host memory by an executor.
 pub trait ToHost<R: Runtime>:
     dispatch::ToHostDispatch<R, Output = <Self as ToHost<R>>::Output>
@@ -79,7 +75,7 @@ impl<R: Runtime> Executor<R> {
     /// Copies host data to device-resident storage.
     pub fn to_device<T>(&self, input: &[T]) -> Result<DeviceVec<R, T>, Error>
     where
-        T: Scalar,
+        T: MStorageElement,
     {
         Ok(DeviceVec::from_inner(self.inner.to_device(input)?))
     }
@@ -87,7 +83,7 @@ impl<R: Runtime> Executor<R> {
     /// Allocates device-resident storage and fills it with `value`.
     pub fn constant<T>(&self, len: MIndex, value: T) -> Result<DeviceVec<R, T>, Error>
     where
-        T: Scalar,
+        T: MStorageElement,
     {
         Ok(DeviceVec::from_inner(self.inner.device_filled(len, value)?))
     }
@@ -129,7 +125,7 @@ impl<R: Runtime> Executor<R> {
         to: DeviceSliceMut<'_, R, T>,
     ) -> Result<(), Error>
     where
-        T: Scalar,
+        T: MStorageElement,
     {
         if from.len != to.len {
             return Err(Error::LengthMismatch {

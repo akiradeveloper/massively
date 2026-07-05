@@ -12,7 +12,6 @@ where
     Right: massively::MIter<WgpuRuntime, Item = Left::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, Left::Item>,
     Output: massively::MIterMut<WgpuRuntime, Item = Left::Item>,
-    Left::Item: massively::MAlloc<WgpuRuntime>,
 {
     set_intersection(exec, left, right, less, out)
 }

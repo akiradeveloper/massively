@@ -4,13 +4,15 @@ use cubecl::prelude::*;
 
 use crate::Error;
 use crate::detail::dispatch::{self as sealed, array_from_inner};
-use crate::detail::op_adapter::{KernelOp, KernelTuple1Op, StencilFlag};
+use crate::detail::op_adapter::{
+    KernelOp, KernelScalarInputOp, KernelScalarTuple1Op, KernelTuple1Op, StencilFlag,
+};
 use crate::error::ensure_same_len;
 use crate::index::{MIndex, mindex_from_usize, usize_from_mindex};
 use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
 use crate::op;
-use crate::runtime::{DeviceSliceMut, DeviceVec, Executor, Scalar};
-use crate::value::{MAlloc, MItem, StorageFromInner};
+use crate::runtime::{DeviceSliceMut, DeviceVec, Executor};
+use crate::value::{MAlloc, MItem, MStorageElement, StorageFromInner};
 
 mod item;
 mod iter;

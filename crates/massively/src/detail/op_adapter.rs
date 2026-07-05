@@ -4,8 +4,7 @@ use cubecl::frontend::PartialOrdExpand;
 use cubecl::prelude::Runtime;
 
 use crate::op;
-use crate::runtime::Scalar;
-use crate::value::MItem;
+use crate::value::{MItem, MStorageElement};
 
 #[doc(hidden)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -31,7 +30,7 @@ impl<R, Op> KernelTuple1Op<R, Op> {
 impl<R, T, Op> crate::detail::op::kernel::UnaryOp<T> for KernelTuple1Op<R, Op>
 where
     R: Runtime,
-    T: Scalar,
+    T: MStorageElement + MItem<R>,
     Op: op::UnaryOp<R, (T,), Output = (T,)>,
 {
     type Env = Op::Env;
@@ -46,7 +45,7 @@ where
 impl<R, T, Op> crate::detail::op::kernel::BinaryOp<T> for KernelTuple1Op<R, Op>
 where
     R: Runtime,
-    T: Scalar,
+    T: MStorageElement + MItem<R>,
     Op: op::ReductionOp<R, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> T {
@@ -58,7 +57,7 @@ where
 impl<R, T, Op> crate::detail::op::kernel::PredicateOp<T> for KernelTuple1Op<R, Op>
 where
     R: Runtime,
-    T: Scalar,
+    T: MStorageElement + MItem<R>,
     Op: op::PredicateOp<R, (T,)>,
 {
     type Env = Op::Env;
@@ -72,7 +71,7 @@ where
 impl<R, T, Op> crate::detail::op::kernel::BinaryPredicateOp<T> for KernelTuple1Op<R, Op>
 where
     R: Runtime,
-    T: Scalar,
+    T: MStorageElement,
     Op: op::BinaryPredicateOp<R, (T,)>,
 {
     fn apply(lhs: T, rhs: T) -> bool {
@@ -130,6 +129,73 @@ where
 {
     fn apply(lhs: Item, rhs: Item) -> bool {
         Op::apply(lhs, rhs)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KernelScalarInputOp<R, Op>(PhantomData<fn() -> (R, Op)>);
+
+#[cubecl::cube]
+impl<R, T, Op> crate::detail::op::kernel::UnaryOp<(T,)> for KernelScalarInputOp<R, Op>
+where
+    R: Runtime,
+    T: MStorageElement + MItem<R>,
+    Op: op::UnaryOp<R, T>,
+{
+    type Env = Op::Env;
+    type Output = Op::Output;
+
+    fn apply(env: Self::Env, input: (T,)) -> Self::Output {
+        Op::apply(env, input.0)
+    }
+}
+
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct KernelScalarTuple1Op<R, Op>(PhantomData<fn() -> (R, Op)>);
+
+impl<R, Op> KernelScalarTuple1Op<R, Op> {
+    pub(super) fn new() -> Self {
+        Self(PhantomData)
+    }
+}
+
+#[cubecl::cube]
+impl<R, T, Op> crate::detail::op::kernel::BinaryOp<(T,)> for KernelScalarTuple1Op<R, Op>
+where
+    R: Runtime,
+    T: MStorageElement + MItem<R>,
+    Op: op::ReductionOp<R, T>,
+{
+    fn apply(lhs: (T,), rhs: (T,)) -> (T,) {
+        (Op::apply(lhs.0, rhs.0),)
+    }
+}
+
+#[cubecl::cube]
+impl<R, T, Op> crate::detail::op::kernel::PredicateOp<(T,)> for KernelScalarTuple1Op<R, Op>
+where
+    R: Runtime,
+    T: MStorageElement + MItem<R>,
+    Op: op::PredicateOp<R, T>,
+{
+    type Env = Op::Env;
+
+    fn apply(env: Self::Env, input: (T,)) -> bool {
+        Op::apply(env, input.0)
+    }
+}
+
+#[cubecl::cube]
+impl<R, T, Op> crate::detail::op::kernel::BinaryPredicateOp<(T,)> for KernelScalarTuple1Op<R, Op>
+where
+    R: Runtime,
+    T: MStorageElement + MItem<R>,
+    Op: op::BinaryPredicateOp<R, T>,
+{
+    fn apply(lhs: (T,), rhs: (T,)) -> bool {
+        Op::apply(lhs.0, rhs.0)
     }
 }
 

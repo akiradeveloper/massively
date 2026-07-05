@@ -4,8 +4,8 @@ use crate::Error;
 use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
-use crate::runtime::{Executor, Scalar};
-use crate::value::{MAlloc, StorageFromInner};
+use crate::runtime::Executor;
+use crate::value::{MAlloc, MStorageElement, StorageFromInner};
 
 mod helpers;
 mod host;

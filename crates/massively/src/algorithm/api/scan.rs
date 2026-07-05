@@ -11,7 +11,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Op: op::ReductionOp<R, Output::Item>,
+    Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
@@ -27,7 +27,7 @@ where
 pub fn exclusive_scan<R, Input, Op, Output>(
     exec: &Executor<R>,
     source: Input,
-    init: Output::Item,
+    init: Input::Item,
     op: Op,
     out: Output,
 ) -> Result<(), Error>
@@ -35,7 +35,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Op: op::ReductionOp<R, Output::Item>,
+    Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
@@ -54,7 +54,7 @@ pub fn exclusive_scan_by_key<R, Keys, Values, KeyEq, Op, Output>(
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
-    init: Output::Item,
+    init: Values::Item,
     op: Op,
     out: Output,
 ) -> Result<(), Error>
@@ -64,7 +64,7 @@ where
     Output: MIterMut<R>,
     Values: MIter<R, Item = Output::Item>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
-    Op: op::ReductionOp<R, Output::Item>,
+    Op: op::ReductionOp<R, Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
@@ -91,7 +91,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Op: op::ReductionOp<R, Output::Item>,
+    Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
@@ -118,7 +118,7 @@ where
     Output: MIterMut<R>,
     Values: MIter<R, Item = Output::Item>,
     KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
-    Op: op::ReductionOp<R, Output::Item>,
+    Op: op::ReductionOp<R, Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;

@@ -1,21 +1,27 @@
 use super::*;
 
 /// Copies elements whose `u32` stencil flag is non-zero.
-pub fn copy_where<R, Input, Output>(
+pub fn copy_where<R, Input, Stencil, Output>(
     exec: &Executor<R>,
     source: Input,
-    stencil: DeviceSlice<'_, R, u32>,
+    stencil: Stencil,
     out: Output,
 ) -> Result<MIndex, Error>
 where
     R: Runtime,
+    Stencil: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
 {
     validate_input(exec, &source)?;
-    validate_device_slice(exec, &stencil)?;
+    validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = u32_stencil(exec.policy(), stencil, false)?;
+    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
+        stencil,
+        exec.policy(),
+        false,
+        false,
+    )?;
     <Input as sealed::MIterDispatch<R>>::copy_where_into_dispatch(
         source,
         exec.policy(),
@@ -25,21 +31,27 @@ where
 }
 
 /// Removes elements whose `u32` stencil flag is non-zero.
-pub fn remove_where<R, Input, Output>(
+pub fn remove_where<R, Input, Stencil, Output>(
     exec: &Executor<R>,
     source: Input,
-    stencil: DeviceSlice<'_, R, u32>,
+    stencil: Stencil,
     out: Output,
 ) -> Result<MIndex, Error>
 where
     R: Runtime,
+    Stencil: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
 {
     validate_input(exec, &source)?;
-    validate_device_slice(exec, &stencil)?;
+    validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = u32_stencil(exec.policy(), stencil, true)?;
+    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
+        stencil,
+        exec.policy(),
+        true,
+        false,
+    )?;
     <Input as sealed::MIterDispatch<R>>::remove_where_into_dispatch(
         source,
         exec.policy(),
@@ -49,19 +61,25 @@ where
 }
 
 /// Replaces elements whose `u32` stencil flag is non-zero.
-pub fn replace_where<R, Output>(
+pub fn replace_where<R, Stencil, Output>(
     exec: &Executor<R>,
     replacement: Output::Item,
-    stencil: DeviceSlice<'_, R, u32>,
+    stencil: Stencil,
     out: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
+    Stencil: MIter<R, Item = u32>,
     Output: MIterMut<R>,
 {
-    validate_device_slice(exec, &stencil)?;
+    validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = u32_stencil_flags(exec.policy(), stencil, false)?;
+    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
+        stencil,
+        exec.policy(),
+        false,
+        true,
+    )?;
     out.replace_where_inner(exec.policy(), replacement, stencil)
 }
 

@@ -74,7 +74,7 @@ pub(crate) trait KernelReduceByKeyCall<Values, KeyEq, Op>: Sized {
 impl<KeySource, KeyEq> KernelReduceByKeyKeys<KeyEq> for KeySource
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     KeyEq: BinaryPredicateOp<KeySource::Item>,
 {
@@ -152,7 +152,7 @@ where
 impl<KeySource, KeyEq> KernelReduceByKeyKeys<KeyEq> for (KeySource,)
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     KeyEq: BinaryPredicateOp<(KeySource::Item,)>,
     crate::detail::api::Tuple1Less<KeyEq>: BinaryPredicateOp<KeySource::Item>,
@@ -176,8 +176,8 @@ impl<First, Second, KeyEq> KernelReduceByKeyKeys<KeyEq> for (First, Second)
 where
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-    First::Item: Scalar + 'static,
-    Second::Item: Scalar + 'static,
+    First::Item: MStorageElement + 'static,
+    Second::Item: MStorageElement + 'static,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     KeyEq: BinaryPredicateOp<(First::Item, Second::Item)>,
@@ -239,9 +239,9 @@ where
     First: KernelColumn + KernelColumnAt<S0>,
     Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
     Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-    First::Item: Scalar + 'static,
-    Second::Item: Scalar + 'static,
-    Third::Item: Scalar + 'static,
+    First::Item: MStorageElement + 'static,
+    Second::Item: MStorageElement + 'static,
+    Third::Item: MStorageElement + 'static,
     First::Expr: DeviceGpuExpr<First::Item>,
     Second::Expr: DeviceGpuExpr<Second::Item>,
     Third::Expr: DeviceGpuExpr<Third::Item>,
@@ -321,7 +321,7 @@ impl<ValueSource, KeyEq, Op>
     KernelReduceByKeyValues<ReduceByKeyControl<ValueSource::Runtime>, KeyEq, Op> for (ValueSource,)
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    ValueSource::Item: Scalar + 'static,
+    ValueSource::Item: MStorageElement + 'static,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
     Op: BinaryOp<(ValueSource::Item,)>,
 {
@@ -355,8 +355,8 @@ impl<ValueA, ValueB, KeyEq, Op>
 where
     ValueA: KernelColumn + KernelColumnAt<S0>,
     ValueB: KernelColumn<Runtime = ValueA::Runtime> + KernelColumnAt<S0>,
-    ValueA::Item: Scalar + 'static,
-    ValueB::Item: Scalar + 'static,
+    ValueA::Item: MStorageElement + 'static,
+    ValueB::Item: MStorageElement + 'static,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
@@ -395,9 +395,9 @@ where
     ValueA: KernelColumn + KernelColumnAt<S0>,
     ValueB: KernelColumn<Runtime = ValueA::Runtime> + KernelColumnAt<S0>,
     ValueC: KernelColumn<Runtime = ValueA::Runtime> + KernelColumnAt<S0>,
-    ValueA::Item: Scalar + 'static,
-    ValueB::Item: Scalar + 'static,
-    ValueC::Item: Scalar + 'static,
+    ValueA::Item: MStorageElement + 'static,
+    ValueB::Item: MStorageElement + 'static,
+    ValueC::Item: MStorageElement + 'static,
     ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
     ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
     ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
@@ -443,10 +443,10 @@ macro_rules! impl_kernel_reduce_by_key_tuple4_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D)>,
         {
             type Runtime = R;
@@ -485,11 +485,11 @@ macro_rules! impl_kernel_reduce_by_key_tuple5_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E)>,
         {
             type Runtime = R;
@@ -531,12 +531,12 @@ macro_rules! impl_kernel_reduce_by_key_tuple6_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
-            F: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
+            F: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E, F)>,
         {
             type Runtime = R;
@@ -580,13 +580,13 @@ macro_rules! impl_kernel_reduce_by_key_tuple7_views {
             )
         where
             R: Runtime,
-            A: Scalar + 'static,
-            B: Scalar + 'static,
-            C: Scalar + 'static,
-            D: Scalar + 'static,
-            E: Scalar + 'static,
-            F: Scalar + 'static,
-            G: Scalar + 'static,
+            A: MStorageElement + 'static,
+            B: MStorageElement + 'static,
+            C: MStorageElement + 'static,
+            D: MStorageElement + 'static,
+            E: MStorageElement + 'static,
+            F: MStorageElement + 'static,
+            G: MStorageElement + 'static,
             Op: BinaryOp<(A, B, C, D, E, F, G)>,
         {
             type Runtime = R;

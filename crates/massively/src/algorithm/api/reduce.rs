@@ -22,7 +22,7 @@ pub fn reduce_by_key<R, Keys, Values, KeyEq, Op, KeyOutput, ValueOutput>(
     keys: Keys,
     values: Values,
     key_eq: KeyEq,
-    init: ValueOutput::Item,
+    init: Values::Item,
     op: Op,
     out_k: KeyOutput,
     out_v: ValueOutput,
@@ -33,8 +33,8 @@ where
     ValueOutput: MIterMut<R>,
     Keys: MIter<R, Item = KeyOutput::Item>,
     Values: MIter<R, Item = ValueOutput::Item>,
-    KeyEq: op::BinaryPredicateOp<R, KeyOutput::Item>,
-    Op: op::ReductionOp<R, ValueOutput::Item>,
+    KeyEq: op::BinaryPredicateOp<R, Keys::Item>,
+    Op: op::ReductionOp<R, Values::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;

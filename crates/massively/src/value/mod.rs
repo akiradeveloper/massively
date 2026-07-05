@@ -9,9 +9,8 @@ use crate::runtime::Executor;
 
 /// Logical item handled by massively algorithms.
 ///
-/// An `MItem` is one element of an [`crate::iter::MIter`]. The current public
-/// model represents items as tuples such as `(T,)`, `(T, U)`, and `(T, U, V)`;
-/// internally those tuples are stored as SoA device columns for backend `R`.
+/// An `MItem` is one element of an [`crate::iter::MIter`]. It is a kernel value
+/// shape, not a storage layout promise.
 pub trait MItem<R: Runtime>:
     dispatch::MItemDispatch<R> + CubeType + Copy + Sized + 'static
 {
@@ -21,7 +20,7 @@ pub trait MItem<R: Runtime>:
 pub trait MStorageElement: CubePrimitive + CubeElement {}
 impl<T> MStorageElement for T where T: CubePrimitive + CubeElement {}
 
-/// Logical item that has an owned/writable device storage shape.
+/// Logical item that has an owned/writable SoA device storage shape.
 pub trait MAlloc<R: Runtime>: MItem<R> {
     #[doc(hidden)]
     type Inner;

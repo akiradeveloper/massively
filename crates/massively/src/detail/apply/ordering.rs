@@ -20,7 +20,7 @@ use crate::{
     index::MIndex,
     op::kernel::BinaryPredicateOp,
     policy::CubePolicy,
-    runtime::Scalar,
+    value::MStorageElement,
 };
 use cubecl::prelude::*;
 
@@ -33,7 +33,7 @@ impl SortApply {
     ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
     where
         Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
-        Source::Item: Scalar + 'static,
+        Source::Item: MStorageElement + 'static,
         Source::Expr: DeviceGpuExpr<Source::Item>,
         Less: BinaryPredicateOp<Source::Item>,
     {
@@ -54,8 +54,8 @@ impl SortApply {
     where
         Left: KernelColumn + KernelColumnAt<S0>,
         Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-        Left::Item: Scalar + 'static,
-        Right::Item: Scalar + 'static,
+        Left::Item: MStorageElement + 'static,
+        Right::Item: MStorageElement + 'static,
         Left::Expr: DeviceGpuExpr<Left::Item>,
         Right::Expr: DeviceGpuExpr<Right::Item>,
         Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
@@ -80,9 +80,9 @@ impl SortApply {
         First: KernelColumn + KernelColumnAt<S0>,
         Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
         Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-        First::Item: Scalar + 'static,
-        Second::Item: Scalar + 'static,
-        Third::Item: Scalar + 'static,
+        First::Item: MStorageElement + 'static,
+        Second::Item: MStorageElement + 'static,
+        Third::Item: MStorageElement + 'static,
         First::Expr: DeviceGpuExpr<First::Item>,
         Second::Expr: DeviceGpuExpr<Second::Item>,
         Third::Expr: DeviceGpuExpr<Third::Item>,
@@ -113,7 +113,7 @@ impl SortByKeyApply {
     >
     where
         KeySource: KernelColumn + KernelColumnAt<S0>,
-        KeySource::Item: Scalar + 'static,
+        KeySource::Item: MStorageElement + 'static,
         KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
         Less: BinaryPredicateOp<KeySource::Item>,
     {
@@ -142,8 +142,8 @@ impl SortByKeyApply {
     where
         First: KernelColumn + KernelColumnAt<S0>,
         Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-        First::Item: Scalar + 'static,
-        Second::Item: Scalar + 'static,
+        First::Item: MStorageElement + 'static,
+        Second::Item: MStorageElement + 'static,
         First::Expr: DeviceGpuExpr<First::Item>,
         Second::Expr: DeviceGpuExpr<Second::Item>,
         Less: BinaryPredicateOp<(First::Item, Second::Item)>,
@@ -180,9 +180,9 @@ impl SortByKeyApply {
         First: KernelColumn + KernelColumnAt<S0>,
         Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
         Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-        First::Item: Scalar + 'static,
-        Second::Item: Scalar + 'static,
-        Third::Item: Scalar + 'static,
+        First::Item: MStorageElement + 'static,
+        Second::Item: MStorageElement + 'static,
+        Third::Item: MStorageElement + 'static,
         First::Expr: DeviceGpuExpr<First::Item>,
         Second::Expr: DeviceGpuExpr<Second::Item>,
         Third::Expr: DeviceGpuExpr<Third::Item>,

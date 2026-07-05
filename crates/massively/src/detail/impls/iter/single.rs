@@ -1,9 +1,353 @@
 use super::*;
 
+impl<'a, R, T> MIter<R> for crate::runtime::DeviceSlice<'a, R, T>
+where
+    R: Runtime,
+    T: MStorageElement + MItem<R> + 'static,
+{
+    type Item = T;
+    type Inner = crate::detail::device::DeviceColumnView<R, T>;
+
+    fn len(&self) -> MIndex {
+        self.len()
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        unreachable!("read-only MIter lowering requires a CubePolicy")
+    }
+
+    fn into_inner_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<Self::Inner, Error> {
+        let _ = policy;
+        Ok(self.column_view())
+    }
+
+    fn into_view_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
+    where
+        Self::Item: MAlloc<R>,
+    {
+        let _ = policy;
+        unreachable!("scalar DeviceSlice is not an allocatable SoA view")
+    }
+}
+
+impl<'a, R, T> sealed::MIterDispatch<R> for crate::runtime::DeviceSlice<'a, R, T>
+where
+    R: Runtime,
+    T: MStorageElement + MItem<R> + 'static,
+{
+    fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
+        exec.ensure_policy_id(self.policy_id())
+    }
+
+    fn index_column_dispatch(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<crate::detail::device::DeviceColumnView<R, MIndex>, Error>
+    where
+        Self: MIter<R, Item = MIndex>,
+    {
+        let _ = policy;
+        Ok(self.aux_u32_column_view())
+    }
+
+    fn stencil_selection_dispatch(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        invert: bool,
+        flags_only: bool,
+    ) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
+    where
+        Self: MIter<R, Item = u32>,
+    {
+        let stencil = self.aux_u32_column_view();
+        if flags_only {
+            crate::detail::api::PrecomputedSelection::from_stencil_flags_with_policy::<
+                _,
+                KernelOp<R, StencilFlag>,
+            >(policy, &(stencil,), invert)
+        } else {
+            crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<
+                _,
+                KernelOp<R, StencilFlag>,
+            >(policy, &(stencil,), invert)
+        }
+    }
+
+    fn transform_dispatch<Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+    {
+        let input = self.into_inner_with_policy(policy)?;
+        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_scalar_input(
+            policy, input, op, env,
+        )?;
+        output.write_from_inner(policy, inner)
+    }
+
+    fn map_dispatch<Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<Output, Error>
+    where
+        Output: StorageFromInner<R>,
+        Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+    {
+        let input = self.into_inner_with_policy(policy)?;
+        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_scalar_input(
+            policy, input, op, env,
+        )?;
+        Ok(array_from_inner::<R, Output::Item, Output>(inner))
+    }
+
+    fn transform_where_dispatch<Op, Output>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Op: op::UnaryOp<R, <Self as MIter<R>>::Item, Output = Output::Item>,
+    {
+        let input = self.into_inner_with_policy(policy)?;
+        let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_scalar_input(
+            policy, input, op, env,
+        )?;
+        output.write_where_from_inner(policy, inner, stencil)
+    }
+
+    fn reduce_dispatch<Op>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        init: <Self as MIter<R>>::Item,
+        _op: Op,
+    ) -> Result<<Self as MIter<R>>::Item, Error>
+    where
+        Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
+    {
+        let result = crate::detail::reduce(
+            policy,
+            (self.into_inner_with_policy(policy)?,),
+            (init,),
+            KernelScalarTuple1Op::<R, Op>::new(),
+        )?;
+        Ok(result.0)
+    }
+
+    fn count_if_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<MIndex, Error>
+    where
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::count_if(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+            env,
+        )
+    }
+
+    fn all_of_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<bool, Error>
+    where
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::all_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+            env,
+        )
+    }
+
+    fn any_of_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<bool, Error>
+    where
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::any_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+            env,
+        )
+    }
+
+    fn none_of_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<bool, Error>
+    where
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::none_of(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+            env,
+        )
+    }
+
+    fn find_if_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<Option<MIndex>, Error>
+    where
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::find_if(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+            env,
+        )
+    }
+
+    fn is_partitioned_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<bool, Error>
+    where
+        Pred: op::PredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::is_partitioned(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+            env,
+        )
+    }
+
+    fn min_element_dispatch<Less>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _less: Less,
+    ) -> Result<Option<MIndex>, Error>
+    where
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::min_element(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
+    }
+
+    fn max_element_dispatch<Less>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _less: Less,
+    ) -> Result<Option<MIndex>, Error>
+    where
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::max_element(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
+    }
+
+    fn minmax_element_dispatch<Less>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _less: Less,
+    ) -> Result<Option<(MIndex, MIndex)>, Error>
+    where
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::minmax_element(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
+    }
+
+    fn adjacent_find_dispatch<Pred>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _pred: Pred,
+    ) -> Result<Option<MIndex>, Error>
+    where
+        Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::adjacent_find(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Pred>::new(),
+        )
+    }
+
+    fn is_sorted_until_dispatch<Less>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _less: Less,
+    ) -> Result<MIndex, Error>
+    where
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::is_sorted_until(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
+    }
+
+    fn is_sorted_dispatch<Less>(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        _less: Less,
+    ) -> Result<bool, Error>
+    where
+        Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
+    {
+        crate::detail::is_sorted(
+            policy,
+            self.into_inner_with_policy(policy)?,
+            KernelOp::<R, Less>::new(),
+        )
+    }
+}
+
 impl<'a, R, T> MIter<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
 where
     R: Runtime,
-    T: Scalar + 'static,
+    T: MStorageElement + 'static,
     (T,): MAlloc<
             R,
             Inner = (crate::detail::DeviceVec<R, T>,),
@@ -41,7 +385,7 @@ where
 impl<'a, R, T> sealed::MIterDispatch<R> for SoA1<crate::runtime::DeviceSlice<'a, R, T>>
 where
     R: Runtime,
-    T: Scalar + 'static,
+    T: MStorageElement + 'static,
     (T,): MAlloc<
             R,
             Inner = (crate::detail::DeviceVec<R, T>,),
@@ -168,7 +512,7 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: StorageFromInner<R, Item = (K,)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -194,7 +538,7 @@ where
         value_output: ValueOutput,
     ) -> Result<(), Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -218,9 +562,9 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -248,9 +592,9 @@ where
         value_output: ValueOutput,
     ) -> Result<(), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -318,8 +662,8 @@ where
         _less: Less,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2)>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -346,8 +690,8 @@ where
         value_output: ValueOutput,
     ) -> Result<(), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2)>,
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -369,7 +713,7 @@ where
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         Eq: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: StorageFromInner<R, Item = (K,)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -395,7 +739,7 @@ where
         value_output: ValueOutput,
     ) -> Result<MIndex, Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         Eq: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -466,9 +810,9 @@ where
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -502,9 +846,9 @@ where
         value_output: ValueOutput,
     ) -> Result<MIndex, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -529,8 +873,8 @@ where
         _eq: Eq,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         Eq: op::BinaryPredicateOp<R, (K1, K2)>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -557,8 +901,8 @@ where
         value_output: ValueOutput,
     ) -> Result<MIndex, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         Eq: op::BinaryPredicateOp<R, (K1, K2)>,
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -583,7 +927,7 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -608,7 +952,7 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -634,9 +978,9 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -674,9 +1018,9 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -701,8 +1045,8 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -738,8 +1082,8 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -805,7 +1149,7 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -832,7 +1176,7 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -860,9 +1204,9 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -901,9 +1245,9 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -930,8 +1274,8 @@ where
         _op: Op,
     ) -> Result<Output, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -968,8 +1312,8 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -1038,7 +1382,7 @@ where
         _op: Op,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: StorageFromInner<R, Item = (K,)>,
@@ -1069,7 +1413,7 @@ where
         value_output: ValueOutput,
     ) -> Result<MIndex, Error>
     where
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K,)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: MIterMut<R, Item = (K,)>,
@@ -1152,8 +1496,8 @@ where
         _op: Op,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
@@ -1222,8 +1566,8 @@ where
         value_output: ValueOutput,
     ) -> Result<MIndex, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
@@ -1254,7 +1598,7 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: StorageFromInner<R, Item = (K,)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -1289,7 +1633,7 @@ where
     ) -> Result<(), Error>
     where
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-        K: Scalar + 'static,
+        K: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K,)>,
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -1324,9 +1668,9 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -1373,9 +1717,9 @@ where
     ) -> Result<(), Error>
     where
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -1408,8 +1752,8 @@ where
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2)>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -1446,8 +1790,8 @@ where
     ) -> Result<(), Error>
     where
         RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
         Less: op::BinaryPredicateOp<R, (K1, K2)>,
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -1479,9 +1823,9 @@ where
         _op: Op,
     ) -> Result<(KeyOutput, ValueOutput), Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
@@ -1556,9 +1900,9 @@ where
         value_output: ValueOutput,
     ) -> Result<MIndex, Error>
     where
-        K1: Scalar + 'static,
-        K2: Scalar + 'static,
-        K3: Scalar + 'static,
+        K1: MStorageElement + 'static,
+        K2: MStorageElement + 'static,
+        K3: MStorageElement + 'static,
         KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
         Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
@@ -1655,11 +1999,11 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-        <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+        Indices: MIter<R, Item = MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
+        let indices =
+            <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
         let input = self.into_inner_with_policy(policy)?.0;
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
@@ -1674,11 +2018,11 @@ where
         indices: Indices,
     ) -> Result<Output, Error>
     where
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-        <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+        Indices: MIter<R, Item = MIndex>,
         Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
+        let indices =
+            <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
         let input = self.into_inner_with_policy(policy)?.0;
         let inner = crate::detail::apply::IndexedExprApply::gather_expr(policy, &input, &indices)?;
         Ok(array_from_inner::<R, (T,), Output>((inner,)))
@@ -2241,12 +2585,11 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-        <Indices as crate::detail::device::KernelColumn>::Expr:
-            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+        Indices: MIter<R, Item = MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
+        let indices =
+            <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
         let input = self.into_inner_with_policy(policy)?.0;
         let mask = stencil.mask();
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
@@ -2265,11 +2608,11 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-        <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+        Indices: MIter<R, Item = MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
+        let indices =
+            <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
         let input = self.into_inner_with_policy(policy)?.0;
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
             .ok_or_else(|| Error::Launch {
@@ -2286,12 +2629,11 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
-        Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-            + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-        <Indices as crate::detail::device::KernelColumn>::Expr:
-            crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+        Indices: MIter<R, Item = MIndex>,
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
+        let indices =
+            <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
         let input = self.into_inner_with_policy(policy)?.0;
         let mask = stencil.mask();
         let output = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
@@ -2693,7 +3035,7 @@ where
 impl<'a, R, T> MIterMut<R> for SoA1<DeviceSliceMut<'a, R, T>>
 where
     R: Runtime,
-    T: Scalar + 'static,
+    T: MStorageElement + 'static,
     (T,): MAlloc<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     type Item = (T,);
@@ -2807,7 +3149,7 @@ where
 impl<'a, R, T> sealed::MIterMutDispatch<R> for SoA1<DeviceSliceMut<'a, R, T>>
 where
     R: Runtime,
-    T: Scalar + 'static,
+    T: MStorageElement + 'static,
     (T,): MAlloc<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
 {
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -2818,7 +3160,7 @@ where
         &self,
     ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, U>>, Error>
     where
-        U: Scalar,
+        U: MStorageElement,
     {
         let source = &*self.0.source as &dyn Any;
         let source = match source.downcast_ref::<DeviceVec<R, U>>() {

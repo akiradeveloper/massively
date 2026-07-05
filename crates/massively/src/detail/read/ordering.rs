@@ -52,7 +52,7 @@ pub(crate) trait KernelPairOrderingInput<Other, Less>: Sized {
 impl<S> KernelReverseInput for S
 where
     S: KernelColumn + KernelColumnAt<S0>,
-    S::Item: Scalar + 'static,
+    S::Item: MStorageElement + 'static,
     S::Expr: DeviceGpuExpr<S::Item>,
 {
     type Runtime = S::Runtime;
@@ -72,7 +72,7 @@ macro_rules! impl_kernel_reverse_tuple1 {
         impl<S> KernelReverseInput for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
         {
             type Runtime = S::Runtime;
@@ -102,8 +102,8 @@ macro_rules! impl_kernel_reverse_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
         {
@@ -153,9 +153,9 @@ macro_rules! impl_kernel_reverse_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
@@ -211,7 +211,7 @@ where
 impl<Source, Less> KernelSortInput<Less> for Source
 where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
-    Source::Item: Scalar + 'static,
+    Source::Item: MStorageElement + 'static,
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<Source::Item>,
 {
@@ -230,7 +230,7 @@ macro_rules! impl_kernel_sort_tuple1 {
         impl<Source, Less> KernelSortInput<Less> for $target
         where
             Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
-            Source::Item: Scalar + 'static,
+            Source::Item: MStorageElement + 'static,
             Source::Expr: DeviceGpuExpr<Source::Item>,
             Less: BinaryPredicateOp<Source::Item>,
         {
@@ -255,7 +255,7 @@ impl_kernel_sort_tuple1!(DeviceSoA1<Source>, source);
 impl<Source, Less> KernelSortInput<Less> for (Source,)
 where
     Source: ReadOnlyKernelColumn + KernelColumnAt<S0>,
-    Source::Item: Scalar + 'static,
+    Source::Item: MStorageElement + 'static,
     Source::Expr: DeviceGpuExpr<Source::Item>,
     Less: BinaryPredicateOp<(Source::Item,)>,
 {
@@ -276,8 +276,8 @@ macro_rules! impl_kernel_sort_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            Left::Item: Scalar + 'static,
-            Right::Item: Scalar + 'static,
+            Left::Item: MStorageElement + 'static,
+            Right::Item: MStorageElement + 'static,
             Left::Expr: DeviceGpuExpr<Left::Item>,
             Right::Expr: DeviceGpuExpr<Right::Item>,
             Less: BinaryPredicateOp<(Left::Item, Right::Item)>,
@@ -328,9 +328,9 @@ macro_rules! impl_kernel_sort_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            First::Item: Scalar + 'static,
-            Second::Item: Scalar + 'static,
-            Third::Item: Scalar + 'static,
+            First::Item: MStorageElement + 'static,
+            Second::Item: MStorageElement + 'static,
+            Third::Item: MStorageElement + 'static,
             First::Expr: DeviceGpuExpr<First::Item>,
             Second::Expr: DeviceGpuExpr<Second::Item>,
             Third::Expr: DeviceGpuExpr<Third::Item>,

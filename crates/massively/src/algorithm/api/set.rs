@@ -12,8 +12,8 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Left: MIter<R, Item = Output::Item>,
-    Right: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Output::Item>,
+    Right: MIter<R, Item = Left::Item>,
+    Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -39,8 +39,8 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Left: MIter<R, Item = Output::Item>,
-    Right: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Output::Item>,
+    Right: MIter<R, Item = Left::Item>,
+    Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -66,8 +66,8 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Left: MIter<R, Item = Output::Item>,
-    Right: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Output::Item>,
+    Right: MIter<R, Item = Left::Item>,
+    Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;

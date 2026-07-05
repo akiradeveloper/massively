@@ -35,7 +35,7 @@ macro_rules! impl_kernel_inclusive_scan_tuple1 {
         impl<S, Op> KernelInclusiveScanInput<Op> for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
             (S::Item,): MItem<S::Runtime>,
             Op: BinaryOp<(S::Item,)>,
@@ -69,7 +69,7 @@ macro_rules! impl_kernel_exclusive_scan_tuple1 {
         impl<S, Op> KernelExclusiveScanInput<Op> for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
             (S::Item,): MItem<S::Runtime>,
             Op: BinaryOp<(S::Item,)>,
@@ -103,7 +103,7 @@ impl_kernel_exclusive_scan_tuple1!(DeviceSoA1<S>, source);
 impl<S, Op> KernelAdjacentDifferenceInput<Op> for S
 where
     S: KernelColumn + KernelColumnAt<S0>,
-    S::Item: Scalar + 'static,
+    S::Item: MStorageElement + 'static,
     S::Expr: DeviceGpuExpr<S::Item>,
     Op: BinaryOp<S::Item>,
 {
@@ -123,7 +123,7 @@ macro_rules! impl_kernel_adjacent_difference_tuple1 {
         impl<S, Op> KernelAdjacentDifferenceInput<Op> for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
             (S::Item,): MItem<S::Runtime>,
             Op: BinaryOp<(S::Item,)>,
@@ -154,8 +154,8 @@ macro_rules! impl_kernel_scan_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             (A::Item, C::Item): MItem<A::Runtime>,
@@ -187,8 +187,8 @@ macro_rules! impl_kernel_scan_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             (A::Item, C::Item): MItem<A::Runtime>,
@@ -228,8 +228,8 @@ macro_rules! impl_kernel_scan_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             (A::Item, C::Item): MItem<A::Runtime>,
@@ -269,9 +269,9 @@ macro_rules! impl_kernel_scan_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
@@ -317,9 +317,9 @@ macro_rules! impl_kernel_scan_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,
@@ -368,9 +368,9 @@ macro_rules! impl_kernel_scan_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,

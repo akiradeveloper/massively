@@ -27,7 +27,7 @@ use crate::{
     index::{MIndex, mindex_from_usize},
     kernels::*,
     op::GpuOp,
-    runtime::Scalar,
+    value::MStorageElement,
 };
 
 #[allow(dead_code)]

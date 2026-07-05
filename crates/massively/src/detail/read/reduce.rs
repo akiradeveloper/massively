@@ -16,7 +16,7 @@ macro_rules! impl_kernel_reduce_tuple1 {
         impl<S, Op> KernelReduceInput<Op> for $target
         where
             S: KernelColumn + KernelColumnAt<S0>,
-            S::Item: Scalar + 'static,
+            S::Item: MStorageElement + 'static,
             S::Expr: DeviceGpuExpr<S::Item>,
             (S::Item,): MItem<S::Runtime>,
             Op: BinaryOp<(S::Item,)>,
@@ -52,8 +52,8 @@ macro_rules! impl_kernel_reduce_tuple2 {
         where
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             (A::Item, C::Item): MItem<A::Runtime>,
@@ -127,9 +127,9 @@ macro_rules! impl_kernel_reduce_tuple3 {
             A: KernelColumn + KernelColumnAt<S0>,
             C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
             D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
-            A::Item: Scalar + 'static,
-            C::Item: Scalar + 'static,
-            D::Item: Scalar + 'static,
+            A::Item: MStorageElement + 'static,
+            C::Item: MStorageElement + 'static,
+            D::Item: MStorageElement + 'static,
             A::Expr: DeviceGpuExpr<A::Item>,
             C::Expr: DeviceGpuExpr<C::Item>,
             D::Expr: DeviceGpuExpr<D::Item>,

@@ -12,8 +12,8 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Left: MIter<R, Item = Output::Item>,
-    Right: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Output::Item>,
+    Right: MIter<R, Item = Left::Item>,
+    Less: op::BinaryPredicateOp<R, Left::Item>,
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
@@ -37,10 +37,10 @@ where
     KeyOutput: MIterMut<R>,
     ValueOutput: MIterMut<R>,
     LeftKeys: MIter<R, Item = KeyOutput::Item>,
-    RightKeys: MIter<R, Item = KeyOutput::Item>,
+    RightKeys: MIter<R, Item = LeftKeys::Item>,
     LeftValues: MIter<R, Item = ValueOutput::Item>,
-    RightValues: MIter<R, Item = ValueOutput::Item>,
-    Less: op::BinaryPredicateOp<R, KeyOutput::Item>,
+    RightValues: MIter<R, Item = LeftValues::Item>,
+    Less: op::BinaryPredicateOp<R, LeftKeys::Item>,
 {
     validate_input(exec, &left_keys)?;
     validate_input(exec, &left_values)?;
@@ -87,7 +87,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Output::Item>,
+    Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
@@ -109,7 +109,7 @@ where
     ValueOutput: MIterMut<R>,
     Keys: MIter<R, Item = KeyOutput::Item>,
     Values: MIter<R, Item = ValueOutput::Item>,
-    Less: op::BinaryPredicateOp<R, KeyOutput::Item>,
+    Less: op::BinaryPredicateOp<R, Keys::Item>,
 {
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
@@ -136,7 +136,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Output::Item>,
+    Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     sort(exec, source, less, out)
 }
@@ -156,7 +156,7 @@ where
     ValueOutput: MIterMut<R>,
     Keys: MIter<R, Item = KeyOutput::Item>,
     Values: MIter<R, Item = ValueOutput::Item>,
-    Less: op::BinaryPredicateOp<R, KeyOutput::Item>,
+    Less: op::BinaryPredicateOp<R, Keys::Item>,
 {
     sort_by_key(exec, keys, values, less, out_k, out_v)
 }

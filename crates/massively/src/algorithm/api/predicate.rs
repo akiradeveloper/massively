@@ -108,7 +108,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
-    Pred: op::PredicateOp<R, Output::Item>,
+    Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;

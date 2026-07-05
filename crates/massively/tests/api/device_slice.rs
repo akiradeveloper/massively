@@ -196,7 +196,7 @@ fn transform_accepts_device_slice() {
     let output = exec.to_device(&[0.0_f32; 2]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(1..3)),
+        input.slice(1..3),
         Double,
         (),
         massively::SoA1(output.slice_mut(..)),
@@ -275,6 +275,16 @@ fn reduce_accepts_multi_column_device_slices() {
     .unwrap();
 
     assert_eq!(sum, (9.0, 90));
+}
+
+#[test]
+fn direct_device_slice_reduce_reads_scalar_items() {
+    let exec = exec();
+    let values = exec.to_device(&[99.0_f32, 1.0, 2.0, 3.0, 88.0]).unwrap();
+
+    let sum = reduce(&exec, values.slice(1..4), 0.0_f32, Sum).unwrap();
+
+    assert_eq!(sum, 6.0);
 }
 
 #[test]

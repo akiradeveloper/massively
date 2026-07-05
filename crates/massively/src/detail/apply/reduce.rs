@@ -19,7 +19,7 @@ use crate::{
         reduce_by_key_apply_init_kernel, reduce_by_key_tuple2_apply_init_kernel,
         reduce_by_key_tuple3_apply_init_kernel, reduce_by_key_tuple7_apply_init_kernel,
     },
-    runtime::Scalar,
+    value::MStorageElement,
 };
 use cubecl::prelude::*;
 
@@ -34,7 +34,7 @@ impl LinearReduceApply {
     ) -> Result<(T,), Error>
     where
         R: Runtime,
-        T: Scalar + 'static,
+        T: MStorageElement + 'static,
         Expr: DeviceGpuExpr<T>,
         (T,): MItem<R>,
         Op: BinaryOp<(T,)>,
@@ -51,8 +51,8 @@ impl LinearReduceApply {
     ) -> Result<(A, C), Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         (A, C): MItem<R>,
@@ -73,9 +73,9 @@ impl LinearReduceApply {
     ) -> Result<(A, C, D), Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         DExpr: DeviceGpuExpr<D>,
@@ -98,10 +98,10 @@ impl LinearReduceApply {
     ) -> Result<(A, B, C, D), Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
@@ -137,11 +137,11 @@ impl LinearReduceApply {
     ) -> Result<(A, B, C, D, E), Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
@@ -176,12 +176,12 @@ impl LinearReduceApply {
     ) -> Result<(A, B, C, D, E, F), Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
@@ -215,13 +215,13 @@ impl LinearReduceApply {
     ) -> Result<(A, B, C, D, E, F, G), Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         let a_stage = KernelColumn::stage(a, policy)?;
@@ -272,7 +272,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
     ) -> Result<DeviceVec<R, ValueSource::Item>, Error>
     where
         ValueSource: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        ValueSource::Item: Scalar + 'static,
+        ValueSource::Item: MStorageElement + 'static,
         ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
         Op: BinaryOp<(ValueSource::Item,)>,
     {
@@ -325,8 +325,8 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
     where
         ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        ValueA::Item: Scalar + 'static,
-        ValueB::Item: Scalar + 'static,
+        ValueA::Item: MStorageElement + 'static,
+        ValueB::Item: MStorageElement + 'static,
         ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
         ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
         (ValueA::Item, ValueB::Item): MItem<R>,
@@ -398,9 +398,9 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         ValueC: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        ValueA::Item: Scalar + 'static,
-        ValueB::Item: Scalar + 'static,
-        ValueC::Item: Scalar + 'static,
+        ValueA::Item: MStorageElement + 'static,
+        ValueB::Item: MStorageElement + 'static,
+        ValueC::Item: MStorageElement + 'static,
         ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
         ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
         ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
@@ -561,10 +561,10 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         if self.control.len == 0 {
@@ -618,11 +618,11 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         if self.control.len == 0 {
@@ -677,12 +677,12 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         if self.control.len == 0 {
@@ -738,13 +738,13 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         let scan_control: ScanByKeyControl<R> = self.control.into();

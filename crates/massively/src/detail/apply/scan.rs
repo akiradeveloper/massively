@@ -19,7 +19,7 @@ use crate::{
     },
     error::Error,
     expr::DeviceGpuExpr,
-    runtime::Scalar,
+    value::MStorageElement,
 };
 use cubecl::prelude::*;
 
@@ -33,7 +33,7 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA1<DeviceVec<R, T>>, Error>
     where
         R: Runtime,
-        T: Scalar + 'static,
+        T: MStorageElement + 'static,
         Expr: DeviceGpuExpr<T>,
         (T,): MItem<R>,
         Op: BinaryOp<(T,)>,
@@ -49,7 +49,7 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA1<DeviceVec<R, T>>, Error>
     where
         R: Runtime,
-        T: Scalar + 'static,
+        T: MStorageElement + 'static,
         Expr: DeviceGpuExpr<T>,
         (T,): MItem<R>,
         Op: BinaryOp<(T,)>,
@@ -65,7 +65,7 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA1<DeviceVec<Source::Runtime, Source::Item>>, Error>
     where
         Source: KernelColumn + KernelColumnAt<S0>,
-        Source::Item: Scalar + 'static,
+        Source::Item: MStorageElement + 'static,
         Source::Expr: DeviceGpuExpr<Source::Item>,
         Op: BinaryOp<Source::Item>,
     {
@@ -83,8 +83,8 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         (A, C): MItem<R>,
@@ -104,8 +104,8 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         (A, C): MItem<R>,
@@ -124,8 +124,8 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA2<DeviceVec<R, A>, DeviceVec<R, C>>, Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         (A, C): MItem<R>,
@@ -145,9 +145,9 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         DExpr: DeviceGpuExpr<D>,
@@ -169,9 +169,9 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         DExpr: DeviceGpuExpr<D>,
@@ -192,9 +192,9 @@ impl LinearScanApply {
     ) -> Result<DeviceSoA3<DeviceVec<R, A>, DeviceVec<R, C>, DeviceVec<R, D>>, Error>
     where
         R: Runtime,
-        A: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         AExpr: DeviceGpuExpr<A>,
         CExpr: DeviceGpuExpr<C>,
         DExpr: DeviceGpuExpr<D>,
@@ -224,10 +224,10 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
@@ -263,11 +263,11 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
@@ -303,12 +303,12 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
@@ -344,13 +344,13 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         primitive_scan::inclusive_scan_tuple7_device_views::<R, A, B, C, D, E, F, G, Op>(
@@ -377,10 +377,10 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
@@ -425,11 +425,11 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
@@ -474,12 +474,12 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
@@ -524,13 +524,13 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         primitive_scan::exclusive_scan_tuple7_device_views::<R, A, B, C, D, E, F, G, Op>(
@@ -556,10 +556,10 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
@@ -595,11 +595,11 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
@@ -635,12 +635,12 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
@@ -676,13 +676,13 @@ impl LinearScanApply {
     >
     where
         R: Runtime,
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         primitive_scan::adjacent_difference_tuple7_device_views::<R, A, B, C, D, E, F, G, Op>(
@@ -707,7 +707,7 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
     ) -> Result<DeviceVec<R, Source::Item>, Error>
     where
         Source: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        Source::Item: Scalar + 'static,
+        Source::Item: MStorageElement + 'static,
         Source::Expr: DeviceGpuExpr<Source::Item>,
         Op: BinaryOp<(Source::Item,)>,
     {
@@ -722,7 +722,7 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
     ) -> Result<DeviceVec<R, Source::Item>, Error>
     where
         Source: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        Source::Item: Scalar + 'static,
+        Source::Item: MStorageElement + 'static,
         Source::Expr: DeviceGpuExpr<Source::Item>,
         Op: BinaryOp<(Source::Item,)>,
     {
@@ -738,8 +738,8 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
     where
         A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
         A::Expr: DeviceGpuExpr<A::Item>,
         C::Expr: DeviceGpuExpr<C::Item>,
         (A::Item, C::Item): MItem<R>,
@@ -758,8 +758,8 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
     where
         A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
         A::Expr: DeviceGpuExpr<A::Item>,
         C::Expr: DeviceGpuExpr<C::Item>,
         (A::Item, C::Item): MItem<R>,
@@ -782,9 +782,9 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         D: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
-        D::Item: Scalar + 'static,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
+        D::Item: MStorageElement + 'static,
         A::Expr: DeviceGpuExpr<A::Item>,
         C::Expr: DeviceGpuExpr<C::Item>,
         D::Expr: DeviceGpuExpr<D::Item>,
@@ -809,9 +809,9 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         D: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-        A::Item: Scalar + 'static,
-        C::Item: Scalar + 'static,
-        D::Item: Scalar + 'static,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
+        D::Item: MStorageElement + 'static,
         A::Expr: DeviceGpuExpr<A::Item>,
         C::Expr: DeviceGpuExpr<C::Item>,
         D::Expr: DeviceGpuExpr<D::Item>,
@@ -839,10 +839,10 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
@@ -878,11 +878,11 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
@@ -918,12 +918,12 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
@@ -959,13 +959,13 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         inclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>(
@@ -1000,10 +1000,10 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D)>,
     {
         let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
@@ -1048,11 +1048,11 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E)>,
     {
         let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
@@ -1097,12 +1097,12 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F)>,
     {
         let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
@@ -1147,13 +1147,13 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Error,
     >
     where
-        A: Scalar + 'static,
-        B: Scalar + 'static,
-        C: Scalar + 'static,
-        D: Scalar + 'static,
-        E: Scalar + 'static,
-        F: Scalar + 'static,
-        G: Scalar + 'static,
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
         Op: BinaryOp<(A, B, C, D, E, F, G)>,
     {
         exclusive_scan_by_flags_seven_views::<R, A, B, C, D, E, F, G, Op>(
