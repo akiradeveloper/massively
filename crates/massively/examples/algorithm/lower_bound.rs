@@ -12,8 +12,8 @@ fn main() -> common::Result {
     let indices = exec.to_device(&[0_u32; 2])?;
     lower_bound(
         &exec,
-        SoA1(sorted.slice(..)),
-        SoA1(values.slice(..)),
+        Zip1(sorted.slice(..)),
+        Zip1(values.slice(..)),
         common::LessF32,
         indices.slice_mut(..),
     )?;

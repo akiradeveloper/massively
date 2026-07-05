@@ -11,10 +11,10 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     let split = partition(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         common::Positive,
         (),
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output.slice(..split))?, vec![2.0, 4.0]);

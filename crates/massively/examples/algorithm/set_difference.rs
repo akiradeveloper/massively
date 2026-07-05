@@ -12,10 +12,10 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 3])?;
     let len = set_difference(
         &exec,
-        SoA1(left.slice(..)),
-        SoA1(right.slice(..)),
+        Zip1(left.slice(..)),
+        Zip1(right.slice(..)),
         common::LessF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     println!("set difference: {:?}", exec.to_host(&output.slice(..len))?);

@@ -67,10 +67,10 @@ fn map_returns_owned_single_column_output() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         AddOneU32,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -85,10 +85,10 @@ fn stateful_unary_op_carries_value() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         AddOffset,
         10_u32,
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -103,10 +103,10 @@ fn stateless_unary_op_uses_unit_env() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         Square,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -122,10 +122,10 @@ fn composed_unary_op_uses_paired_env() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         op,
         (2_u32, ()),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -140,10 +140,10 @@ fn constant_unary_op_returns_env_for_single_column() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         massively::op::constant::<(u32,)>(),
         (42_u32,),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -159,10 +159,10 @@ fn constant_unary_op_returns_env_for_multi_column() {
     let tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         massively::op::Constant::<(f32, u32)>::new(),
         (1.5_f32, 9_u32),
-        massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
+        massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
 
@@ -175,13 +175,13 @@ fn stateful_predicate_op_carries_value() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 3, 5, 7]).unwrap();
 
-    assert!(!massively::all_of(&exec, massively::SoA1(input.slice(..)), LessThan, 5_u32,).unwrap());
+    assert!(!massively::all_of(&exec, massively::Zip1(input.slice(..)), LessThan, 5_u32,).unwrap());
     assert_eq!(
-        count_if(&exec, massively::SoA1(input.slice(..)), LessThan, 5_u32).unwrap(),
+        count_if(&exec, massively::Zip1(input.slice(..)), LessThan, 5_u32).unwrap(),
         2
     );
     assert_eq!(
-        find_if(&exec, massively::SoA1(input.slice(..)), LessThan, 4_u32).unwrap(),
+        find_if(&exec, massively::Zip1(input.slice(..)), LessThan, 4_u32).unwrap(),
         Some(0)
     );
 }
@@ -195,10 +195,10 @@ fn map_returns_owned_output_from_multi_column_input() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA2(left.slice(..), right.slice(..)),
+        massively::Zip2(left.slice(..), right.slice(..)),
         PairToU32,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -214,9 +214,9 @@ fn permute_returns_owned_single_column_output() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         indices.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -234,9 +234,9 @@ fn permute_returns_owned_two_column_output() {
     let out_right = exec.to_device(&[0_u32; 3]).unwrap();
     gather(
         &exec,
-        massively::SoA2(left.slice(..), right.slice(..)),
+        massively::Zip2(left.slice(..), right.slice(..)),
         indices.slice(..),
-        massively::SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        massively::Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -257,9 +257,9 @@ fn permute_returns_owned_three_column_output() {
     let out_c = exec.to_device(&[0_u32; 2]).unwrap();
     gather(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         indices.slice(..),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -281,9 +281,9 @@ fn where_algorithms_accept_device_slice_stencil() {
     let copied = exec.to_device(&[0_u32; 4]).unwrap();
     let copied_len = copy_where(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         stencil.slice(..),
-        massively::SoA1(copied.slice_mut(..)),
+        massively::Zip1(copied.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -294,36 +294,36 @@ fn where_algorithms_accept_device_slice_stencil() {
     let transformed = exec.constant(4, 0_u32).unwrap();
     transform_where(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         AddOneU32,
         (),
         stencil.slice(..),
-        massively::SoA1(transformed.slice_mut(..)),
+        massively::Zip1(transformed.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&transformed).unwrap(), vec![0, 21, 0, 41]);
 }
 
 #[test]
-fn owned_soa_result_can_feed_next_algorithm() {
+fn owned_zip_result_can_feed_next_algorithm() {
     let exec = exec();
     let input = exec.to_device(&[4_u32, 1, 3, 2]).unwrap();
 
     let sorted = exec.to_device(&[0_u32; 4]).unwrap();
     sort(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         LessU32,
-        massively::SoA1(sorted.slice_mut(..)),
+        massively::Zip1(sorted.slice_mut(..)),
     )
     .unwrap();
     let output = exec.to_device(&[0_u32; 4]).unwrap();
     transform(
         &exec,
-        massively::SoA1(sorted.slice(..)),
+        massively::Zip1(sorted.slice(..)),
         AddOneU32,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -331,25 +331,25 @@ fn owned_soa_result_can_feed_next_algorithm() {
 }
 
 #[test]
-fn owned_soa_result_can_be_sliced_before_next_algorithm() {
+fn owned_zip_result_can_be_sliced_before_next_algorithm() {
     let exec = exec();
     let input = exec.to_device(&[4_u32, 1, 3, 2]).unwrap();
 
     let sorted = exec.to_device(&[0_u32; 4]).unwrap();
     sort(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         LessU32,
-        massively::SoA1(sorted.slice_mut(..)),
+        massively::Zip1(sorted.slice_mut(..)),
     )
     .unwrap();
     let output = exec.to_device(&[0_u32; 2]).unwrap();
     transform(
         &exec,
-        massively::SoA1(sorted.slice(1..3)),
+        massively::Zip1(sorted.slice(1..3)),
         AddOneU32,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -357,7 +357,7 @@ fn owned_soa_result_can_be_sliced_before_next_algorithm() {
 }
 
 #[test]
-fn permuted_owned_soa_can_feed_selection_algorithm() {
+fn permuted_owned_zip_can_feed_selection_algorithm() {
     let exec = exec();
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
@@ -366,10 +366,10 @@ fn permuted_owned_soa_can_feed_selection_algorithm() {
 
     let permuted_left = exec.to_device(&[0_u32; 3]).unwrap();
     let permuted_right = exec.to_device(&[0_u32; 3]).unwrap();
-    let permuted = massively::SoA2(permuted_left, permuted_right);
+    let permuted = massively::Zip2(permuted_left, permuted_right);
     gather(
         &exec,
-        massively::SoA2(left.slice(..), right.slice(..)),
+        massively::Zip2(left.slice(..), right.slice(..)),
         indices.slice(..),
         permuted.slice_mut(..),
     )
@@ -380,7 +380,7 @@ fn permuted_owned_soa_can_feed_selection_algorithm() {
         &exec,
         permuted.slice(..),
         stencil.slice(..),
-        massively::SoA2(out_left.slice_mut(..), out_right.slice_mut(..)),
+        massively::Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
 
@@ -389,14 +389,14 @@ fn permuted_owned_soa_can_feed_selection_algorithm() {
 }
 
 #[test]
-fn owned_soa_slice_mut_can_be_used_as_output() {
+fn owned_zip_slice_mut_can_be_used_as_output() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
-    let output = massively::SoA1(exec.constant(5, 0_u32).unwrap());
+    let output = massively::Zip1(exec.constant(5, 0_u32).unwrap());
 
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         AddOneU32,
         (),
         output.slice_mut(1..4),

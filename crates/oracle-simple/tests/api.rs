@@ -156,7 +156,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_transform(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TransformMap, (), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_transform(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TransformMap, (), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), transform_map(&input));
     }
 
@@ -165,7 +165,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_reduce(&exec, massively::SoA1(input_g.slice(slice_range(&input))), (init,), TupleMaxOp).unwrap().0, oracle_simple::reduce(&input, init));
+        prop_assert_eq!(api_reduce(&exec, massively::Zip1(input_g.slice(slice_range(&input))), (init,), TupleMaxOp).unwrap().0, oracle_simple::reduce(&input, init));
     }
 
     #[test]
@@ -174,7 +174,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_inclusive_scan(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_inclusive_scan(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleMaxOp, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::inclusive_scan(&input));
     }
 
@@ -184,7 +184,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_exclusive_scan(&exec, massively::SoA1(input_g.slice(slice_range(&input))), (init,), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_exclusive_scan(&exec, massively::Zip1(input_g.slice(slice_range(&input))), (init,), TupleMaxOp, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::exclusive_scan(&input, init));
     }
 
@@ -194,7 +194,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_adjacent_difference(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_adjacent_difference(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleMaxOp, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::adjacent_difference(&input));
     }
 
@@ -206,7 +206,7 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let len = api_copy_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let len = api_copy_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::copy_where(&input, &stencil));
     }
 
@@ -218,7 +218,7 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let len = api_remove_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let len = api_remove_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::remove_where(&input, &stencil));
     }
 
@@ -228,7 +228,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let split = api_partition(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, (), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let split = api_partition(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, (), massively::Zip1(output_g.slice_mut(..))).unwrap();
         let (matching, failing) = oracle_simple::partition(&input);
         prop_assert_eq!(exec.to_host(&output_g.slice(..split)).unwrap(), matching);
         prop_assert_eq!(exec.to_host(&output_g.slice(split..mindex(input.len()))).unwrap(), failing);
@@ -239,7 +239,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_count_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), mindex(oracle_simple::count_if(&input)));
+        prop_assert_eq!(api_count_if(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), mindex(oracle_simple::count_if(&input)));
     }
 
     #[test]
@@ -247,7 +247,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_all_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::all_of(&input));
+        prop_assert_eq!(api_all_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::all_of(&input));
     }
 
     #[test]
@@ -255,7 +255,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_any_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::any_of(&input));
+        prop_assert_eq!(api_any_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::any_of(&input));
     }
 
     #[test]
@@ -263,7 +263,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_none_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::none_of(&input));
+        prop_assert_eq!(api_none_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::none_of(&input));
     }
 
     #[test]
@@ -271,7 +271,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_find_if(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), opt_mindex(oracle_simple::find_if(&input)));
+        prop_assert_eq!(api_find_if(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), opt_mindex(oracle_simple::find_if(&input)));
     }
 
     #[test]
@@ -279,7 +279,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_is_partitioned(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::is_partitioned(&input));
+        prop_assert_eq!(api_is_partitioned(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::is_partitioned(&input));
     }
 
     #[test]
@@ -289,7 +289,7 @@ proptest! {
         let stencil = stencil_flags(&input);
         let output_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
-        api_replace_where(&exec, (replacement,), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(slice_range(&input)))).unwrap();
+        api_replace_where(&exec, (replacement,), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(slice_range(&input)))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(slice_range(&input))).unwrap(), oracle_simple::replace_where(&input, replacement, &stencil));
     }
 
@@ -300,7 +300,7 @@ proptest! {
         let output_g = padded_device(&exec, &input);
         let mut expected = input.clone();
         oracle_simple::fill(replacement, &mut expected);
-        api_fill(&exec, (replacement,), massively::SoA1(output_g.slice_mut(slice_range(&input)))).unwrap();
+        api_fill(&exec, (replacement,), massively::Zip1(output_g.slice_mut(slice_range(&input)))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(slice_range(&input))).unwrap(), expected);
     }
 
@@ -310,7 +310,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let len = api_unique(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleSameLowNibble, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let len = api_unique(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleSameLowNibble, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::unique(&input));
     }
 
@@ -320,7 +320,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_reverse(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_reverse(&exec, massively::Zip1(input_g.slice(slice_range(&input))), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::reverse(&input));
     }
 
@@ -332,7 +332,7 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let indices_g = padded_device(&exec, &indices);
         let output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
-        api_gather(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_gather(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::gather(&input, &indices));
     }
 
@@ -348,7 +348,7 @@ proptest! {
         prop_assert_eq!(
             {
                 let output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
-                gather_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..)))
+                gather_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..)))
                     .unwrap();
                 exec.to_host(&output_g).unwrap()
             },
@@ -365,7 +365,7 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let indices_g = padded_device(&exec, &indices);
         let output_g = exec.to_device(&vec![default; input.len()]).unwrap();
-        scatter(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+        scatter(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::scatter(&input, &indices, input.len(), default));
     }
 
@@ -382,7 +382,7 @@ proptest! {
         prop_assert_eq!(
             {
                 let output_g = exec.to_device(&vec![default; input.len()]).unwrap();
-                scatter_where(&exec, massively::SoA1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::SoA1(output_g.slice_mut(..))).unwrap();
+                scatter_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..))).unwrap();
                 exec.to_host(&output_g).unwrap()
             },
             oracle_simple::scatter_where(&input, &indices, input.len(), default, &stencil)
@@ -395,7 +395,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_sort(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        api_sort(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::sort(&input));
     }
 
@@ -405,7 +405,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        stable_sort(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        stable_sort(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::sort(&input));
     }
 
@@ -419,8 +419,8 @@ proptest! {
         let output = exec.to_device(&vec![0_u32; values.len()]).unwrap();
         lower_bound(
             &exec,
-            massively::SoA1(sorted_g.slice(slice_range(&sorted))),
-            massively::SoA1(values_g.slice(slice_range(&values))),
+            massively::Zip1(sorted_g.slice(slice_range(&sorted))),
+            massively::Zip1(values_g.slice(slice_range(&values))),
             TupleBucketThenValueLess,
             output.slice_mut(..),
         ).unwrap();
@@ -437,8 +437,8 @@ proptest! {
         let output = exec.to_device(&vec![0_u32; values.len()]).unwrap();
         upper_bound(
             &exec,
-            massively::SoA1(sorted_g.slice(slice_range(&sorted))),
-            massively::SoA1(values_g.slice(slice_range(&values))),
+            massively::Zip1(sorted_g.slice(slice_range(&sorted))),
+            massively::Zip1(values_g.slice(slice_range(&values))),
             TupleBucketThenValueLess,
             output.slice_mut(..),
         ).unwrap();
@@ -451,7 +451,7 @@ proptest! {
         let sorted = oracle_simple::sort(&input);
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
-        prop_assert_eq!(is_sorted_until(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), TupleBucketThenValueLess).unwrap(), mindex(oracle_simple::is_sorted_until(&sorted)));
+        prop_assert_eq!(is_sorted_until(&exec, massively::Zip1(sorted_g.slice(slice_range(&sorted))), TupleBucketThenValueLess).unwrap(), mindex(oracle_simple::is_sorted_until(&sorted)));
     }
 
     #[test]
@@ -460,7 +460,7 @@ proptest! {
         let sorted = oracle_simple::sort(&input);
         let exec = exec();
         let sorted_g = padded_device(&exec, &sorted);
-        prop_assert_eq!(is_sorted(&exec, massively::SoA1(sorted_g.slice(slice_range(&sorted))), TupleBucketThenValueLess).unwrap(), oracle_simple::is_sorted(&sorted));
+        prop_assert_eq!(is_sorted(&exec, massively::Zip1(sorted_g.slice(slice_range(&sorted))), TupleBucketThenValueLess).unwrap(), oracle_simple::is_sorted(&sorted));
     }
 
     #[test]
@@ -472,7 +472,7 @@ proptest! {
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
         let output_g = exec.to_device(&vec![0_u32; left.len() + right.len()]).unwrap();
-        merge(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        merge(&exec, massively::Zip1(left_g.slice(slice_range(&left))), massively::Zip1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::merge(&left, &right));
     }
 
@@ -485,7 +485,7 @@ proptest! {
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
         let output_g = exec.to_device(&vec![0_u32; left.len() + right.len()]).unwrap();
-        let len = set_union(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let len = set_union(&exec, massively::Zip1(left_g.slice(slice_range(&left))), massively::Zip1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::set_union(&left, &right));
     }
 
@@ -498,7 +498,7 @@ proptest! {
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
         let output_g = exec.to_device(&vec![0_u32; left.len().min(right.len())]).unwrap();
-        let len = set_intersection(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let len = set_intersection(&exec, massively::Zip1(left_g.slice(slice_range(&left))), massively::Zip1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::set_intersection(&left, &right));
     }
 
@@ -511,7 +511,7 @@ proptest! {
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
         let output_g = exec.to_device(&vec![0_u32; left.len()]).unwrap();
-        let len = set_difference(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        let len = set_difference(&exec, massively::Zip1(left_g.slice(slice_range(&left))), massively::Zip1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::set_difference(&left, &right));
     }
 
@@ -520,7 +520,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(adjacent_find(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::adjacent_find(&input)));
+        prop_assert_eq!(adjacent_find(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::adjacent_find(&input)));
     }
 
     #[test]
@@ -530,7 +530,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let right_g = padded_device(&exec, &right);
-        prop_assert_eq!(equal(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(right_g.slice(slice_range(&right))), TupleSameLowNibble).unwrap(), oracle_simple::equal(&input, &right));
+        prop_assert_eq!(equal(&exec, massively::Zip1(input_g.slice(slice_range(&input))), massively::Zip1(right_g.slice(slice_range(&right))), TupleSameLowNibble).unwrap(), oracle_simple::equal(&input, &right));
     }
 
     #[test]
@@ -540,7 +540,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let right_g = padded_device(&exec, &right);
-        prop_assert_eq!(mismatch(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(right_g.slice(slice_range(&right))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::mismatch(&input, &right)));
+        prop_assert_eq!(mismatch(&exec, massively::Zip1(input_g.slice(slice_range(&input))), massively::Zip1(right_g.slice(slice_range(&right))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::mismatch(&input, &right)));
     }
 
     #[test]
@@ -554,7 +554,7 @@ proptest! {
         let exec = exec();
         let input_g = padded_device(&exec, &input);
         let needles_g = padded_device(&exec, &needles);
-        prop_assert_eq!(find_first_of(&exec, massively::SoA1(input_g.slice(slice_range(&input))), massively::SoA1(needles_g.slice(slice_range(&needles))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::find_first_of(&input, &needles)));
+        prop_assert_eq!(find_first_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), massively::Zip1(needles_g.slice(slice_range(&needles))), TupleSameLowNibble).unwrap(), opt_mindex(oracle_simple::find_first_of(&input, &needles)));
     }
 
     #[test]
@@ -562,7 +562,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(min_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_mindex(oracle_simple::min_element(&input)));
+        prop_assert_eq!(min_element(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_mindex(oracle_simple::min_element(&input)));
     }
 
     #[test]
@@ -570,7 +570,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(max_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_mindex(oracle_simple::max_element(&input)));
+        prop_assert_eq!(max_element(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_mindex(oracle_simple::max_element(&input)));
     }
 
     #[test]
@@ -578,7 +578,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(minmax_element(&exec, massively::SoA1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_pair_mindex(oracle_simple::minmax_element(&input)));
+        prop_assert_eq!(minmax_element(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess).unwrap(), opt_pair_mindex(oracle_simple::minmax_element(&input)));
     }
 
     #[test]
@@ -587,7 +587,7 @@ proptest! {
         let exec = exec();
         let left_g = padded_device(&exec, &left);
         let right_g = padded_device(&exec, &right);
-        prop_assert_eq!(lexicographical_compare(&exec, massively::SoA1(left_g.slice(slice_range(&left))), massively::SoA1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap(), oracle_simple::lexicographical_compare(&left, &right));
+        prop_assert_eq!(lexicographical_compare(&exec, massively::Zip1(left_g.slice(slice_range(&left))), massively::Zip1(right_g.slice(slice_range(&right))), TupleBucketThenValueLess).unwrap(), oracle_simple::lexicographical_compare(&left, &right));
     }
 
     #[test]
@@ -598,7 +598,7 @@ proptest! {
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
         let output_g = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        inclusive_scan_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        inclusive_scan_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleSameLowNibble, TupleMaxOp, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::inclusive_scan_by_key(&keys, &values));
     }
 
@@ -611,7 +611,7 @@ proptest! {
         let keys_g = padded_device(&exec, &keys);
         let values_g = padded_device(&exec, &values);
         let output_g = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        exclusive_scan_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp, massively::SoA1(output_g.slice_mut(..))).unwrap();
+        exclusive_scan_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::exclusive_scan_by_key(&keys, &values, init));
     }
 
@@ -626,7 +626,7 @@ proptest! {
         let (expected_keys, expected_values) = oracle_simple::reduce_by_key(&keys, &values, init);
         let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
         let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        let len = reduce_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
+        let len = reduce_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleSameLowNibble, (init,), TupleMaxOp, massively::Zip1(actual_keys.slice_mut(..)), massively::Zip1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys.slice(..len)).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values.slice(..len)).unwrap(), expected_values);
     }
@@ -641,7 +641,7 @@ proptest! {
         let (expected_keys, expected_values) = oracle_simple::unique_by_key(&keys, &values);
         let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
         let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        let len = unique_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleSameLowNibble, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
+        let len = unique_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleSameLowNibble, massively::Zip1(actual_keys.slice_mut(..)), massively::Zip1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys.slice(..len)).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values.slice(..len)).unwrap(), expected_values);
     }
@@ -656,7 +656,7 @@ proptest! {
         let (expected_keys, expected_values) = oracle_simple::sort_by_key(&keys, &values);
         let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
         let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        sort_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
+        sort_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::Zip1(actual_keys.slice_mut(..)), massively::Zip1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
@@ -671,7 +671,7 @@ proptest! {
         let (expected_keys, expected_values) = oracle_simple::sort_by_key(&keys, &values);
         let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
         let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        stable_sort_by_key(&exec, massively::SoA1(keys_g.slice(slice_range(&keys))), massively::SoA1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::SoA1(actual_keys.slice_mut(..)), massively::SoA1(actual_values.slice_mut(..))).unwrap();
+        stable_sort_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::Zip1(actual_keys.slice_mut(..)), massively::Zip1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }
@@ -695,13 +695,13 @@ proptest! {
         let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
         let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
         merge_by_key(&exec,
-            massively::SoA1(left_keys_g.slice(slice_range(&left_keys))),
-            massively::SoA1(left_values_g.slice(slice_range(&left_values))),
-            massively::SoA1(right_keys_g.slice(slice_range(&right_keys))),
-            massively::SoA1(right_values_g.slice(slice_range(&right_values))),
+            massively::Zip1(left_keys_g.slice(slice_range(&left_keys))),
+            massively::Zip1(left_values_g.slice(slice_range(&left_values))),
+            massively::Zip1(right_keys_g.slice(slice_range(&right_keys))),
+            massively::Zip1(right_values_g.slice(slice_range(&right_values))),
             TupleBucketThenValueLess,
-            massively::SoA1(actual_keys.slice_mut(..)),
-            massively::SoA1(actual_values.slice_mut(..)),
+            massively::Zip1(actual_keys.slice_mut(..)),
+            massively::Zip1(actual_values.slice_mut(..)),
         )
         .unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);

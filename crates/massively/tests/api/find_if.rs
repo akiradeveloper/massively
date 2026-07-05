@@ -8,7 +8,7 @@ fn find_if_accepts_heterogeneous_tuple_predicates() {
 
     let first = find_if(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedTagIsTwenty,
         (),
     )

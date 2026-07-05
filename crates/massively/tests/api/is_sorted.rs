@@ -8,7 +8,7 @@ fn is_sorted_accepts_borrowed_tuple_columns() {
     assert!(
         is_sorted(
             &exec,
-            massively::SoA2(k.slice(..), l.slice(..)),
+            massively::Zip2(k.slice(..), l.slice(..)),
             MixedTupleLess
         )
         .unwrap()

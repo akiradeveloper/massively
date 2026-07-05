@@ -2,7 +2,7 @@
 
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp},
-    device::{DeviceColumnView, DeviceVec, KernelColumnBindings, SoA1, SoA2, SoA3},
+    device::{DeviceColumnView, DeviceVec, KernelColumnBindings, Zip1, Zip2, Zip3},
     error::Error,
     expr::DeviceGpuExpr,
     kernels::*,
@@ -79,7 +79,7 @@ pub(crate) fn adjacent_difference_tuple2_device_expr<R, A, B, ExprA, ExprB, Op>(
     a_bindings: &KernelColumnBindings,
     b_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+) -> Result<Zip2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -90,7 +90,7 @@ where
 {
     let client = policy.client();
     if len == 0 {
-        return Ok(SoA2 {
+        return Ok(Zip2 {
             left: policy.empty_device_vec(),
             right: policy.empty_device_vec(),
         });
@@ -135,7 +135,7 @@ where
         );
     }
 
-    Ok(SoA2 {
+    Ok(Zip2 {
         left: DeviceVec::from_handle(policy.id(), output_a, len),
         right: DeviceVec::from_handle(policy.id(), output_b, len),
     })
@@ -147,7 +147,7 @@ pub(crate) fn adjacent_difference_tuple3_device_expr<R, A, B, C, ExprA, ExprB, E
     b_bindings: &KernelColumnBindings,
     c_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+) -> Result<Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -160,7 +160,7 @@ where
 {
     let client = policy.client();
     if len == 0 {
-        return Ok(SoA3 {
+        return Ok(Zip3 {
             first: policy.empty_device_vec(),
             second: policy.empty_device_vec(),
             third: policy.empty_device_vec(),
@@ -227,7 +227,7 @@ where
         );
     }
 
-    Ok(SoA3 {
+    Ok(Zip3 {
         first: DeviceVec::from_handle(policy.id(), output_a, len),
         second: DeviceVec::from_handle(policy.id(), output_b, len),
         third: DeviceVec::from_handle(policy.id(), output_c, len),
@@ -309,7 +309,7 @@ pub(crate) fn inclusive_scan_tuple2_by_key_values_device_expr<
     a_bindings: &KernelColumnBindings,
     b_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+) -> Result<Zip2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
@@ -332,7 +332,7 @@ where
         KeyEq,
         Op,
     >(policy, key_bindings, a_bindings, b_bindings, len)?;
-    Ok(SoA2 {
+    Ok(Zip2 {
         left: DeviceVec::from_handle(policy.id(), left, len),
         right: DeviceVec::from_handle(policy.id(), right, len),
     })
@@ -355,7 +355,7 @@ pub(crate) fn exclusive_scan_tuple2_by_key_values_device_expr<
     b_bindings: &KernelColumnBindings,
     len: usize,
     init: (A, B),
-) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+) -> Result<Zip2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
@@ -386,7 +386,7 @@ where
             inclusive,
             init,
         )?;
-    Ok(SoA2 {
+    Ok(Zip2 {
         left: DeviceVec::from_handle(policy.id(), left, len),
         right: DeviceVec::from_handle(policy.id(), right, len),
     })
@@ -411,7 +411,7 @@ pub(crate) fn inclusive_scan_tuple3_by_key_values_device_expr<
     b_bindings: &KernelColumnBindings,
     c_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+) -> Result<Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
@@ -445,7 +445,7 @@ where
         c_bindings,
         len,
     )?;
-    Ok(SoA3 {
+    Ok(Zip3 {
         first: DeviceVec::from_handle(policy.id(), first, len),
         second: DeviceVec::from_handle(policy.id(), second, len),
         third: DeviceVec::from_handle(policy.id(), third, len),
@@ -472,7 +472,7 @@ pub(crate) fn exclusive_scan_tuple3_by_key_values_device_expr<
     c_bindings: &KernelColumnBindings,
     len: usize,
     init: (A, B, C),
-) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+) -> Result<Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
 where
     R: Runtime,
     K: CubePrimitive + CubeElement,
@@ -514,7 +514,7 @@ where
             inclusive,
             init,
         )?;
-    Ok(SoA3 {
+    Ok(Zip3 {
         first: DeviceVec::from_handle(policy.id(), first, len),
         second: DeviceVec::from_handle(policy.id(), second, len),
         third: DeviceVec::from_handle(policy.id(), third, len),
@@ -894,7 +894,7 @@ pub(crate) fn inclusive_scan_tuple1_device_expr<R, A, ExprA, Op>(
     policy: &CubePolicy<R>,
     a_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA1<DeviceVec<R, A>>, Error>
+) -> Result<Zip1<DeviceVec<R, A>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -903,7 +903,7 @@ where
 {
     let client = policy.client();
     if len == 0 {
-        return Ok(SoA1 {
+        return Ok(Zip1 {
             source: policy.empty_device_vec(),
         });
     }
@@ -953,7 +953,7 @@ where
         }
     }
 
-    Ok(SoA1 {
+    Ok(Zip1 {
         source: DeviceVec::from_handle(policy.id(), output_a, len),
     })
 }
@@ -963,7 +963,7 @@ pub(crate) fn exclusive_scan_tuple1_device_expr<R, A, ExprA, Op>(
     a_bindings: &KernelColumnBindings,
     len: usize,
     init: (A,),
-) -> Result<SoA1<DeviceVec<R, A>>, Error>
+) -> Result<Zip1<DeviceVec<R, A>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -973,7 +973,7 @@ where
     let inclusive = inclusive_scan_tuple1_device_expr::<R, A, ExprA, Op>(policy, a_bindings, len)?;
     let (output_a,) =
         make_tuple1_exclusive::<R, A, Op>(policy, &inclusive.source.handle, len, init)?;
-    Ok(SoA1 {
+    Ok(Zip1 {
         source: DeviceVec::from_handle(policy.id(), output_a, len),
     })
 }
@@ -1072,7 +1072,7 @@ pub(crate) fn inclusive_scan_tuple2_device_expr<R, A, B, ExprA, ExprB, Op>(
     a_bindings: &KernelColumnBindings,
     b_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+) -> Result<Zip2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -1083,7 +1083,7 @@ where
 {
     let client = policy.client();
     if len == 0 {
-        return Ok(SoA2 {
+        return Ok(Zip2 {
             left: policy.empty_device_vec(),
             right: policy.empty_device_vec(),
         });
@@ -1154,7 +1154,7 @@ where
         }
     }
 
-    Ok(SoA2 {
+    Ok(Zip2 {
         left: DeviceVec::from_handle(policy.id(), output_a, len),
         right: DeviceVec::from_handle(policy.id(), output_b, len),
     })
@@ -1166,7 +1166,7 @@ pub(crate) fn exclusive_scan_tuple2_device_expr<R, A, B, ExprA, ExprB, Op>(
     b_bindings: &KernelColumnBindings,
     len: usize,
     init: (A, B),
-) -> Result<SoA2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
+) -> Result<Zip2<DeviceVec<R, A>, DeviceVec<R, B>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -1185,7 +1185,7 @@ where
         len,
         init,
     )?;
-    Ok(SoA2 {
+    Ok(Zip2 {
         left: DeviceVec::from_handle(policy.id(), output_a, len),
         right: DeviceVec::from_handle(policy.id(), output_b, len),
     })
@@ -1306,7 +1306,7 @@ pub(crate) fn inclusive_scan_tuple3_device_expr<R, A, B, C, ExprA, ExprB, ExprC,
     b_bindings: &KernelColumnBindings,
     c_bindings: &KernelColumnBindings,
     len: usize,
-) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+) -> Result<Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -1319,7 +1319,7 @@ where
 {
     let client = policy.client();
     if len == 0 {
-        return Ok(SoA3 {
+        return Ok(Zip3 {
             first: policy.empty_device_vec(),
             second: policy.empty_device_vec(),
             third: policy.empty_device_vec(),
@@ -1418,7 +1418,7 @@ where
         }
     }
 
-    Ok(SoA3 {
+    Ok(Zip3 {
         first: DeviceVec::from_handle(policy.id(), output_a, len),
         second: DeviceVec::from_handle(policy.id(), output_b, len),
         third: DeviceVec::from_handle(policy.id(), output_c, len),
@@ -1432,7 +1432,7 @@ pub(crate) fn exclusive_scan_tuple3_device_expr<R, A, B, C, ExprA, ExprB, ExprC,
     c_bindings: &KernelColumnBindings,
     len: usize,
     init: (A, B, C),
-) -> Result<SoA3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
+) -> Result<Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>, Error>
 where
     R: Runtime,
     A: CubePrimitive + CubeElement,
@@ -1454,7 +1454,7 @@ where
         len,
         init,
     )?;
-    Ok(SoA3 {
+    Ok(Zip3 {
         first: DeviceVec::from_handle(policy.id(), output_a, len),
         second: DeviceVec::from_handle(policy.id(), output_b, len),
         third: DeviceVec::from_handle(policy.id(), output_c, len),

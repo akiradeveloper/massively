@@ -468,15 +468,15 @@ impl OffsetFirst for (u32, u32, u32, u32, u32, u32, u32) {
 }
 
 macro_rules! cols_to_aos {
-    ($cols:expr, SoA1) => {{
+    ($cols:expr, Zip1) => {{
         let (a,) = $cols;
         a.into_iter().map(|a| (a,)).collect::<Vec<_>>()
     }};
-    ($cols:expr, SoA2) => {{
+    ($cols:expr, Zip2) => {{
         let (a, b) = $cols;
         a.into_iter().zip(b).collect::<Vec<_>>()
     }};
-    ($cols:expr, SoA3) => {{
+    ($cols:expr, Zip3) => {{
         let (a, b, c) = $cols;
         a.into_iter()
             .zip(b)
@@ -484,7 +484,7 @@ macro_rules! cols_to_aos {
             .map(|((a, b), c)| (a, b, c))
             .collect::<Vec<_>>()
     }};
-    ($cols:expr, SoA4) => {{
+    ($cols:expr, Zip4) => {{
         let (a, b, c, d) = $cols;
         a.into_iter()
             .zip(b)
@@ -493,7 +493,7 @@ macro_rules! cols_to_aos {
             .map(|(((a, b), c), d)| (a, b, c, d))
             .collect::<Vec<_>>()
     }};
-    ($cols:expr, SoA5) => {{
+    ($cols:expr, Zip5) => {{
         let (a, b, c, d, e) = $cols;
         a.into_iter()
             .zip(b)
@@ -503,7 +503,7 @@ macro_rules! cols_to_aos {
             .map(|((((a, b), c), d), e)| (a, b, c, d, e))
             .collect::<Vec<_>>()
     }};
-    ($cols:expr, SoA6) => {{
+    ($cols:expr, Zip6) => {{
         let (a, b, c, d, e, f) = $cols;
         a.into_iter()
             .zip(b)
@@ -514,7 +514,7 @@ macro_rules! cols_to_aos {
             .map(|(((((a, b), c), d), e), f)| (a, b, c, d, e, f))
             .collect::<Vec<_>>()
     }};
-    ($cols:expr, SoA7) => {{
+    ($cols:expr, Zip7) => {{
         let (a, b, c, d, e, f, g) = $cols;
         a.into_iter()
             .zip(b)
@@ -528,45 +528,45 @@ macro_rules! cols_to_aos {
     }};
 }
 
-macro_rules! make_soa {
-    ($exec:expr, $input:expr, SoA1, ($a:ty)) => {{
+macro_rules! make_zip {
+    ($exec:expr, $input:expr, Zip1, ($a:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
-        massively::SoA1($exec.to_device(&c0).unwrap())
+        massively::Zip1($exec.to_device(&c0).unwrap())
     }};
-    ($exec:expr, $input:expr, SoA2, ($a:ty, $b:ty)) => {{
+    ($exec:expr, $input:expr, Zip2, ($a:ty, $b:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
         let c1: Vec<$b> = $input.iter().map(|row| row.1).collect();
-        massively::SoA2($exec.to_device(&c0).unwrap(), $exec.to_device(&c1).unwrap())
+        massively::Zip2($exec.to_device(&c0).unwrap(), $exec.to_device(&c1).unwrap())
     }};
-    ($exec:expr, $input:expr, SoA3, ($a:ty, $b:ty, $c:ty)) => {{
+    ($exec:expr, $input:expr, Zip3, ($a:ty, $b:ty, $c:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
         let c1: Vec<$b> = $input.iter().map(|row| row.1).collect();
         let c2: Vec<$c> = $input.iter().map(|row| row.2).collect();
-        massively::SoA3(
+        massively::Zip3(
             $exec.to_device(&c0).unwrap(),
             $exec.to_device(&c1).unwrap(),
             $exec.to_device(&c2).unwrap(),
         )
     }};
-    ($exec:expr, $input:expr, SoA4, ($a:ty, $b:ty, $c:ty, $d:ty)) => {{
+    ($exec:expr, $input:expr, Zip4, ($a:ty, $b:ty, $c:ty, $d:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
         let c1: Vec<$b> = $input.iter().map(|row| row.1).collect();
         let c2: Vec<$c> = $input.iter().map(|row| row.2).collect();
         let c3: Vec<$d> = $input.iter().map(|row| row.3).collect();
-        massively::SoA4(
+        massively::Zip4(
             $exec.to_device(&c0).unwrap(),
             $exec.to_device(&c1).unwrap(),
             $exec.to_device(&c2).unwrap(),
             $exec.to_device(&c3).unwrap(),
         )
     }};
-    ($exec:expr, $input:expr, SoA5, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty)) => {{
+    ($exec:expr, $input:expr, Zip5, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
         let c1: Vec<$b> = $input.iter().map(|row| row.1).collect();
         let c2: Vec<$c> = $input.iter().map(|row| row.2).collect();
         let c3: Vec<$d> = $input.iter().map(|row| row.3).collect();
         let c4: Vec<$e> = $input.iter().map(|row| row.4).collect();
-        massively::SoA5(
+        massively::Zip5(
             $exec.to_device(&c0).unwrap(),
             $exec.to_device(&c1).unwrap(),
             $exec.to_device(&c2).unwrap(),
@@ -574,14 +574,14 @@ macro_rules! make_soa {
             $exec.to_device(&c4).unwrap(),
         )
     }};
-    ($exec:expr, $input:expr, SoA6, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty)) => {{
+    ($exec:expr, $input:expr, Zip6, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
         let c1: Vec<$b> = $input.iter().map(|row| row.1).collect();
         let c2: Vec<$c> = $input.iter().map(|row| row.2).collect();
         let c3: Vec<$d> = $input.iter().map(|row| row.3).collect();
         let c4: Vec<$e> = $input.iter().map(|row| row.4).collect();
         let c5: Vec<$f> = $input.iter().map(|row| row.5).collect();
-        massively::SoA6(
+        massively::Zip6(
             $exec.to_device(&c0).unwrap(),
             $exec.to_device(&c1).unwrap(),
             $exec.to_device(&c2).unwrap(),
@@ -590,7 +590,7 @@ macro_rules! make_soa {
             $exec.to_device(&c5).unwrap(),
         )
     }};
-    ($exec:expr, $input:expr, SoA7, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty)) => {{
+    ($exec:expr, $input:expr, Zip7, ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty)) => {{
         let c0: Vec<$a> = $input.iter().map(|row| row.0).collect();
         let c1: Vec<$b> = $input.iter().map(|row| row.1).collect();
         let c2: Vec<$c> = $input.iter().map(|row| row.2).collect();
@@ -598,7 +598,7 @@ macro_rules! make_soa {
         let c4: Vec<$e> = $input.iter().map(|row| row.4).collect();
         let c5: Vec<$f> = $input.iter().map(|row| row.5).collect();
         let c6: Vec<$g> = $input.iter().map(|row| row.6).collect();
-        massively::SoA7(
+        massively::Zip7(
             $exec.to_device(&c0).unwrap(),
             $exec.to_device(&c1).unwrap(),
             $exec.to_device(&c2).unwrap(),
@@ -611,28 +611,28 @@ macro_rules! make_soa {
 }
 
 macro_rules! map_arity_case {
-    ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
+    ($input:expr, $input_zip:ident, ($($input_ty:ty),+), $output_zip:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _ = $init;
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
-        let gpu_output = make_soa!(&exec, &vec![$init; input.len()], $output_soa, ($($output_ty),+));
+        let gpu_input = make_zip!(&exec, &input, $input_zip, ($($input_ty),+));
+        let gpu_output = make_zip!(&exec, &vec![$init; input.len()], $output_zip, ($($output_ty),+));
         massively::transform(&exec, gpu_input.slice(..), $op, (), gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
         let host = oracle::map(&input, $op, ());
         prop_assert_eq!(gpu, host);
     }};
 }
 
 macro_rules! transform_arity_case {
-    ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
+    ($input:expr, $input_zip:ident, ($($input_ty:ty),+), $output_zip:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut host = vec![$init; input.len()];
-        let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
-        let gpu_output = make_soa!(&exec, &host, $output_soa, ($($output_ty),+));
+        let gpu_input = make_zip!(&exec, &input, $input_zip, ($($input_ty),+));
+        let gpu_output = make_zip!(&exec, &host, $output_zip, ($($output_ty),+));
         massively::transform(
             &exec,
             gpu_input.slice(..),
@@ -642,21 +642,21 @@ macro_rules! transform_arity_case {
         )
         .unwrap();
         oracle::transform(&input, $op, (), &mut host);
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
         prop_assert_eq!(gpu, host);
     }};
 }
 
 macro_rules! transform_where_arity_case {
-    ($input:expr, $input_soa:ident, ($($input_ty:ty),+), $output_soa:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
+    ($input:expr, $input_zip:ident, ($($input_ty:ty),+), $output_zip:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
         let mut host = vec![$init; input.len()];
-        let gpu_input = make_soa!(&exec, &input, $input_soa, ($($input_ty),+));
+        let gpu_input = make_zip!(&exec, &input, $input_zip, ($($input_ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &host, $output_soa, ($($output_ty),+));
+        let gpu_output = make_zip!(&exec, &host, $output_zip, ($($output_ty),+));
         massively::transform_where(
             &exec,
             gpu_input.slice(..),
@@ -667,54 +667,54 @@ macro_rules! transform_where_arity_case {
         )
         .unwrap();
         oracle::transform_where(&input, $op, (), &stencil, &mut host);
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
         prop_assert_eq!(gpu, host);
     }};
 }
 
 macro_rules! sort_by_key_only_case {
-    ($pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $less:ident) => {{
+    ($pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $less:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
+        let out_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
         let (host_keys, host_values) = oracle::sort_by_key(&keys, &values, $less);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_zip), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_zip), host_values);
     }};
 }
 
 macro_rules! stable_sort_by_key_case {
-    ($pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $less:ident) => {{
+    ($pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $less:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
+        let out_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::stable_sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
         let (host_keys, host_values) = oracle::stable_sort_by_key(&keys, &values, $less);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_zip), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_zip), host_values);
     }};
 }
 
 macro_rules! scan_by_key_case {
-    (inclusive_scan_by_key, $pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $init:expr) => {{
+    (inclusive_scan_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let gpu_output = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
+        let gpu_output = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::inclusive_scan_by_key(
             &exec,
             gpu_keys.slice(..),
@@ -725,18 +725,18 @@ macro_rules! scan_by_key_case {
         )
         .unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $value_soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $value_zip),
             oracle::inclusive_scan_by_key(&keys, &values, EqTuple, MaxTuple)
         );
     }};
-    (exclusive_scan_by_key, $pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $init:expr) => {{
+    (exclusive_scan_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let gpu_output = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
+        let gpu_output = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::exclusive_scan_by_key(
             &exec,
             gpu_keys.slice(..),
@@ -748,19 +748,19 @@ macro_rules! scan_by_key_case {
         )
         .unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $value_soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $value_zip),
             oracle::exclusive_scan_by_key(&keys, &values, EqTuple, $init, MaxTuple)
         );
     }};
-    (reduce_by_key, $pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $init:expr) => {{
+    (reduce_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let gpu_out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
+        let gpu_out_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         let len = massively::reduce_by_key(
             &exec,
             gpu_keys.slice(..),
@@ -774,18 +774,18 @@ macro_rules! scan_by_key_case {
         .unwrap();
         let (host_keys, host_values) =
             oracle::reduce_by_key(&keys, &values, EqTuple, $init, MaxTuple);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys.slice(..len)).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys.slice(..len)).unwrap(), $key_zip), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_zip), host_values);
     }};
-    (unique_by_key, $pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $init:expr) => {{
+    (unique_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
-        let gpu_out_keys = make_soa!(&exec, &keys, $key_soa, ($($key_ty),+));
-        let gpu_out_values = make_soa!(&exec, &values, $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
+        let gpu_out_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
+        let gpu_out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         let len = massively::unique_by_key(
             &exec,
             gpu_keys.slice(..),
@@ -796,13 +796,13 @@ macro_rules! scan_by_key_case {
         )
         .unwrap();
         let (host_keys, host_values) = oracle::unique_by_key(&keys, &values, EqTuple);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys.slice(..len)).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_keys.slice(..len)).unwrap(), $key_zip), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_zip), host_values);
     }};
 }
 
 macro_rules! merge_by_key_case {
-    ($pairs:expr, $key_soa:ident, ($($key_ty:ty),+), $value_soa:ident, ($($value_ty:ty),+), $less:ident) => {{
+    ($pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $less:ident) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
@@ -815,13 +815,13 @@ macro_rules! merge_by_key_case {
             oracle::sort_by_key(&left_keys_unsorted, &left_values_unsorted, $less);
         let (right_keys, right_values) =
             oracle::sort_by_key(&right_keys_unsorted, &right_values_unsorted, $less);
-        let gpu_left_keys = make_soa!(&exec, &left_keys, $key_soa, ($($key_ty),+));
-        let gpu_right_keys = make_soa!(&exec, &right_keys, $key_soa, ($($key_ty),+));
-        let gpu_left_values = make_soa!(&exec, &left_values, $value_soa, ($($value_ty),+));
-        let gpu_right_values = make_soa!(&exec, &right_values, $value_soa, ($($value_ty),+));
+        let gpu_left_keys = make_zip!(&exec, &left_keys, $key_zip, ($($key_ty),+));
+        let gpu_right_keys = make_zip!(&exec, &right_keys, $key_zip, ($($key_ty),+));
+        let gpu_left_values = make_zip!(&exec, &left_values, $value_zip, ($($value_ty),+));
+        let gpu_right_values = make_zip!(&exec, &right_values, $value_zip, ($($value_ty),+));
 
-        let gpu_keys = make_soa!(&exec, &pairs.iter().map(|pair| pair.0).collect::<Vec<_>>(), $key_soa, ($($key_ty),+));
-        let gpu_values = make_soa!(&exec, &pairs.iter().map(|pair| pair.1).collect::<Vec<_>>(), $value_soa, ($($value_ty),+));
+        let gpu_keys = make_zip!(&exec, &pairs.iter().map(|pair| pair.0).collect::<Vec<_>>(), $key_zip, ($($key_ty),+));
+        let gpu_values = make_zip!(&exec, &pairs.iter().map(|pair| pair.1).collect::<Vec<_>>(), $value_zip, ($($value_ty),+));
         massively::merge_by_key(
             &exec,
             gpu_left_keys.slice(..),
@@ -840,8 +840,8 @@ macro_rules! merge_by_key_case {
             &right_values,
             $less,
         );
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_keys).unwrap(), $key_soa), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_values).unwrap(), $value_soa), host_values);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_keys).unwrap(), $key_zip), host_keys);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_values).unwrap(), $value_zip), host_values);
     }};
 }
 
@@ -858,161 +858,161 @@ macro_rules! reverse_indices_for {
 }
 
 macro_rules! value_case {
-    (reduce, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (reduce, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu = massively::reduce(&exec, gpu_input.slice(..), $init, MaxTuple).unwrap();
         let host = oracle::reduce(&input, $init, MaxTuple);
         prop_assert_eq!(gpu, host);
     }};
-    (inclusive_scan, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (inclusive_scan, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::inclusive_scan(&exec, gpu_input.slice(..), MaxTuple, gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::inclusive_scan(&input, MaxTuple);
         prop_assert_eq!(gpu, host);
     }};
-    (exclusive_scan, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (exclusive_scan, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::exclusive_scan(&exec, gpu_input.slice(..), $init, MaxTuple, gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::exclusive_scan(&input, $init, MaxTuple);
         prop_assert_eq!(gpu, host);
     }};
-    (adjacent_difference, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (adjacent_difference, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::adjacent_difference(&exec, gpu_input.slice(..), MaxTuple, gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::adjacent_difference(&input, MaxTuple);
         prop_assert_eq!(gpu, host);
     }};
-    (copy_where, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (copy_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         let len = massively::copy_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..), gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip);
         let host = oracle::copy_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
     }};
-    (remove_where, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (remove_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         let len = massively::remove_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..), gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip);
         let host = oracle::remove_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
     }};
-    (reverse, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (reverse, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::reverse(&exec, gpu_input.slice(..), gpu_output.slice_mut(..)).unwrap();
-        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa);
+        let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::reverse(&input);
         prop_assert_eq!(gpu, host);
     }};
-    (count_if, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (count_if, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::count_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             mindex(oracle::count_if(&input, KeepTuple, ()))
         );
     }};
-    (all_of, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (all_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::all_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             oracle::all_of(&input, KeepTuple, ())
         );
     }};
-    (any_of, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (any_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::any_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             oracle::any_of(&input, KeepTuple, ())
         );
     }};
-    (none_of, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (none_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::none_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             oracle::none_of(&input, KeepTuple, ())
         );
     }};
-    (find_if, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (find_if, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::find_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             opt_mindex(oracle::find_if(&input, KeepTuple, ()))
         );
     }};
-    (is_partitioned, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (is_partitioned, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             oracle::is_partitioned(&input, KeepTuple, ())
         );
     }};
-    (partition, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (partition, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, (), gpu_output.slice_mut(..)).unwrap();
         let (host_yes, host_no) = oracle::partition(&input, KeepTuple, ());
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $soa), host_yes);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $soa), host_no);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $zip), host_yes);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
     }};
-    (predicate, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (predicate, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::count_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             mindex(oracle::count_if(&input, KeepTuple, ()))
@@ -1037,35 +1037,35 @@ macro_rules! value_case {
             massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
             oracle::is_partitioned(&input, KeepTuple, ())
         );
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, (), gpu_output.slice_mut(..)).unwrap();
         let (host_yes, host_no) = oracle::partition(&input, KeepTuple, ());
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $soa), host_yes);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $soa), host_no);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $zip), host_yes);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
     }};
-    (indexed, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (indexed, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
         let stencil = stencil_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_stencil = exec.to_device(&stencil).unwrap();
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather_where(
             &exec,
             gpu_input.slice(..),
@@ -1076,15 +1076,15 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::gather_where(&input, &indices, &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::scatter(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::scatter(&input, &indices, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::scatter_where(
             &exec,
             gpu_input.slice(..),
@@ -1095,44 +1095,44 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::scatter_where(&input, &indices, &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (permute, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (permute, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (gather, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (gather, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (gather_where, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (gather_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
         let stencil = stencil_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather_where(
             &exec,
             gpu_input.slice(..),
@@ -1143,31 +1143,31 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::gather_where(&input, &indices, &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (scatter, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (scatter, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::scatter(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::scatter(&input, &indices, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (scatter_where, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (scatter_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
         let stencil = stencil_for!(input.len());
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::scatter_where(
             &exec,
             gpu_input.slice(..),
@@ -1178,16 +1178,16 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::scatter_where(&input, &indices, &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (search_eq, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (search_eq, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut other = input.clone();
         other.reverse();
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_other = make_soa!(&exec, &other, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_other = make_zip!(&exec, &other, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::equal(&exec, gpu_input.slice(..), gpu_input.slice(..), EqTuple).unwrap(),
             oracle::equal(&input, &input, EqTuple)
@@ -1205,68 +1205,68 @@ macro_rules! value_case {
             opt_mindex(oracle::find_first_of(&input, &other, EqTuple))
         );
     }};
-    (equal, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (equal, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::equal(&exec, gpu_input.slice(..), gpu_input.slice(..), EqTuple).unwrap(),
             oracle::equal(&input, &input, EqTuple)
         );
     }};
-    (mismatch, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (mismatch, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut other = input.clone();
         other.reverse();
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_other = make_soa!(&exec, &other, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_other = make_zip!(&exec, &other, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::mismatch(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
             opt_mindex(oracle::mismatch(&input, &other, EqTuple))
         );
     }};
-    (adjacent_find, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (adjacent_find, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::adjacent_find(&exec, gpu_input.slice(..), EqTuple).unwrap(),
             opt_mindex(oracle::adjacent_find(&input, EqTuple))
         );
     }};
-    (find_first_of, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (find_first_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut other = input.clone();
         other.reverse();
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_other = make_soa!(&exec, &other, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_other = make_zip!(&exec, &other, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::find_first_of(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
             opt_mindex(oracle::find_first_of(&input, &other, EqTuple))
         );
     }};
-    (mutating, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (mutating, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
         let replacement = $init;
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::fill(&exec, replacement, gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::fill(replacement, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::replace_where(
             &exec,
             replacement,
@@ -1276,9 +1276,9 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::replace_where(replacement, &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::transform_where(
             &exec,
             gpu_input.slice(..),
@@ -1290,25 +1290,25 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::transform_where(&input, Identity, (), &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (fill, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (fill, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::fill(&exec, $init, gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::fill($init, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (replace_where, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (replace_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::replace_where(
             &exec,
             $init,
@@ -1318,16 +1318,16 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::replace_where($init, &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (transform_where, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (transform_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
         let gpu_stencil = exec.to_device(&stencil).unwrap();
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::transform_where(
             &exec,
             gpu_input.slice(..),
@@ -1339,9 +1339,9 @@ macro_rules! value_case {
         .unwrap();
         let mut host = input.clone();
         oracle::transform_where(&input, Identity, (), &stencil, &mut host);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), host);
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
-    (ordering, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (ordering, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1349,26 +1349,26 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa), sorted.clone());
+        prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), sorted.clone());
 
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::stable_sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::stable_sort(&input, LessTuple)
         );
 
         let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
-        let gpu_output = make_soa!(&exec, &merge_init, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &merge_init, $zip, ($($ty),+));
         massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::merge(&sorted, &right, LessTuple)
         );
 
@@ -1404,57 +1404,57 @@ macro_rules! value_case {
         massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
 
-        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let len = massively::unique(&exec, gpu_sorted.slice(..), EqTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::unique(&sorted, EqTuple)
         );
         let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
-        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
         let len = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_union(&sorted, &right, LessTuple)
         );
-        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
         let len = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_intersection(&sorted, &right, LessTuple)
         );
-        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let len = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_difference(&sorted, &right, LessTuple)
         );
     }};
-    (sort, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (sort, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::sort(&input, LessTuple)
         );
     }};
-    (stable_sort, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (stable_sort, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::stable_sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::stable_sort(&input, LessTuple)
         );
     }};
-    (merge, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (merge, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1465,38 +1465,38 @@ macro_rules! value_case {
             .map(|value| value.offset_first(8192))
             .collect::<Vec<_>>();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
-        let gpu_output = make_soa!(&exec, &merge_init, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &merge_init, $zip, ($($ty),+));
         massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::merge(&sorted, &right, LessTuple)
         );
     }};
-    (is_sorted, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (is_sorted, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::is_sorted(&exec, gpu_sorted.slice(..), LessTuple).unwrap(),
             oracle::is_sorted(&sorted, LessTuple)
         );
     }};
-    (is_sorted_until, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (is_sorted_until, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::is_sorted_until(&exec, gpu_input.slice(..), LessTuple).unwrap(),
             mindex(oracle::is_sorted_until(&input, LessTuple))
         );
     }};
-    (lexicographical_compare, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (lexicographical_compare, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1504,44 +1504,44 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::lexicographical_compare(&exec, gpu_input.slice(..), gpu_right.slice(..), LessTuple).unwrap(),
             oracle::lexicographical_compare(&input, &right, LessTuple)
         );
     }};
-    (min_element, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (min_element, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::min_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
             opt_mindex(oracle::min_element(&input, LessTuple))
         );
     }};
-    (max_element, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (max_element, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::max_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
             opt_mindex(oracle::max_element(&input, LessTuple))
         );
     }};
-    (minmax_element, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (minmax_element, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
-        let gpu_input = make_soa!(&exec, &input, $soa, ($($ty),+));
+        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
             massively::minmax_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
             opt_pair_mindex(oracle::minmax_element(&input, LessTuple))
         );
     }};
-    (lower_bound, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (lower_bound, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1549,13 +1549,13 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
         massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::lower_bound(&sorted, &right, LessTuple));
     }};
-    (upper_bound, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (upper_bound, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1563,26 +1563,26 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
         massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
     }};
-    (unique, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (unique, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let len = massively::unique(&exec, gpu_sorted.slice(..), EqTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::unique(&sorted, EqTuple)
         );
     }};
-    (set_union, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (set_union, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1590,17 +1590,17 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
-        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
         let len = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_union(&sorted, &right, LessTuple)
         );
     }};
-    (set_intersection, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (set_intersection, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1608,17 +1608,17 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
-        let gpu_output = make_soa!(&exec, &set_init, $soa, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
         let len = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_intersection(&sorted, &right, LessTuple)
         );
     }};
-    (set_difference, $input:expr, $soa:ident, ($($ty:ty),+), $init:expr) => {{
+    (set_difference, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
         let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
@@ -1626,12 +1626,12 @@ macro_rules! value_case {
         let mut other = sorted.clone();
         other.reverse();
         let right = oracle::sort(&other, LessTuple);
-        let gpu_sorted = make_soa!(&exec, &sorted, $soa, ($($ty),+));
-        let gpu_right = make_soa!(&exec, &right, $soa, ($($ty),+));
-        let gpu_output = make_soa!(&exec, &sorted, $soa, ($($ty),+));
+        let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
+        let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
+        let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let len = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $soa),
+            cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_difference(&sorted, &right, LessTuple)
         );
     }};
@@ -1647,37 +1647,37 @@ macro_rules! define_value_arity_module {
 
                 #[test]
                 fn arity_1(input in prop::collection::vec((0_u32..4096).prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA1, (u32), (0_u32,));
+                    value_case!($case, input, Zip1, (u32), (0_u32,));
                 }
 
                 #[test]
                 fn arity_2(input in prop::collection::vec((0_u32..4096, 0_u32..4096), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA2, (u32, u32), (0_u32, 0_u32));
+                    value_case!($case, input, Zip2, (u32, u32), (0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_3(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_4(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_5(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_6(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_7(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN)) {
-                    value_case!($case, input, SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
             }
         }
@@ -1720,37 +1720,37 @@ macro_rules! define_ordering_arity_module {
 
                 #[test]
                 fn arity_1(input in prop::collection::vec((0_u32..4096).prop_map(|v| (v,)), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA1, (u32), (0_u32,));
+                    value_case!($case, input, Zip1, (u32), (0_u32,));
                 }
 
                 #[test]
                 fn arity_2(input in prop::collection::vec((0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA2, (u32, u32), (0_u32, 0_u32));
+                    value_case!($case, input, Zip2, (u32, u32), (0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_3(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_4(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_5(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_6(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn arity_7(input in prop::collection::vec((0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096), 0..MAX_LEN).prop_filter("unique first column", |input| unique_by(input, |row| row.0))) {
-                    value_case!($case, input, SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    value_case!($case, input, Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
             }
         }
@@ -1783,247 +1783,247 @@ macro_rules! define_unary_arity_product_module {
 
                 #[test]
                 fn input_1_output_1(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip1, (u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_1_output_2(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip1, (u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_1_output_3(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip1, (u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_1_output_4(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip1, (u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_1_output_5(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip1, (u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_1_output_6(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip1, (u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_1_output_7(input in prop::collection::vec(any::<u32>().prop_map(|v| (v,)), 0..MAX_LEN)) {
-                    $case!(input, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip1, (u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
                 #[test]
                 fn input_2_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip2, (u32, u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_2_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip2, (u32, u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_2_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip2, (u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_2_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip2, (u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_2_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip2, (u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_2_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip2, (u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_2_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip2, (u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
                 #[test]
                 fn input_3_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip3, (u32, u32, u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_3_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip3, (u32, u32, u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_3_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip3, (u32, u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_3_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip3, (u32, u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_3_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip3, (u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_3_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip3, (u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_3_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip3, (u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
                 #[test]
                 fn input_4_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_4_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_4_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_4_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_4_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_4_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_4_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA4, (u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip4, (u32, u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
                 #[test]
                 fn input_5_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_5_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_5_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_5_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_5_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_5_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_5_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA5, (u32, u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip5, (u32, u32, u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
                 #[test]
                 fn input_6_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_6_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_6_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_6_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_6_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_6_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_6_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA6, (u32, u32, u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip6, (u32, u32, u32, u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
                 #[test]
                 fn input_7_output_1(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA1, (u32), (0_u32,), ArityTupleToTuple1);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip1, (u32), (0_u32,), ArityTupleToTuple1);
                 }
 
                 #[test]
                 fn input_7_output_2(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip2, (u32, u32), (0_u32, 0_u32), ArityTupleToTuple2);
                 }
 
                 #[test]
                 fn input_7_output_3(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32), ArityTupleToTuple3);
                 }
 
                 #[test]
                 fn input_7_output_4(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple4);
                 }
 
                 #[test]
                 fn input_7_output_5(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple5);
                 }
 
                 #[test]
                 fn input_7_output_6(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple6);
                 }
 
                 #[test]
                 fn input_7_output_7(input in prop::collection::vec((any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>()), 0..MAX_LEN)) {
-                    $case!(input, SoA7, (u32, u32, u32, u32, u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
+                    $case!(input, Zip7, (u32, u32, u32, u32, u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32), ArityTupleToTuple7);
                 }
 
             }
@@ -2045,107 +2045,107 @@ macro_rules! define_sort_by_key_arity_product_module {
 
                 #[test]
                 fn key_1_value_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip1, (u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip2, (u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip3, (u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip4, (u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip5, (u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip6, (u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
+                    sort_by_key_only_case!(pairs, Zip1, (u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_2_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip1, (u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA2, (u32, u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip2, (u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip3, (u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip4, (u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip5, (u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less2);
+                    sort_by_key_only_case!(pairs, Zip2, (u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_3_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip1, (u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip2, (u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip3, (u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip4, (u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    sort_by_key_only_case!(pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less3);
+                    sort_by_key_only_case!(pairs, Zip3, (u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less3);
                 }
 
             }
@@ -2163,107 +2163,107 @@ macro_rules! define_stable_sort_by_key_arity_product_module {
 
                 #[test]
                 fn key_1_value_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip1, (u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip2, (u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip3, (u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip4, (u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip5, (u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip6, (u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
+                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_2_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip1, (u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA2, (u32, u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip2, (u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip3, (u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip4, (u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip5, (u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less2);
+                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_3_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip1, (u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip2, (u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip3, (u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip4, (u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less3);
+                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less3);
                 }
 
             }
@@ -2281,107 +2281,107 @@ macro_rules! define_scan_by_key_arity_product_module {
 
                 #[test]
                 fn key_1_value_1(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA1, (u32), (0_u32,));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip1, (u32), (0_u32,));
                 }
 
                 #[test]
                 fn key_1_value_2(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA2, (u32, u32), (0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip2, (u32, u32), (0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_1_value_3(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_1_value_4(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_1_value_5(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_1_value_6(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_1_value_7(pairs in prop::collection::vec(((0_u32..16).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip1, (u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_2_value_1(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA1, (u32), (0_u32,));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip1, (u32), (0_u32,));
                 }
 
                 #[test]
                 fn key_2_value_2(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA2, (u32, u32), (0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip2, (u32, u32), (0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_2_value_3(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_2_value_4(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_2_value_5(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_2_value_6(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_2_value_7(pairs in prop::collection::vec(((0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip2, (u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_3_value_1(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA1, (u32), (0_u32,));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip1, (u32), (0_u32,));
                 }
 
                 #[test]
                 fn key_3_value_2(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), (0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip2, (u32, u32), (0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_3_value_3(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip3, (u32, u32, u32), (0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_3_value_4(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip4, (u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_3_value_5(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_3_value_6(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
                 #[test]
                 fn key_3_value_7(pairs in prop::collection::vec(((0_u32..16, 0_u32..16, 0_u32..16), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    scan_by_key_case!($case, pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
+                    scan_by_key_case!($case, pairs, Zip3, (u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), (0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32, 0_u32));
                 }
 
             }
@@ -2399,107 +2399,107 @@ macro_rules! define_merge_by_key_arity_product_module {
 
                 #[test]
                 fn key_1_value_1(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA1, (u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip1, (u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_2(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA2, (u32, u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip2, (u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_3(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA3, (u32, u32, u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip3, (u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_4(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA4, (u32, u32, u32, u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip4, (u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_5(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA5, (u32, u32, u32, u32, u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip5, (u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_6(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA6, (u32, u32, u32, u32, u32, u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip6, (u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_1_value_7(pairs in prop::collection::vec(((0_u32..4096).prop_map(|k| (k,)), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA1, (u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
+                    merge_by_key_case!(pairs, Zip1, (u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
                 }
 
                 #[test]
                 fn key_2_value_1(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA1, (u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip1, (u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_2(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA2, (u32, u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip2, (u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_3(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA3, (u32, u32, u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip3, (u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_4(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA4, (u32, u32, u32, u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip4, (u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_5(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA5, (u32, u32, u32, u32, u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip5, (u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_6(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_2_value_7(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA2, (u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less2);
+                    merge_by_key_case!(pairs, Zip2, (u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less2);
                 }
 
                 #[test]
                 fn key_3_value_1(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096).prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA1, (u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip1, (u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_2(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA2, (u32, u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip2, (u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_3(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA3, (u32, u32, u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip3, (u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_4(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA4, (u32, u32, u32, u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip4, (u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_5(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA5, (u32, u32, u32, u32, u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_6(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA6, (u32, u32, u32, u32, u32, u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less3);
                 }
 
                 #[test]
                 fn key_3_value_7(pairs in prop::collection::vec(((0_u32..4096, 0_u32..4096, 0_u32..4096), (0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096, 0_u32..4096)), 0..MAX_LEN)) {
-                    merge_by_key_case!(pairs, SoA3, (u32, u32, u32), SoA7, (u32, u32, u32, u32, u32, u32, u32), Less3);
+                    merge_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less3);
                 }
 
             }

@@ -12,10 +12,10 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     merge(
         &exec,
-        SoA1(left.slice(..)),
-        SoA1(right.slice(..)),
+        Zip1(left.slice(..)),
+        Zip1(right.slice(..)),
         common::LessF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![1.0, 2.0, 3.0, 4.0]);

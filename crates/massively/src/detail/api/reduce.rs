@@ -59,7 +59,7 @@ where
 /// Reduces contiguous equal-key runs using read-only keys and values.
 ///
 /// This is a borrowing algorithm: values may be a borrowed column or a read-only
-/// SoA from [`zip`](crate::zip). The returned keys and values are owned SoA
+/// Zip from [`zip`](crate::zip). The returned keys and values are owned Zip
 /// storage.
 pub fn reduce_by_key<R, Keys, Values, KeyEq, Op>(
     policy: &CubePolicy<R>,

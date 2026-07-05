@@ -11,9 +11,9 @@ fn remove_where_accepts_heterogeneous_tuple_stencil() {
 
     let len = remove_where(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         stencil.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -44,7 +44,7 @@ fn remove_where_accepts_seven_tuple_columns() {
 
     let len = remove_where(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -54,7 +54,7 @@ fn remove_where_accepts_seven_tuple_columns() {
             g.slice(..),
         ),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -83,9 +83,9 @@ fn remove_where_keeps_all_values_when_no_flags_are_selected() {
 
     let len = remove_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         stencil.slice(..),
-        massively::SoA1(remaining.slice_mut(..)),
+        massively::Zip1(remaining.slice_mut(..)),
     )
     .unwrap();
 
@@ -104,9 +104,9 @@ fn remove_where_returns_empty_when_all_flags_are_selected() {
 
     let len = remove_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         stencil.slice(..),
-        massively::SoA1(remaining.slice_mut(..)),
+        massively::Zip1(remaining.slice_mut(..)),
     )
     .unwrap();
 

@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, merge_by_key};
+use massively::{DeviceVec, Executor, Zip1, merge_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     timestamp: DeviceVec<B, u32>,
@@ -35,13 +35,13 @@ where
     let event_id = exec.constant(len, 0_u32)?;
     merge_by_key(
         exec,
-        SoA1(left_timestamp.slice(..)),
-        SoA1(left_event_id.slice(..)),
-        SoA1(right_timestamp.slice(..)),
-        SoA1(right_event_id.slice(..)),
+        Zip1(left_timestamp.slice(..)),
+        Zip1(left_event_id.slice(..)),
+        Zip1(right_timestamp.slice(..)),
+        Zip1(right_event_id.slice(..)),
         common::LessU32,
-        SoA1(timestamp.slice_mut(..)),
-        SoA1(event_id.slice_mut(..)),
+        Zip1(timestamp.slice_mut(..)),
+        Zip1(event_id.slice_mut(..)),
     )?;
     Ok(Output {
         timestamp,

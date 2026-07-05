@@ -11,9 +11,9 @@ fn copy_where_accepts_u32_flags_for_heterogeneous_tuple_values() {
 
     let len = copy_where(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         stencil.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -36,9 +36,9 @@ fn copy_where_accepts_three_tuple_columns() {
 
     let len = copy_where(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         stencil.slice(..),
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -74,7 +74,7 @@ fn copy_where_accepts_seven_tuple_columns() {
 
     let len = copy_where(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -84,7 +84,7 @@ fn copy_where_accepts_seven_tuple_columns() {
             g.slice(..),
         ),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -115,9 +115,9 @@ fn copy_where_accepts_u32_stencil() {
 
     let len = copy_where(
         &exec,
-        massively::SoA2(values.slice(..), ids.slice(..)),
+        massively::Zip2(values.slice(..), ids.slice(..)),
         stencil.slice(..),
-        massively::SoA2(out_values.slice_mut(..), out_ids.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_ids.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -136,9 +136,9 @@ fn copy_where_returns_empty_when_no_flags_are_selected() {
 
     let len = copy_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         stencil.slice(..),
-        massively::SoA1(selected.slice_mut(..)),
+        massively::Zip1(selected.slice_mut(..)),
     )
     .unwrap();
 
@@ -157,9 +157,9 @@ fn copy_where_keeps_all_values_when_all_flags_are_selected() {
 
     let len = copy_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         stencil.slice(..),
-        massively::SoA1(selected.slice_mut(..)),
+        massively::Zip1(selected.slice_mut(..)),
     )
     .unwrap();
 

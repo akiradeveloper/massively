@@ -10,10 +10,10 @@ fn transform_zip_output_returns_storage() {
     let out_tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
         (),
-        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
 
@@ -30,10 +30,10 @@ fn transform_returns_device_storage() {
     let tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA2(left.slice(..), right.slice(..)),
+        massively::Zip2(left.slice(..), right.slice(..)),
         PairMixedSplit,
         (),
-        massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
+        massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
 
@@ -53,10 +53,10 @@ fn transform_tuple_output_maps_to_mitem_storage() {
     let bias_out = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
+        massively::Zip3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
         (),
-        massively::SoA3(
+        massively::Zip3(
             values_out.slice_mut(..),
             flags.slice_mut(..),
             bias_out.slice_mut(..),
@@ -72,17 +72,17 @@ fn transform_tuple_output_maps_to_mitem_storage() {
 }
 
 #[test]
-fn tuple1_transform_returns_soa1_storage() {
+fn tuple1_transform_returns_zip1_storage() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
     let output = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         Double,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -100,7 +100,7 @@ fn device_slice_transform_reads_scalar_item() {
         input.slice(..),
         Double,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -120,7 +120,7 @@ fn device_slice_transform_where_reads_scalar_item() {
         Double,
         (),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -134,10 +134,10 @@ fn transform_can_write_in_place_for_single_column() {
 
     transform(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         Double,
         (),
-        massively::SoA1(values.slice_mut(..)),
+        massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();
 
@@ -152,10 +152,10 @@ fn transform_can_write_in_place_for_multi_column() {
 
     transform(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
         (),
-        massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
+        massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
 
@@ -177,10 +177,10 @@ fn unary_transform_accepts_seven_tuple_output() {
 
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         ScalarToTuple7Mixed,
         (),
-        massively::SoA7(
+        massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
             c.slice_mut(..),
@@ -216,11 +216,11 @@ fn transform_where_accepts_seven_tuple_output() {
 
     massively::transform_where(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         ScalarToTuple7Mixed,
         (),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
             c.slice_mut(..),
@@ -261,7 +261,7 @@ fn transform_accepts_seven_tuple_input_and_output() {
 
     transform(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -272,7 +272,7 @@ fn transform_accepts_seven_tuple_input_and_output() {
         ),
         TupleWideMixedSplit,
         (),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -316,7 +316,7 @@ fn transform_where_accepts_seven_tuple_input_and_output() {
 
     massively::transform_where(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -328,7 +328,7 @@ fn transform_where_accepts_seven_tuple_input_and_output() {
         TupleWideMixedSplit,
         (),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -364,10 +364,10 @@ fn unary_transform_accepts_wide_tuple_outputs() {
 
     transform(
         &exec,
-        massively::SoA1(input.slice(..)),
+        massively::Zip1(input.slice(..)),
         ScalarToTuple5Mixed,
         (),
-        massively::SoA5(
+        massively::Zip5(
             a.slice_mut(..),
             b.slice_mut(..),
             c.slice_mut(..),
@@ -385,7 +385,7 @@ fn unary_transform_accepts_wide_tuple_outputs() {
 }
 
 #[test]
-fn tuple_transform_uses_flat_soa_input() {
+fn tuple_transform_uses_flat_zip_input() {
     let exec = exec();
     let lhs = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let rhs = exec.to_device(&[10_u32, 20, 30]).unwrap();
@@ -396,10 +396,10 @@ fn tuple_transform_uses_flat_soa_input() {
     let adjusted_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA3(lhs.slice(..), rhs.slice(..), bias.slice(..)),
+        massively::Zip3(lhs.slice(..), rhs.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
         (),
-        massively::SoA3(
+        massively::Zip3(
             values.slice_mut(..),
             tags.slice_mut(..),
             adjusted_bias.slice_mut(..),
@@ -425,10 +425,10 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
     let pair_tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
         (),
-        massively::SoA2(pair_values.slice_mut(..), pair_tags.slice_mut(..)),
+        massively::Zip2(pair_values.slice_mut(..), pair_tags.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&pair_values).unwrap(), vec![11.0, 12.0, 13.0]);
@@ -439,10 +439,10 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
     let tuple_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA3(values.slice(..), tags.slice(..), bias.slice(..)),
+        massively::Zip3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
         (),
-        massively::SoA3(
+        massively::Zip3(
             tuple_values.slice_mut(..),
             tuple_tags.slice_mut(..),
             tuple_bias.slice_mut(..),
@@ -461,7 +461,7 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
 }
 
 #[test]
-fn transform_accepts_soa4_heterogeneous_inputs_and_checks_every_column() {
+fn transform_accepts_zip4_heterogeneous_inputs_and_checks_every_column() {
     let exec = exec();
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let b = exec.to_device(&[10_u32, 20, 30]).unwrap();
@@ -474,10 +474,10 @@ fn transform_accepts_soa4_heterogeneous_inputs_and_checks_every_column() {
 
     transform(
         &exec,
-        massively::SoA4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
+        massively::Zip4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
         Tuple4MixedSplit,
         (),
-        massively::SoA4(
+        massively::Zip4(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -506,7 +506,7 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
     let z = exec.to_device(&[0.0_f32; 2]).unwrap();
     transform(
         &exec,
-        massively::SoA5(
+        massively::Zip5(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -515,7 +515,7 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
         ),
         Tuple5To3MixedSplit,
         (),
-        massively::SoA3(x.slice_mut(..), y.slice_mut(..), z.slice_mut(..)),
+        massively::Zip3(x.slice_mut(..), y.slice_mut(..), z.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&x).unwrap(), vec![10101.0, 20202.0]);
@@ -529,10 +529,10 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
     let v = exec.to_device(&[0.0_f32; 2]).unwrap();
     transform(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         Tuple3To5MixedSplit,
         (),
-        massively::SoA5(
+        massively::Zip5(
             x.slice_mut(..),
             y.slice_mut(..),
             z.slice_mut(..),
@@ -549,7 +549,7 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
 }
 
 #[test]
-fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
+fn transform_accepts_zip5_to_zip7_heterogeneous_tuple_outputs() {
     let exec = exec();
     let a = exec.to_device(&[1.0_f32]).unwrap();
     let b = exec.to_device(&[10_u32]).unwrap();
@@ -566,7 +566,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
     let e5 = exec.to_device(&[0.0_f32]).unwrap();
     transform(
         &exec,
-        massively::SoA5(
+        massively::Zip5(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -575,7 +575,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
         ),
         TupleWideMixedSplit,
         (),
-        massively::SoA5(
+        massively::Zip5(
             a5.slice_mut(..),
             b5.slice_mut(..),
             c5.slice_mut(..),
@@ -598,7 +598,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
     let f6 = exec.to_device(&[0_u32]).unwrap();
     transform(
         &exec,
-        massively::SoA6(
+        massively::Zip6(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -608,7 +608,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
         ),
         TupleWideMixedSplit,
         (),
-        massively::SoA6(
+        massively::Zip6(
             a6.slice_mut(..),
             b6.slice_mut(..),
             c6.slice_mut(..),
@@ -634,7 +634,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
     let g7 = exec.to_device(&[0.0_f32]).unwrap();
     transform(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -645,7 +645,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
         ),
         TupleWideMixedSplit,
         (),
-        massively::SoA7(
+        massively::Zip7(
             a7.slice_mut(..),
             b7.slice_mut(..),
             c7.slice_mut(..),
@@ -666,7 +666,7 @@ fn transform_accepts_soa5_to_soa7_heterogeneous_tuple_outputs() {
 }
 
 #[test]
-fn transform_zip_flattens_soa1_columns() {
+fn transform_zip_flattens_zip1_columns() {
     let exec = exec();
     let left = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
     let right = exec.to_device(&[10_u32, 20, 30]).unwrap();
@@ -675,10 +675,10 @@ fn transform_zip_flattens_soa1_columns() {
     let tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::SoA2(left.slice(..), right.slice(..)),
+        massively::Zip2(left.slice(..), right.slice(..)),
         PairMixedSplit,
         (),
-        massively::SoA2(values.slice_mut(..), tags.slice_mut(..)),
+        massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
 

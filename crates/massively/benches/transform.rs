@@ -24,10 +24,10 @@ fn check_transform(exec: &Executor<WgpuRuntime>) {
     let output = exec.to_device(&[0.0_f32; 3]).unwrap();
     transform(
         exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         MulTwo,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
@@ -47,10 +47,10 @@ fn bench_transform(c: &mut Criterion) {
                 iter_gpu(b, || {
                     transform(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         MulTwo,
                         (),
-                        massively::SoA1(output.slice_mut(..)),
+                        massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);

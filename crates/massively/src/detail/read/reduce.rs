@@ -43,8 +43,8 @@ macro_rules! impl_kernel_reduce_tuple1 {
 }
 
 impl_kernel_reduce_tuple1!((S,), 0);
-impl_kernel_reduce_tuple1!(SoAView1<S>, source);
-impl_kernel_reduce_tuple1!(DeviceSoA1<S>, source);
+impl_kernel_reduce_tuple1!(ZipView1<S>, source);
+impl_kernel_reduce_tuple1!(DeviceZip1<S>, source);
 
 macro_rules! impl_kernel_reduce_tuple2 {
     ($target:ty, $left:tt, $right:tt) => {
@@ -94,23 +94,23 @@ macro_rules! impl_kernel_reduce_tuple2 {
     };
 }
 
-impl_kernel_reduce_tuple2!(SoAView2<A, C>, left, right);
-impl_kernel_reduce_tuple2!(DeviceSoA2<A, C>, left, right);
+impl_kernel_reduce_tuple2!(ZipView2<A, C>, left, right);
+impl_kernel_reduce_tuple2!(DeviceZip2<A, C>, left, right);
 
 impl<Left, Right, Op> KernelReduceInput<Op> for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelReduceInput<Op>,
+    ZipView2<Left, Right>: KernelReduceInput<Op>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelReduceInput<Op>>::Runtime;
-    type Item = <SoAView2<Left, Right> as KernelReduceInput<Op>>::Item;
+    type Runtime = <ZipView2<Left, Right> as KernelReduceInput<Op>>::Runtime;
+    type Item = <ZipView2<Left, Right> as KernelReduceInput<Op>>::Item;
 
     fn reduce_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         init: Self::Item,
     ) -> Result<Self::Item, Error> {
-        <SoAView2<Left, Right> as KernelReduceInput<Op>>::reduce_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelReduceInput<Op>>::reduce_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -180,23 +180,23 @@ macro_rules! impl_kernel_reduce_tuple3 {
     };
 }
 
-impl_kernel_reduce_tuple3!(SoAView3<A, C, D>, first, second, third);
-impl_kernel_reduce_tuple3!(DeviceSoA3<A, C, D>, first, second, third);
+impl_kernel_reduce_tuple3!(ZipView3<A, C, D>, first, second, third);
+impl_kernel_reduce_tuple3!(DeviceZip3<A, C, D>, first, second, third);
 
 impl<First, Second, Third, Op> KernelReduceInput<Op> for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelReduceInput<Op>,
+    ZipView3<First, Second, Third>: KernelReduceInput<Op>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelReduceInput<Op>>::Runtime;
-    type Item = <SoAView3<First, Second, Third> as KernelReduceInput<Op>>::Item;
+    type Runtime = <ZipView3<First, Second, Third> as KernelReduceInput<Op>>::Runtime;
+    type Item = <ZipView3<First, Second, Third> as KernelReduceInput<Op>>::Item;
 
     fn reduce_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         init: Self::Item,
     ) -> Result<Self::Item, Error> {
-        <SoAView3<First, Second, Third> as KernelReduceInput<Op>>::reduce_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelReduceInput<Op>>::reduce_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

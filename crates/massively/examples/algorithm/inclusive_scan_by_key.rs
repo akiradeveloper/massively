@@ -12,11 +12,11 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     inclusive_scan_by_key(
         &exec,
-        SoA1(keys.slice(..)),
-        SoA1(values.slice(..)),
+        Zip1(keys.slice(..)),
+        Zip1(values.slice(..)),
         common::EqualU32,
         common::SumF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![1.0, 3.0, 10.0, 30.0]);

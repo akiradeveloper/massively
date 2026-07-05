@@ -9,12 +9,12 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Treat item columns as carried SoA values.
+//! 1. Treat item columns as carried Zip values.
 //! 2. Scatter rows by rank index.
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA2, scatter};
+use massively::{DeviceVec, Executor, MIndex, Zip2, scatter};
 
 struct Output<B: cubecl::prelude::Runtime> {
     item_id: DeviceVec<B, u32>,
@@ -35,9 +35,9 @@ where
     let ranked_score = exec.constant(len, 0.0_f32)?;
     scatter(
         exec,
-        SoA2(item_id.slice(..), score.slice(..)),
+        Zip2(item_id.slice(..), score.slice(..)),
         rank_index.slice(..),
-        SoA2(ranked_item_id.slice_mut(..), ranked_score.slice_mut(..)),
+        Zip2(ranked_item_id.slice_mut(..), ranked_score.slice_mut(..)),
     )?;
     Ok(Output {
         item_id: ranked_item_id,

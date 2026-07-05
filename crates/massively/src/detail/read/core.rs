@@ -68,7 +68,7 @@ where
     }
 }
 
-impl<R, S> KernelItemRead<R> for SoAView1<S>
+impl<R, S> KernelItemRead<R> for ZipView1<S>
 where
     R: Runtime,
     S: KernelScalarRead<R>,
@@ -87,7 +87,7 @@ where
     }
 }
 
-impl<R, S> KernelItemRead<R> for DeviceSoA1<S>
+impl<R, S> KernelItemRead<R> for DeviceZip1<S>
 where
     R: Runtime,
     S: KernelScalarRead<R>,
@@ -137,14 +137,14 @@ macro_rules! impl_kernel_item_read {
     };
 }
 
-impl_kernel_item_read!(SoAView2<A, C>, left: A, right: C);
-impl_kernel_item_read!(DeviceSoA2<A, C>, left: A, right: C);
-impl_kernel_item_read!(SoAView3<A, C, D>, first: A, second: C, third: D);
-impl_kernel_item_read!(DeviceSoA3<A, C, D>, first: A, second: C, third: D);
+impl_kernel_item_read!(ZipView2<A, C>, left: A, right: C);
+impl_kernel_item_read!(DeviceZip2<A, C>, left: A, right: C);
+impl_kernel_item_read!(ZipView3<A, C, D>, first: A, second: C, third: D);
+impl_kernel_item_read!(DeviceZip3<A, C, D>, first: A, second: C, third: D);
 
-impl<Source> KernelIndexRead for SoAView1<Source>
+impl<Source> KernelIndexRead for ZipView1<Source>
 where
-    Self: ReadOnlySoA<Item = (u32,), Scalar = u32>,
+    Self: ReadOnlyZip<Item = (u32,), Scalar = u32>,
     Source: KernelColumn<Item = u32> + KernelColumnAt<S0>,
     Source::Expr: DeviceGpuExpr<u32>,
 {
@@ -152,7 +152,7 @@ where
     type Source = Source;
 
     fn index_source(self) -> Result<Self::Source, Error> {
-        ReadOnlySoA::validate(&self)?;
+        ReadOnlyZip::validate(&self)?;
         Ok(self.source)
     }
 }
@@ -166,7 +166,7 @@ where
     type Source = Source;
 
     fn index_source(self) -> Result<Self::Source, Error> {
-        <SoAView1<Source> as KernelIndexRead>::index_source(SoAView1 { source: self })
+        <ZipView1<Source> as KernelIndexRead>::index_source(ZipView1 { source: self })
     }
 }
 

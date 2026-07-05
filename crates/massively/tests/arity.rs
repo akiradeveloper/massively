@@ -36,7 +36,7 @@ fn stencil(exec: &Executor<WgpuRuntime>) -> U32Vec {
     exec.to_device(&[1_u32, 0, 1, 0]).unwrap()
 }
 
-macro_rules! soa_fn {
+macro_rules! zip_fn {
     ($values:ident, $output:ident, $owned:ty, $ctor:expr, $out_ctor:expr) => {
         fn $values(exec: &Executor<WgpuRuntime>) -> $owned {
             $ctor(exec)
@@ -48,37 +48,37 @@ macro_rules! soa_fn {
     };
 }
 
-soa_fn!(
+zip_fn!(
     values1,
     output1,
-    massively::SoA1<U32Vec>,
-    |exec: &Executor<WgpuRuntime>| massively::SoA1(column_u32(exec)),
-    |exec: &Executor<WgpuRuntime>| massively::SoA1(zeros_u32(exec))
+    massively::Zip1<U32Vec>,
+    |exec: &Executor<WgpuRuntime>| massively::Zip1(column_u32(exec)),
+    |exec: &Executor<WgpuRuntime>| massively::Zip1(zeros_u32(exec))
 );
-soa_fn!(
+zip_fn!(
     values2,
     output2,
-    massively::SoA2<F32Vec, U32Vec>,
-    |exec: &Executor<WgpuRuntime>| massively::SoA2(column_f32(exec), column_u32(exec)),
-    |exec: &Executor<WgpuRuntime>| massively::SoA2(zeros_f32(exec), zeros_u32(exec))
+    massively::Zip2<F32Vec, U32Vec>,
+    |exec: &Executor<WgpuRuntime>| massively::Zip2(column_f32(exec), column_u32(exec)),
+    |exec: &Executor<WgpuRuntime>| massively::Zip2(zeros_f32(exec), zeros_u32(exec))
 );
-soa_fn!(
+zip_fn!(
     values3,
     output3,
-    massively::SoA3<F32Vec, U32Vec, F32Vec>,
+    massively::Zip3<F32Vec, U32Vec, F32Vec>,
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA3(column_f32(exec), column_u32(exec), column_f32(exec))
+        massively::Zip3(column_f32(exec), column_u32(exec), column_f32(exec))
     },
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA3(zeros_f32(exec), zeros_u32(exec), zeros_f32(exec))
+        massively::Zip3(zeros_f32(exec), zeros_u32(exec), zeros_f32(exec))
     }
 );
-soa_fn!(
+zip_fn!(
     values4,
     output4,
-    massively::SoA4<F32Vec, U32Vec, F32Vec, U32Vec>,
+    massively::Zip4<F32Vec, U32Vec, F32Vec, U32Vec>,
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA4(
+        massively::Zip4(
             column_f32(exec),
             column_u32(exec),
             column_f32(exec),
@@ -86,7 +86,7 @@ soa_fn!(
         )
     },
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA4(
+        massively::Zip4(
             zeros_f32(exec),
             zeros_u32(exec),
             zeros_f32(exec),
@@ -94,12 +94,12 @@ soa_fn!(
         )
     }
 );
-soa_fn!(
+zip_fn!(
     values5,
     output5,
-    massively::SoA5<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
+    massively::Zip5<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA5(
+        massively::Zip5(
             column_f32(exec),
             column_u32(exec),
             column_f32(exec),
@@ -108,7 +108,7 @@ soa_fn!(
         )
     },
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA5(
+        massively::Zip5(
             zeros_f32(exec),
             zeros_u32(exec),
             zeros_f32(exec),
@@ -117,12 +117,12 @@ soa_fn!(
         )
     }
 );
-soa_fn!(
+zip_fn!(
     values6,
     output6,
-    massively::SoA6<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec>,
+    massively::Zip6<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec>,
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA6(
+        massively::Zip6(
             column_f32(exec),
             column_u32(exec),
             column_f32(exec),
@@ -132,7 +132,7 @@ soa_fn!(
         )
     },
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA6(
+        massively::Zip6(
             zeros_f32(exec),
             zeros_u32(exec),
             zeros_f32(exec),
@@ -142,12 +142,12 @@ soa_fn!(
         )
     }
 );
-soa_fn!(
+zip_fn!(
     values7,
     output7,
-    massively::SoA7<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
+    massively::Zip7<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA7(
+        massively::Zip7(
             column_f32(exec),
             column_u32(exec),
             column_f32(exec),
@@ -158,7 +158,7 @@ soa_fn!(
         )
     },
     |exec: &Executor<WgpuRuntime>| {
-        massively::SoA7(
+        massively::Zip7(
             zeros_f32(exec),
             zeros_u32(exec),
             zeros_f32(exec),
@@ -298,7 +298,7 @@ macro_rules! define_value_arity_tests {
 
             #[test]
             fn arity_1() {
-                $case!(values1, output1, massively::SoA1<U32Vec>, (0_u32,));
+                $case!(values1, output1, massively::Zip1<U32Vec>, (0_u32,));
             }
 
             #[test]
@@ -306,7 +306,7 @@ macro_rules! define_value_arity_tests {
                 $case!(
                     values2,
                     output2,
-                    massively::SoA2<F32Vec, U32Vec>,
+                    massively::Zip2<F32Vec, U32Vec>,
                     (0.0_f32, 0_u32)
                 );
             }
@@ -316,7 +316,7 @@ macro_rules! define_value_arity_tests {
                 $case!(
                     values3,
                     output3,
-                    massively::SoA3<F32Vec, U32Vec, F32Vec>,
+                    massively::Zip3<F32Vec, U32Vec, F32Vec>,
                     (0.0_f32, 0_u32, 0.0_f32)
                 );
             }
@@ -326,7 +326,7 @@ macro_rules! define_value_arity_tests {
                 $case!(
                     values4,
                     output4,
-                    massively::SoA4<F32Vec, U32Vec, F32Vec, U32Vec>,
+                    massively::Zip4<F32Vec, U32Vec, F32Vec, U32Vec>,
                     (0.0_f32, 0_u32, 0.0_f32, 0_u32)
                 );
             }
@@ -336,7 +336,7 @@ macro_rules! define_value_arity_tests {
                 $case!(
                     values5,
                     output5,
-                    massively::SoA5<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
+                    massively::Zip5<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
                     (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32)
                 );
             }
@@ -346,7 +346,7 @@ macro_rules! define_value_arity_tests {
                 $case!(
                     values6,
                     output6,
-                    massively::SoA6<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec>,
+                    massively::Zip6<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec>,
                     (0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32)
                 );
             }
@@ -356,7 +356,7 @@ macro_rules! define_value_arity_tests {
                 $case!(
                     values7,
                     output7,
-                    massively::SoA7<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
+                    massively::Zip7<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
                     (
                         0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32, 0_u32, 0.0_f32
                     )
@@ -376,7 +376,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values1,
                     output1,
-                    massively::SoA1<U32Vec>,
+                    massively::Zip1<U32Vec>,
                     ArityScalarToTuple1
                 );
             }
@@ -386,7 +386,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values2,
                     output2,
-                    massively::SoA2<F32Vec, U32Vec>,
+                    massively::Zip2<F32Vec, U32Vec>,
                     ArityScalarToTuple2
                 );
             }
@@ -396,7 +396,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values3,
                     output3,
-                    massively::SoA3<F32Vec, U32Vec, F32Vec>,
+                    massively::Zip3<F32Vec, U32Vec, F32Vec>,
                     ArityScalarToTuple3
                 );
             }
@@ -406,7 +406,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values4,
                     output4,
-                    massively::SoA4<F32Vec, U32Vec, F32Vec, U32Vec>,
+                    massively::Zip4<F32Vec, U32Vec, F32Vec, U32Vec>,
                     ArityScalarToTuple4
                 );
             }
@@ -416,7 +416,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values5,
                     output5,
-                    massively::SoA5<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
+                    massively::Zip5<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
                     ArityScalarToTuple5
                 );
             }
@@ -426,7 +426,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values6,
                     output6,
-                    massively::SoA6<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec>,
+                    massively::Zip6<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec>,
                     ArityScalarToTuple6
                 );
             }
@@ -436,7 +436,7 @@ macro_rules! define_output_arity_tests {
                 $case!(
                     values7,
                     output7,
-                    massively::SoA7<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
+                    massively::Zip7<F32Vec, U32Vec, F32Vec, U32Vec, F32Vec, U32Vec, F32Vec>,
                     ArityScalarToTuple7
                 );
             }
@@ -451,17 +451,17 @@ macro_rules! define_key_arity_tests {
 
             #[test]
             fn arity_1() {
-                $case!(values1, massively::SoA1<U32Vec>);
+                $case!(values1, massively::Zip1<U32Vec>);
             }
 
             #[test]
             fn arity_2() {
-                $case!(values2, massively::SoA2<F32Vec, U32Vec>);
+                $case!(values2, massively::Zip2<F32Vec, U32Vec>);
             }
 
             #[test]
             fn arity_3() {
-                $case!(values3, massively::SoA3<F32Vec, U32Vec, F32Vec>);
+                $case!(values3, massively::Zip3<F32Vec, U32Vec, F32Vec>);
             }
         }
     };

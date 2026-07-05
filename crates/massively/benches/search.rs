@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, ascending_u32, iter_gpu, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{Executor, SoA1, lower_bound, upper_bound};
+use massively::{Executor, Zip1, lower_bound, upper_bound};
 
 struct Less;
 
@@ -28,8 +28,8 @@ fn check_search(exec: &Executor<WgpuRuntime>) {
     let lower = exec.to_device(&[0_u32; 3]).unwrap();
     lower_bound(
         exec,
-        SoA1(input.slice(..)),
-        SoA1(values.slice(..)),
+        Zip1(input.slice(..)),
+        Zip1(values.slice(..)),
         Less,
         lower.slice_mut(..),
     )
@@ -38,8 +38,8 @@ fn check_search(exec: &Executor<WgpuRuntime>) {
     let upper = exec.to_device(&[0_u32; 3]).unwrap();
     upper_bound(
         exec,
-        SoA1(input.slice(..)),
-        SoA1(values.slice(..)),
+        Zip1(input.slice(..)),
+        Zip1(values.slice(..)),
         Less,
         upper.slice_mut(..),
     )
@@ -62,8 +62,8 @@ fn bench_search(c: &mut Criterion) {
                 iter_gpu(b, || {
                     lower_bound(
                         &exec,
-                        SoA1(black_box(input.slice(..))),
-                        SoA1(black_box(values.slice(..))),
+                        Zip1(black_box(input.slice(..))),
+                        Zip1(black_box(values.slice(..))),
                         Less,
                         black_box(output.slice_mut(..)),
                     )
@@ -90,8 +90,8 @@ fn bench_search(c: &mut Criterion) {
                 iter_gpu(b, || {
                     upper_bound(
                         &exec,
-                        SoA1(black_box(input.slice(..))),
-                        SoA1(black_box(values.slice(..))),
+                        Zip1(black_box(input.slice(..))),
+                        Zip1(black_box(values.slice(..))),
                         Less,
                         black_box(output.slice_mut(..)),
                     )

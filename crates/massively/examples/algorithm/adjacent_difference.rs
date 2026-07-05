@@ -11,9 +11,9 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     adjacent_difference(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         common::SumF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     println!(

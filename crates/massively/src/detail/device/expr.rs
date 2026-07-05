@@ -8,44 +8,44 @@ use crate::{
 use cubecl::prelude::*;
 
 /// Two-component flat device expression.
-pub struct SoA2<Left, Right> {
+pub struct Zip2<Left, Right> {
     pub(crate) left: Left,
     pub(crate) right: Right,
 }
 
 /// One-component flat device expression.
-pub struct SoA1<Source> {
+pub struct Zip1<Source> {
     pub(crate) source: Source,
 }
 
 /// One-component read-only virtual device expression.
 #[doc(hidden)]
-pub struct SoAView1<Source> {
+pub struct ZipView1<Source> {
     pub(crate) source: Source,
 }
 
 #[doc(hidden)]
-pub struct SoAView2<Left, Right> {
+pub struct ZipView2<Left, Right> {
     pub(crate) left: Left,
     pub(crate) right: Right,
 }
 
 /// Three-component flat device expression.
-pub struct SoA3<First, Second, Third> {
+pub struct Zip3<First, Second, Third> {
     pub(crate) first: First,
     pub(crate) second: Second,
     pub(crate) third: Third,
 }
 
 #[doc(hidden)]
-pub struct SoAView3<First, Second, Third> {
+pub struct ZipView3<First, Second, Third> {
     pub(crate) first: First,
     pub(crate) second: Second,
     pub(crate) third: Third,
 }
 
 #[doc(hidden)]
-pub struct SoAView4<A, B, C, D> {
+pub struct ZipView4<A, B, C, D> {
     pub(crate) a: A,
     pub(crate) b: B,
     pub(crate) c: C,
@@ -53,7 +53,7 @@ pub struct SoAView4<A, B, C, D> {
 }
 
 #[doc(hidden)]
-pub struct SoAView5<A, B, C, D, E> {
+pub struct ZipView5<A, B, C, D, E> {
     pub(crate) a: A,
     pub(crate) b: B,
     pub(crate) c: C,
@@ -62,7 +62,7 @@ pub struct SoAView5<A, B, C, D, E> {
 }
 
 #[doc(hidden)]
-pub struct SoAView6<A, B, C, D, E, F> {
+pub struct ZipView6<A, B, C, D, E, F> {
     pub(crate) a: A,
     pub(crate) b: B,
     pub(crate) c: C,
@@ -72,7 +72,7 @@ pub struct SoAView6<A, B, C, D, E, F> {
 }
 
 #[doc(hidden)]
-pub struct SoAView7<A, B, C, D, E, F, G> {
+pub struct ZipView7<A, B, C, D, E, F, G> {
     pub(crate) a: A,
     pub(crate) b: B,
     pub(crate) c: C,
@@ -96,7 +96,7 @@ pub struct S4;
 /// Internal scalar-column expression that can be lowered into GPU kernels.
 ///
 /// This is not a public API concept. Public iterator inputs deal in
-/// `DeviceSlice` / `DeviceSliceMut` wrapped by `SoA`; this trait is the private
+/// `DeviceSlice` / `DeviceSliceMut` wrapped by `Zip`; this trait is the private
 /// staging layer used by algorithms to pass one or more columns to kernels.
 #[doc(hidden)]
 pub trait KernelColumn {
@@ -183,7 +183,7 @@ where
     }
 }
 
-impl<R, T> ReadOnlySoA for DeviceColumnView<R, T>
+impl<R, T> ReadOnlyZip for DeviceColumnView<R, T>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
@@ -201,11 +201,11 @@ where
     }
 }
 
-/// Internal read-only SoA compatibility layer.
+/// Internal read-only Zip compatibility layer.
 ///
-/// Public API terminology is `SoA`; this trait remains as an implementation
+/// Public API terminology is `Zip`; this trait remains as an implementation
 /// detail for virtual/read-only expression inputs.
-pub(crate) trait ReadOnlySoA {
+pub(crate) trait ReadOnlyZip {
     type Runtime: Runtime;
     type Item;
     type Scalar;
@@ -214,8 +214,8 @@ pub(crate) trait ReadOnlySoA {
     fn validate(&self) -> Result<(), Error>;
 }
 
-/// Internal storage-backed structure-of-arrays.
-pub trait SoA {
+/// Internal storage-backed Zip value.
+pub trait Zip {
     type Runtime: Runtime;
     type Item;
     type Scalar;
@@ -224,24 +224,24 @@ pub trait SoA {
     fn validate(&self) -> Result<(), Error>;
 }
 
-impl<Source> ReadOnlySoA for Source
+impl<Source> ReadOnlyZip for Source
 where
-    Source: SoA,
+    Source: Zip,
 {
     type Runtime = Source::Runtime;
     type Item = Source::Item;
     type Scalar = Source::Scalar;
 
     fn len(&self) -> usize {
-        SoA::len(self)
+        Zip::len(self)
     }
 
     fn validate(&self) -> Result<(), Error> {
-        SoA::validate(self)
+        Zip::validate(self)
     }
 }
 
-impl<R, T> SoA for DeviceVec<R, T>
+impl<R, T> Zip for DeviceVec<R, T>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
@@ -259,7 +259,7 @@ where
     }
 }
 
-impl<R, T> ReadOnlySoA for &DeviceVec<R, T>
+impl<R, T> ReadOnlyZip for &DeviceVec<R, T>
 where
     R: Runtime,
     T: CubePrimitive + CubeElement,
@@ -290,17 +290,17 @@ pub struct KernelColumnBindings {
     pub(crate) slot_offsets: Vec<usize>,
 }
 
-impl<Left, Right> ReadOnlySoA for SoAView2<Left, Right>
+impl<Left, Right> ReadOnlyZip for ZipView2<Left, Right>
 where
     Left: KernelColumn
         + KernelColumnAt<S0>
-        + ReadOnlySoA<
+        + ReadOnlyZip<
             Runtime = <Left as KernelColumn>::Runtime,
             Item = (<Left as KernelColumn>::Item,),
         >,
     Right: KernelColumn<Runtime = <Left as KernelColumn>::Runtime>
         + KernelColumnAt<<Left as KernelColumnAt<S0>>::Next>
-        + ReadOnlySoA,
+        + ReadOnlyZip,
     <Left as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Right as KernelColumn>::Item: CubePrimitive + CubeElement,
 {
@@ -323,29 +323,29 @@ where
     }
 }
 
-impl<Left, Right> SoA for SoA2<Left, Right>
+impl<Left, Right> Zip for Zip2<Left, Right>
 where
-    Left: SoA + KernelColumn,
-    Right: SoA<Runtime = <Left as SoA>::Runtime>
+    Left: Zip + KernelColumn,
+    Right: Zip<Runtime = <Left as Zip>::Runtime>
         + KernelColumn<Runtime = <Left as KernelColumn>::Runtime>,
 {
-    type Runtime = <Left as SoA>::Runtime;
+    type Runtime = <Left as Zip>::Runtime;
     type Item = (<Left as KernelColumn>::Item, <Right as KernelColumn>::Item);
     type Scalar = Left::Scalar;
 
     fn len(&self) -> usize {
-        SoA::len(&self.left)
+        Zip::len(&self.left)
     }
 
     fn validate(&self) -> Result<(), Error> {
-        SoA::validate(&self.left)?;
-        SoA::validate(&self.right)?;
-        ensure_same_len(SoA::len(&self.right), SoA::len(&self.left))?;
+        Zip::validate(&self.left)?;
+        Zip::validate(&self.right)?;
+        ensure_same_len(Zip::len(&self.right), Zip::len(&self.left))?;
         Ok(())
     }
 }
 
-impl<Source> ReadOnlySoA for SoAView1<Source>
+impl<Source> ReadOnlyZip for ZipView1<Source>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
     <Source as KernelColumn>::Item: CubePrimitive + CubeElement,
@@ -363,7 +363,7 @@ where
     }
 }
 
-impl<Source> SoA for SoA1<Source>
+impl<Source> Zip for Zip1<Source>
 where
     Source: StorageKernelColumn + KernelColumnAt<S0>,
 {
@@ -380,7 +380,7 @@ where
     }
 }
 
-impl<Left, Right, Start> KernelColumnAt<Start> for SoA2<Left, Right>
+impl<Left, Right, Start> KernelColumnAt<Start> for Zip2<Left, Right>
 where
     Left: KernelColumn + KernelColumnAt<S0> + KernelColumnAt<Start>,
     Right: KernelColumn<Runtime = Left::Runtime>
@@ -404,20 +404,20 @@ where
     }
 }
 
-impl<First, Second, Third> ReadOnlySoA for SoAView3<First, Second, Third>
+impl<First, Second, Third> ReadOnlyZip for ZipView3<First, Second, Third>
 where
     First: KernelColumn
         + KernelColumnAt<S0>
-        + ReadOnlySoA<
+        + ReadOnlyZip<
             Runtime = <First as KernelColumn>::Runtime,
             Item = (<First as KernelColumn>::Item,),
         >,
     Second: KernelColumn<Runtime = <First as KernelColumn>::Runtime>
         + KernelColumnAt<<First as KernelColumnAt<S0>>::Next>
-        + ReadOnlySoA,
+        + ReadOnlyZip,
     Third: KernelColumn<Runtime = <First as KernelColumn>::Runtime>
         + KernelColumnAt<<Second as KernelColumnAt<<First as KernelColumnAt<S0>>::Next>>::Next>
-        + ReadOnlySoA,
+        + ReadOnlyZip,
     <First as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Second as KernelColumn>::Item: CubePrimitive + CubeElement,
     <Third as KernelColumn>::Item: CubePrimitive + CubeElement,
@@ -450,9 +450,9 @@ where
     }
 }
 
-macro_rules! impl_read_only_wide_soa_view {
+macro_rules! impl_read_only_wide_zip_view {
     ($name:ident < $first:ident : $first_field:ident, $( $ty:ident : $field:ident ),+ > => ($($item:ty),+)) => {
-        impl<$first, $( $ty ),+> ReadOnlySoA for $name<$first, $( $ty ),+>
+        impl<$first, $( $ty ),+> ReadOnlyZip for $name<$first, $( $ty ),+>
         where
             $first: KernelColumn + KernelColumnAt<S0>,
             $(
@@ -486,20 +486,20 @@ macro_rules! impl_read_only_wide_soa_view {
     };
 }
 
-impl_read_only_wide_soa_view!(SoAView4<A: a, B: b, C: c, D: d> => (
+impl_read_only_wide_zip_view!(ZipView4<A: a, B: b, C: c, D: d> => (
     <A as KernelColumn>::Item,
     <B as KernelColumn>::Item,
     <C as KernelColumn>::Item,
     <D as KernelColumn>::Item
 ));
-impl_read_only_wide_soa_view!(SoAView5<A: a, B: b, C: c, D: d, E: e> => (
+impl_read_only_wide_zip_view!(ZipView5<A: a, B: b, C: c, D: d, E: e> => (
     <A as KernelColumn>::Item,
     <B as KernelColumn>::Item,
     <C as KernelColumn>::Item,
     <D as KernelColumn>::Item,
     <E as KernelColumn>::Item
 ));
-impl_read_only_wide_soa_view!(SoAView6<A: a, B: b, C: c, D: d, E: e, F: f> => (
+impl_read_only_wide_zip_view!(ZipView6<A: a, B: b, C: c, D: d, E: e, F: f> => (
     <A as KernelColumn>::Item,
     <B as KernelColumn>::Item,
     <C as KernelColumn>::Item,
@@ -507,7 +507,7 @@ impl_read_only_wide_soa_view!(SoAView6<A: a, B: b, C: c, D: d, E: e, F: f> => (
     <E as KernelColumn>::Item,
     <F as KernelColumn>::Item
 ));
-impl_read_only_wide_soa_view!(SoAView7<A: a, B: b, C: c, D: d, E: e, F: f, G: g> => (
+impl_read_only_wide_zip_view!(ZipView7<A: a, B: b, C: c, D: d, E: e, F: f, G: g> => (
     <A as KernelColumn>::Item,
     <B as KernelColumn>::Item,
     <C as KernelColumn>::Item,
@@ -517,15 +517,15 @@ impl_read_only_wide_soa_view!(SoAView7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>
     <G as KernelColumn>::Item
 ));
 
-impl<First, Second, Third> SoA for SoA3<First, Second, Third>
+impl<First, Second, Third> Zip for Zip3<First, Second, Third>
 where
-    First: SoA + KernelColumn,
-    Second: SoA<Runtime = <First as SoA>::Runtime>
+    First: Zip + KernelColumn,
+    Second: Zip<Runtime = <First as Zip>::Runtime>
         + KernelColumn<Runtime = <First as KernelColumn>::Runtime>,
-    Third: SoA<Runtime = <First as SoA>::Runtime>
+    Third: Zip<Runtime = <First as Zip>::Runtime>
         + KernelColumn<Runtime = <First as KernelColumn>::Runtime>,
 {
-    type Runtime = <First as SoA>::Runtime;
+    type Runtime = <First as Zip>::Runtime;
     type Item = (
         <First as KernelColumn>::Item,
         <Second as KernelColumn>::Item,
@@ -534,20 +534,20 @@ where
     type Scalar = First::Scalar;
 
     fn len(&self) -> usize {
-        SoA::len(&self.first)
+        Zip::len(&self.first)
     }
 
     fn validate(&self) -> Result<(), Error> {
-        SoA::validate(&self.first)?;
-        SoA::validate(&self.second)?;
-        SoA::validate(&self.third)?;
-        ensure_same_len(SoA::len(&self.second), SoA::len(&self.first))?;
-        ensure_same_len(SoA::len(&self.third), SoA::len(&self.first))?;
+        Zip::validate(&self.first)?;
+        Zip::validate(&self.second)?;
+        Zip::validate(&self.third)?;
+        ensure_same_len(Zip::len(&self.second), Zip::len(&self.first))?;
+        ensure_same_len(Zip::len(&self.third), Zip::len(&self.first))?;
         Ok(())
     }
 }
 
-impl<First, Second, Third, Start> KernelColumnAt<Start> for SoA3<First, Second, Third>
+impl<First, Second, Third, Start> KernelColumnAt<Start> for Zip3<First, Second, Third>
 where
     First: KernelColumn + KernelColumnAt<S0> + KernelColumnAt<Start>,
     Second: KernelColumn<Runtime = First::Runtime>

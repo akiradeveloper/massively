@@ -11,8 +11,8 @@ fn main() -> common::Result {
 
     let index = find_first_of(
         &exec,
-        SoA1(input.slice(..)),
-        SoA1(needles.slice(..)),
+        Zip1(input.slice(..)),
+        Zip1(needles.slice(..)),
         common::EqualF32,
     )?;
 

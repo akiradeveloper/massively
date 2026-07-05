@@ -1,6 +1,6 @@
 use super::*;
 
-/// Sorts read-only SoA input and returns owned device storage.
+/// Sorts read-only Zip input and returns owned device storage.
 pub fn sort<R, Input, Less>(
     policy: &CubePolicy<R>,
     input: Input,

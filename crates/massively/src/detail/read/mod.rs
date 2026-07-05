@@ -13,8 +13,8 @@ use crate::{
         CubePolicy,
         device::{
             DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, KernelColumnBindings,
-            ReadOnlyKernelColumn, ReadOnlySoA, S0, SoA1 as DeviceSoA1, SoA2 as DeviceSoA2,
-            SoA3 as DeviceSoA3, SoAView1, SoAView2, SoAView3,
+            ReadOnlyKernelColumn, ReadOnlyZip, S0, Zip1 as DeviceZip1, Zip2 as DeviceZip2,
+            Zip3 as DeviceZip3, ZipView1, ZipView2, ZipView3,
         },
         op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},
         primitives::{

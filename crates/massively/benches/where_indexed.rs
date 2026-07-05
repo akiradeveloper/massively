@@ -16,10 +16,10 @@ fn check_where_indexed(exec: &Executor<WgpuRuntime>) {
 
     gather_where(
         exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![30.0, 10.0, 0.0]);
@@ -28,10 +28,10 @@ fn check_where_indexed(exec: &Executor<WgpuRuntime>) {
     let scattered = exec.to_device(&[0.0_f32; 3]).unwrap();
     scatter_where(
         exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
         scatter_stencil.slice(..),
-        massively::SoA1(scattered.slice_mut(..)),
+        massively::Zip1(scattered.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&scattered).unwrap(), vec![0.0, 30.0, 10.0]);
@@ -40,7 +40,7 @@ fn check_where_indexed(exec: &Executor<WgpuRuntime>) {
         exec,
         (0.0,),
         scatter_stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 }
@@ -61,10 +61,10 @@ fn bench_where_indexed(c: &mut Criterion) {
                 iter_gpu(b, || {
                     gather_where(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
                         black_box(stencil.slice(..)),
-                        massively::SoA1(output.slice_mut(..)),
+                        massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);
@@ -90,10 +90,10 @@ fn bench_where_indexed(c: &mut Criterion) {
                 iter_gpu(b, || {
                     scatter_where(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
                         black_box(stencil.slice(..)),
-                        massively::SoA1(output.slice_mut(..)),
+                        massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);
@@ -119,7 +119,7 @@ fn bench_where_indexed(c: &mut Criterion) {
                         &exec,
                         (0.0,),
                         black_box(stencil.slice(..)),
-                        massively::SoA1(values.slice_mut(..)),
+                        massively::Zip1(values.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);
@@ -162,10 +162,10 @@ fn bench_where_indexed(c: &mut Criterion) {
                             iter_gpu(b, || {
                                 gather_where(
                                     &exec,
-                                    massively::SoA1(black_box(values.slice(..))),
+                                    massively::Zip1(black_box(values.slice(..))),
                                     black_box(indices.slice(..)),
                                     black_box(stencil.slice(..)),
-                                    massively::SoA1(output.slice_mut(..)),
+                                    massively::Zip1(output.slice_mut(..)),
                                 )
                                 .unwrap();
                                 sync(&exec);
@@ -203,10 +203,10 @@ fn bench_where_indexed(c: &mut Criterion) {
                             iter_gpu(b, || {
                                 scatter_where(
                                     &exec,
-                                    massively::SoA1(black_box(values.slice(..))),
+                                    massively::Zip1(black_box(values.slice(..))),
                                     black_box(indices.slice(..)),
                                     black_box(stencil.slice(..)),
-                                    massively::SoA1(output.slice_mut(..)),
+                                    massively::Zip1(output.slice_mut(..)),
                                 )
                                 .unwrap();
                                 sync(&exec);
@@ -240,7 +240,7 @@ fn bench_where_indexed(c: &mut Criterion) {
                                 &exec,
                                 (0.0,),
                                 black_box(stencil.slice(..)),
-                                massively::SoA1(values.slice_mut(..)),
+                                massively::Zip1(values.slice_mut(..)),
                             )
                             .unwrap();
                             sync(&exec);

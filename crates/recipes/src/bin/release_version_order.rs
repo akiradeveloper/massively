@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, lexicographical_compare};
+use massively::{DeviceVec, Executor, Zip1, lexicographical_compare};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,8 +25,8 @@ where
 {
     lexicographical_compare(
         exec,
-        SoA1(left.slice(..)),
-        SoA1(right.slice(..)),
+        Zip1(left.slice(..)),
+        Zip1(right.slice(..)),
         common::LessU32,
     )
 }

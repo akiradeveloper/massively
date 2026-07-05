@@ -25,9 +25,9 @@ fn check_scatter(exec: &Executor<WgpuRuntime>) {
     let output = exec.to_device(&[0.0_f32; 4]).unwrap();
     scatter(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![4.0, 3.0, 2.0, 1.0]);
@@ -46,10 +46,10 @@ fn bench_scatter(c: &mut Criterion) {
             let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             transform(
                 &exec,
-                massively::SoA1(input.slice(..)),
+                massively::Zip1(input.slice(..)),
                 MulTwo,
                 (),
-                massively::SoA1(values.slice_mut(..)),
+                massively::Zip1(values.slice_mut(..)),
             )
             .unwrap();
             sync(&exec);
@@ -57,9 +57,9 @@ fn bench_scatter(c: &mut Criterion) {
                 iter_gpu(b, || {
                     scatter(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
-                        massively::SoA1(output.slice_mut(..)),
+                        massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);

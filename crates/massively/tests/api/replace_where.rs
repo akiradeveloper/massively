@@ -12,7 +12,7 @@ fn replace_where_accepts_three_tuple_columns() {
         &exec,
         (99.0_f32, 77_u32, -99.0_f32),
         stencil.slice(..),
-        massively::SoA3(a.slice_mut(..), b.slice_mut(..), c.slice_mut(..)),
+        massively::Zip3(a.slice_mut(..), b.slice_mut(..), c.slice_mut(..)),
     )
     .unwrap();
 
@@ -39,7 +39,7 @@ fn replace_where_accepts_seven_tuple_columns() {
             101_u32, 102_u32, 103_u32, 104_u32, 105_u32, 106_u32, 107_u32,
         ),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
             c.slice_mut(..),
@@ -71,7 +71,7 @@ fn replace_where_accepts_u32_stencil() {
         &exec,
         (-1.0_f32, 99_u32),
         stencil.slice(..),
-        massively::SoA2(a.slice_mut(..), b.slice_mut(..)),
+        massively::Zip2(a.slice_mut(..), b.slice_mut(..)),
     )
     .unwrap();
 
@@ -89,7 +89,7 @@ fn replace_where_leaves_values_unchanged_when_no_flags_are_selected() {
         &exec,
         (99_u32,),
         stencil.slice(..),
-        massively::SoA1(values.slice_mut(..)),
+        massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();
 
@@ -106,7 +106,7 @@ fn replace_where_replaces_all_values_when_all_flags_are_selected() {
         &exec,
         (99_u32,),
         stencil.slice(..),
-        massively::SoA1(values.slice_mut(..)),
+        massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();
 
@@ -123,7 +123,7 @@ fn replace_where_accepts_sliced_output() {
         &exec,
         (99_u32,),
         stencil.slice(..),
-        massively::SoA1(values.slice_mut(1..4)),
+        massively::Zip1(values.slice_mut(1..4)),
     )
     .unwrap();
 

@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, scatter_where};
+use massively::{DeviceVec, Executor, MIndex, Zip1, scatter_where};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -28,10 +28,10 @@ where
     let out = exec.constant(len, 0_u32)?;
     scatter_where(
         exec,
-        SoA1(item_id.slice(..)),
+        Zip1(item_id.slice(..)),
         slot.slice(..),
         approved.slice(..),
-        SoA1(out.slice_mut(..)),
+        Zip1(out.slice_mut(..)),
     )?;
     Ok(out)
 }

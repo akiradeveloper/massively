@@ -11,9 +11,9 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 3])?;
     sort(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         common::LessF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![1.0, 2.0, 3.0]);

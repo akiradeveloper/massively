@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, inclusive_scan_by_key};
+use massively::{DeviceVec, Executor, Zip1, inclusive_scan_by_key};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -26,11 +26,11 @@ where
     let balance = exec.constant(amount_delta.len(), 0.0_f32)?;
     inclusive_scan_by_key(
         exec,
-        SoA1(account_id.slice(..)),
-        SoA1(amount_delta.slice(..)),
+        Zip1(account_id.slice(..)),
+        Zip1(amount_delta.slice(..)),
         common::EqualU32,
         common::SumF32,
-        SoA1(balance.slice_mut(..)),
+        Zip1(balance.slice_mut(..)),
     )?;
     Ok(balance)
 }

@@ -18,7 +18,7 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{Executor, MIndex, SoA1, SoA2, reduce, transform, util::random};
+use massively::{Executor, MIndex, Zip1, Zip2, reduce, transform, util::random};
 
 const SCALE: u32 = 1_000_000;
 
@@ -52,12 +52,12 @@ where
     let inside = exec.constant(samples, 0_u32)?;
     transform(
         exec,
-        SoA2(x.slice(..), y.slice(..)),
+        Zip2(x.slice(..), y.slice(..)),
         InsideQuarterCircle,
         (),
-        SoA1(inside.slice_mut(..)),
+        Zip1(inside.slice_mut(..)),
     )?;
-    let (hits,) = reduce(exec, SoA1(inside.slice(..)), (0_u32,), common::SumU32)?;
+    let (hits,) = reduce(exec, Zip1(inside.slice(..)), (0_u32,), common::SumU32)?;
     Ok(4.0 * hits as f32 / samples as f32)
 }
 

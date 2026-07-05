@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, minmax_element};
+use massively::{DeviceVec, Executor, MIndex, Zip1, minmax_element};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -22,7 +22,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    minmax_element(exec, SoA1(price.slice(..)), common::LessF32)
+    minmax_element(exec, Zip1(price.slice(..)), common::LessF32)
 }
 
 fn main() -> common::Result {

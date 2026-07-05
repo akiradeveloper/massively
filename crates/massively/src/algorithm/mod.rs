@@ -2,7 +2,7 @@
 
 pub(crate) mod api;
 
-pub use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
+pub use crate::iter::{MIter, MIterMut, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
 pub use crate::op;
 pub use crate::value::MItem;
 pub use api::{

@@ -1,80 +1,80 @@
 use super::*;
 
-macro_rules! soa_type {
+macro_rules! zip_type {
     ($a:ty) => {
-        SoA1<$a>
+        Zip1<$a>
     };
     ($a:ty, $b:ty) => {
-        SoA2<$a, $b>
+        Zip2<$a, $b>
     };
     ($a:ty, $b:ty, $c:ty) => {
-        SoA3<$a, $b, $c>
+        Zip3<$a, $b, $c>
     };
     ($a:ty, $b:ty, $c:ty, $d:ty) => {
-        SoA4<$a, $b, $c, $d>
+        Zip4<$a, $b, $c, $d>
     };
     ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty) => {
-        SoA5<$a, $b, $c, $d, $e>
+        Zip5<$a, $b, $c, $d, $e>
     };
     ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty) => {
-        SoA6<$a, $b, $c, $d, $e, $f>
+        Zip6<$a, $b, $c, $d, $e, $f>
     };
     ($a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty) => {
-        SoA7<$a, $b, $c, $d, $e, $f, $g>
+        Zip7<$a, $b, $c, $d, $e, $f, $g>
     };
 }
 
-macro_rules! soa_value {
+macro_rules! zip_value {
     ($a:expr) => {
-        SoA1($a)
+        Zip1($a)
     };
     ($a:expr, $b:expr) => {
-        SoA2($a, $b)
+        Zip2($a, $b)
     };
     ($a:expr, $b:expr, $c:expr) => {
-        SoA3($a, $b, $c)
+        Zip3($a, $b, $c)
     };
     ($a:expr, $b:expr, $c:expr, $d:expr) => {
-        SoA4($a, $b, $c, $d)
+        Zip4($a, $b, $c, $d)
     };
     ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr) => {
-        SoA5($a, $b, $c, $d, $e)
+        Zip5($a, $b, $c, $d, $e)
     };
     ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr) => {
-        SoA6($a, $b, $c, $d, $e, $f)
+        Zip6($a, $b, $c, $d, $e, $f)
     };
     ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr) => {
-        SoA7($a, $b, $c, $d, $e, $f, $g)
+        Zip7($a, $b, $c, $d, $e, $f, $g)
     };
 }
 
-macro_rules! soa_into_inner {
+macro_rules! zip_into_inner {
     ($value:expr; $a:ident) => {{
-        let SoA1($a) = $value;
+        let Zip1($a) = $value;
         ($a.inner,)
     }};
     ($value:expr; $a:ident, $b:ident) => {{
-        let SoA2($a, $b) = $value;
+        let Zip2($a, $b) = $value;
         ($a.inner, $b.inner)
     }};
     ($value:expr; $a:ident, $b:ident, $c:ident) => {{
-        let SoA3($a, $b, $c) = $value;
+        let Zip3($a, $b, $c) = $value;
         ($a.inner, $b.inner, $c.inner)
     }};
     ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident) => {{
-        let SoA4($a, $b, $c, $d) = $value;
+        let Zip4($a, $b, $c, $d) = $value;
         ($a.inner, $b.inner, $c.inner, $d.inner)
     }};
     ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident) => {{
-        let SoA5($a, $b, $c, $d, $e) = $value;
+        let Zip5($a, $b, $c, $d, $e) = $value;
         ($a.inner, $b.inner, $c.inner, $d.inner, $e.inner)
     }};
     ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident) => {{
-        let SoA6($a, $b, $c, $d, $e, $f) = $value;
+        let Zip6($a, $b, $c, $d, $e, $f) = $value;
         ($a.inner, $b.inner, $c.inner, $d.inner, $e.inner, $f.inner)
     }};
     ($value:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident, $g:ident) => {{
-        let SoA7($a, $b, $c, $d, $e, $f, $g) = $value;
+        let Zip7($a, $b, $c, $d, $e, $f, $g) = $value;
         (
             $a.inner, $b.inner, $c.inner, $d.inner, $e.inner, $f.inner, $g.inner,
         )
@@ -139,11 +139,11 @@ macro_rules! impl_mitem_tuple {
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Storage = soa_type!($( DeviceVec<R, $ty> ),+);
+            type Storage = zip_type!($( DeviceVec<R, $ty> ),+);
 
             fn storage_from_inner(inner: Self::Inner) -> Self::Storage {
                 let ($( $var, )+) = inner;
-                soa_value!($( DeviceVec::from_inner($var) ),+)
+                zip_value!($( DeviceVec::from_inner($var) ),+)
             }
 
             fn alloc_storage(exec: &Executor<R>, len: MIndex) -> Result<Self::Storage, Error> {
@@ -151,7 +151,7 @@ macro_rules! impl_mitem_tuple {
             }
         }
 
-        impl<R, $( $ty ),+> StorageFromInner<R> for soa_type!($( DeviceVec<R, $ty> ),+)
+        impl<R, $( $ty ),+> StorageFromInner<R> for zip_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
             $( $ty: MStorageElement + 'static, )+
@@ -163,7 +163,7 @@ macro_rules! impl_mitem_tuple {
             }
 
             fn into_inner(self) -> <Self::Item as MAlloc<R>>::Inner {
-                soa_into_inner!(self; $( $var ),+)
+                zip_into_inner!(self; $( $var ),+)
             }
 
             fn len(&self) -> MIndex {
@@ -252,7 +252,7 @@ macro_rules! impl_mitem_tuple {
                 Left: MStorageElement,
                 Right: MStorageElement,
                 Op: op::UnaryOp<R, (Left, Right), Output = Self>,
-                Self: crate::detail::TransformSoA2Output<
+                Self: crate::detail::TransformZip2Output<
                     R,
                     Left,
                     Right,
@@ -268,7 +268,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -294,7 +294,7 @@ macro_rules! impl_mitem_tuple {
                 Second: MStorageElement,
                 Third: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
-                Self: crate::detail::TransformSoA3Output<
+                Self: crate::detail::TransformZip3Output<
                     R,
                     First,
                     Second,
@@ -311,7 +311,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -330,7 +330,7 @@ macro_rules! impl_mitem_tuple {
                 Third: MStorageElement,
                 Fourth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
-                Self: crate::detail::TransformSoA4Output<
+                Self: crate::detail::TransformZip4Output<
                     R,
                     First,
                     Second,
@@ -348,7 +348,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -369,7 +369,7 @@ macro_rules! impl_mitem_tuple {
                 Fourth: MStorageElement,
                 Fifth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
-                Self: crate::detail::TransformSoA5Output<
+                Self: crate::detail::TransformZip5Output<
                     R,
                     First,
                     Second,
@@ -388,7 +388,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -412,7 +412,7 @@ macro_rules! impl_mitem_tuple {
                 Fifth: MStorageElement,
                 Sixth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
-                Self: crate::detail::TransformSoA6Output<
+                Self: crate::detail::TransformZip6Output<
                     R,
                     First,
                     Second,
@@ -432,7 +432,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -462,7 +462,7 @@ macro_rules! impl_mitem_tuple {
                     (First, Second, Third, Fourth, Fifth, Sixth, Seventh),
                     Output = Self,
                 >,
-                Self: crate::detail::TransformSoA7Output<
+                Self: crate::detail::TransformZip7Output<
                     R,
                     First,
                     Second,
@@ -483,7 +483,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -524,11 +524,11 @@ macro_rules! impl_wide_mitem_tuple {
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
-            type Storage = soa_type!($( DeviceVec<R, $ty> ),+);
+            type Storage = zip_type!($( DeviceVec<R, $ty> ),+);
 
             fn storage_from_inner(inner: Self::Inner) -> Self::Storage {
                 let ($( $var, )+) = inner;
-                soa_value!($( DeviceVec::from_inner($var) ),+)
+                zip_value!($( DeviceVec::from_inner($var) ),+)
             }
 
             fn alloc_storage(exec: &Executor<R>, len: MIndex) -> Result<Self::Storage, Error> {
@@ -536,7 +536,7 @@ macro_rules! impl_wide_mitem_tuple {
             }
         }
 
-        impl<R, $( $ty ),+> StorageFromInner<R> for soa_type!($( DeviceVec<R, $ty> ),+)
+        impl<R, $( $ty ),+> StorageFromInner<R> for zip_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
             $( $ty: MStorageElement + 'static, )+
@@ -548,7 +548,7 @@ macro_rules! impl_wide_mitem_tuple {
             }
 
             fn into_inner(self) -> <Self::Item as MAlloc<R>>::Inner {
-                soa_into_inner!(self; $( $var ),+)
+                zip_into_inner!(self; $( $var ),+)
             }
 
             fn len(&self) -> MIndex {
@@ -637,7 +637,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Left: MStorageElement,
                 Right: MStorageElement,
                 Op: op::UnaryOp<R, (Left, Right), Output = Self>,
-                Self: crate::detail::TransformSoA2Output<
+                Self: crate::detail::TransformZip2Output<
                     R,
                     Left,
                     Right,
@@ -653,7 +653,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -679,7 +679,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Second: MStorageElement,
                 Third: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
-                Self: crate::detail::TransformSoA3Output<
+                Self: crate::detail::TransformZip3Output<
                     R,
                     First,
                     Second,
@@ -696,7 +696,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -715,7 +715,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Third: MStorageElement,
                 Fourth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
-                Self: crate::detail::TransformSoA4Output<
+                Self: crate::detail::TransformZip4Output<
                     R,
                     First,
                     Second,
@@ -733,7 +733,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -754,7 +754,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Fourth: MStorageElement,
                 Fifth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
-                Self: crate::detail::TransformSoA5Output<
+                Self: crate::detail::TransformZip5Output<
                     R,
                     First,
                     Second,
@@ -773,7 +773,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -797,7 +797,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Fifth: MStorageElement,
                 Sixth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
-                Self: crate::detail::TransformSoA6Output<
+                Self: crate::detail::TransformZip6Output<
                     R,
                     First,
                     Second,
@@ -817,7 +817,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -847,7 +847,7 @@ macro_rules! impl_wide_mitem_tuple {
                     (First, Second, Third, Fourth, Fifth, Sixth, Seventh),
                     Output = Self,
                 >,
-                Self: crate::detail::TransformSoA7Output<
+                Self: crate::detail::TransformZip7Output<
                     R,
                     First,
                     Second,
@@ -868,7 +868,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::soa7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
         }

@@ -9,7 +9,7 @@ use crate::detail::op_adapter::{
 };
 use crate::error::ensure_same_len;
 use crate::index::{MIndex, mindex_from_usize, usize_from_mindex};
-use crate::iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7};
+use crate::iter::{MIter, MIterMut, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
 use crate::op;
 use crate::runtime::{DeviceSliceMut, DeviceVec, Executor};
 use crate::value::{MAlloc, MItem, MStorageElement, StorageFromInner};

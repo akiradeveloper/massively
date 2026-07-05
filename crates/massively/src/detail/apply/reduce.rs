@@ -6,7 +6,7 @@ use crate::{
         control::{ReduceByKeyControl, ScanByKeyControl},
         device::{
             DeviceColumnMutView, DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt,
-            KernelColumnBindings, S0, SoA2 as DeviceSoA2, SoA3 as DeviceSoA3,
+            KernelColumnBindings, S0, Zip2 as DeviceZip2, Zip3 as DeviceZip3,
         },
         op::kernel::BinaryOp,
         primitives::{
@@ -379,7 +379,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         a: &ValueA,
         b: &ValueB,
         init: (ValueA::Item, ValueB::Item),
-    ) -> Result<DeviceSoA2<DeviceVec<R, ValueA::Item>, DeviceVec<R, ValueB::Item>>, Error>
+    ) -> Result<DeviceZip2<DeviceVec<R, ValueA::Item>, DeviceVec<R, ValueB::Item>>, Error>
     where
         ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
         ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
@@ -431,7 +431,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
             &self.control.output_selection,
             self.control.output_count,
         );
-        Ok(DeviceSoA2 {
+        Ok(DeviceZip2 {
             left: payload_apply.apply_value::<R, ValueA::Item>(policy, reduced_a_handle)?,
             right: payload_apply.apply_value::<R, ValueB::Item>(policy, reduced_b_handle)?,
         })
@@ -517,7 +517,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         c: &ValueC,
         init: (ValueA::Item, ValueB::Item, ValueC::Item),
     ) -> Result<
-        DeviceSoA3<
+        DeviceZip3<
             DeviceVec<R, ValueA::Item>,
             DeviceVec<R, ValueB::Item>,
             DeviceVec<R, ValueC::Item>,
@@ -585,7 +585,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
             &self.control.output_selection,
             self.control.output_count,
         );
-        Ok(DeviceSoA3 {
+        Ok(DeviceZip3 {
             first: payload_apply.apply_value::<R, ValueA::Item>(policy, reduced_a_handle)?,
             second: payload_apply.apply_value::<R, ValueB::Item>(policy, reduced_b_handle)?,
             third: payload_apply.apply_value::<R, ValueC::Item>(policy, reduced_c_handle)?,

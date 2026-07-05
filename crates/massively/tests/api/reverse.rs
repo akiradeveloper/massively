@@ -10,8 +10,8 @@ fn reverse_accepts_borrowed_tuple_columns() {
 
     reverse(
         &exec,
-        massively::SoA2(a.slice(..), b.slice(..)),
-        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
+        massively::Zip2(a.slice(..), b.slice(..)),
+        massively::Zip2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
 
@@ -31,8 +31,8 @@ fn reverse_accepts_borrowed_three_tuple_columns() {
 
     reverse(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
-        massively::SoA3(
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

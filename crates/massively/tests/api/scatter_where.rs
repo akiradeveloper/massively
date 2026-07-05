@@ -12,10 +12,10 @@ fn scatter_where_accepts_u32_stencil() {
     let out_b = exec.to_device(&[0.0_f32; 4]).unwrap();
     scatter_where(
         &exec,
-        massively::SoA2(a.slice(..), b.slice(..)),
+        massively::Zip2(a.slice(..), b.slice(..)),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA2(out_a.slice_mut(..), out_b.slice_mut(..)),
+        massively::Zip2(out_a.slice_mut(..), out_b.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&out_a).unwrap(), vec![40, 30, 0, 0]);
@@ -32,10 +32,10 @@ fn scatter_where_leaves_output_unchanged_when_no_flags_are_selected() {
 
     scatter_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -52,10 +52,10 @@ fn scatter_where_scatters_all_values_when_all_flags_are_selected() {
 
     scatter_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -72,10 +72,10 @@ fn scatter_where_accepts_sliced_output() {
 
     scatter_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         indices.slice(..),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(1..4)),
+        massively::Zip1(output.slice_mut(1..4)),
     )
     .unwrap();
 

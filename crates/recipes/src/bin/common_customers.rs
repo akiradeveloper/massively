@@ -12,7 +12,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, set_intersection};
+use massively::{DeviceVec, Executor, Zip1, set_intersection};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,10 +25,10 @@ where
     let out = exec.constant(a.len().min(b.len()), 0_u32)?;
     let len = set_intersection(
         exec,
-        SoA1(a.slice(..)),
-        SoA1(b.slice(..)),
+        Zip1(a.slice(..)),
+        Zip1(b.slice(..)),
         common::LessU32,
-        SoA1(out.slice_mut(..)),
+        Zip1(out.slice_mut(..)),
     )?;
     Ok(exec.to_device(&exec.to_host(&out.slice(..len))?)?)
 }

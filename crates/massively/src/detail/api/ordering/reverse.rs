@@ -1,6 +1,6 @@
 use super::*;
 
-/// Reverses read-only SoA input and returns new device storage.
+/// Reverses read-only Zip input and returns new device storage.
 pub fn reverse<Input>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelReverseInput>::Runtime>,
     input: Input,

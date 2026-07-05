@@ -8,8 +8,7 @@
 //! - [`runtime`] prepares a CubeCL runtime from a device, owns host/device
 //!   transfers, and manages device memory such as [`DeviceVec`],
 //!   [`DeviceSlice`], and [`DeviceSliceMut`].
-//! - [`iter`] provides Structure-of-Arrays inputs and massively iterator
-//!   traits.
+//! - [`iter`] provides Zip inputs and massively iterator traits.
 //! - [`value`] provides massively item traits.
 //! - [`op`] provides CubeCL-backed operation traits.
 //! - [`algorithm`] provides parallel algorithms such as [`transform`],
@@ -42,7 +41,7 @@ pub use algorithm::{
 pub use error::Error;
 pub use index::MIndex;
 pub use iter::{
-    MAllocStorage, MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice, ToSliceMut,
+    MAllocStorage, MIter, MIterMut, ToSlice, ToSliceMut, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7,
 };
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use value::{MAlloc, MItem, MStorageElement};
@@ -54,8 +53,8 @@ pub use value::{MAlloc, MItem, MStorageElement};
 pub mod prelude {
     pub use crate::{
         DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MAllocStorage, MIndex, MItem,
-        MIter, MIterMut, MStorageElement, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice,
-        ToSliceMut,
+        MIter, MIterMut, MStorageElement, ToSlice, ToSliceMut, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6,
+        Zip7,
     };
 }
 

@@ -24,8 +24,8 @@ fn lower_bound_handles_multiple_values() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     lower_bound(
         &exec,
-        massively::SoA1(xs.slice(..)),
-        massively::SoA1(vs.slice(..)),
+        massively::Zip1(xs.slice(..)),
+        massively::Zip1(vs.slice(..)),
         LessU32,
         output.slice_mut(..),
     )
@@ -41,8 +41,8 @@ fn lower_bound_handles_empty_inputs() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     lower_bound(
         &exec,
-        massively::SoA1(xs.slice(..)),
-        massively::SoA1(vs.slice(..)),
+        massively::Zip1(xs.slice(..)),
+        massively::Zip1(vs.slice(..)),
         LessU32,
         output.slice_mut(..),
     )
@@ -54,8 +54,8 @@ fn lower_bound_handles_empty_inputs() {
     let output = exec.to_device(&[] as &[u32]).unwrap();
     lower_bound(
         &exec,
-        massively::SoA1(xs.slice(..)),
-        massively::SoA1(vs.slice(..)),
+        massively::Zip1(xs.slice(..)),
+        massively::Zip1(vs.slice(..)),
         LessU32,
         output.slice_mut(..),
     )
@@ -70,8 +70,8 @@ fn lower_bound_accepts_generic_values_without_inner_equality_bound() {
     let vs = exec.to_device(&[0_u32, 1, 2]).unwrap();
     let output = lower_bound_with_generic_values(
         &exec,
-        massively::SoA1(xs.slice(..)),
-        massively::SoA1(vs.slice(..)),
+        massively::Zip1(xs.slice(..)),
+        massively::Zip1(vs.slice(..)),
         LessU32,
     );
     assert_eq!(output, vec![0, 2, 2]);
@@ -84,8 +84,8 @@ fn lower_bound_accepts_borrowed_tuple_columns() {
     let l = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let qk = exec.to_device(&[0.5_f32, 3.0, 5.0]).unwrap();
     let ql = exec.to_device(&[5_u32, 30, 50]).unwrap();
-    let input = massively::SoA2(k.slice(..), l.slice(..));
-    let values = massively::SoA2(qk.slice(..), ql.slice(..));
+    let input = massively::Zip2(k.slice(..), l.slice(..));
+    let values = massively::Zip2(qk.slice(..), ql.slice(..));
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     lower_bound(&exec, input, values, MixedTupleLess, output.slice_mut(..)).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![0, 2, 4]);
@@ -100,8 +100,8 @@ fn lower_bound_accepts_generic_tuple_values_without_inner_equality_bound() {
     let ql = exec.to_device(&[5_u32, 30, 50]).unwrap();
     let output = lower_bound_with_generic_values(
         &exec,
-        massively::SoA2(k.slice(..), l.slice(..)),
-        massively::SoA2(qk.slice(..), ql.slice(..)),
+        massively::Zip2(k.slice(..), l.slice(..)),
+        massively::Zip2(qk.slice(..), ql.slice(..)),
         MixedTupleLess,
     );
     assert_eq!(output, vec![0, 2, 4]);

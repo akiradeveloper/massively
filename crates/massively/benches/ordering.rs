@@ -27,9 +27,9 @@ fn check_ordering(exec: &Executor<WgpuRuntime>) {
     let sorted = exec.to_device(&[0_u32; 3]).unwrap();
     sort(
         exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         Less,
-        massively::SoA1(sorted.slice_mut(..)),
+        massively::Zip1(sorted.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&sorted).unwrap(), vec![1, 2, 3]);
@@ -39,10 +39,10 @@ fn check_ordering(exec: &Executor<WgpuRuntime>) {
     let merged = exec.to_device(&[0_u32; 4]).unwrap();
     merge(
         exec,
-        massively::SoA1(left.slice(..)),
-        massively::SoA1(right.slice(..)),
+        massively::Zip1(left.slice(..)),
+        massively::Zip1(right.slice(..)),
         Less,
-        massively::SoA1(merged.slice_mut(..)),
+        massively::Zip1(merged.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&merged).unwrap(), vec![1, 2, 3, 4]);
@@ -62,9 +62,9 @@ fn bench_ordering(c: &mut Criterion) {
                 iter_gpu(b, || {
                     sort(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         Less,
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
@@ -89,10 +89,10 @@ fn bench_ordering(c: &mut Criterion) {
                 iter_gpu(b, || {
                     merge(
                         &exec,
-                        massively::SoA1(black_box(left.slice(..))),
-                        massively::SoA1(black_box(right.slice(..))),
+                        massively::Zip1(black_box(left.slice(..))),
+                        massively::Zip1(black_box(right.slice(..))),
                         Less,
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
@@ -117,10 +117,10 @@ fn bench_ordering(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output_len = set_union(
                         &exec,
-                        massively::SoA1(black_box(left.slice(..))),
-                        massively::SoA1(black_box(right.slice(..))),
+                        massively::Zip1(black_box(left.slice(..))),
+                        massively::Zip1(black_box(right.slice(..))),
                         Less,
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
@@ -145,10 +145,10 @@ fn bench_ordering(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output_len = set_intersection(
                         &exec,
-                        massively::SoA1(black_box(left.slice(..))),
-                        massively::SoA1(black_box(right.slice(..))),
+                        massively::Zip1(black_box(left.slice(..))),
+                        massively::Zip1(black_box(right.slice(..))),
                         Less,
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
@@ -173,10 +173,10 @@ fn bench_ordering(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output_len = set_difference(
                         &exec,
-                        massively::SoA1(black_box(left.slice(..))),
-                        massively::SoA1(black_box(right.slice(..))),
+                        massively::Zip1(black_box(left.slice(..))),
+                        massively::Zip1(black_box(right.slice(..))),
                         Less,
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);

@@ -26,9 +26,9 @@ fn main() -> common::Result {
     let ids = exec.to_device(&[100_u32, 200, 300])?;
     let indices = exec.to_device(&[2_u32, 0, 1])?;
 
-    let SoA2(out_scores, out_ids) = scatter_to_new(
+    let Zip2(out_scores, out_ids) = scatter_to_new(
         &exec,
-        SoA2(scores.slice(..), ids.slice(..)),
+        Zip2(scores.slice(..), ids.slice(..)),
         indices.slice(..),
         3,
     )?;

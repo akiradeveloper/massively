@@ -11,8 +11,8 @@ fn equal_accepts_borrowed_tuple_columns() {
     assert!(
         equal(
             &exec,
-            massively::SoA2(a.slice(..), b.slice(..)),
-            massively::SoA2(c.slice(..), d.slice(..)),
+            massively::Zip2(a.slice(..), b.slice(..)),
+            massively::Zip2(c.slice(..), d.slice(..)),
             MixedTupleEqual
         )
         .unwrap()

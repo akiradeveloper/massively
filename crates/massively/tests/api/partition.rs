@@ -8,10 +8,10 @@ fn partition_puts_everything_on_matching_side_when_all_values_match() {
 
     let split = partition(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         F32GreaterThanOne,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 
@@ -33,10 +33,10 @@ fn partition_puts_everything_on_failing_side_when_no_values_match() {
 
     let split = partition(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         F32GreaterThanOne,
         (),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
 

@@ -84,7 +84,7 @@ where
     Less: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
 
     fn sort_by_key_control(
         self,
@@ -92,7 +92,7 @@ where
     ) -> Result<(Self::OutputKeys, DeviceVec<Self::Runtime, MIndex>), Error> {
         let (keys, indices) =
             crate::detail::apply::SortByKeyApply::apply_keys1::<KeySource, Less>(policy, &self)?;
-        Ok((DeviceSoA1 { source: keys }, indices))
+        Ok((DeviceZip1 { source: keys }, indices))
     }
 }
 
@@ -106,7 +106,7 @@ macro_rules! impl_kernel_sort_by_key_keys_tuple1 {
             Less: BinaryPredicateOp<KeySource::Item>,
         {
             type Runtime = KeySource::Runtime;
-            type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+            type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
 
             fn sort_by_key_control(
                 self,
@@ -118,8 +118,8 @@ macro_rules! impl_kernel_sort_by_key_keys_tuple1 {
     };
 }
 
-impl_kernel_sort_by_key_keys_tuple1!(SoAView1<KeySource>, source);
-impl_kernel_sort_by_key_keys_tuple1!(DeviceSoA1<KeySource>, source);
+impl_kernel_sort_by_key_keys_tuple1!(ZipView1<KeySource>, source);
+impl_kernel_sort_by_key_keys_tuple1!(DeviceZip1<KeySource>, source);
 
 impl<KeySource, Less> KernelSortByKeyKeys<Less> for (KeySource,)
 where
@@ -130,7 +130,7 @@ where
     crate::detail::api::Tuple1Less<Less>: BinaryPredicateOp<KeySource::Item>,
 {
     type Runtime = KeySource::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<KeySource::Runtime, KeySource::Item>>;
 
     fn sort_by_key_control(
         self,
@@ -157,7 +157,7 @@ where
 {
     type Runtime = First::Runtime;
     type OutputKeys =
-        DeviceSoA2<DeviceVec<First::Runtime, First::Item>, DeviceVec<First::Runtime, Second::Item>>;
+        DeviceZip2<DeviceVec<First::Runtime, First::Item>, DeviceVec<First::Runtime, Second::Item>>;
 
     fn sort_by_key_control(
         self,
@@ -168,7 +168,7 @@ where
                 policy, &self.0, &self.1,
             )?;
         Ok((
-            DeviceSoA2 {
+            DeviceZip2 {
                 left: first,
                 right: second,
             },
@@ -191,7 +191,7 @@ where
     Less: BinaryPredicateOp<(First::Item, Second::Item, Third::Item)>,
 {
     type Runtime = First::Runtime;
-    type OutputKeys = DeviceSoA3<
+    type OutputKeys = DeviceZip3<
         DeviceVec<First::Runtime, First::Item>,
         DeviceVec<First::Runtime, Second::Item>,
         DeviceVec<First::Runtime, Third::Item>,
@@ -206,7 +206,7 @@ where
                 policy, &self.0, &self.1, &self.2,
             )?;
         Ok((
-            DeviceSoA3 {
+            DeviceZip3 {
                 first,
                 second,
                 third,
@@ -223,7 +223,7 @@ where
     ValueSource::Expr: GpuExpr<ValueSource::Item>,
 {
     type Runtime = ValueSource::Runtime;
-    type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+    type OutputValues = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn sort_by_key_values(
         self,
@@ -232,7 +232,7 @@ where
     ) -> Result<Self::OutputValues, Error> {
         ensure_same_len(control.len, <ValueSource as KernelColumn>::len(&self))?;
         let apply = crate::detail::apply::PermutationPayloadApply::new(control);
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: apply.apply_expr(policy, &self)?,
         })
     }
@@ -247,7 +247,7 @@ macro_rules! impl_kernel_sort_by_key_values_tuple1 {
             ValueSource::Expr: GpuExpr<ValueSource::Item>,
         {
             type Runtime = ValueSource::Runtime;
-            type OutputValues = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+            type OutputValues = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
             fn sort_by_key_values(
                 self,
@@ -260,8 +260,8 @@ macro_rules! impl_kernel_sort_by_key_values_tuple1 {
     };
 }
 
-impl_kernel_sort_by_key_values_tuple1!(SoAView1<ValueSource>, source);
-impl_kernel_sort_by_key_values_tuple1!(DeviceSoA1<ValueSource>, source);
+impl_kernel_sort_by_key_values_tuple1!(ZipView1<ValueSource>, source);
+impl_kernel_sort_by_key_values_tuple1!(DeviceZip1<ValueSource>, source);
 
 impl<ValueSource> KernelSortByKeyValues for (ValueSource,)
 where
@@ -309,23 +309,23 @@ macro_rules! impl_kernel_sort_by_key_values_tuple2 {
     };
 }
 
-impl_kernel_sort_by_key_values_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_sort_by_key_values_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_sort_by_key_values_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_sort_by_key_values_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right> KernelSortByKeyValues for (Left, Right)
 where
-    SoAView2<Left, Right>: KernelSortByKeyValues,
+    ZipView2<Left, Right>: KernelSortByKeyValues,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelSortByKeyValues>::Runtime;
-    type OutputValues = <SoAView2<Left, Right> as KernelSortByKeyValues>::OutputValues;
+    type Runtime = <ZipView2<Left, Right> as KernelSortByKeyValues>::Runtime;
+    type OutputValues = <ZipView2<Left, Right> as KernelSortByKeyValues>::OutputValues;
 
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
         control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
-        <SoAView2<Left, Right> as KernelSortByKeyValues>::sort_by_key_values(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelSortByKeyValues>::sort_by_key_values(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -376,23 +376,23 @@ macro_rules! impl_kernel_sort_by_key_values_tuple3 {
     };
 }
 
-impl_kernel_sort_by_key_values_tuple3!(SoAView3<First, Second, Third>, DeviceSoA3, first, second, third);
-impl_kernel_sort_by_key_values_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, second, third);
+impl_kernel_sort_by_key_values_tuple3!(ZipView3<First, Second, Third>, DeviceZip3, first, second, third);
+impl_kernel_sort_by_key_values_tuple3!(DeviceZip3<First, Second, Third>, DeviceZip3, first, second, third);
 
 impl<First, Second, Third> KernelSortByKeyValues for (First, Second, Third)
 where
-    SoAView3<First, Second, Third>: KernelSortByKeyValues,
+    ZipView3<First, Second, Third>: KernelSortByKeyValues,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelSortByKeyValues>::Runtime;
-    type OutputValues = <SoAView3<First, Second, Third> as KernelSortByKeyValues>::OutputValues;
+    type Runtime = <ZipView3<First, Second, Third> as KernelSortByKeyValues>::Runtime;
+    type OutputValues = <ZipView3<First, Second, Third> as KernelSortByKeyValues>::OutputValues;
 
     fn sort_by_key_values(
         self,
         policy: &CubePolicy<Self::Runtime>,
         control: &crate::detail::control::PermutationControl<Self::Runtime>,
     ) -> Result<Self::OutputValues, Error> {
-        <SoAView3<First, Second, Third> as KernelSortByKeyValues>::sort_by_key_values(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelSortByKeyValues>::sort_by_key_values(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -516,7 +516,7 @@ where
     Less: BinaryPredicateOp<LeftKey::Item>,
 {
     type Runtime = LeftKey::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>;
 
     fn merge_by_key_control(
         self,
@@ -528,7 +528,7 @@ where
             RightKey,
             Less,
         >(policy, &self, &right_keys)?;
-        Ok((DeviceSoA1 { source: keys }, control))
+        Ok((DeviceZip1 { source: keys }, control))
     }
 }
 
@@ -553,8 +553,8 @@ macro_rules! impl_kernel_merge_by_key_keys_tuple1 {
     };
 }
 
-impl_kernel_merge_by_key_keys_tuple1!(SoAView1<LeftKey>, SoAView1<RightKey>, source, source);
-impl_kernel_merge_by_key_keys_tuple1!(DeviceSoA1<LeftKey>, DeviceSoA1<RightKey>, source, source);
+impl_kernel_merge_by_key_keys_tuple1!(ZipView1<LeftKey>, ZipView1<RightKey>, source, source);
+impl_kernel_merge_by_key_keys_tuple1!(DeviceZip1<LeftKey>, DeviceZip1<RightKey>, source, source);
 
 impl<LeftKey, RightKey, Less> KernelMergeByKeyKeys<(RightKey,), Less> for (LeftKey,)
 where
@@ -566,7 +566,7 @@ where
     Less: BinaryPredicateOp<(LeftKey::Item,)>,
 {
     type Runtime = LeftKey::Runtime;
-    type OutputKeys = DeviceSoA1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>;
+    type OutputKeys = DeviceZip1<DeviceVec<LeftKey::Runtime, LeftKey::Item>>;
 
     fn merge_by_key_control(
         self,
@@ -598,7 +598,7 @@ where
 {
     type Runtime = LeftA::Runtime;
     type OutputKeys =
-        DeviceSoA2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>;
+        DeviceZip2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>;
 
     fn merge_by_key_control(
         self,
@@ -636,7 +636,7 @@ where
     Less: BinaryPredicateOp<(LeftA::Item, LeftB::Item, LeftC::Item)>,
 {
     type Runtime = LeftA::Runtime;
-    type OutputKeys = DeviceSoA3<
+    type OutputKeys = DeviceZip3<
         DeviceVec<LeftA::Runtime, LeftA::Item>,
         DeviceVec<LeftA::Runtime, LeftB::Item>,
         DeviceVec<LeftA::Runtime, LeftC::Item>,
@@ -677,7 +677,7 @@ where
     RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
 {
     type Runtime = LeftValue::Runtime;
-    type OutputValues = DeviceSoA1<DeviceVec<LeftValue::Runtime, LeftValue::Item>>;
+    type OutputValues = DeviceZip1<DeviceVec<LeftValue::Runtime, LeftValue::Item>>;
 
     fn merge_by_key_values(
         self,
@@ -687,7 +687,7 @@ where
     ) -> Result<Self::OutputValues, Error> {
         let apply = crate::detail::apply::MergePayloadApply::new(control);
         let values = apply.apply_expr(policy, &self, &right_values)?;
-        Ok(DeviceSoA1 { source: values })
+        Ok(DeviceZip1 { source: values })
     }
 }
 
@@ -703,7 +703,7 @@ macro_rules! impl_kernel_merge_by_key_values_tuple1 {
             RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
         {
             type Runtime = LeftValue::Runtime;
-            type OutputValues = DeviceSoA1<DeviceVec<LeftValue::Runtime, LeftValue::Item>>;
+            type OutputValues = DeviceZip1<DeviceVec<LeftValue::Runtime, LeftValue::Item>>;
 
             fn merge_by_key_values(
                 self,
@@ -718,10 +718,10 @@ macro_rules! impl_kernel_merge_by_key_values_tuple1 {
     };
 }
 
-impl_kernel_merge_by_key_values_tuple1!(SoAView1<LeftValue>, SoAView1<RightValue>, source, source);
+impl_kernel_merge_by_key_values_tuple1!(ZipView1<LeftValue>, ZipView1<RightValue>, source, source);
 impl_kernel_merge_by_key_values_tuple1!(
-    DeviceSoA1<LeftValue>,
-    DeviceSoA1<RightValue>,
+    DeviceZip1<LeftValue>,
+    DeviceZip1<RightValue>,
     source,
     source
 );
@@ -786,17 +786,17 @@ macro_rules! impl_kernel_merge_by_key_values_tuple2 {
     };
 }
 
-impl_kernel_merge_by_key_values_tuple2!(SoAView2<LeftA, LeftB>, SoAView2<RightA, RightB>, DeviceSoA2, left, right);
-impl_kernel_merge_by_key_values_tuple2!(DeviceSoA2<LeftA, LeftB>, DeviceSoA2<RightA, RightB>, DeviceSoA2, left, right);
+impl_kernel_merge_by_key_values_tuple2!(ZipView2<LeftA, LeftB>, ZipView2<RightA, RightB>, DeviceZip2, left, right);
+impl_kernel_merge_by_key_values_tuple2!(DeviceZip2<LeftA, LeftB>, DeviceZip2<RightA, RightB>, DeviceZip2, left, right);
 
 impl<LeftA, LeftB, RightA, RightB> KernelMergeByKeyValues<(RightA, RightB)> for (LeftA, LeftB)
 where
-    SoAView2<LeftA, LeftB>: KernelMergeByKeyValues<SoAView2<RightA, RightB>>,
+    ZipView2<LeftA, LeftB>: KernelMergeByKeyValues<ZipView2<RightA, RightB>>,
 {
     type Runtime =
-        <SoAView2<LeftA, LeftB> as KernelMergeByKeyValues<SoAView2<RightA, RightB>>>::Runtime;
+        <ZipView2<LeftA, LeftB> as KernelMergeByKeyValues<ZipView2<RightA, RightB>>>::Runtime;
     type OutputValues =
-        <SoAView2<LeftA, LeftB> as KernelMergeByKeyValues<SoAView2<RightA, RightB>>>::OutputValues;
+        <ZipView2<LeftA, LeftB> as KernelMergeByKeyValues<ZipView2<RightA, RightB>>>::OutputValues;
 
     fn merge_by_key_values(
         self,
@@ -804,13 +804,13 @@ where
         right_values: (RightA, RightB),
         control: &primitive_ordering::MergeByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
-        SoAView2 {
+        ZipView2 {
             left: self.0,
             right: self.1,
         }
         .merge_by_key_values(
             policy,
-            SoAView2 {
+            ZipView2 {
                 left: right_values.0,
                 right: right_values.1,
             },
@@ -879,19 +879,19 @@ macro_rules! impl_kernel_merge_by_key_values_tuple3 {
     };
 }
 
-impl_kernel_merge_by_key_values_tuple3!(SoAView3<LeftA, LeftB, LeftC>, SoAView3<RightA, RightB, RightC>, DeviceSoA3, first, second, third);
-impl_kernel_merge_by_key_values_tuple3!(DeviceSoA3<LeftA, LeftB, LeftC>, DeviceSoA3<RightA, RightB, RightC>, DeviceSoA3, first, second, third);
+impl_kernel_merge_by_key_values_tuple3!(ZipView3<LeftA, LeftB, LeftC>, ZipView3<RightA, RightB, RightC>, DeviceZip3, first, second, third);
+impl_kernel_merge_by_key_values_tuple3!(DeviceZip3<LeftA, LeftB, LeftC>, DeviceZip3<RightA, RightB, RightC>, DeviceZip3, first, second, third);
 
 impl<LeftA, LeftB, LeftC, RightA, RightB, RightC> KernelMergeByKeyValues<(RightA, RightB, RightC)>
     for (LeftA, LeftB, LeftC)
 where
-    SoAView3<LeftA, LeftB, LeftC>: KernelMergeByKeyValues<SoAView3<RightA, RightB, RightC>>,
+    ZipView3<LeftA, LeftB, LeftC>: KernelMergeByKeyValues<ZipView3<RightA, RightB, RightC>>,
 {
-    type Runtime = <SoAView3<LeftA, LeftB, LeftC> as KernelMergeByKeyValues<
-        SoAView3<RightA, RightB, RightC>,
+    type Runtime = <ZipView3<LeftA, LeftB, LeftC> as KernelMergeByKeyValues<
+        ZipView3<RightA, RightB, RightC>,
     >>::Runtime;
-    type OutputValues = <SoAView3<LeftA, LeftB, LeftC> as KernelMergeByKeyValues<
-        SoAView3<RightA, RightB, RightC>,
+    type OutputValues = <ZipView3<LeftA, LeftB, LeftC> as KernelMergeByKeyValues<
+        ZipView3<RightA, RightB, RightC>,
     >>::OutputValues;
 
     fn merge_by_key_values(
@@ -900,14 +900,14 @@ where
         right_values: (RightA, RightB, RightC),
         control: &primitive_ordering::MergeByKeyControl,
     ) -> Result<Self::OutputValues, Error> {
-        SoAView3 {
+        ZipView3 {
             first: self.0,
             second: self.1,
             third: self.2,
         }
         .merge_by_key_values(
             policy,
-            SoAView3 {
+            ZipView3 {
                 first: right_values.0,
                 second: right_values.1,
                 third: right_values.2,

@@ -381,7 +381,7 @@ pub(crate) fn inclusive_scan_by_flags_two<A, C, Op>(
     left: &A,
     right: &C,
     control: &ScanByKeyControl<A::Runtime>,
-) -> Result<DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>, Error>
+) -> Result<DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>, Error>
 where
     A: KernelColumn + KernelColumnAt<S0>,
     C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -394,7 +394,7 @@ where
     validate_columns2(left, right)?;
     ensure_same_len(<A as KernelColumn>::len(left), control.len)?;
     if control.len == 0 {
-        return Ok(DeviceSoA2 {
+        return Ok(DeviceZip2 {
             left: policy.empty_device_vec(),
             right: policy.empty_device_vec(),
         });
@@ -453,7 +453,7 @@ where
         );
     }
 
-    Ok(DeviceSoA2 {
+    Ok(DeviceZip2 {
         left: DeviceVec::from_handle(policy.id(), out_a, control.len),
         right: DeviceVec::from_handle(policy.id(), out_b, control.len),
     })
@@ -554,7 +554,7 @@ pub(crate) fn exclusive_scan_by_flags_two<A, C, Op>(
     right: &C,
     control: &ScanByKeyControl<A::Runtime>,
     init: (A::Item, C::Item),
-) -> Result<DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>, Error>
+) -> Result<DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>, Error>
 where
     A: KernelColumn + KernelColumnAt<S0>,
     C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
@@ -567,7 +567,7 @@ where
     validate_columns2(left, right)?;
     ensure_same_len(<A as KernelColumn>::len(left), control.len)?;
     if control.len == 0 {
-        return Ok(DeviceSoA2 {
+        return Ok(DeviceZip2 {
             left: policy.empty_device_vec(),
             right: policy.empty_device_vec(),
         });
@@ -630,7 +630,7 @@ where
         );
     }
 
-    Ok(DeviceSoA2 {
+    Ok(DeviceZip2 {
         left: DeviceVec::from_handle(policy.id(), out_a, control.len),
         right: DeviceVec::from_handle(policy.id(), out_b, control.len),
     })
@@ -737,7 +737,7 @@ pub(crate) fn inclusive_scan_by_flags_three<A, C, D, Op>(
     third: &D,
     control: &ScanByKeyControl<A::Runtime>,
 ) -> Result<
-    DeviceSoA3<
+    DeviceZip3<
         DeviceVec<A::Runtime, A::Item>,
         DeviceVec<A::Runtime, C::Item>,
         DeviceVec<A::Runtime, D::Item>,
@@ -759,7 +759,7 @@ where
     validate_columns3(first, second, third)?;
     ensure_same_len(<A as KernelColumn>::len(first), control.len)?;
     if control.len == 0 {
-        return Ok(DeviceSoA3 {
+        return Ok(DeviceZip3 {
             first: policy.empty_device_vec(),
             second: policy.empty_device_vec(),
             third: policy.empty_device_vec(),
@@ -834,7 +834,7 @@ where
         );
     }
 
-    Ok(DeviceSoA3 {
+    Ok(DeviceZip3 {
         first: DeviceVec::from_handle(policy.id(), out_a, control.len),
         second: DeviceVec::from_handle(policy.id(), out_b, control.len),
         third: DeviceVec::from_handle(policy.id(), out_c, control.len),
@@ -961,7 +961,7 @@ pub(crate) fn exclusive_scan_by_flags_three<A, C, D, Op>(
     control: &ScanByKeyControl<A::Runtime>,
     init: (A::Item, C::Item, D::Item),
 ) -> Result<
-    DeviceSoA3<
+    DeviceZip3<
         DeviceVec<A::Runtime, A::Item>,
         DeviceVec<A::Runtime, C::Item>,
         DeviceVec<A::Runtime, D::Item>,
@@ -983,7 +983,7 @@ where
     validate_columns3(first, second, third)?;
     ensure_same_len(<A as KernelColumn>::len(first), control.len)?;
     if control.len == 0 {
-        return Ok(DeviceSoA3 {
+        return Ok(DeviceZip3 {
             first: policy.empty_device_vec(),
             second: policy.empty_device_vec(),
             third: policy.empty_device_vec(),
@@ -1064,7 +1064,7 @@ where
         );
     }
 
-    Ok(DeviceSoA3 {
+    Ok(DeviceZip3 {
         first: DeviceVec::from_handle(policy.id(), out_a, control.len),
         second: DeviceVec::from_handle(policy.id(), out_b, control.len),
         third: DeviceVec::from_handle(policy.id(), out_c, control.len),
@@ -1706,8 +1706,8 @@ macro_rules! impl_kernel_scan_by_key_keys_tuple1 {
     };
 }
 
-impl_kernel_scan_by_key_keys_tuple1!(SoAView1<KeySource>, source);
-impl_kernel_scan_by_key_keys_tuple1!(DeviceSoA1<KeySource>, source);
+impl_kernel_scan_by_key_keys_tuple1!(ZipView1<KeySource>, source);
+impl_kernel_scan_by_key_keys_tuple1!(DeviceZip1<KeySource>, source);
 
 impl<KeySource, KeyEq> KernelScanByKeyKeys<KeyEq> for (KeySource,)
 where
@@ -1825,7 +1825,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
             Op: BinaryOp<(S::Item,)>,
         {
             type Runtime = S::Runtime;
-            type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+            type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
             fn inclusive_scan_by_key_values(
                 self,
@@ -1833,7 +1833,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
                 control: &ScanByKeyControl<S::Runtime>,
             ) -> Result<Self::Output, Error> {
                 let apply = crate::detail::apply::SegmentedScanApply::new(control);
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: apply.inclusive_expr::<S, Op>(policy, &self.$field)?,
                 })
             }
@@ -1849,7 +1849,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
         {
             type Runtime = S::Runtime;
             type Init = S::Item;
-            type Output = DeviceSoA1<DeviceVec<S::Runtime, S::Item>>;
+            type Output = DeviceZip1<DeviceVec<S::Runtime, S::Item>>;
 
             fn exclusive_scan_by_key_values(
                 self,
@@ -1858,7 +1858,7 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
                 init: Self::Init,
             ) -> Result<Self::Output, Error> {
                 let apply = crate::detail::apply::SegmentedScanApply::new(control);
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: apply.exclusive_expr::<S, Op>(policy, &self.$field, init)?,
                 })
             }
@@ -1867,8 +1867,8 @@ macro_rules! impl_kernel_scan_by_key_tuple1 {
 }
 
 impl_kernel_scan_by_key_tuple1!((S,), 0);
-impl_kernel_scan_by_key_tuple1!(SoAView1<S>, source);
-impl_kernel_scan_by_key_tuple1!(DeviceSoA1<S>, source);
+impl_kernel_scan_by_key_tuple1!(ZipView1<S>, source);
+impl_kernel_scan_by_key_tuple1!(DeviceZip1<S>, source);
 
 macro_rules! impl_kernel_scan_by_key_tuple2 {
     ($target:ty, $left:tt, $right:tt) => {
@@ -1886,7 +1886,7 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
         {
             type Runtime = A::Runtime;
             type Output =
-                DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
+                DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
 
             fn inclusive_scan_by_key_values(
                 self,
@@ -1913,7 +1913,7 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
             type Runtime = A::Runtime;
             type Init = (A::Item, C::Item);
             type Output =
-                DeviceSoA2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
+                DeviceZip2<DeviceVec<A::Runtime, A::Item>, DeviceVec<A::Runtime, C::Item>>;
 
             fn exclusive_scan_by_key_values(
                 self,
@@ -1928,8 +1928,8 @@ macro_rules! impl_kernel_scan_by_key_tuple2 {
     };
 }
 
-impl_kernel_scan_by_key_tuple2!(SoAView2<A, C>, left, right);
-impl_kernel_scan_by_key_tuple2!(DeviceSoA2<A, C>, left, right);
+impl_kernel_scan_by_key_tuple2!(ZipView2<A, C>, left, right);
+impl_kernel_scan_by_key_tuple2!(DeviceZip2<A, C>, left, right);
 
 macro_rules! impl_kernel_scan_by_key_tuple3 {
     ($target:ty, $first:tt, $second:tt, $third:tt) => {
@@ -1949,7 +1949,7 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
             Op: BinaryOp<(A::Item, C::Item, D::Item)>,
         {
             type Runtime = A::Runtime;
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<A::Runtime, A::Item>,
                 DeviceVec<A::Runtime, C::Item>,
                 DeviceVec<A::Runtime, D::Item>,
@@ -1987,7 +1987,7 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
         {
             type Runtime = A::Runtime;
             type Init = (A::Item, C::Item, D::Item);
-            type Output = DeviceSoA3<
+            type Output = DeviceZip3<
                 DeviceVec<A::Runtime, A::Item>,
                 DeviceVec<A::Runtime, C::Item>,
                 DeviceVec<A::Runtime, D::Item>,
@@ -2012,8 +2012,8 @@ macro_rules! impl_kernel_scan_by_key_tuple3 {
     };
 }
 
-impl_kernel_scan_by_key_tuple3!(SoAView3<A, C, D>, first, second, third);
-impl_kernel_scan_by_key_tuple3!(DeviceSoA3<A, C, D>, first, second, third);
+impl_kernel_scan_by_key_tuple3!(ZipView3<A, C, D>, first, second, third);
+impl_kernel_scan_by_key_tuple3!(DeviceZip3<A, C, D>, first, second, third);
 
 macro_rules! impl_kernel_scan_by_key_tuple4_views {
     () => {
@@ -2370,14 +2370,14 @@ impl<Left, Right, R, KeyEq, Op> KernelInclusiveScanByKeyValues<ScanByKeyControl<
     for (Left, Right)
 where
     R: Runtime,
-    SoAView2<Left, Right>: KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
+    ZipView2<Left, Right>: KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelInclusiveScanByKeyValues<
+    type Runtime = <ZipView2<Left, Right> as KernelInclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
-    type Output = <SoAView2<Left, Right> as KernelInclusiveScanByKeyValues<
+    type Output = <ZipView2<Left, Right> as KernelInclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
@@ -2388,12 +2388,12 @@ where
         policy: &CubePolicy<Self::Runtime>,
         control: &ScanByKeyControl<R>,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelInclusiveScanByKeyValues<
+        <ZipView2<Left, Right> as KernelInclusiveScanByKeyValues<
             ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::inclusive_scan_by_key_values(
-            SoAView2 {
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -2407,14 +2407,14 @@ impl<First, Second, Third, R, KeyEq, Op>
     KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op> for (First, Second, Third)
 where
     R: Runtime,
-    SoAView3<First, Second, Third>: KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
+    ZipView3<First, Second, Third>: KernelInclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
+    type Runtime = <ZipView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
-    type Output = <SoAView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
+    type Output = <ZipView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
@@ -2425,12 +2425,12 @@ where
         policy: &CubePolicy<Self::Runtime>,
         control: &ScanByKeyControl<R>,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
+        <ZipView3<First, Second, Third> as KernelInclusiveScanByKeyValues<
             ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::inclusive_scan_by_key_values(
-            SoAView3 {
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -2445,19 +2445,19 @@ impl<Left, Right, R, KeyEq, Op> KernelExclusiveScanByKeyValues<ScanByKeyControl<
     for (Left, Right)
 where
     R: Runtime,
-    SoAView2<Left, Right>: KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
+    ZipView2<Left, Right>: KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
+    type Runtime = <ZipView2<Left, Right> as KernelExclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
-    type Init = <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
+    type Init = <ZipView2<Left, Right> as KernelExclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Init;
-    type Output = <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
+    type Output = <ZipView2<Left, Right> as KernelExclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
@@ -2469,12 +2469,12 @@ where
         control: &ScanByKeyControl<R>,
         init: Self::Init,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelExclusiveScanByKeyValues<
+        <ZipView2<Left, Right> as KernelExclusiveScanByKeyValues<
             ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::exclusive_scan_by_key_values(
-            SoAView2 {
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -2489,19 +2489,19 @@ impl<First, Second, Third, R, KeyEq, Op>
     KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op> for (First, Second, Third)
 where
     R: Runtime,
-    SoAView3<First, Second, Third>: KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
+    ZipView3<First, Second, Third>: KernelExclusiveScanByKeyValues<ScanByKeyControl<R>, KeyEq, Op>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
+    type Runtime = <ZipView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Runtime;
-    type Init = <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
+    type Init = <ZipView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
     >>::Init;
-    type Output = <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
+    type Output = <ZipView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
         ScanByKeyControl<R>,
         KeyEq,
         Op,
@@ -2513,12 +2513,12 @@ where
         control: &ScanByKeyControl<R>,
         init: Self::Init,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
+        <ZipView3<First, Second, Third> as KernelExclusiveScanByKeyValues<
             ScanByKeyControl<R>,
             KeyEq,
             Op,
         >>::exclusive_scan_by_key_values(
-            SoAView3 {
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

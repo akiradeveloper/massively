@@ -8,9 +8,9 @@ fn sort_returns_device_storage() {
 
     sort(
         &exec,
-        massively::SoA1(x.slice(..)),
+        massively::Zip1(x.slice(..)),
         Less,
-        massively::SoA1(sorted.slice_mut(..)),
+        massively::Zip1(sorted.slice_mut(..)),
     )
     .unwrap();
 
@@ -26,9 +26,9 @@ fn sort_accepts_builtin_less() {
 
     sort(
         &exec,
-        massively::SoA1(x.slice(..)),
+        massively::Zip1(x.slice(..)),
         massively::op::Less,
-        massively::SoA1(sorted.slice_mut(..)),
+        massively::Zip1(sorted.slice_mut(..)),
     )
     .unwrap();
 
@@ -47,9 +47,9 @@ fn tuple_sort_accepts_builtin_lexicographical_less() {
 
     sort(
         &exec,
-        massively::SoA3(a.slice(..), b.slice(..), c.slice(..)),
+        massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         massively::op::Less,
-        massively::SoA3(
+        massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -63,7 +63,7 @@ fn tuple_sort_accepts_builtin_lexicographical_less() {
 }
 
 #[test]
-fn tuple_sort_preserves_soa_components() {
+fn tuple_sort_preserves_zip_components() {
     let exec = exec();
     let x = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
     let y = exec.to_device(&[30_u32, 10, 20]).unwrap();
@@ -72,9 +72,9 @@ fn tuple_sort_preserves_soa_components() {
 
     sort(
         &exec,
-        massively::SoA2(x.slice(..), y.slice(..)),
+        massively::Zip2(x.slice(..), y.slice(..)),
         MixedTupleLess,
-        massively::SoA2(out_x.slice_mut(..), out_y.slice_mut(..)),
+        massively::Zip2(out_x.slice_mut(..), out_y.slice_mut(..)),
     )
     .unwrap();
 
@@ -92,9 +92,9 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
 
     sort(
         &exec,
-        massively::SoA2(values.slice(..), tags.slice(..)),
+        massively::Zip2(values.slice(..), tags.slice(..)),
         MixedTupleLess,
-        massively::SoA2(out_values.slice_mut(..), out_tags.slice_mut(..)),
+        massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&out_values).unwrap(), vec![1.0, 2.0, 2.0, 3.0]);
@@ -109,9 +109,9 @@ fn sort_accepts_heterogeneous_tuple_comparators_for_two_and_three_columns() {
 
     sort(
         &exec,
-        massively::SoA3(values.slice(..), tags.slice(..), payload.slice(..)),
+        massively::Zip3(values.slice(..), tags.slice(..), payload.slice(..)),
         MixedTuple3Less,
-        massively::SoA3(
+        massively::Zip3(
             out_values.slice_mut(..),
             out_tags.slice_mut(..),
             out_payload.slice_mut(..),
@@ -146,7 +146,7 @@ fn sort_accepts_seven_tuple_columns() {
 
     sort(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -156,7 +156,7 @@ fn sort_accepts_seven_tuple_columns() {
             g.slice(..),
         ),
         Tuple7MixedLess,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -205,7 +205,7 @@ fn stable_sort_accepts_seven_tuple_columns_and_preserves_equal_order() {
 
     massively::stable_sort(
         &exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -215,7 +215,7 @@ fn stable_sort_accepts_seven_tuple_columns_and_preserves_equal_order() {
             g.slice(..),
         ),
         Tuple7MixedLess,
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -243,7 +243,7 @@ fn stable_sort_accepts_seven_tuple_columns_and_preserves_equal_order() {
 }
 
 #[test]
-fn tuple_sort_accepts_wide_borrowed_soas() {
+fn tuple_sort_accepts_wide_borrowed_zips() {
     let exec = exec();
     let a = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();
     let b = exec.to_device(&[30.0_f32, 10.0, 20.0]).unwrap();
@@ -256,9 +256,9 @@ fn tuple_sort_accepts_wide_borrowed_soas() {
 
     sort(
         &exec,
-        massively::SoA4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
+        massively::Zip4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
         Tuple4Less,
-        massively::SoA4(
+        massively::Zip4(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),

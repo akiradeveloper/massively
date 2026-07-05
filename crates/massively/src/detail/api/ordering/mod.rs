@@ -2,8 +2,8 @@ use super::memory::{MaterializeOutput, materialize};
 use crate::{
     detail::op::kernel::BinaryPredicateOp,
     device::{
-        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA1, SoA2,
-        SoA3, SoAView1, SoAView2, SoAView3,
+        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyZip, S0, Zip1, Zip2,
+        Zip3, ZipView1, ZipView2, ZipView3,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -633,7 +633,7 @@ pub(crate) fn device_expr_merge_tuple2_by_key_control_with_policy<
     right_b: &RightB,
 ) -> Result<
     (
-        SoA2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>,
+        Zip2<DeviceVec<LeftA::Runtime, LeftA::Item>, DeviceVec<LeftA::Runtime, LeftB::Item>>,
         ordering::MergeByKeyControl,
     ),
     Error,
@@ -744,7 +744,7 @@ where
     }
 
     Ok((
-        SoA2 {
+        Zip2 {
             left: DeviceVec::from_handle(policy.id(), out_a_handle, len),
             right: DeviceVec::from_handle(policy.id(), out_b_handle, len),
         },
@@ -776,7 +776,7 @@ pub(crate) fn device_expr_merge_tuple3_by_key_control_with_policy<
     right_c: &RightC,
 ) -> Result<
     (
-        SoA3<
+        Zip3<
             DeviceVec<LeftA::Runtime, LeftA::Item>,
             DeviceVec<LeftA::Runtime, LeftB::Item>,
             DeviceVec<LeftA::Runtime, LeftC::Item>,
@@ -927,7 +927,7 @@ where
     }
 
     Ok((
-        SoA3 {
+        Zip3 {
             first: DeviceVec::from_handle(policy.id(), out_a_handle, len),
             second: DeviceVec::from_handle(policy.id(), out_b_handle, len),
             third: DeviceVec::from_handle(policy.id(), out_c_handle, len),
@@ -1096,11 +1096,11 @@ where
     Ok(())
 }
 
-impl<Left, Right, Less> crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>
-    for SoAView1<Left>
+impl<Left, Right, Less> crate::detail::read::KernelPairOrderingInput<ZipView1<Right>, Less>
+    for ZipView1<Left>
 where
-    Self: ReadOnlySoA<Item = (Left::Item,), Scalar = Left::Item>,
-    SoAView1<Right>: ReadOnlySoA<Item = (Right::Item,), Scalar = Right::Item>,
+    Self: ReadOnlyZip<Item = (Left::Item,), Scalar = Left::Item>,
+    ZipView1<Right>: ReadOnlyZip<Item = (Right::Item,), Scalar = Right::Item>,
     Left: KernelColumn + KernelColumnAt<S0>,
     Right: KernelColumn<Runtime = Left::Runtime, Item = Left::Item> + KernelColumnAt<S0>,
     Left::Item: CubePrimitive + CubeElement,
@@ -1109,17 +1109,17 @@ where
     Less: BinaryPredicateOp<Left::Item>,
 {
     type Runtime = Left::Runtime;
-    type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
+    type Output = Zip1<DeviceVec<Left::Runtime, Left::Item>>;
 
     fn merge_input(
         self,
         policy: &CubePolicy<Left::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&other)?;
-        Ok(SoA1 {
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&other)?;
+        Ok(Zip1 {
             source: crate::detail::apply::MergeExprApply::apply_expr::<Left, Right, Less>(
                 policy,
                 &self.source,
@@ -1131,12 +1131,12 @@ where
     fn set_union_input(
         self,
         policy: &CubePolicy<Left::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&other)?;
-        Ok(SoA1 {
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&other)?;
+        Ok(Zip1 {
             source: crate::detail::apply::SetMembershipControlApply::set_union_expr::<
                 Left,
                 Right,
@@ -1148,12 +1148,12 @@ where
     fn set_intersection_input(
         self,
         policy: &CubePolicy<Left::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&other)?;
-        Ok(SoA1 {
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&other)?;
+        Ok(Zip1 {
             source: crate::detail::apply::SetMembershipControlApply::set_intersection_expr::<
                 Left,
                 Right,
@@ -1165,12 +1165,12 @@ where
     fn set_difference_input(
         self,
         policy: &CubePolicy<Left::Runtime>,
-        other: SoAView1<Right>,
+        other: ZipView1<Right>,
         _less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        ReadOnlySoA::validate(&self)?;
-        ReadOnlySoA::validate(&other)?;
-        Ok(SoA1 {
+        ReadOnlyZip::validate(&self)?;
+        ReadOnlyZip::validate(&other)?;
+        Ok(Zip1 {
             source: crate::detail::apply::SetMembershipControlApply::set_difference_expr::<
                 Left,
                 Right,
@@ -1190,7 +1190,7 @@ where
     Less: BinaryPredicateOp<Left::Item>,
 {
     type Runtime = Left::Runtime;
-    type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
+    type Output = Zip1<DeviceVec<Left::Runtime, Left::Item>>;
 
     fn merge_input(
         self,
@@ -1198,10 +1198,10 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::merge_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairOrderingInput<ZipView1<Right>, Less>>::merge_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             less,
         )
     }
@@ -1212,10 +1212,10 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::set_union_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairOrderingInput<ZipView1<Right>, Less>>::set_union_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             less,
         )
     }
@@ -1226,10 +1226,10 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::set_intersection_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairOrderingInput<ZipView1<Right>, Less>>::set_intersection_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             less,
         )
     }
@@ -1240,10 +1240,10 @@ where
         other: Right,
         less: GpuOp<Less>,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<Left> as crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>>::set_difference_input(
-            SoAView1 { source: self },
+        <ZipView1<Left> as crate::detail::read::KernelPairOrderingInput<ZipView1<Right>, Less>>::set_difference_input(
+            ZipView1 { source: self },
             policy,
-            SoAView1 { source: other },
+            ZipView1 { source: other },
             less,
         )
     }
@@ -1259,7 +1259,7 @@ where
     Less: BinaryPredicateOp<(Left::Item,)>,
 {
     type Runtime = Left::Runtime;
-    type Output = SoA1<DeviceVec<Left::Runtime, Left::Item>>;
+    type Output = Zip1<DeviceVec<Left::Runtime, Left::Item>>;
 
     fn merge_input(
         self,
@@ -1334,8 +1334,8 @@ macro_rules! impl_tuple_pair_ordering {
             crate::detail::read::KernelPairOrderingInput<$input<$right_first_ty, $( $right_rest_ty ),+>, Less>
             for $input<$first, $( $rest ),+>
         where
-            Self: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
-            $input<$right_first_ty, $( $right_rest_ty ),+>: ReadOnlySoA<Scalar = <$first as KernelColumn>::Item>,
+            Self: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
+            $input<$right_first_ty, $( $right_rest_ty ),+>: ReadOnlyZip<Scalar = <$first as KernelColumn>::Item>,
             $first: KernelColumn + KernelColumnAt<S0>,
             $right_first_ty:
                 KernelColumn<Runtime = <$first as KernelColumn>::Runtime, Item = <$first as KernelColumn>::Item>
@@ -1371,8 +1371,8 @@ macro_rules! impl_tuple_pair_ordering {
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let (output, _) = $merge_control_fn::<
                     $first,
                     $( $rest, )+
@@ -1395,8 +1395,8 @@ macro_rules! impl_tuple_pair_ordering {
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let flags = crate::detail::apply::SetMembershipControlApply::$membership_expr_fn::<
                     $right_first_ty,
                     $( $right_rest_ty, )+
@@ -1438,8 +1438,8 @@ macro_rules! impl_tuple_pair_ordering {
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let flags = crate::detail::apply::SetMembershipControlApply::$membership_expr_fn::<
                     $first,
                     $( $rest, )+
@@ -1468,8 +1468,8 @@ macro_rules! impl_tuple_pair_ordering {
                 other: $input<$right_first_ty, $( $right_rest_ty ),+>,
                 _less: GpuOp<Less>,
             ) -> Result<Self::Output, Error> {
-                ReadOnlySoA::validate(&self)?;
-                ReadOnlySoA::validate(&other)?;
+                ReadOnlyZip::validate(&self)?;
+                ReadOnlyZip::validate(&other)?;
                 let flags = crate::detail::apply::SetMembershipControlApply::$membership_expr_fn::<
                     $first,
                     $( $rest, )+
@@ -1496,10 +1496,10 @@ macro_rules! impl_tuple_pair_ordering {
     };
 }
 
-impl_tuple_pair_ordering!(SoAView2 -> SoA2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy, apply_expr2);
-impl_tuple_pair_ordering!(SoA2 -> SoA2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy, apply_expr2);
-impl_tuple_pair_ordering!(SoAView3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy, apply_expr3);
-impl_tuple_pair_ordering!(SoA3 -> SoA3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy, apply_expr3);
+impl_tuple_pair_ordering!(ZipView2 -> Zip2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy, apply_expr2);
+impl_tuple_pair_ordering!(Zip2 -> Zip2<A, B; RA, RB> { left / right_left, right / right_right }, device_expr_merge_tuple2_by_key_control_with_policy, tuple2_membership_expr_flags_with_policy, apply_expr2);
+impl_tuple_pair_ordering!(ZipView3 -> Zip3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy, apply_expr3);
+impl_tuple_pair_ordering!(Zip3 -> Zip3<A, B, C; RA, RB, RC> { first / right_first, second / right_second, third / right_third }, device_expr_merge_tuple3_by_key_control_with_policy, tuple3_membership_expr_flags_with_policy, apply_expr3);
 
 mod reverse;
 pub use reverse::reverse;

@@ -45,9 +45,9 @@ fn check_copy_where(exec: &Executor<WgpuRuntime>) {
     let output = exec.to_device(&[0.0_f32; 4]).unwrap();
     let len = copy_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         stencil.slice(..),
-        massively::SoA1(output.slice_mut(..)),
+        massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output.slice(..len)).unwrap(), vec![2.0, 4.0]);
@@ -60,9 +60,9 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     let removed = exec.to_device(&[0.0_f32; 4]).unwrap();
     let len = remove_where(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         stencil.slice(..),
-        massively::SoA1(removed.slice_mut(..)),
+        massively::Zip1(removed.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -73,10 +73,10 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     let partitioned = exec.to_device(&[0.0_f32; 4]).unwrap();
     let split = partition(
         &exec,
-        massively::SoA1(values.slice(..)),
+        massively::Zip1(values.slice(..)),
         Positive,
         (),
-        massively::SoA1(partitioned.slice_mut(..)),
+        massively::Zip1(partitioned.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -92,9 +92,9 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     let unique_values = exec.to_device(&[0.0_f32; 5]).unwrap();
     let len = unique(
         &exec,
-        massively::SoA1(repeated.slice(..)),
+        massively::Zip1(repeated.slice(..)),
         Equal,
-        massively::SoA1(unique_values.slice_mut(..)),
+        massively::Zip1(unique_values.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -122,7 +122,7 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
 
     let selected = copy_where(
         exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -132,7 +132,7 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
             g.slice(..),
         ),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -147,7 +147,7 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
 
     let remaining = remove_where(
         exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -157,7 +157,7 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
             g.slice(..),
         ),
         stencil.slice(..),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -189,7 +189,7 @@ fn check_wide_partition(exec: &Executor<WgpuRuntime>) {
 
     let split = partition(
         exec,
-        massively::SoA7(
+        massively::Zip7(
             a.slice(..),
             b.slice(..),
             c.slice(..),
@@ -200,7 +200,7 @@ fn check_wide_partition(exec: &Executor<WgpuRuntime>) {
         ),
         FirstColumnEven,
         (),
-        massively::SoA7(
+        massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
             out_c.slice_mut(..),
@@ -259,9 +259,9 @@ fn bench_select(c: &mut Criterion) {
                         iter_gpu(b, || {
                             let output_len = copy_where(
                                 &exec,
-                                massively::SoA1(black_box(values.slice(..))),
+                                massively::Zip1(black_box(values.slice(..))),
                                 black_box(stencil.slice(..)),
-                                massively::SoA1(black_box(output.slice_mut(..))),
+                                massively::Zip1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);
@@ -288,9 +288,9 @@ fn bench_select(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output_len = remove_where(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         black_box(stencil.slice(..)),
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
@@ -329,7 +329,7 @@ fn bench_select(c: &mut Criterion) {
                     iter_gpu(b, || {
                         let output_len = copy_where(
                             &exec,
-                            massively::SoA7(
+                            massively::Zip7(
                                 black_box(col_a.slice(..)),
                                 black_box(col_b.slice(..)),
                                 black_box(col_c.slice(..)),
@@ -339,7 +339,7 @@ fn bench_select(c: &mut Criterion) {
                                 black_box(col_g.slice(..)),
                             ),
                             black_box(stencil.slice(..)),
-                            massively::SoA7(
+                            massively::Zip7(
                                 black_box(out_a.slice_mut(..)),
                                 black_box(out_b.slice_mut(..)),
                                 black_box(out_c.slice_mut(..)),
@@ -363,7 +363,7 @@ fn bench_select(c: &mut Criterion) {
                     iter_gpu(b, || {
                         let output_len = remove_where(
                             &exec,
-                            massively::SoA7(
+                            massively::Zip7(
                                 black_box(col_a.slice(..)),
                                 black_box(col_b.slice(..)),
                                 black_box(col_c.slice(..)),
@@ -373,7 +373,7 @@ fn bench_select(c: &mut Criterion) {
                                 black_box(col_g.slice(..)),
                             ),
                             black_box(stencil.slice(..)),
-                            massively::SoA7(
+                            massively::Zip7(
                                 black_box(out_a.slice_mut(..)),
                                 black_box(out_b.slice_mut(..)),
                                 black_box(out_c.slice_mut(..)),
@@ -408,10 +408,10 @@ fn bench_select(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let split = partition(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         Positive,
                         (),
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
@@ -447,7 +447,7 @@ fn bench_select(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let split = partition(
                         &exec,
-                        massively::SoA7(
+                        massively::Zip7(
                             black_box(col_a.slice(..)),
                             black_box(col_b.slice(..)),
                             black_box(col_c.slice(..)),
@@ -458,7 +458,7 @@ fn bench_select(c: &mut Criterion) {
                         ),
                         FirstColumnEven,
                         (),
-                        massively::SoA7(
+                        massively::Zip7(
                             black_box(out_a.slice_mut(..)),
                             black_box(out_b.slice_mut(..)),
                             black_box(out_c.slice_mut(..)),
@@ -492,9 +492,9 @@ fn bench_select(c: &mut Criterion) {
                 iter_gpu(b, || {
                     let output_len = unique(
                         &exec,
-                        massively::SoA1(black_box(values.slice(..))),
+                        massively::Zip1(black_box(values.slice(..))),
                         Equal,
-                        massively::SoA1(black_box(output.slice_mut(..))),
+                        massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);

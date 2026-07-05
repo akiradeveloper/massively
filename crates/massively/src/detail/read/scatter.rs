@@ -107,7 +107,7 @@ where
 {
     type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
-    type Output = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+    type Output = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn scatter_read(
         self,
@@ -116,7 +116,7 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: scatter_one_read::<ValueSource, IndexSource>(
                 policy, &self, indices, len, default,
             )?,
@@ -137,7 +137,7 @@ macro_rules! impl_kernel_scatter_tuple1 {
         {
             type Runtime = ValueSource::Runtime;
             type Default = (ValueSource::Item,);
-            type Output = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+            type Output = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
             fn scatter_read(
                 self,
@@ -146,7 +146,7 @@ macro_rules! impl_kernel_scatter_tuple1 {
                 len: usize,
                 default: Self::Default,
             ) -> Result<Self::Output, Error> {
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: scatter_one_read::<ValueSource, IndexSource>(
                         policy,
                         &self.$field,
@@ -160,18 +160,18 @@ macro_rules! impl_kernel_scatter_tuple1 {
     };
 }
 
-impl_kernel_scatter_tuple1!(SoAView1<ValueSource>, source);
-impl_kernel_scatter_tuple1!(DeviceSoA1<ValueSource>, source);
+impl_kernel_scatter_tuple1!(ZipView1<ValueSource>, source);
+impl_kernel_scatter_tuple1!(DeviceZip1<ValueSource>, source);
 
 impl<ValueSource, IndexSource> KernelScatterInput<IndexSource> for (ValueSource,)
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
-    SoAView1<ValueSource>: KernelScatterInput<IndexSource, Runtime = ValueSource::Runtime>,
+    ZipView1<ValueSource>: KernelScatterInput<IndexSource, Runtime = ValueSource::Runtime>,
 {
     type Runtime = ValueSource::Runtime;
-    type Default = <SoAView1<ValueSource> as KernelScatterInput<IndexSource>>::Default;
-    type Output = <SoAView1<ValueSource> as KernelScatterInput<IndexSource>>::Output;
+    type Default = <ZipView1<ValueSource> as KernelScatterInput<IndexSource>>::Default;
+    type Output = <ZipView1<ValueSource> as KernelScatterInput<IndexSource>>::Output;
 
     fn scatter_read(
         self,
@@ -180,8 +180,8 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<ValueSource> as KernelScatterInput<IndexSource>>::scatter_read(
-            SoAView1 { source: self.0 },
+        <ZipView1<ValueSource> as KernelScatterInput<IndexSource>>::scatter_read(
+            ZipView1 { source: self.0 },
             policy,
             indices,
             len,
@@ -236,17 +236,17 @@ macro_rules! impl_kernel_scatter_tuple2 {
     };
 }
 
-impl_kernel_scatter_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_scatter_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_scatter_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_scatter_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, IndexSource> KernelScatterInput<IndexSource> for (Left, Right)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView2<Left, Right>: KernelScatterInput<IndexSource>,
+    ZipView2<Left, Right>: KernelScatterInput<IndexSource>,
 {
-    type Runtime = <SoAView2<Left, Right> as KernelScatterInput<IndexSource>>::Runtime;
-    type Default = <SoAView2<Left, Right> as KernelScatterInput<IndexSource>>::Default;
-    type Output = <SoAView2<Left, Right> as KernelScatterInput<IndexSource>>::Output;
+    type Runtime = <ZipView2<Left, Right> as KernelScatterInput<IndexSource>>::Runtime;
+    type Default = <ZipView2<Left, Right> as KernelScatterInput<IndexSource>>::Default;
+    type Output = <ZipView2<Left, Right> as KernelScatterInput<IndexSource>>::Output;
 
     fn scatter_read(
         self,
@@ -255,8 +255,8 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelScatterInput<IndexSource>>::scatter_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelScatterInput<IndexSource>>::scatter_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -331,17 +331,17 @@ macro_rules! impl_kernel_scatter_tuple3 {
     };
 }
 
-impl_kernel_scatter_tuple3!(SoAView3<First, Second, Third>, DeviceSoA3, first, second, third);
-impl_kernel_scatter_tuple3!(DeviceSoA3<First, Second, Third>, DeviceSoA3, first, second, third);
+impl_kernel_scatter_tuple3!(ZipView3<First, Second, Third>, DeviceZip3, first, second, third);
+impl_kernel_scatter_tuple3!(DeviceZip3<First, Second, Third>, DeviceZip3, first, second, third);
 
 impl<First, Second, Third, IndexSource> KernelScatterInput<IndexSource> for (First, Second, Third)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView3<First, Second, Third>: KernelScatterInput<IndexSource>,
+    ZipView3<First, Second, Third>: KernelScatterInput<IndexSource>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Runtime;
-    type Default = <SoAView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Default;
-    type Output = <SoAView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Output;
+    type Runtime = <ZipView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Runtime;
+    type Default = <ZipView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Default;
+    type Output = <ZipView3<First, Second, Third> as KernelScatterInput<IndexSource>>::Output;
 
     fn scatter_read(
         self,
@@ -350,8 +350,8 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelScatterInput<IndexSource>>::scatter_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelScatterInput<IndexSource>>::scatter_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,
@@ -376,7 +376,7 @@ where
 {
     type Runtime = ValueSource::Runtime;
     type Default = ValueSource::Item;
-    type Output = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+    type Output = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
     fn scatter_where_read(
         self,
@@ -386,7 +386,7 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        Ok(DeviceSoA1 {
+        Ok(DeviceZip1 {
             source: scatter_where_one_read::<ValueSource, IndexSource, Stencil, Pred>(
                 policy, &self, indices, &stencil, len, default,
             )?,
@@ -409,7 +409,7 @@ macro_rules! impl_kernel_scatter_where_tuple1 {
         {
             type Runtime = ValueSource::Runtime;
             type Default = (ValueSource::Item,);
-            type Output = DeviceSoA1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
+            type Output = DeviceZip1<DeviceVec<ValueSource::Runtime, ValueSource::Item>>;
 
             fn scatter_where_read(
                 self,
@@ -419,7 +419,7 @@ macro_rules! impl_kernel_scatter_where_tuple1 {
                 len: usize,
                 default: Self::Default,
             ) -> Result<Self::Output, Error> {
-                Ok(DeviceSoA1 {
+                Ok(DeviceZip1 {
                     source: scatter_where_one_read::<ValueSource, IndexSource, Stencil, Pred>(
                         policy,
                         &self.$field,
@@ -434,22 +434,22 @@ macro_rules! impl_kernel_scatter_where_tuple1 {
     };
 }
 
-impl_kernel_scatter_where_tuple1!(SoAView1<ValueSource>, source);
-impl_kernel_scatter_where_tuple1!(DeviceSoA1<ValueSource>, source);
+impl_kernel_scatter_where_tuple1!(ZipView1<ValueSource>, source);
+impl_kernel_scatter_where_tuple1!(DeviceZip1<ValueSource>, source);
 
 impl<ValueSource, IndexSource, Stencil, Pred> KernelScatterWhereInput<IndexSource, Stencil, Pred>
     for (ValueSource,)
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
     IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = MIndex> + KernelColumnAt<S0>,
-    SoAView1<ValueSource>:
+    ZipView1<ValueSource>:
         KernelScatterWhereInput<IndexSource, Stencil, Pred, Runtime = ValueSource::Runtime>,
 {
     type Runtime = ValueSource::Runtime;
     type Default =
-        <SoAView1<ValueSource> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Default;
+        <ZipView1<ValueSource> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Default;
     type Output =
-        <SoAView1<ValueSource> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Output;
+        <ZipView1<ValueSource> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Output;
 
     fn scatter_where_read(
         self,
@@ -459,8 +459,8 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView1<ValueSource> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::scatter_where_read(
-            SoAView1 { source: self.0 },
+        <ZipView1<ValueSource> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::scatter_where_read(
+            ZipView1 { source: self.0 },
             policy,
             indices,
             stencil,
@@ -521,21 +521,21 @@ macro_rules! impl_kernel_scatter_where_tuple2 {
     };
 }
 
-impl_kernel_scatter_where_tuple2!(SoAView2<Left, Right>, DeviceSoA2, left, right);
-impl_kernel_scatter_where_tuple2!(DeviceSoA2<Left, Right>, DeviceSoA2, left, right);
+impl_kernel_scatter_where_tuple2!(ZipView2<Left, Right>, DeviceZip2, left, right);
+impl_kernel_scatter_where_tuple2!(DeviceZip2<Left, Right>, DeviceZip2, left, right);
 
 impl<Left, Right, IndexSource, Stencil, Pred> KernelScatterWhereInput<IndexSource, Stencil, Pred>
     for (Left, Right)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView2<Left, Right>: KernelScatterWhereInput<IndexSource, Stencil, Pred>,
+    ZipView2<Left, Right>: KernelScatterWhereInput<IndexSource, Stencil, Pred>,
 {
     type Runtime =
-        <SoAView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Runtime;
+        <ZipView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Runtime;
     type Default =
-        <SoAView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Default;
+        <ZipView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Default;
     type Output =
-        <SoAView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Output;
+        <ZipView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::Output;
 
     fn scatter_where_read(
         self,
@@ -545,8 +545,8 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::scatter_where_read(
-            SoAView2 {
+        <ZipView2<Left, Right> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::scatter_where_read(
+            ZipView2 {
                 left: self.0,
                 right: self.1,
             },
@@ -629,15 +629,15 @@ macro_rules! impl_kernel_scatter_where_tuple3 {
 }
 
 impl_kernel_scatter_where_tuple3!(
-    SoAView3<First, Second, Third>,
-    DeviceSoA3,
+    ZipView3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
 );
 impl_kernel_scatter_where_tuple3!(
-    DeviceSoA3<First, Second, Third>,
-    DeviceSoA3,
+    DeviceZip3<First, Second, Third>,
+    DeviceZip3,
     first,
     second,
     third
@@ -647,19 +647,19 @@ impl<First, Second, Third, IndexSource, Stencil, Pred>
     KernelScatterWhereInput<IndexSource, Stencil, Pred> for (First, Second, Third)
 where
     IndexSource: KernelColumn<Item = MIndex> + KernelColumnAt<S0>,
-    SoAView3<First, Second, Third>: KernelScatterWhereInput<IndexSource, Stencil, Pred>,
+    ZipView3<First, Second, Third>: KernelScatterWhereInput<IndexSource, Stencil, Pred>,
 {
-    type Runtime = <SoAView3<First, Second, Third> as KernelScatterWhereInput<
+    type Runtime = <ZipView3<First, Second, Third> as KernelScatterWhereInput<
         IndexSource,
         Stencil,
         Pred,
     >>::Runtime;
-    type Default = <SoAView3<First, Second, Third> as KernelScatterWhereInput<
+    type Default = <ZipView3<First, Second, Third> as KernelScatterWhereInput<
         IndexSource,
         Stencil,
         Pred,
     >>::Default;
-    type Output = <SoAView3<First, Second, Third> as KernelScatterWhereInput<
+    type Output = <ZipView3<First, Second, Third> as KernelScatterWhereInput<
         IndexSource,
         Stencil,
         Pred,
@@ -673,8 +673,8 @@ where
         len: usize,
         default: Self::Default,
     ) -> Result<Self::Output, Error> {
-        <SoAView3<First, Second, Third> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::scatter_where_read(
-            SoAView3 {
+        <ZipView3<First, Second, Third> as KernelScatterWhereInput<IndexSource, Stencil, Pred>>::scatter_where_read(
+            ZipView3 {
                 first: self.0,
                 second: self.1,
                 third: self.2,

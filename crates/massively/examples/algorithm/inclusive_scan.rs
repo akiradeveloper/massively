@@ -11,9 +11,9 @@ fn main() -> common::Result {
     let output = exec.to_device(&[0.0_f32; 4])?;
     inclusive_scan(
         &exec,
-        SoA1(values.slice(..)),
+        Zip1(values.slice(..)),
         common::TupleSumF32,
-        SoA1(output.slice_mut(..)),
+        Zip1(output.slice_mut(..)),
     )?;
 
     assert_eq!(exec.to_host(&output)?, vec![1.0, 3.0, 6.0, 10.0]);

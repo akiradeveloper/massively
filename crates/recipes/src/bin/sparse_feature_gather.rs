@@ -9,12 +9,12 @@
 //!
 //! # GPU Algorithm
 //!
-//! 1. Treat feature columns as one SoA row.
+//! 1. Treat feature columns as one Zip row.
 //! 2. Gather rows by index.
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA2, gather};
+use massively::{DeviceVec, Executor, MIndex, Zip2, gather};
 
 struct Output<B: cubecl::prelude::Runtime> {
     age: DeviceVec<B, u32>,
@@ -34,9 +34,9 @@ where
     let gathered_score = exec.constant(row_index.len(), 0.0_f32)?;
     gather(
         exec,
-        SoA2(age.slice(..), score.slice(..)),
+        Zip2(age.slice(..), score.slice(..)),
         row_index.slice(..),
-        SoA2(gathered_age.slice_mut(..), gathered_score.slice_mut(..)),
+        Zip2(gathered_age.slice_mut(..), gathered_score.slice_mut(..)),
     )?;
     Ok(Output {
         age: gathered_age,

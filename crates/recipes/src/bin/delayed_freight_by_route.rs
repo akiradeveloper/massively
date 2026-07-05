@@ -15,7 +15,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, SoA1, SoA2, copy_where, reduce_by_key, sort_by_key};
+use massively::{DeviceVec, Executor, Zip1, Zip2, copy_where, reduce_by_key, sort_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     route_id: DeviceVec<B, u32>,
@@ -35,31 +35,31 @@ where
     let delayed_weight = exec.constant(weight.len(), 0.0_f32)?;
     let delayed_len = copy_where(
         exec,
-        SoA2(route_id.slice(..), weight.slice(..)),
+        Zip2(route_id.slice(..), weight.slice(..)),
         delayed.slice(..),
-        SoA2(delayed_route.slice_mut(..), delayed_weight.slice_mut(..)),
+        Zip2(delayed_route.slice_mut(..), delayed_weight.slice_mut(..)),
     )?;
     let sorted_route = exec.constant(delayed_len, 0_u32)?;
     let sorted_weight = exec.constant(delayed_len, 0.0_f32)?;
     sort_by_key(
         exec,
-        SoA1(delayed_route.slice(..delayed_len)),
-        SoA1(delayed_weight.slice(..delayed_len)),
+        Zip1(delayed_route.slice(..delayed_len)),
+        Zip1(delayed_weight.slice(..delayed_len)),
         common::LessU32,
-        SoA1(sorted_route.slice_mut(..)),
-        SoA1(sorted_weight.slice_mut(..)),
+        Zip1(sorted_route.slice_mut(..)),
+        Zip1(sorted_weight.slice_mut(..)),
     )?;
     let route_id = exec.constant(delayed_len, 0_u32)?;
     let delayed_weight = exec.constant(delayed_len, 0.0_f32)?;
     let len = reduce_by_key(
         exec,
-        SoA1(sorted_route.slice(..)),
-        SoA1(sorted_weight.slice(..)),
+        Zip1(sorted_route.slice(..)),
+        Zip1(sorted_weight.slice(..)),
         common::EqualU32,
         (0.0_f32,),
         common::SumF32,
-        SoA1(route_id.slice_mut(..)),
-        SoA1(delayed_weight.slice_mut(..)),
+        Zip1(route_id.slice_mut(..)),
+        Zip1(delayed_weight.slice_mut(..)),
     )?;
     Ok(Output {
         route_id: exec.to_device(&exec.to_host(&route_id.slice(..len))?)?,

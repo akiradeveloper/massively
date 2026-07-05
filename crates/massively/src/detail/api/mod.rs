@@ -16,8 +16,9 @@ pub(in crate::detail) use expr::{
     device_expr_selected_rank_with_policy, device_expr_selection_flags_with_policy,
 };
 pub use memory::{
-    MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformSoA4Output,
-    TransformSoA5Output, TransformSoA6Output, TransformSoA7Output, TransformUnaryOutput,
+    MItemStorage, MaterializeOutput, TransformUnaryOutput, TransformZip2Output,
+    TransformZip3Output, TransformZip4Output, TransformZip5Output, TransformZip6Output,
+    TransformZip7Output,
 };
 pub(in crate::detail) use ordering::{
     device_expr_merge_by_key_values_into_with_control_with_policy,
@@ -43,7 +44,7 @@ pub use sequence::{replace_where, unique, unique_by_key};
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},
     device::{
-        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, S0, SoAView2, SoAView3,
+        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, S0, ZipView2, ZipView3,
     },
     error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr},

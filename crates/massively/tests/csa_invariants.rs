@@ -241,19 +241,19 @@ fn transform_dispatch_uses_transform_payload_apply() {
     assert!(
         apply.contains("struct TransformPayloadApply")
             && apply.contains("fn unary<")
-            && apply.contains("fn soa2<")
-            && apply.contains("fn soa3<")
-            && apply.contains("fn soa4<")
-            && apply.contains("fn soa5<")
-            && apply.contains("fn soa6<")
-            && apply.contains("fn soa7<")
+            && apply.contains("fn zip2<")
+            && apply.contains("fn zip3<")
+            && apply.contains("fn zip4<")
+            && apply.contains("fn zip5<")
+            && apply.contains("fn zip6<")
+            && apply.contains("fn zip7<")
             && apply.contains("Output::run(policy"),
         "TransformPayloadApply should own transform payload dispatch boundaries"
     );
     assert!(
         item_impls.matches("TransformPayloadApply::").count() >= 14
             && item_impls.contains("TransformPayloadApply::unary")
-            && item_impls.contains("TransformPayloadApply::soa7")
+            && item_impls.contains("TransformPayloadApply::zip7")
             && !item_impls.contains(">>::run(policy"),
         "MItem transform dispatch should route through TransformPayloadApply"
     );

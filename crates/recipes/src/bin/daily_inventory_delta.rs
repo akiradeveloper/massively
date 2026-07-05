@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, SoA1, merge_by_key, reduce_by_key};
+use massively::{DeviceVec, Executor, MIndex, Zip1, merge_by_key, reduce_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     sku: DeviceVec<B, u32>,
@@ -36,25 +36,25 @@ where
     let delta = exec.to_device(&vec![0.0_f32; merged_len])?;
     merge_by_key(
         exec,
-        SoA1(left_sku.slice(..)),
-        SoA1(left_delta.slice(..)),
-        SoA1(right_sku.slice(..)),
-        SoA1(right_delta.slice(..)),
+        Zip1(left_sku.slice(..)),
+        Zip1(left_delta.slice(..)),
+        Zip1(right_sku.slice(..)),
+        Zip1(right_delta.slice(..)),
         common::LessU32,
-        SoA1(sku.slice_mut(..)),
-        SoA1(delta.slice_mut(..)),
+        Zip1(sku.slice_mut(..)),
+        Zip1(delta.slice_mut(..)),
     )?;
     let out_sku = exec.to_device(&vec![0_u32; merged_len])?;
     let out_delta = exec.to_device(&vec![0.0_f32; merged_len])?;
     let len = reduce_by_key(
         exec,
-        SoA1(sku.slice(..)),
-        SoA1(delta.slice(..)),
+        Zip1(sku.slice(..)),
+        Zip1(delta.slice(..)),
         common::EqualU32,
         (0.0_f32,),
         common::SumF32,
-        SoA1(out_sku.slice_mut(..)),
-        SoA1(out_delta.slice_mut(..)),
+        Zip1(out_sku.slice_mut(..)),
+        Zip1(out_delta.slice_mut(..)),
     )?;
     Ok(Output {
         sku: out_sku,
