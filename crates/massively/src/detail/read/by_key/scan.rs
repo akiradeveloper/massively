@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::detail::{
     control::{ScanByKeyControl, SegmentControl},
-    device::DeviceColumnView,
+    device::{DeviceColumnMutView, DeviceColumnView},
 };
 
 pub(crate) trait KernelScanByKeyKeys<KeyEq>: Sized {
@@ -153,6 +153,7 @@ where
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
     let offsets = bindings.slot_offsets_handle(client)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offset = client.create_from_slice(u32::as_bytes(&[0]));
     let output = client.empty(control.len * std::mem::size_of::<Source::Item>());
     let num_blocks = control
         .len
@@ -177,11 +178,74 @@ where
             BufferArg::from_raw_parts(offsets.clone(), 4),
             BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offset.clone(), 1),
             BufferArg::from_raw_parts(output.clone(), control.len),
         );
     }
 
     Ok(DeviceVec::from_handle(policy.id(), output, control.len))
+}
+
+#[allow(dead_code)]
+pub(crate) fn inclusive_scan_by_flags_one_into<Source, Op>(
+    policy: &CubePolicy<Source::Runtime>,
+    source: &Source,
+    control: &ScanByKeyControl<Source::Runtime>,
+    output: &DeviceColumnMutView<Source::Runtime, Source::Item>,
+) -> Result<(), Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Source::Item: MStorageElement + 'static,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Op: BinaryOp<(Source::Item,)>,
+{
+    <Source as KernelColumn>::validate(source)?;
+    ensure_same_len(<Source as KernelColumn>::len(source), control.len)?;
+    ensure_same_len(output.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let bindings = <Source as KernelColumn>::stage(source, policy)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let offsets = bindings.slot_offsets_handle(client)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offset_u32 =
+        u32::try_from(output.offset).map_err(|_| Error::LengthTooLarge { len: output.offset })?;
+    let output_offset = client.create_from_slice(u32::as_bytes(&[output_offset_u32]));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        inclusive_scan_by_flags_device_expr_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Op,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+            BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+            BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+            BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+            BufferArg::from_raw_parts(offsets.clone(), 4),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offset.clone(), 1),
+            BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -212,6 +276,7 @@ where
     let offsets = bindings.slot_offsets_handle(client)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
     let init_handle = client.create_from_slice(Source::Item::as_bytes(&[init]));
+    let output_offset = client.create_from_slice(u32::as_bytes(&[0]));
     let output = client.empty(control.len * std::mem::size_of::<Source::Item>());
     let num_blocks = control
         .len
@@ -237,11 +302,77 @@ where
             BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
             BufferArg::from_raw_parts(init_handle.clone(), 1),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offset.clone(), 1),
             BufferArg::from_raw_parts(output.clone(), control.len),
         );
     }
 
     Ok(DeviceVec::from_handle(policy.id(), output, control.len))
+}
+
+#[allow(dead_code)]
+pub(crate) fn exclusive_scan_by_flags_one_into<Source, Op>(
+    policy: &CubePolicy<Source::Runtime>,
+    source: &Source,
+    control: &ScanByKeyControl<Source::Runtime>,
+    init: Source::Item,
+    output: &DeviceColumnMutView<Source::Runtime, Source::Item>,
+) -> Result<(), Error>
+where
+    Source: KernelColumn + KernelColumnAt<S0>,
+    Source::Item: MStorageElement + 'static,
+    Source::Expr: DeviceGpuExpr<Source::Item>,
+    Op: BinaryOp<(Source::Item,)>,
+{
+    <Source as KernelColumn>::validate(source)?;
+    ensure_same_len(<Source as KernelColumn>::len(source), control.len)?;
+    ensure_same_len(output.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let bindings = <Source as KernelColumn>::stage(source, policy)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let offsets = bindings.slot_offsets_handle(client)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let init_handle = client.create_from_slice(Source::Item::as_bytes(&[init]));
+    let output_offset_u32 =
+        u32::try_from(output.offset).map_err(|_| Error::LengthTooLarge { len: output.offset })?;
+    let output_offset = client.create_from_slice(u32::as_bytes(&[output_offset_u32]));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        exclusive_scan_by_flags_device_expr_kernel::launch_unchecked::<
+            Source::Item,
+            Source::Expr,
+            Op,
+            Source::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+            BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+            BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+            BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+            BufferArg::from_raw_parts(offsets.clone(), 4),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(init_handle.clone(), 1),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offset.clone(), 1),
+            BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -283,6 +414,7 @@ where
     let a_offsets = a.slot_offsets_handle(client)?;
     let b_offsets = b.slot_offsets_handle(client)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = client.create_from_slice(u32::as_bytes(&[0, 0]));
     let out_a = client.empty(control.len * std::mem::size_of::<A::Item>());
     let out_b = client.empty(control.len * std::mem::size_of::<C::Item>());
     let num_blocks = control
@@ -315,6 +447,7 @@ where
             BufferArg::from_raw_parts(b_offsets.clone(), 4),
             BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 2),
             BufferArg::from_raw_parts(out_a.clone(), control.len),
             BufferArg::from_raw_parts(out_b.clone(), control.len),
         );
@@ -324,6 +457,94 @@ where
         left: DeviceVec::from_handle(policy.id(), out_a, control.len),
         right: DeviceVec::from_handle(policy.id(), out_b, control.len),
     })
+}
+
+#[allow(dead_code)]
+pub(crate) fn inclusive_scan_by_flags_two_into<A, C, Op>(
+    policy: &CubePolicy<A::Runtime>,
+    left: &A,
+    right: &C,
+    control: &ScanByKeyControl<A::Runtime>,
+    out_left: &DeviceColumnMutView<A::Runtime, A::Item>,
+    out_right: &DeviceColumnMutView<A::Runtime, C::Item>,
+) -> Result<(), Error>
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    Op: BinaryOp<(A::Item, C::Item)>,
+{
+    validate_columns2(left, right)?;
+    ensure_same_len(<A as KernelColumn>::len(left), control.len)?;
+    ensure_same_len(out_left.len, control.len)?;
+    ensure_same_len(out_right.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let a = <A as KernelColumn>::stage(left, policy)?;
+    let b = <C as KernelColumn>::stage(right, policy)?;
+    let a0 = a.slots.first().unwrap();
+    let a1 = a.slots.get(1).unwrap_or(a0);
+    let a2 = a.slots.get(2).unwrap_or(a0);
+    let a3 = a.slots.get(3).unwrap_or(a0);
+    let b0 = b.slots.first().unwrap();
+    let b1 = b.slots.get(1).unwrap_or(b0);
+    let b2 = b.slots.get(2).unwrap_or(b0);
+    let b3 = b.slots.get(3).unwrap_or(b0);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = [
+        u32::try_from(out_left.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_left.offset,
+        })?,
+        u32::try_from(out_right.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_right.offset,
+        })?,
+    ];
+    let output_offsets = client.create_from_slice(u32::as_bytes(&output_offsets));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        inclusive_scan_tuple2_by_flags_device_expr_kernel::launch_unchecked::<
+            A::Item,
+            C::Item,
+            A::Expr,
+            C::Expr,
+            Op,
+            A::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a0.0.clone(), a0.1),
+            BufferArg::from_raw_parts(a1.0.clone(), a1.1),
+            BufferArg::from_raw_parts(a2.0.clone(), a2.1),
+            BufferArg::from_raw_parts(a3.0.clone(), a3.1),
+            BufferArg::from_raw_parts(a_offsets.clone(), 4),
+            BufferArg::from_raw_parts(b0.0.clone(), b0.1),
+            BufferArg::from_raw_parts(b1.0.clone(), b1.1),
+            BufferArg::from_raw_parts(b2.0.clone(), b2.1),
+            BufferArg::from_raw_parts(b3.0.clone(), b3.1),
+            BufferArg::from_raw_parts(b_offsets.clone(), 4),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 2),
+            BufferArg::from_raw_parts(out_left.source.handle.clone(), out_left.source.len()),
+            BufferArg::from_raw_parts(out_right.source.handle.clone(), out_right.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -368,6 +589,7 @@ where
     let init_a = client.create_from_slice(A::Item::as_bytes(&[init.0]));
     let init_b = client.create_from_slice(C::Item::as_bytes(&[init.1]));
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = client.create_from_slice(u32::as_bytes(&[0, 0]));
     let out_a = client.empty(control.len * std::mem::size_of::<A::Item>());
     let out_b = client.empty(control.len * std::mem::size_of::<C::Item>());
     let num_blocks = control
@@ -402,6 +624,7 @@ where
             BufferArg::from_raw_parts(init_a.clone(), 1),
             BufferArg::from_raw_parts(init_b.clone(), 1),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 2),
             BufferArg::from_raw_parts(out_a.clone(), control.len),
             BufferArg::from_raw_parts(out_b.clone(), control.len),
         );
@@ -411,6 +634,99 @@ where
         left: DeviceVec::from_handle(policy.id(), out_a, control.len),
         right: DeviceVec::from_handle(policy.id(), out_b, control.len),
     })
+}
+
+#[allow(dead_code)]
+pub(crate) fn exclusive_scan_by_flags_two_into<A, C, Op>(
+    policy: &CubePolicy<A::Runtime>,
+    left: &A,
+    right: &C,
+    control: &ScanByKeyControl<A::Runtime>,
+    init: (A::Item, C::Item),
+    out_left: &DeviceColumnMutView<A::Runtime, A::Item>,
+    out_right: &DeviceColumnMutView<A::Runtime, C::Item>,
+) -> Result<(), Error>
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    Op: BinaryOp<(A::Item, C::Item)>,
+{
+    validate_columns2(left, right)?;
+    ensure_same_len(<A as KernelColumn>::len(left), control.len)?;
+    ensure_same_len(out_left.len, control.len)?;
+    ensure_same_len(out_right.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let a = <A as KernelColumn>::stage(left, policy)?;
+    let b = <C as KernelColumn>::stage(right, policy)?;
+    let a0 = a.slots.first().unwrap();
+    let a1 = a.slots.get(1).unwrap_or(a0);
+    let a2 = a.slots.get(2).unwrap_or(a0);
+    let a3 = a.slots.get(3).unwrap_or(a0);
+    let b0 = b.slots.first().unwrap();
+    let b1 = b.slots.get(1).unwrap_or(b0);
+    let b2 = b.slots.get(2).unwrap_or(b0);
+    let b3 = b.slots.get(3).unwrap_or(b0);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
+    let init_a = client.create_from_slice(A::Item::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(C::Item::as_bytes(&[init.1]));
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = [
+        u32::try_from(out_left.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_left.offset,
+        })?,
+        u32::try_from(out_right.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_right.offset,
+        })?,
+    ];
+    let output_offsets = client.create_from_slice(u32::as_bytes(&output_offsets));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        exclusive_scan_tuple2_by_flags_device_expr_kernel::launch_unchecked::<
+            A::Item,
+            C::Item,
+            A::Expr,
+            C::Expr,
+            Op,
+            A::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a0.0.clone(), a0.1),
+            BufferArg::from_raw_parts(a1.0.clone(), a1.1),
+            BufferArg::from_raw_parts(a2.0.clone(), a2.1),
+            BufferArg::from_raw_parts(a3.0.clone(), a3.1),
+            BufferArg::from_raw_parts(a_offsets.clone(), 4),
+            BufferArg::from_raw_parts(b0.0.clone(), b0.1),
+            BufferArg::from_raw_parts(b1.0.clone(), b1.1),
+            BufferArg::from_raw_parts(b2.0.clone(), b2.1),
+            BufferArg::from_raw_parts(b3.0.clone(), b3.1),
+            BufferArg::from_raw_parts(b_offsets.clone(), 4),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(init_a.clone(), 1),
+            BufferArg::from_raw_parts(init_b.clone(), 1),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 2),
+            BufferArg::from_raw_parts(out_left.source.handle.clone(), out_left.source.len()),
+            BufferArg::from_raw_parts(out_right.source.handle.clone(), out_right.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -470,6 +786,7 @@ where
     let b_offsets = b.slot_offsets_handle(client)?;
     let c_offsets = c.slot_offsets_handle(client)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = client.create_from_slice(u32::as_bytes(&[0, 0, 0]));
     let out_a = client.empty(control.len * std::mem::size_of::<A::Item>());
     let out_b = client.empty(control.len * std::mem::size_of::<C::Item>());
     let out_c = client.empty(control.len * std::mem::size_of::<D::Item>());
@@ -510,6 +827,7 @@ where
             BufferArg::from_raw_parts(c_offsets.clone(), 4),
             BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 3),
             BufferArg::from_raw_parts(out_a.clone(), control.len),
             BufferArg::from_raw_parts(out_b.clone(), control.len),
             BufferArg::from_raw_parts(out_c.clone(), control.len),
@@ -521,6 +839,117 @@ where
         second: DeviceVec::from_handle(policy.id(), out_b, control.len),
         third: DeviceVec::from_handle(policy.id(), out_c, control.len),
     })
+}
+
+#[allow(dead_code)]
+pub(crate) fn inclusive_scan_by_flags_three_into<A, C, D, Op>(
+    policy: &CubePolicy<A::Runtime>,
+    first: &A,
+    second: &C,
+    third: &D,
+    control: &ScanByKeyControl<A::Runtime>,
+    out_first: &DeviceColumnMutView<A::Runtime, A::Item>,
+    out_second: &DeviceColumnMutView<A::Runtime, C::Item>,
+    out_third: &DeviceColumnMutView<A::Runtime, D::Item>,
+) -> Result<(), Error>
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    D::Item: MStorageElement + 'static,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    Op: BinaryOp<(A::Item, C::Item, D::Item)>,
+{
+    validate_columns3(first, second, third)?;
+    ensure_same_len(<A as KernelColumn>::len(first), control.len)?;
+    ensure_same_len(out_first.len, control.len)?;
+    ensure_same_len(out_second.len, control.len)?;
+    ensure_same_len(out_third.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let a = <A as KernelColumn>::stage(first, policy)?;
+    let b = <C as KernelColumn>::stage(second, policy)?;
+    let c = <D as KernelColumn>::stage(third, policy)?;
+    let a0 = a.slots.first().unwrap();
+    let a1 = a.slots.get(1).unwrap_or(a0);
+    let a2 = a.slots.get(2).unwrap_or(a0);
+    let a3 = a.slots.get(3).unwrap_or(a0);
+    let b0 = b.slots.first().unwrap();
+    let b1 = b.slots.get(1).unwrap_or(b0);
+    let b2 = b.slots.get(2).unwrap_or(b0);
+    let b3 = b.slots.get(3).unwrap_or(b0);
+    let c0 = c.slots.first().unwrap();
+    let c1 = c.slots.get(1).unwrap_or(c0);
+    let c2 = c.slots.get(2).unwrap_or(c0);
+    let c3 = c.slots.get(3).unwrap_or(c0);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
+    let c_offsets = c.slot_offsets_handle(client)?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = [
+        u32::try_from(out_first.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_first.offset,
+        })?,
+        u32::try_from(out_second.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_second.offset,
+        })?,
+        u32::try_from(out_third.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_third.offset,
+        })?,
+    ];
+    let output_offsets = client.create_from_slice(u32::as_bytes(&output_offsets));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        inclusive_scan_tuple3_by_flags_device_expr_kernel::launch_unchecked::<
+            A::Item,
+            C::Item,
+            D::Item,
+            A::Expr,
+            C::Expr,
+            D::Expr,
+            Op,
+            A::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a0.0.clone(), a0.1),
+            BufferArg::from_raw_parts(a1.0.clone(), a1.1),
+            BufferArg::from_raw_parts(a2.0.clone(), a2.1),
+            BufferArg::from_raw_parts(a3.0.clone(), a3.1),
+            BufferArg::from_raw_parts(a_offsets.clone(), 4),
+            BufferArg::from_raw_parts(b0.0.clone(), b0.1),
+            BufferArg::from_raw_parts(b1.0.clone(), b1.1),
+            BufferArg::from_raw_parts(b2.0.clone(), b2.1),
+            BufferArg::from_raw_parts(b3.0.clone(), b3.1),
+            BufferArg::from_raw_parts(b_offsets.clone(), 4),
+            BufferArg::from_raw_parts(c0.0.clone(), c0.1),
+            BufferArg::from_raw_parts(c1.0.clone(), c1.1),
+            BufferArg::from_raw_parts(c2.0.clone(), c2.1),
+            BufferArg::from_raw_parts(c3.0.clone(), c3.1),
+            BufferArg::from_raw_parts(c_offsets.clone(), 4),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 3),
+            BufferArg::from_raw_parts(out_first.source.handle.clone(), out_first.source.len()),
+            BufferArg::from_raw_parts(out_second.source.handle.clone(), out_second.source.len()),
+            BufferArg::from_raw_parts(out_third.source.handle.clone(), out_third.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -584,6 +1013,7 @@ where
     let init_b = client.create_from_slice(C::Item::as_bytes(&[init.1]));
     let init_c = client.create_from_slice(D::Item::as_bytes(&[init.2]));
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = client.create_from_slice(u32::as_bytes(&[0, 0, 0]));
     let out_a = client.empty(control.len * std::mem::size_of::<A::Item>());
     let out_b = client.empty(control.len * std::mem::size_of::<C::Item>());
     let out_c = client.empty(control.len * std::mem::size_of::<D::Item>());
@@ -627,6 +1057,7 @@ where
             BufferArg::from_raw_parts(init_b.clone(), 1),
             BufferArg::from_raw_parts(init_c.clone(), 1),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 3),
             BufferArg::from_raw_parts(out_a.clone(), control.len),
             BufferArg::from_raw_parts(out_b.clone(), control.len),
             BufferArg::from_raw_parts(out_c.clone(), control.len),
@@ -638,6 +1069,124 @@ where
         second: DeviceVec::from_handle(policy.id(), out_b, control.len),
         third: DeviceVec::from_handle(policy.id(), out_c, control.len),
     })
+}
+
+#[allow(dead_code)]
+pub(crate) fn exclusive_scan_by_flags_three_into<A, C, D, Op>(
+    policy: &CubePolicy<A::Runtime>,
+    first: &A,
+    second: &C,
+    third: &D,
+    control: &ScanByKeyControl<A::Runtime>,
+    init: (A::Item, C::Item, D::Item),
+    out_first: &DeviceColumnMutView<A::Runtime, A::Item>,
+    out_second: &DeviceColumnMutView<A::Runtime, C::Item>,
+    out_third: &DeviceColumnMutView<A::Runtime, D::Item>,
+) -> Result<(), Error>
+where
+    A: KernelColumn + KernelColumnAt<S0>,
+    C: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    D: KernelColumn<Runtime = A::Runtime> + KernelColumnAt<S0>,
+    A::Item: MStorageElement + 'static,
+    C::Item: MStorageElement + 'static,
+    D::Item: MStorageElement + 'static,
+    A::Expr: DeviceGpuExpr<A::Item>,
+    C::Expr: DeviceGpuExpr<C::Item>,
+    D::Expr: DeviceGpuExpr<D::Item>,
+    Op: BinaryOp<(A::Item, C::Item, D::Item)>,
+{
+    validate_columns3(first, second, third)?;
+    ensure_same_len(<A as KernelColumn>::len(first), control.len)?;
+    ensure_same_len(out_first.len, control.len)?;
+    ensure_same_len(out_second.len, control.len)?;
+    ensure_same_len(out_third.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let a = <A as KernelColumn>::stage(first, policy)?;
+    let b = <C as KernelColumn>::stage(second, policy)?;
+    let c = <D as KernelColumn>::stage(third, policy)?;
+    let a0 = a.slots.first().unwrap();
+    let a1 = a.slots.get(1).unwrap_or(a0);
+    let a2 = a.slots.get(2).unwrap_or(a0);
+    let a3 = a.slots.get(3).unwrap_or(a0);
+    let b0 = b.slots.first().unwrap();
+    let b1 = b.slots.get(1).unwrap_or(b0);
+    let b2 = b.slots.get(2).unwrap_or(b0);
+    let b3 = b.slots.get(3).unwrap_or(b0);
+    let c0 = c.slots.first().unwrap();
+    let c1 = c.slots.get(1).unwrap_or(c0);
+    let c2 = c.slots.get(2).unwrap_or(c0);
+    let c3 = c.slots.get(3).unwrap_or(c0);
+    let a_offsets = a.slot_offsets_handle(client)?;
+    let b_offsets = b.slot_offsets_handle(client)?;
+    let c_offsets = c.slot_offsets_handle(client)?;
+    let init_a = client.create_from_slice(A::Item::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(C::Item::as_bytes(&[init.1]));
+    let init_c = client.create_from_slice(D::Item::as_bytes(&[init.2]));
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = [
+        u32::try_from(out_first.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_first.offset,
+        })?,
+        u32::try_from(out_second.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_second.offset,
+        })?,
+        u32::try_from(out_third.offset).map_err(|_| Error::LengthTooLarge {
+            len: out_third.offset,
+        })?,
+    ];
+    let output_offsets = client.create_from_slice(u32::as_bytes(&output_offsets));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        exclusive_scan_tuple3_by_flags_device_expr_kernel::launch_unchecked::<
+            A::Item,
+            C::Item,
+            D::Item,
+            A::Expr,
+            C::Expr,
+            D::Expr,
+            Op,
+            A::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a0.0.clone(), a0.1),
+            BufferArg::from_raw_parts(a1.0.clone(), a1.1),
+            BufferArg::from_raw_parts(a2.0.clone(), a2.1),
+            BufferArg::from_raw_parts(a3.0.clone(), a3.1),
+            BufferArg::from_raw_parts(a_offsets.clone(), 4),
+            BufferArg::from_raw_parts(b0.0.clone(), b0.1),
+            BufferArg::from_raw_parts(b1.0.clone(), b1.1),
+            BufferArg::from_raw_parts(b2.0.clone(), b2.1),
+            BufferArg::from_raw_parts(b3.0.clone(), b3.1),
+            BufferArg::from_raw_parts(b_offsets.clone(), 4),
+            BufferArg::from_raw_parts(c0.0.clone(), c0.1),
+            BufferArg::from_raw_parts(c1.0.clone(), c1.1),
+            BufferArg::from_raw_parts(c2.0.clone(), c2.1),
+            BufferArg::from_raw_parts(c3.0.clone(), c3.1),
+            BufferArg::from_raw_parts(c_offsets.clone(), 4),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(init_a.clone(), 1),
+            BufferArg::from_raw_parts(init_b.clone(), 1),
+            BufferArg::from_raw_parts(init_c.clone(), 1),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 3),
+            BufferArg::from_raw_parts(out_first.source.handle.clone(), out_first.source.len()),
+            BufferArg::from_raw_parts(out_second.source.handle.clone(), out_second.source.len()),
+            BufferArg::from_raw_parts(out_third.source.handle.clone(), out_third.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -705,6 +1254,7 @@ where
     ];
     let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = client.create_from_slice(u32::as_bytes(&[0, 0, 0, 0, 0, 0, 0]));
     let out_a = client.empty(control.len * std::mem::size_of::<A>());
     let out_b = client.empty(control.len * std::mem::size_of::<B>());
     let out_c = client.empty(control.len * std::mem::size_of::<C>());
@@ -733,6 +1283,7 @@ where
             BufferArg::from_raw_parts(offsets_handle.clone(), 7),
             BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 7),
             BufferArg::from_raw_parts(out_a.clone(), control.len),
             BufferArg::from_raw_parts(out_b.clone(), control.len),
             BufferArg::from_raw_parts(out_c.clone(), control.len),
@@ -752,6 +1303,111 @@ where
         DeviceVec::from_handle(policy.id(), out_f, control.len),
         DeviceVec::from_handle(policy.id(), out_g, control.len),
     ))
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn inclusive_scan_by_flags_seven_views_into<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    a: &DeviceColumnView<R, A>,
+    b: &DeviceColumnView<R, B>,
+    c: &DeviceColumnView<R, C>,
+    d: &DeviceColumnView<R, D>,
+    e: &DeviceColumnView<R, E>,
+    f: &DeviceColumnView<R, F>,
+    g: &DeviceColumnView<R, G>,
+    control: &ScanByKeyControl<R>,
+    out_a: &DeviceColumnMutView<R, A>,
+    out_b: &DeviceColumnMutView<R, B>,
+    out_c: &DeviceColumnMutView<R, C>,
+    out_d: &DeviceColumnMutView<R, D>,
+    out_e: &DeviceColumnMutView<R, E>,
+    out_f: &DeviceColumnMutView<R, F>,
+    out_g: &DeviceColumnMutView<R, G>,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    A: MStorageElement + 'static,
+    B: MStorageElement + 'static,
+    C: MStorageElement + 'static,
+    D: MStorageElement + 'static,
+    E: MStorageElement + 'static,
+    F: MStorageElement + 'static,
+    G: MStorageElement + 'static,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    ensure_same_len(a.len, control.len)?;
+    ensure_same_len(b.len, control.len)?;
+    ensure_same_len(c.len, control.len)?;
+    ensure_same_len(d.len, control.len)?;
+    ensure_same_len(e.len, control.len)?;
+    ensure_same_len(f.len, control.len)?;
+    ensure_same_len(g.len, control.len)?;
+    ensure_same_len(out_a.len, control.len)?;
+    ensure_same_len(out_b.len, control.len)?;
+    ensure_same_len(out_c.len, control.len)?;
+    ensure_same_len(out_d.len, control.len)?;
+    ensure_same_len(out_e.len, control.len)?;
+    ensure_same_len(out_f.len, control.len)?;
+    ensure_same_len(out_g.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let offsets = [
+        u32::try_from(a.offset).map_err(|_| Error::LengthTooLarge { len: a.offset })?,
+        u32::try_from(b.offset).map_err(|_| Error::LengthTooLarge { len: b.offset })?,
+        u32::try_from(c.offset).map_err(|_| Error::LengthTooLarge { len: c.offset })?,
+        u32::try_from(d.offset).map_err(|_| Error::LengthTooLarge { len: d.offset })?,
+        u32::try_from(e.offset).map_err(|_| Error::LengthTooLarge { len: e.offset })?,
+        u32::try_from(f.offset).map_err(|_| Error::LengthTooLarge { len: f.offset })?,
+        u32::try_from(g.offset).map_err(|_| Error::LengthTooLarge { len: g.offset })?,
+    ];
+    let output_offsets = [
+        u32::try_from(out_a.offset).map_err(|_| Error::LengthTooLarge { len: out_a.offset })?,
+        u32::try_from(out_b.offset).map_err(|_| Error::LengthTooLarge { len: out_b.offset })?,
+        u32::try_from(out_c.offset).map_err(|_| Error::LengthTooLarge { len: out_c.offset })?,
+        u32::try_from(out_d.offset).map_err(|_| Error::LengthTooLarge { len: out_d.offset })?,
+        u32::try_from(out_e.offset).map_err(|_| Error::LengthTooLarge { len: out_e.offset })?,
+        u32::try_from(out_f.offset).map_err(|_| Error::LengthTooLarge { len: out_f.offset })?,
+        u32::try_from(out_g.offset).map_err(|_| Error::LengthTooLarge { len: out_g.offset })?,
+    ];
+    let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
+    let output_offsets_handle = client.create_from_slice(u32::as_bytes(&output_offsets));
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        inclusive_scan_tuple7_by_flags_view_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
+            BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
+            BufferArg::from_raw_parts(c.source.handle.clone(), c.source.len()),
+            BufferArg::from_raw_parts(d.source.handle.clone(), d.source.len()),
+            BufferArg::from_raw_parts(e.source.handle.clone(), e.source.len()),
+            BufferArg::from_raw_parts(f.source.handle.clone(), f.source.len()),
+            BufferArg::from_raw_parts(g.source.handle.clone(), g.source.len()),
+            BufferArg::from_raw_parts(offsets_handle.clone(), 7),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets_handle.clone(), 7),
+            BufferArg::from_raw_parts(out_a.source.handle.clone(), out_a.source.len()),
+            BufferArg::from_raw_parts(out_b.source.handle.clone(), out_b.source.len()),
+            BufferArg::from_raw_parts(out_c.source.handle.clone(), out_c.source.len()),
+            BufferArg::from_raw_parts(out_d.source.handle.clone(), out_d.source.len()),
+            BufferArg::from_raw_parts(out_e.source.handle.clone(), out_e.source.len()),
+            BufferArg::from_raw_parts(out_f.source.handle.clone(), out_f.source.len()),
+            BufferArg::from_raw_parts(out_g.source.handle.clone(), out_g.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -820,6 +1476,7 @@ where
     ];
     let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
     let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let output_offsets = client.create_from_slice(u32::as_bytes(&[0, 0, 0, 0, 0, 0, 0]));
     let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
     let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
     let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
@@ -862,6 +1519,7 @@ where
             BufferArg::from_raw_parts(init_f.clone(), 1),
             BufferArg::from_raw_parts(init_g.clone(), 1),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets.clone(), 7),
             BufferArg::from_raw_parts(out_a.clone(), control.len),
             BufferArg::from_raw_parts(out_b.clone(), control.len),
             BufferArg::from_raw_parts(out_c.clone(), control.len),
@@ -881,6 +1539,126 @@ where
         DeviceVec::from_handle(policy.id(), out_f, control.len),
         DeviceVec::from_handle(policy.id(), out_g, control.len),
     ))
+}
+
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub(crate) fn exclusive_scan_by_flags_seven_views_into<R, A, B, C, D, E, F, G, Op>(
+    policy: &CubePolicy<R>,
+    a: &DeviceColumnView<R, A>,
+    b: &DeviceColumnView<R, B>,
+    c: &DeviceColumnView<R, C>,
+    d: &DeviceColumnView<R, D>,
+    e: &DeviceColumnView<R, E>,
+    f: &DeviceColumnView<R, F>,
+    g: &DeviceColumnView<R, G>,
+    control: &ScanByKeyControl<R>,
+    init: (A, B, C, D, E, F, G),
+    out_a: &DeviceColumnMutView<R, A>,
+    out_b: &DeviceColumnMutView<R, B>,
+    out_c: &DeviceColumnMutView<R, C>,
+    out_d: &DeviceColumnMutView<R, D>,
+    out_e: &DeviceColumnMutView<R, E>,
+    out_f: &DeviceColumnMutView<R, F>,
+    out_g: &DeviceColumnMutView<R, G>,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    A: MStorageElement + 'static,
+    B: MStorageElement + 'static,
+    C: MStorageElement + 'static,
+    D: MStorageElement + 'static,
+    E: MStorageElement + 'static,
+    F: MStorageElement + 'static,
+    G: MStorageElement + 'static,
+    Op: BinaryOp<(A, B, C, D, E, F, G)>,
+{
+    ensure_same_len(a.len, control.len)?;
+    ensure_same_len(b.len, control.len)?;
+    ensure_same_len(c.len, control.len)?;
+    ensure_same_len(d.len, control.len)?;
+    ensure_same_len(e.len, control.len)?;
+    ensure_same_len(f.len, control.len)?;
+    ensure_same_len(g.len, control.len)?;
+    ensure_same_len(out_a.len, control.len)?;
+    ensure_same_len(out_b.len, control.len)?;
+    ensure_same_len(out_c.len, control.len)?;
+    ensure_same_len(out_d.len, control.len)?;
+    ensure_same_len(out_e.len, control.len)?;
+    ensure_same_len(out_f.len, control.len)?;
+    ensure_same_len(out_g.len, control.len)?;
+    if control.len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let offsets = [
+        u32::try_from(a.offset).map_err(|_| Error::LengthTooLarge { len: a.offset })?,
+        u32::try_from(b.offset).map_err(|_| Error::LengthTooLarge { len: b.offset })?,
+        u32::try_from(c.offset).map_err(|_| Error::LengthTooLarge { len: c.offset })?,
+        u32::try_from(d.offset).map_err(|_| Error::LengthTooLarge { len: d.offset })?,
+        u32::try_from(e.offset).map_err(|_| Error::LengthTooLarge { len: e.offset })?,
+        u32::try_from(f.offset).map_err(|_| Error::LengthTooLarge { len: f.offset })?,
+        u32::try_from(g.offset).map_err(|_| Error::LengthTooLarge { len: g.offset })?,
+    ];
+    let output_offsets = [
+        u32::try_from(out_a.offset).map_err(|_| Error::LengthTooLarge { len: out_a.offset })?,
+        u32::try_from(out_b.offset).map_err(|_| Error::LengthTooLarge { len: out_b.offset })?,
+        u32::try_from(out_c.offset).map_err(|_| Error::LengthTooLarge { len: out_c.offset })?,
+        u32::try_from(out_d.offset).map_err(|_| Error::LengthTooLarge { len: out_d.offset })?,
+        u32::try_from(out_e.offset).map_err(|_| Error::LengthTooLarge { len: out_e.offset })?,
+        u32::try_from(out_f.offset).map_err(|_| Error::LengthTooLarge { len: out_f.offset })?,
+        u32::try_from(out_g.offset).map_err(|_| Error::LengthTooLarge { len: out_g.offset })?,
+    ];
+    let offsets_handle = client.create_from_slice(u32::as_bytes(&offsets));
+    let output_offsets_handle = client.create_from_slice(u32::as_bytes(&output_offsets));
+    let len_handle = client.create_from_slice(u32::as_bytes(&[control.len_u32]));
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
+    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
+    let init_d = client.create_from_slice(D::as_bytes(&[init.3]));
+    let init_e = client.create_from_slice(E::as_bytes(&[init.4]));
+    let init_f = client.create_from_slice(F::as_bytes(&[init.5]));
+    let init_g = client.create_from_slice(G::as_bytes(&[init.6]));
+    let num_blocks = control
+        .len
+        .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+    unsafe {
+        exclusive_scan_tuple7_by_flags_view_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+            BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
+            BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
+            BufferArg::from_raw_parts(c.source.handle.clone(), c.source.len()),
+            BufferArg::from_raw_parts(d.source.handle.clone(), d.source.len()),
+            BufferArg::from_raw_parts(e.source.handle.clone(), e.source.len()),
+            BufferArg::from_raw_parts(f.source.handle.clone(), f.source.len()),
+            BufferArg::from_raw_parts(g.source.handle.clone(), g.source.len()),
+            BufferArg::from_raw_parts(offsets_handle.clone(), 7),
+            BufferArg::from_raw_parts(control.head_flags.clone(), control.len),
+            BufferArg::from_raw_parts(init_a.clone(), 1),
+            BufferArg::from_raw_parts(init_b.clone(), 1),
+            BufferArg::from_raw_parts(init_c.clone(), 1),
+            BufferArg::from_raw_parts(init_d.clone(), 1),
+            BufferArg::from_raw_parts(init_e.clone(), 1),
+            BufferArg::from_raw_parts(init_f.clone(), 1),
+            BufferArg::from_raw_parts(init_g.clone(), 1),
+            BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(output_offsets_handle.clone(), 7),
+            BufferArg::from_raw_parts(out_a.source.handle.clone(), out_a.source.len()),
+            BufferArg::from_raw_parts(out_b.source.handle.clone(), out_b.source.len()),
+            BufferArg::from_raw_parts(out_c.source.handle.clone(), out_c.source.len()),
+            BufferArg::from_raw_parts(out_d.source.handle.clone(), out_d.source.len()),
+            BufferArg::from_raw_parts(out_e.source.handle.clone(), out_e.source.len()),
+            BufferArg::from_raw_parts(out_f.source.handle.clone(), out_f.source.len()),
+            BufferArg::from_raw_parts(out_g.source.handle.clone(), out_g.source.len()),
+        );
+    }
+
+    Ok(())
 }
 
 impl<KeySource, KeyEq> KernelScanByKeyKeys<KeyEq> for KeySource

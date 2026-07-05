@@ -98,3 +98,8 @@ cargo run -p recipes --bin merge_ranked_feeds
 ```
 
 See `crates/recipes/README.md` for the full recipe list.
+
+## Real-world Examples
+
+- [bph-gpu](https://github.com/akiradeveloper/bph-gpu)
+- [pi-monte-carlo](https://github.com/akiradeveloper/pi-monte-carlo)

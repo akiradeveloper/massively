@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, iter_gpu, select_flags, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{Executor, SoA1, copy_where, partition, remove_where, unique};
+use massively::{Executor, copy_where, partition, remove_where, unique};
 
 fn alternating_signed(len: usize) -> Vec<f32> {
     (0..len)
@@ -42,27 +42,65 @@ impl BinaryPredicateOp<WgpuRuntime, (f32,)> for Equal {
 fn check_copy_where(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
-    let SoA1(output) =
-        copy_where(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
-    assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0]);
+    let output = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let len = copy_where(
+        &exec,
+        massively::SoA1(values.slice(..)),
+        stencil.slice(..),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
+    assert_eq!(exec.to_host(&output.slice(..len)).unwrap(), vec![2.0, 4.0]);
 }
 
 fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     let values = exec.to_device(&[-1.0_f32, 2.0, -3.0, 4.0]).unwrap();
     let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
 
-    let SoA1(removed) =
-        remove_where(&exec, massively::SoA1(values.slice(..)), stencil.slice(..)).unwrap();
-    assert_eq!(exec.to_host(&removed).unwrap(), vec![-1.0, -3.0]);
+    let removed = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let len = remove_where(
+        &exec,
+        massively::SoA1(values.slice(..)),
+        stencil.slice(..),
+        massively::SoA1(removed.slice_mut(..)),
+    )
+    .unwrap();
+    assert_eq!(
+        exec.to_host(&removed.slice(..len)).unwrap(),
+        vec![-1.0, -3.0]
+    );
 
-    let (SoA1(positives), SoA1(non_positives)) =
-        partition(&exec, massively::SoA1(values.slice(..)), Positive, ()).unwrap();
-    assert_eq!(exec.to_host(&positives).unwrap(), vec![2.0, 4.0]);
-    assert_eq!(exec.to_host(&non_positives).unwrap(), vec![-1.0, -3.0]);
+    let partitioned = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let split = partition(
+        &exec,
+        massively::SoA1(values.slice(..)),
+        Positive,
+        (),
+        massively::SoA1(partitioned.slice_mut(..)),
+    )
+    .unwrap();
+    assert_eq!(
+        exec.to_host(&partitioned.slice(..split)).unwrap(),
+        vec![2.0, 4.0]
+    );
+    assert_eq!(
+        exec.to_host(&partitioned.slice(split..)).unwrap(),
+        vec![-1.0, -3.0]
+    );
 
     let repeated = exec.to_device(&[1.0_f32, 1.0, 2.0, 2.0, 3.0]).unwrap();
-    let SoA1(unique_values) = unique(&exec, massively::SoA1(repeated.slice(..)), Equal).unwrap();
-    assert_eq!(exec.to_host(&unique_values).unwrap(), vec![1.0, 2.0, 3.0]);
+    let unique_values = exec.to_device(&[0.0_f32; 5]).unwrap();
+    let len = unique(
+        &exec,
+        massively::SoA1(repeated.slice(..)),
+        Equal,
+        massively::SoA1(unique_values.slice_mut(..)),
+    )
+    .unwrap();
+    assert_eq!(
+        exec.to_host(&unique_values.slice(..len)).unwrap(),
+        vec![1.0, 2.0, 3.0]
+    );
 }
 
 fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
@@ -74,6 +112,13 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
     let f = exec.to_device(&[51_u32, 52, 53, 54, 55]).unwrap();
     let g = exec.to_device(&[61_u32, 62, 63, 64, 65]).unwrap();
     let stencil = exec.to_device(&[1_u32, 0, 1, 0, 1]).unwrap();
+    let out_a = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_c = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_d = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_e = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_f = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_g = exec.to_device(&[0_u32; 5]).unwrap();
 
     let selected = copy_where(
         exec,
@@ -87,9 +132,18 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
             g.slice(..),
         ),
         stencil.slice(..),
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
     )
     .unwrap();
-    assert_eq!(selected.0.len(), 3);
+    assert_eq!(selected, 3);
 
     let remaining = remove_where(
         exec,
@@ -103,9 +157,18 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
             g.slice(..),
         ),
         stencil.slice(..),
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
     )
     .unwrap();
-    assert_eq!(remaining.0.len(), 2);
+    assert_eq!(remaining, 2);
 }
 
 fn check_wide_partition(exec: &Executor<WgpuRuntime>) {
@@ -116,8 +179,15 @@ fn check_wide_partition(exec: &Executor<WgpuRuntime>) {
     let e = exec.to_device(&[40_u32, 41, 42, 43, 44]).unwrap();
     let f = exec.to_device(&[50_u32, 51, 52, 53, 54]).unwrap();
     let g = exec.to_device(&[60_u32, 61, 62, 63, 64]).unwrap();
+    let out_a = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_b = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_c = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_d = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_e = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_f = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_g = exec.to_device(&[0_u32; 5]).unwrap();
 
-    let (matching, failing) = partition(
+    let split = partition(
         exec,
         massively::SoA7(
             a.slice(..),
@@ -130,10 +200,19 @@ fn check_wide_partition(exec: &Executor<WgpuRuntime>) {
         ),
         FirstColumnEven,
         (),
+        massively::SoA7(
+            out_a.slice_mut(..),
+            out_b.slice_mut(..),
+            out_c.slice_mut(..),
+            out_d.slice_mut(..),
+            out_e.slice_mut(..),
+            out_f.slice_mut(..),
+            out_g.slice_mut(..),
+        ),
     )
     .unwrap();
-    assert_eq!(matching.0.len(), 3);
-    assert_eq!(failing.0.len(), 2);
+    assert_eq!(split, 3);
+    assert_eq!(exec.to_host(&out_a.slice(split..)).unwrap().len(), 2);
 }
 
 struct Positive;
@@ -172,21 +251,21 @@ fn bench_select(c: &mut Criterion) {
                 let stencil = exec
                     .to_device(&select_flags(len, selected_per_100))
                     .unwrap();
+                let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
                 sync(&exec);
                 copy_group.bench_function(
                     BenchmarkId::new(format!("{}-{}pct", backend.name(), selected_per_100), len),
                     |b| {
                         iter_gpu(b, || {
-                            let output = copy_where(
+                            let output_len = copy_where(
                                 &exec,
                                 massively::SoA1(black_box(values.slice(..))),
                                 black_box(stencil.slice(..)),
+                                massively::SoA1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
-                            let output_len = output.0.len();
-                            drop(output);
                             sync(&exec);
-                            black_box(output_len)
+                            black_box((output_len, &output))
                         })
                     },
                 );
@@ -203,19 +282,19 @@ fn bench_select(c: &mut Criterion) {
         for &len in SIZES {
             let values = exec.to_device(&alternating_signed(len)).unwrap();
             let stencil = exec.to_device(&alternating_flags(len)).unwrap();
+            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             sync(&exec);
             remove_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output = remove_where(
+                    let output_len = remove_where(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         black_box(stencil.slice(..)),
+                        massively::SoA1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
-                    let output_len = output.0.len();
-                    drop(output);
                     sync(&exec);
-                    black_box(output_len)
+                    black_box((output_len, &output))
                 })
             });
         }
@@ -236,12 +315,19 @@ fn bench_select(c: &mut Criterion) {
             let col_f = exec.to_device(&offset_u32(len, 50)).unwrap();
             let col_g = exec.to_device(&offset_u32(len, 60)).unwrap();
             let stencil = exec.to_device(&alternating_flags(len)).unwrap();
+            let out_a = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_b = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_c = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_d = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_e = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_f = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_g = exec.to_device(&vec![0_u32; len]).unwrap();
             sync(&exec);
             wide_group.bench_function(
                 BenchmarkId::new(format!("{}-copy", backend.name()), len),
                 |b| {
                     iter_gpu(b, || {
-                        let output = copy_where(
+                        let output_len = copy_where(
                             &exec,
                             massively::SoA7(
                                 black_box(col_a.slice(..)),
@@ -253,12 +339,21 @@ fn bench_select(c: &mut Criterion) {
                                 black_box(col_g.slice(..)),
                             ),
                             black_box(stencil.slice(..)),
+                            massively::SoA7(
+                                black_box(out_a.slice_mut(..)),
+                                black_box(out_b.slice_mut(..)),
+                                black_box(out_c.slice_mut(..)),
+                                black_box(out_d.slice_mut(..)),
+                                black_box(out_e.slice_mut(..)),
+                                black_box(out_f.slice_mut(..)),
+                                black_box(out_g.slice_mut(..)),
+                            ),
                         )
                         .unwrap();
-                        let output_len = output.0.len();
-                        drop(output);
                         sync(&exec);
-                        black_box(output_len)
+                        black_box((
+                            output_len, &out_a, &out_b, &out_c, &out_d, &out_e, &out_f, &out_g,
+                        ))
                     })
                 },
             );
@@ -266,7 +361,7 @@ fn bench_select(c: &mut Criterion) {
                 BenchmarkId::new(format!("{}-remove", backend.name()), len),
                 |b| {
                     iter_gpu(b, || {
-                        let output = remove_where(
+                        let output_len = remove_where(
                             &exec,
                             massively::SoA7(
                                 black_box(col_a.slice(..)),
@@ -278,12 +373,21 @@ fn bench_select(c: &mut Criterion) {
                                 black_box(col_g.slice(..)),
                             ),
                             black_box(stencil.slice(..)),
+                            massively::SoA7(
+                                black_box(out_a.slice_mut(..)),
+                                black_box(out_b.slice_mut(..)),
+                                black_box(out_c.slice_mut(..)),
+                                black_box(out_d.slice_mut(..)),
+                                black_box(out_e.slice_mut(..)),
+                                black_box(out_f.slice_mut(..)),
+                                black_box(out_g.slice_mut(..)),
+                            ),
                         )
                         .unwrap();
-                        let output_len = output.0.len();
-                        drop(output);
                         sync(&exec);
-                        black_box(output_len)
+                        black_box((
+                            output_len, &out_a, &out_b, &out_c, &out_d, &out_e, &out_f, &out_g,
+                        ))
                     })
                 },
             );
@@ -298,20 +402,20 @@ fn bench_select(c: &mut Criterion) {
 
         for &len in SIZES {
             let values = exec.to_device(&alternating_signed(len)).unwrap();
+            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             sync(&exec);
             partition_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output = partition(
+                    let split = partition(
                         &exec,
                         massively::SoA1(black_box(values.slice(..))),
                         Positive,
                         (),
+                        massively::SoA1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
-                    let output_len = output.0.0.len() + output.1.0.len();
-                    drop(output);
                     sync(&exec);
-                    black_box(output_len)
+                    black_box((split, &output))
                 })
             });
         }
@@ -331,10 +435,17 @@ fn bench_select(c: &mut Criterion) {
             let col_e = exec.to_device(&offset_u32(len, 40)).unwrap();
             let col_f = exec.to_device(&offset_u32(len, 50)).unwrap();
             let col_g = exec.to_device(&offset_u32(len, 60)).unwrap();
+            let out_a = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_b = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_c = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_d = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_e = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_f = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_g = exec.to_device(&vec![0_u32; len]).unwrap();
             sync(&exec);
             wide_partition_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output = partition(
+                    let split = partition(
                         &exec,
                         massively::SoA7(
                             black_box(col_a.slice(..)),
@@ -347,12 +458,21 @@ fn bench_select(c: &mut Criterion) {
                         ),
                         FirstColumnEven,
                         (),
+                        massively::SoA7(
+                            black_box(out_a.slice_mut(..)),
+                            black_box(out_b.slice_mut(..)),
+                            black_box(out_c.slice_mut(..)),
+                            black_box(out_d.slice_mut(..)),
+                            black_box(out_e.slice_mut(..)),
+                            black_box(out_f.slice_mut(..)),
+                            black_box(out_g.slice_mut(..)),
+                        ),
                     )
                     .unwrap();
-                    let output_len = output.0.0.len() + output.1.0.len();
-                    drop(output);
                     sync(&exec);
-                    black_box(output_len)
+                    black_box((
+                        split, &out_a, &out_b, &out_c, &out_d, &out_e, &out_f, &out_g,
+                    ))
                 })
             });
         }
@@ -366,15 +486,19 @@ fn bench_select(c: &mut Criterion) {
 
         for &len in SIZES {
             let values = exec.to_device(&repeated_pairs(len)).unwrap();
+            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             sync(&exec);
             unique_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output =
-                        unique(&exec, massively::SoA1(black_box(values.slice(..))), Equal).unwrap();
-                    let output_len = output.0.len();
-                    drop(output);
+                    let output_len = unique(
+                        &exec,
+                        massively::SoA1(black_box(values.slice(..))),
+                        Equal,
+                        massively::SoA1(black_box(output.slice_mut(..))),
+                    )
+                    .unwrap();
                     sync(&exec);
-                    black_box(output_len)
+                    black_box((output_len, &output))
                 })
             });
         }

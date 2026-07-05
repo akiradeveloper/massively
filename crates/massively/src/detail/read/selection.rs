@@ -1847,7 +1847,7 @@ fn unique_block_count_read(len: usize) -> Result<u32, Error> {
     u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
 }
 
-pub(in crate::detail::read) fn unique_one_flags_read<Source, Pred>(
+pub(crate) fn unique_one_flags_read<Source, Pred>(
     policy: &CubePolicy<Source::Runtime>,
     source: &Source,
 ) -> Result<cubecl::server::Handle, Error>

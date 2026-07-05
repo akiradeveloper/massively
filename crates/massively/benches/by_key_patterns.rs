@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, dense_f32, iter_gpu, run_keys, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
-use massively::{Executor, SoA1, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key};
+use massively::{Executor, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key};
 
 struct Sum;
 
@@ -38,12 +38,14 @@ fn check_by_key(exec: &Executor<WgpuRuntime>) {
     let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
 
-    let SoA1(inclusive) = inclusive_scan_by_key(
+    let inclusive = exec.to_device(&[0.0_f32; 4]).unwrap();
+    inclusive_scan_by_key(
         exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
         KeyEq,
         Sum,
+        massively::SoA1(inclusive.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(
@@ -51,13 +53,15 @@ fn check_by_key(exec: &Executor<WgpuRuntime>) {
         vec![1.0, 3.0, 10.0, 30.0]
     );
 
-    let SoA1(exclusive) = exclusive_scan_by_key(
+    let exclusive = exec.to_device(&[0.0_f32; 4]).unwrap();
+    exclusive_scan_by_key(
         exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
         KeyEq,
         (0.0,),
         Sum,
+        massively::SoA1(exclusive.slice_mut(..)),
     )
     .unwrap();
     assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0.0, 1.0, 0.0, 10.0]);
@@ -71,6 +75,7 @@ fn bench_by_key_patterns(c: &mut Criterion) {
 
         for &len in SIZES {
             let values = exec.to_device(&dense_f32(len)).unwrap();
+            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             for (pattern, host_keys) in key_patterns(len) {
                 let keys = exec.to_device(&host_keys).unwrap();
                 sync(&exec);
@@ -78,16 +83,17 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                     BenchmarkId::new(format!("{}-{pattern}", backend.name()), len),
                     |b| {
                         iter_gpu(b, || {
-                            let output = inclusive_scan_by_key(
+                            inclusive_scan_by_key(
                                 &exec,
                                 massively::SoA1(black_box(keys.slice(..))),
                                 massively::SoA1(black_box(values.slice(..))),
                                 KeyEq,
                                 Sum,
+                                massively::SoA1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);
-                            black_box(output)
+                            black_box(&output)
                         })
                     },
                 );
@@ -103,6 +109,7 @@ fn bench_by_key_patterns(c: &mut Criterion) {
 
         for &len in SIZES {
             let values = exec.to_device(&dense_f32(len)).unwrap();
+            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
             for (pattern, host_keys) in key_patterns(len) {
                 let keys = exec.to_device(&host_keys).unwrap();
                 sync(&exec);
@@ -110,17 +117,18 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                     BenchmarkId::new(format!("{}-{pattern}", backend.name()), len),
                     |b| {
                         iter_gpu(b, || {
-                            let output = exclusive_scan_by_key(
+                            exclusive_scan_by_key(
                                 &exec,
                                 massively::SoA1(black_box(keys.slice(..))),
                                 massively::SoA1(black_box(values.slice(..))),
                                 KeyEq,
                                 (0.0,),
                                 Sum,
+                                massively::SoA1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);
-                            black_box(output)
+                            black_box(&output)
                         })
                     },
                 );
@@ -136,6 +144,8 @@ fn bench_by_key_patterns(c: &mut Criterion) {
 
         for &len in SIZES {
             let values = exec.to_device(&dense_f32(len)).unwrap();
+            let out_keys = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_values = exec.to_device(&vec![0.0_f32; len]).unwrap();
             for (pattern, host_keys) in key_patterns(len) {
                 let keys = exec.to_device(&host_keys).unwrap();
                 sync(&exec);
@@ -143,17 +153,19 @@ fn bench_by_key_patterns(c: &mut Criterion) {
                     BenchmarkId::new(format!("{}-{pattern}", backend.name()), len),
                     |b| {
                         iter_gpu(b, || {
-                            let output = reduce_by_key(
+                            let len = reduce_by_key(
                                 &exec,
                                 massively::SoA1(black_box(keys.slice(..))),
                                 massively::SoA1(black_box(values.slice(..))),
                                 KeyEq,
                                 (0.0,),
                                 Sum,
+                                massively::SoA1(black_box(out_keys.slice_mut(..))),
+                                massively::SoA1(black_box(out_values.slice_mut(..))),
                             )
                             .unwrap();
                             sync(&exec);
-                            black_box(output)
+                            black_box((len, &out_keys, &out_values))
                         })
                     },
                 );

@@ -19,7 +19,10 @@ pub use memory::{
     MItemStorage, MaterializeOutput, TransformSoA2Output, TransformSoA3Output, TransformSoA4Output,
     TransformSoA5Output, TransformSoA6Output, TransformSoA7Output, TransformUnaryOutput,
 };
-pub(in crate::detail) use ordering::device_expr_merge_by_key_values_with_control_with_policy;
+pub(in crate::detail) use ordering::{
+    device_expr_merge_by_key_values_into_with_control_with_policy,
+    device_expr_merge_by_key_values_with_control_with_policy,
+};
 pub use ordering::{
     merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,
 };

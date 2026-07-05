@@ -758,13 +758,15 @@ pub(crate) fn merge_by_key_values_from_control_device_expr_kernel<
     rhs_slot_offsets: &[u32],
     source_sides: &[u32],
     source_indices: &[u32],
+    len: &[u32],
+    output_offset: &[u32],
     out_values: &mut [T],
 ) {
     let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
-    if out < out_values.len() {
+    if out < len[0] as usize {
         let index = source_indices[out] as usize;
         if source_sides[out] == 0u32 {
-            out_values[out] = LeftExpr::eval(
+            out_values[output_offset[0] as usize + out] = LeftExpr::eval(
                 lhs_slot0,
                 lhs_slot1,
                 lhs_slot2,
@@ -773,7 +775,7 @@ pub(crate) fn merge_by_key_values_from_control_device_expr_kernel<
                 index,
             );
         } else {
-            out_values[out] = RightExpr::eval(
+            out_values[output_offset[0] as usize + out] = RightExpr::eval(
                 rhs_slot0,
                 rhs_slot1,
                 rhs_slot2,

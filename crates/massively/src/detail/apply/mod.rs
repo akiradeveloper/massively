@@ -1,6 +1,7 @@
 use crate::{
     detail::api::{
         SelectionStencil, device_expr_count_if_with_policy, device_expr_find_if_with_policy,
+        device_expr_merge_by_key_values_into_with_control_with_policy,
         device_expr_merge_by_key_values_with_control_with_policy,
         device_expr_minmax_element_with_policy, expr,
     },

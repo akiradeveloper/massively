@@ -26,6 +26,30 @@ impl<'a> MergePayloadApply<'a> {
         device_expr_merge_by_key_values_with_control_with_policy(policy, left, right, self.control)
     }
 
+    pub(in crate::detail) fn apply_expr_into<LeftValue, RightValue>(
+        &self,
+        policy: &crate::policy::CubePolicy<LeftValue::Runtime>,
+        left: &LeftValue,
+        right: &RightValue,
+        output: &DeviceColumnMutView<LeftValue::Runtime, LeftValue::Item>,
+    ) -> Result<(), Error>
+    where
+        LeftValue: KernelColumn + KernelColumnAt<S0>,
+        RightValue:
+            KernelColumn<Runtime = LeftValue::Runtime, Item = LeftValue::Item> + KernelColumnAt<S0>,
+        LeftValue::Item: CubePrimitive + CubeElement,
+        LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
+        RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
+    {
+        device_expr_merge_by_key_values_into_with_control_with_policy(
+            policy,
+            left,
+            right,
+            self.control,
+            output,
+        )
+    }
+
     pub(in crate::detail) fn apply_expr2<LeftA, LeftB, RightA, RightB>(
         &self,
         policy: &crate::policy::CubePolicy<LeftA::Runtime>,

@@ -5,7 +5,7 @@ use common::{Runtime, SIZES, dense_f32, iter_gpu, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
-use massively::{DeviceVec, Executor, SoA1, reduce, reduce_by_key};
+use massively::{Executor, reduce, reduce_by_key};
 
 struct Sum;
 
@@ -38,17 +38,25 @@ fn check_reduce(exec: &Executor<WgpuRuntime>) {
 fn check_reduce_by_key(exec: &Executor<WgpuRuntime>) {
     let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
     let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
-    let (SoA1(out_keys), SoA1(out_values)) = reduce_by_key(
+    let out_keys = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
+    let len = reduce_by_key(
         &exec,
         massively::SoA1(keys.slice(..)),
         massively::SoA1(values.slice(..)),
         KeyEq,
         (0.0,),
         Sum,
+        massively::SoA1(out_keys.slice_mut(..)),
+        massively::SoA1(out_values.slice_mut(..)),
     )
     .unwrap();
-    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![0, 1]);
-    assert_eq!(exec.to_host(&out_values).unwrap(), vec![3.0, 30.0]);
+    assert_eq!(len, 2);
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 1]);
+    assert_eq!(
+        exec.to_host(&out_values.slice(..len)).unwrap(),
+        vec![3.0, 30.0]
+    );
 }
 
 fn bench_reduce(c: &mut Criterion) {
@@ -85,23 +93,24 @@ fn bench_reduce(c: &mut Criterion) {
         for &len in SIZES {
             let keys = exec.to_device(&keys(len)).unwrap();
             let values = exec.to_device(&dense_f32(len)).unwrap();
+            let out_keys = exec.to_device(&vec![0_u32; len]).unwrap();
+            let out_values = exec.to_device(&vec![0.0_f32; len]).unwrap();
             sync(&exec);
             reduce_by_key_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output: (
-                        SoA1<DeviceVec<WgpuRuntime, u32>>,
-                        SoA1<DeviceVec<WgpuRuntime, f32>>,
-                    ) = reduce_by_key(
+                    let output_len = reduce_by_key(
                         &exec,
                         massively::SoA1(black_box(keys.slice(..))),
                         massively::SoA1(black_box(values.slice(..))),
                         KeyEq,
                         (0.0,),
                         Sum,
+                        massively::SoA1(black_box(out_keys.slice_mut(..))),
+                        massively::SoA1(black_box(out_values.slice_mut(..))),
                     )
                     .unwrap();
                     sync(&exec);
-                    black_box(output)
+                    black_box((output_len, &out_keys, &out_values))
                 })
             });
         }

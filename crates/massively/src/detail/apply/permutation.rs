@@ -26,6 +26,23 @@ impl<'a, R: Runtime> PermutationPayloadApply<'a, R> {
         expr::device_expr_gather_with_policy(policy, expr, &indices)
     }
 
+    pub(in crate::detail) fn apply_expr_into<ExprSource>(
+        &self,
+        policy: &crate::policy::CubePolicy<R>,
+        expr: &ExprSource,
+        output: &DeviceColumnMutView<R, ExprSource::Item>,
+    ) -> Result<(), Error>
+    where
+        ExprSource: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ExprSource::Item: CubePrimitive + CubeElement,
+        ExprSource::Expr: GpuExpr<ExprSource::Item>,
+    {
+        ensure_same_len(expr.len(), self.control.len)?;
+        ensure_same_len(output.len, self.control.len)?;
+        let indices = self.control.indices(policy);
+        expr::device_expr_gather_into_with_policy(policy, expr, &indices, output)
+    }
+
     pub(in crate::detail) fn apply_expr2<Left, Right>(
         &self,
         policy: &crate::policy::CubePolicy<R>,

@@ -5,16 +5,20 @@ use crate::{
         api::{Tuple4AsTuple7BinaryOp, Tuple5AsTuple7BinaryOp, Tuple6AsTuple7BinaryOp},
         control::ScanByKeyControl,
         device::{
-            DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, KernelColumnBindings, S0,
-            SoA1 as DeviceSoA1, SoA2 as DeviceSoA2, SoA3 as DeviceSoA3,
+            DeviceColumnMutView, DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt,
+            KernelColumnBindings, S0, SoA1 as DeviceSoA1, SoA2 as DeviceSoA2, SoA3 as DeviceSoA3,
         },
         op::kernel::BinaryOp,
         primitives::{range as primitive_range, scan as primitive_scan},
         read::by_key::scan::{
-            exclusive_scan_by_flags_one, exclusive_scan_by_flags_seven_views,
-            exclusive_scan_by_flags_three, exclusive_scan_by_flags_two,
-            inclusive_scan_by_flags_one, inclusive_scan_by_flags_seven_views,
-            inclusive_scan_by_flags_three, inclusive_scan_by_flags_two,
+            exclusive_scan_by_flags_one, exclusive_scan_by_flags_one_into,
+            exclusive_scan_by_flags_seven_views, exclusive_scan_by_flags_seven_views_into,
+            exclusive_scan_by_flags_three, exclusive_scan_by_flags_three_into,
+            exclusive_scan_by_flags_two, exclusive_scan_by_flags_two_into,
+            inclusive_scan_by_flags_one, inclusive_scan_by_flags_one_into,
+            inclusive_scan_by_flags_seven_views, inclusive_scan_by_flags_seven_views_into,
+            inclusive_scan_by_flags_three, inclusive_scan_by_flags_three_into,
+            inclusive_scan_by_flags_two, inclusive_scan_by_flags_two_into,
         },
     },
     error::Error,
@@ -714,6 +718,21 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         inclusive_scan_by_flags_one::<Source, Op>(policy, source, self.control)
     }
 
+    pub(in crate::detail) fn inclusive_expr_into<Source, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        source: &Source,
+        output: &DeviceColumnMutView<R, Source::Item>,
+    ) -> Result<(), Error>
+    where
+        Source: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        Source::Item: MStorageElement + 'static,
+        Source::Expr: DeviceGpuExpr<Source::Item>,
+        Op: BinaryOp<(Source::Item,)>,
+    {
+        inclusive_scan_by_flags_one_into::<Source, Op>(policy, source, self.control, output)
+    }
+
     pub(in crate::detail) fn exclusive_expr<Source, Op>(
         &self,
         policy: &CubePolicy<R>,
@@ -727,6 +746,22 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Op: BinaryOp<(Source::Item,)>,
     {
         exclusive_scan_by_flags_one::<Source, Op>(policy, source, self.control, init)
+    }
+
+    pub(in crate::detail) fn exclusive_expr_into<Source, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        source: &Source,
+        init: Source::Item,
+        output: &DeviceColumnMutView<R, Source::Item>,
+    ) -> Result<(), Error>
+    where
+        Source: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        Source::Item: MStorageElement + 'static,
+        Source::Expr: DeviceGpuExpr<Source::Item>,
+        Op: BinaryOp<(Source::Item,)>,
+    {
+        exclusive_scan_by_flags_one_into::<Source, Op>(policy, source, self.control, init, output)
     }
 
     pub(in crate::detail) fn inclusive_expr2<A, C, Op>(
@@ -766,6 +801,49 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Op: BinaryOp<(A::Item, C::Item)>,
     {
         exclusive_scan_by_flags_two::<A, C, Op>(policy, a, c, self.control, init)
+    }
+
+    pub(in crate::detail) fn inclusive_expr2_into<A, C, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &A,
+        c: &C,
+        out_a: &DeviceColumnMutView<R, A::Item>,
+        out_c: &DeviceColumnMutView<R, C::Item>,
+    ) -> Result<(), Error>
+    where
+        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
+        A::Expr: DeviceGpuExpr<A::Item>,
+        C::Expr: DeviceGpuExpr<C::Item>,
+        (A::Item, C::Item): MItem<R>,
+        Op: BinaryOp<(A::Item, C::Item)>,
+    {
+        inclusive_scan_by_flags_two_into::<A, C, Op>(policy, a, c, self.control, out_a, out_c)
+    }
+
+    pub(in crate::detail) fn exclusive_expr2_into<A, C, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &A,
+        c: &C,
+        init: (A::Item, C::Item),
+        out_a: &DeviceColumnMutView<R, A::Item>,
+        out_c: &DeviceColumnMutView<R, C::Item>,
+    ) -> Result<(), Error>
+    where
+        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
+        A::Expr: DeviceGpuExpr<A::Item>,
+        C::Expr: DeviceGpuExpr<C::Item>,
+        (A::Item, C::Item): MItem<R>,
+        Op: BinaryOp<(A::Item, C::Item)>,
+    {
+        exclusive_scan_by_flags_two_into::<A, C, Op>(policy, a, c, self.control, init, out_a, out_c)
     }
 
     pub(in crate::detail) fn inclusive_expr3<A, C, D, Op>(
@@ -819,6 +897,78 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
         Op: BinaryOp<(A::Item, C::Item, D::Item)>,
     {
         exclusive_scan_by_flags_three::<A, C, D, Op>(policy, a, c, d, self.control, init)
+    }
+
+    pub(in crate::detail) fn inclusive_expr3_into<A, C, D, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &A,
+        c: &C,
+        d: &D,
+        out_a: &DeviceColumnMutView<R, A::Item>,
+        out_c: &DeviceColumnMutView<R, C::Item>,
+        out_d: &DeviceColumnMutView<R, D::Item>,
+    ) -> Result<(), Error>
+    where
+        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        D: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
+        D::Item: MStorageElement + 'static,
+        A::Expr: DeviceGpuExpr<A::Item>,
+        C::Expr: DeviceGpuExpr<C::Item>,
+        D::Expr: DeviceGpuExpr<D::Item>,
+        (A::Item, C::Item, D::Item): MItem<R>,
+        Op: BinaryOp<(A::Item, C::Item, D::Item)>,
+    {
+        inclusive_scan_by_flags_three_into::<A, C, D, Op>(
+            policy,
+            a,
+            c,
+            d,
+            self.control,
+            out_a,
+            out_c,
+            out_d,
+        )
+    }
+
+    pub(in crate::detail) fn exclusive_expr3_into<A, C, D, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &A,
+        c: &C,
+        d: &D,
+        init: (A::Item, C::Item, D::Item),
+        out_a: &DeviceColumnMutView<R, A::Item>,
+        out_c: &DeviceColumnMutView<R, C::Item>,
+        out_d: &DeviceColumnMutView<R, D::Item>,
+    ) -> Result<(), Error>
+    where
+        A: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        C: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        D: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        A::Item: MStorageElement + 'static,
+        C::Item: MStorageElement + 'static,
+        D::Item: MStorageElement + 'static,
+        A::Expr: DeviceGpuExpr<A::Item>,
+        C::Expr: DeviceGpuExpr<C::Item>,
+        D::Expr: DeviceGpuExpr<D::Item>,
+        (A::Item, C::Item, D::Item): MItem<R>,
+        Op: BinaryOp<(A::Item, C::Item, D::Item)>,
+    {
+        exclusive_scan_by_flags_three_into::<A, C, D, Op>(
+            policy,
+            a,
+            c,
+            d,
+            self.control,
+            init,
+            out_a,
+            out_c,
+            out_d,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -978,6 +1128,55 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
             f,
             g,
             self.control,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn inclusive_views7_into<A, B, C, D, E, F, G, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        e: &DeviceColumnView<R, E>,
+        f: &DeviceColumnView<R, F>,
+        g: &DeviceColumnView<R, G>,
+        out_a: &DeviceColumnMutView<R, A>,
+        out_b: &DeviceColumnMutView<R, B>,
+        out_c: &DeviceColumnMutView<R, C>,
+        out_d: &DeviceColumnMutView<R, D>,
+        out_e: &DeviceColumnMutView<R, E>,
+        out_f: &DeviceColumnMutView<R, F>,
+        out_g: &DeviceColumnMutView<R, G>,
+    ) -> Result<(), Error>
+    where
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
+        Op: BinaryOp<(A, B, C, D, E, F, G)>,
+    {
+        inclusive_scan_by_flags_seven_views_into::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            self.control,
+            out_a,
+            out_b,
+            out_c,
+            out_d,
+            out_e,
+            out_f,
+            out_g,
         )
     }
 
@@ -1167,6 +1366,57 @@ impl<'a, R: Runtime> SegmentedScanApply<'a, R> {
             g,
             self.control,
             init,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn exclusive_views7_into<A, B, C, D, E, F, G, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        e: &DeviceColumnView<R, E>,
+        f: &DeviceColumnView<R, F>,
+        g: &DeviceColumnView<R, G>,
+        init: (A, B, C, D, E, F, G),
+        out_a: &DeviceColumnMutView<R, A>,
+        out_b: &DeviceColumnMutView<R, B>,
+        out_c: &DeviceColumnMutView<R, C>,
+        out_d: &DeviceColumnMutView<R, D>,
+        out_e: &DeviceColumnMutView<R, E>,
+        out_f: &DeviceColumnMutView<R, F>,
+        out_g: &DeviceColumnMutView<R, G>,
+    ) -> Result<(), Error>
+    where
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
+        Op: BinaryOp<(A, B, C, D, E, F, G)>,
+    {
+        exclusive_scan_by_flags_seven_views_into::<R, A, B, C, D, E, F, G, Op>(
+            policy,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g,
+            self.control,
+            init,
+            out_a,
+            out_b,
+            out_c,
+            out_d,
+            out_e,
+            out_f,
+            out_g,
         )
     }
 }

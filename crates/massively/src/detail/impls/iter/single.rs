@@ -543,14 +543,27 @@ where
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::sort_by_key(
-            policy,
-            (keys,),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, Less>::new(),
-        )?;
-        key_output.write_from_inner(policy, key_inner)?;
-        value_output.write_from_inner(policy, value_inner)
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, keys.len)?;
+        let (_sorted_keys, indices) = crate::detail::apply::SortByKeyApply::apply_keys1::<
+            crate::detail::device::DeviceColumnView<R, K>,
+            crate::detail::api::Tuple1Less<KernelOp<R, Less>>,
+        >(policy, &keys)?;
+        let control = crate::detail::control::PermutationControl::from_indices(&indices)?;
+        let key_out =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<K>(&key_output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "sort_by_key key output must match key shape".to_string(),
+                })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "sort_by_key value output must match value shape".to_string(),
+        })?;
+        let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
+        apply.apply_expr_into(policy, &keys, &key_out)?;
+        apply.apply_expr_into(policy, &values, &value_out)
     }
 
     fn sort_by_three_key_dispatch<K1, K2, K3, Less, KeyOutput, ValueOutput>(
@@ -599,14 +612,51 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::sort_by_key(
-            policy,
-            (first_key, second_key, third_key),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, Less>::new(),
-        )?;
-        key_output.write_from_inner(policy, key_inner)?;
-        value_output.write_from_inner(policy, value_inner)
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, first_key.len)?;
+        let (_first, _second, _third, indices) =
+            crate::detail::apply::SortByKeyApply::apply_keys3::<
+                crate::detail::device::DeviceColumnView<R, K1>,
+                crate::detail::device::DeviceColumnView<R, K2>,
+                crate::detail::device::DeviceColumnView<R, K3>,
+                KernelOp<R, Less>,
+            >(policy, &first_key, &second_key, &third_key)?;
+        let control = crate::detail::control::PermutationControl::from_indices(&indices)?;
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "sort_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "sort_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out2 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K3>(
+                &key_output,
+                2,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "sort_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "sort_by_key value output must match value shape".to_string(),
+        })?;
+        let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
+        apply.apply_expr_into(policy, &first_key, &key_out0)?;
+        apply.apply_expr_into(policy, &second_key, &key_out1)?;
+        apply.apply_expr_into(policy, &third_key, &key_out2)?;
+        apply.apply_expr_into(policy, &values, &value_out)
     }
 
     fn sort_by_key_dispatch<Values, Less, KeyOutput, ValueOutput>(
@@ -696,14 +746,40 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::sort_by_key(
-            policy,
-            (first_key, second_key),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, Less>::new(),
-        )?;
-        key_output.write_from_inner(policy, key_inner)?;
-        value_output.write_from_inner(policy, value_inner)
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, first_key.len)?;
+        let (_first, _second, indices) = crate::detail::apply::SortByKeyApply::apply_keys2::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            KernelOp<R, Less>,
+        >(policy, &first_key, &second_key)?;
+        let control = crate::detail::control::PermutationControl::from_indices(&indices)?;
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "sort_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "sort_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "sort_by_key value output must match value shape".to_string(),
+        })?;
+        let apply = crate::detail::apply::PermutationPayloadApply::new(&control);
+        apply.apply_expr_into(policy, &first_key, &key_out0)?;
+        apply.apply_expr_into(policy, &second_key, &key_out1)?;
+        apply.apply_expr_into(policy, &values, &value_out)
     }
 
     fn unique_by_single_key_dispatch<K, Eq, KeyOutput, ValueOutput>(
@@ -744,15 +820,33 @@ where
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::unique_by_key(
-            policy,
-            (keys,),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, Eq>::new(),
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, keys.len)?;
+        let flags = crate::detail::read::unique_one_flags_read::<
+            crate::detail::device::DeviceColumnView<R, K>,
+            crate::detail::api::Tuple1Less<KernelOp<R, Eq>>,
+        >(policy, &keys)?;
+        let len_u32 =
+            u32::try_from(keys.len).map_err(|_| Error::LengthTooLarge { len: keys.len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, keys.len, len_u32, flags,
         )?;
-        let len = key_inner.0.len() as MIndex;
-        key_output.write_prefix_from_inner(policy, key_inner)?;
-        value_output.write_prefix_from_inner(policy, value_inner)?;
+        let count = crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+        let key_out =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<K>(&key_output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "unique_by_key key output must match key shape".to_string(),
+                })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "unique_by_key value output must match value shape".to_string(),
+        })?;
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
+        payload_apply.apply_expr_into(policy, &keys, &key_out)?;
+        payload_apply.apply_expr_into(policy, &values, &value_out)?;
+        let len = mindex_from_usize(count)?;
         Ok(len)
     }
 
@@ -853,15 +947,59 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::unique_by_key(
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, first_key.len)?;
+        let flags = crate::detail::read::unique_tuple3_flags_read::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K3>,
+            KernelOp<R, Eq>,
+        >(policy, &first_key, &second_key, &third_key)?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
-            (first_key, second_key, third_key),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, Eq>::new(),
+            first_key.len,
+            len_u32,
+            flags,
         )?;
-        let len = key_inner.0.len() as MIndex;
-        key_output.write_prefix_from_inner(policy, key_inner)?;
-        value_output.write_prefix_from_inner(policy, value_inner)?;
+        let count = crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "unique_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "unique_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out2 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K3>(
+                &key_output,
+                2,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "unique_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "unique_by_key value output must match value shape".to_string(),
+        })?;
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
+        payload_apply.apply_expr_into(policy, &first_key, &key_out0)?;
+        payload_apply.apply_expr_into(policy, &second_key, &key_out1)?;
+        payload_apply.apply_expr_into(policy, &third_key, &key_out2)?;
+        payload_apply.apply_expr_into(policy, &values, &value_out)?;
+        let len = mindex_from_usize(count)?;
         Ok(len)
     }
 
@@ -907,15 +1045,49 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::unique_by_key(
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, first_key.len)?;
+        let flags = crate::detail::read::unique_tuple2_flags_read::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            KernelOp<R, Eq>,
+        >(policy, &first_key, &second_key)?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
-            (first_key, second_key),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, Eq>::new(),
+            first_key.len,
+            len_u32,
+            flags,
         )?;
-        let len = key_inner.0.len() as MIndex;
-        key_output.write_prefix_from_inner(policy, key_inner)?;
-        value_output.write_prefix_from_inner(policy, value_inner)?;
+        let count = crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "unique_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "unique_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "unique_by_key value output must match value shape".to_string(),
+        })?;
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
+        payload_apply.apply_expr_into(policy, &first_key, &key_out0)?;
+        payload_apply.apply_expr_into(policy, &second_key, &key_out1)?;
+        payload_apply.apply_expr_into(policy, &values, &value_out)?;
+        let len = mindex_from_usize(count)?;
         Ok(len)
     }
 
@@ -958,14 +1130,18 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::inclusive_scan_by_key(
-            policy,
-            keys,
-            crate::detail::device::SoAView1 { source: values },
-            KernelTuple1Op::<R, KeyEq>::new(),
-            KernelOp::<R, Op>::new(),
-        )?;
-        output.write_from_inner(policy, inner)
+        let values = crate::detail::device::SoAView1 { source: values };
+        let output_view =
+            <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "inclusive_scan_by_key output must match input shape".to_string(),
+                })?;
+        let control =
+            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::read::KernelScanByKeyKeys<
+                KernelTuple1Op<R, KeyEq>,
+            >>::scan_by_key_control(keys, policy)?;
+        crate::detail::apply::SegmentedScanApply::new(&control)
+            .inclusive_expr_into::<_, KernelOp<R, Op>>(policy, &values.source, &output_view)
     }
 
     fn inclusive_scan_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, Output>(
@@ -1026,14 +1202,21 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::inclusive_scan_by_key(
-            policy,
+        let output_view =
+            <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "inclusive_scan_by_key output must match input shape".to_string(),
+                })?;
+        let control = <(
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K3>,
+        ) as crate::detail::read::KernelScanByKeyKeys<KernelOp<R, KeyEq>>>::scan_by_key_control(
             (first_key, second_key, third_key),
-            crate::detail::device::SoAView1 { source: values },
-            KernelOp::<R, KeyEq>::new(),
-            KernelOp::<R, Op>::new(),
+            policy,
         )?;
-        output.write_from_inner(policy, inner)
+        crate::detail::apply::SegmentedScanApply::new(&control)
+            .inclusive_expr_into::<_, KernelOp<R, Op>>(policy, &values, &output_view)
     }
 
     fn inclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
@@ -1089,14 +1272,20 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::inclusive_scan_by_key(
-            policy,
+        let output_view =
+            <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "inclusive_scan_by_key output must match input shape".to_string(),
+                })?;
+        let control = <(
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+        ) as crate::detail::read::KernelScanByKeyKeys<KernelOp<R, KeyEq>>>::scan_by_key_control(
             (first_key, second_key),
-            crate::detail::device::SoAView1 { source: values },
-            KernelOp::<R, KeyEq>::new(),
-            KernelOp::<R, Op>::new(),
+            policy,
         )?;
-        output.write_from_inner(policy, inner)
+        crate::detail::apply::SegmentedScanApply::new(&control)
+            .inclusive_expr_into::<_, KernelOp<R, Op>>(policy, &values, &output_view)
     }
 
     fn inclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -1182,15 +1371,18 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::exclusive_scan_by_key(
-            policy,
-            keys,
-            crate::detail::device::SoAView1 { source: values },
-            KernelTuple1Op::<R, KeyEq>::new(),
-            init.0,
-            KernelOp::<R, Op>::new(),
-        )?;
-        output.write_from_inner(policy, inner)
+        let values = crate::detail::device::SoAView1 { source: values };
+        let output_view =
+            <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "exclusive_scan_by_key output must match input shape".to_string(),
+                })?;
+        let control =
+            <crate::detail::device::DeviceColumnView<R, K> as crate::detail::read::KernelScanByKeyKeys<
+                KernelTuple1Op<R, KeyEq>,
+            >>::scan_by_key_control(keys, policy)?;
+        crate::detail::apply::SegmentedScanApply::new(&control)
+            .exclusive_expr_into::<_, KernelOp<R, Op>>(policy, &values.source, init.0, &output_view)
     }
 
     fn exclusive_scan_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, Output>(
@@ -1253,15 +1445,21 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::exclusive_scan_by_key(
-            policy,
+        let output_view =
+            <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "exclusive_scan_by_key output must match input shape".to_string(),
+                })?;
+        let control = <(
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K3>,
+        ) as crate::detail::read::KernelScanByKeyKeys<KernelOp<R, KeyEq>>>::scan_by_key_control(
             (first_key, second_key, third_key),
-            crate::detail::device::SoAView1 { source: values },
-            KernelOp::<R, KeyEq>::new(),
-            init.0,
-            KernelOp::<R, Op>::new(),
+            policy,
         )?;
-        output.write_from_inner(policy, inner)
+        crate::detail::apply::SegmentedScanApply::new(&control)
+            .exclusive_expr_into::<_, KernelOp<R, Op>>(policy, &values, init.0, &output_view)
     }
 
     fn exclusive_scan_by_two_key_dispatch<K1, K2, KeyEq, Op, Output>(
@@ -1319,15 +1517,20 @@ where
         Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
         let values = self.into_inner_with_policy(policy)?.0;
-        let inner = crate::detail::exclusive_scan_by_key(
-            policy,
+        let output_view =
+            <Output as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(&output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "exclusive_scan_by_key output must match input shape".to_string(),
+                })?;
+        let control = <(
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+        ) as crate::detail::read::KernelScanByKeyKeys<KernelOp<R, KeyEq>>>::scan_by_key_control(
             (first_key, second_key),
-            crate::detail::device::SoAView1 { source: values },
-            KernelOp::<R, KeyEq>::new(),
-            init.0,
-            KernelOp::<R, Op>::new(),
+            policy,
         )?;
-        output.write_from_inner(policy, inner)
+        crate::detail::apply::SegmentedScanApply::new(&control)
+            .exclusive_expr_into::<_, KernelOp<R, Op>>(policy, &values, init.0, &output_view)
     }
 
     fn exclusive_scan_by_key_dispatch<Values, KeyEq, Op, Output>(
@@ -1419,17 +1622,53 @@ where
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let (key_inner, value_inner) = crate::detail::reduce_by_key(
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, keys.len)?;
+        if keys.len == 0 {
+            return Ok(0);
+        }
+        let head_flags = crate::detail::read::unique_one_flags_read::<
+            crate::detail::device::DeviceColumnView<R, K>,
+            crate::detail::api::Tuple1Less<KernelOp<R, KeyEq>>,
+        >(policy, &keys)?;
+        let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), keys.len)?;
+        let len_u32 =
+            u32::try_from(keys.len).map_err(|_| Error::LengthTooLarge { len: keys.len })?;
+        let output_selection = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
-            (keys,),
-            self.into_inner_with_policy(policy)?,
-            KernelOp::<R, KeyEq>::new(),
-            init,
-            KernelOp::<R, Op>::new(),
+            keys.len,
+            len_u32,
+            end_flags.clone(),
         )?;
-        let len = key_inner.0.len() as MIndex;
-        key_output.write_prefix_from_inner(policy, key_inner)?;
-        value_output.write_prefix_from_inner(policy, value_inner)?;
+        let output_count =
+            crate::detail::primitives::select::selected_count(policy, &output_selection)?;
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            head_flags, end_flags, keys.len, len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            output_selection,
+            output_count,
+        );
+        let key_out =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<K>(&key_output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "reduce_by_key key output must match key shape".to_string(),
+                })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "reduce_by_key value output must match value shape".to_string(),
+        })?;
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
+        payload_apply.apply_expr_into(policy, &keys, &key_out)?;
+        crate::detail::apply::SegmentedReduceApply::new(&reduce_control)
+            .apply_expr_into::<_, KernelOp<R, Op>>(policy, &values, init.0, &value_out)?;
+        let len = mindex_from_usize(reduce_control.output_count)?;
         Ok(len)
     }
 
@@ -1573,18 +1812,69 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let values = self.into_inner_with_policy(policy)?;
-        let (key_inner, value_inner) = crate::detail::reduce_by_key(
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, first_key.len)?;
+        if first_key.len == 0 {
+            return Ok(0);
+        }
+        let head_flags = crate::detail::read::unique_tuple2_flags_read::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            KernelOp<R, KeyEq>,
+        >(policy, &first_key, &second_key)?;
+        let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let output_selection = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
-            (first_key, second_key),
-            values,
-            KernelOp::<R, KeyEq>::new(),
-            init,
-            KernelOp::<R, Op>::new(),
+            first_key.len,
+            len_u32,
+            end_flags.clone(),
         )?;
-        let len = mindex_from_usize(key_inner.0.len())?;
-        key_output.write_prefix_from_inner(policy, key_inner)?;
-        value_output.write_prefix_from_inner(policy, value_inner)?;
+        let output_count =
+            crate::detail::primitives::select::selected_count(policy, &output_selection)?;
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            head_flags,
+            end_flags,
+            first_key.len,
+            len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            output_selection,
+            output_count,
+        );
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "reduce_by_key value output must match value shape".to_string(),
+        })?;
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
+        payload_apply.apply_expr_into(policy, &first_key, &key_out0)?;
+        payload_apply.apply_expr_into(policy, &second_key, &key_out1)?;
+        crate::detail::apply::SegmentedReduceApply::new(&reduce_control)
+            .apply_expr_into::<_, KernelOp<R, Op>>(policy, &values, init.0, &value_out)?;
+        let len = mindex_from_usize(reduce_control.output_count)?;
         Ok(len)
     }
 
@@ -1640,18 +1930,25 @@ where
     {
         let left_value = self.into_alloc_view_with_policy(policy)?.0;
         let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
-        let (key_inner, value_inner) = crate::detail::merge_by_key(
-            policy,
-            crate::detail::device::SoAView1 { source: left_keys },
-            crate::detail::device::SoAView1 { source: left_value },
-            crate::detail::device::SoAView1 { source: right_keys },
-            crate::detail::device::SoAView1 {
-                source: right_value,
-            },
-            KernelTuple1Op::<R, Less>::new(),
-        )?;
-        key_output.write_from_inner(policy, key_inner)?;
-        value_output.write_from_inner(policy, value_inner)
+        let (_keys, control) = crate::detail::apply::MergeByKeyControlApply::apply_keys1::<
+            crate::detail::device::DeviceColumnView<R, K>,
+            crate::detail::device::DeviceColumnView<R, K>,
+            crate::detail::api::Tuple1Less<KernelOp<R, Less>>,
+        >(policy, &left_keys, &right_keys)?;
+        let key_out =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<K>(&key_output)?
+                .ok_or_else(|| Error::Launch {
+                    message: "merge_by_key key output must match key shape".to_string(),
+                })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "merge_by_key value output must match value shape".to_string(),
+        })?;
+        let apply = crate::detail::apply::MergePayloadApply::new(&control);
+        apply.apply_expr_into(policy, &left_keys, &right_keys, &key_out)?;
+        apply.apply_expr_into(policy, &left_value, &right_value, &value_out)
     }
 
     fn merge_by_three_key_same_dispatch<K1, K2, K3, RightValues, Less, KeyOutput, ValueOutput>(
@@ -1726,18 +2023,58 @@ where
     {
         let left_value = self.into_alloc_view_with_policy(policy)?.0;
         let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
-        let (key_inner, value_inner) = crate::detail::merge_by_key(
+        let (_keys, control) = crate::detail::apply::MergeByKeyControlApply::apply_keys3::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K3>,
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K3>,
+            KernelOp<R, Less>,
+        >(
             policy,
-            (left_first_key, left_second_key, left_third_key),
-            crate::detail::device::SoAView1 { source: left_value },
-            (right_first_key, right_second_key, right_third_key),
-            crate::detail::device::SoAView1 {
-                source: right_value,
-            },
-            KernelOp::<R, Less>::new(),
+            &left_first_key,
+            &left_second_key,
+            &left_third_key,
+            &right_first_key,
+            &right_second_key,
+            &right_third_key,
         )?;
-        key_output.write_from_inner(policy, key_inner)?;
-        value_output.write_from_inner(policy, value_inner)
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out2 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K3>(
+                &key_output,
+                2,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "merge_by_key value output must match value shape".to_string(),
+        })?;
+        let apply = crate::detail::apply::MergePayloadApply::new(&control);
+        apply.apply_expr_into(policy, &left_first_key, &right_first_key, &key_out0)?;
+        apply.apply_expr_into(policy, &left_second_key, &right_second_key, &key_out1)?;
+        apply.apply_expr_into(policy, &left_third_key, &right_third_key, &key_out2)?;
+        apply.apply_expr_into(policy, &left_value, &right_value, &value_out)
     }
 
     fn merge_by_two_key_same_dispatch<K1, K2, RightValues, Less, KeyOutput, ValueOutput>(
@@ -1798,18 +2135,45 @@ where
     {
         let left_value = self.into_alloc_view_with_policy(policy)?.0;
         let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
-        let (key_inner, value_inner) = crate::detail::merge_by_key(
+        let (_keys, control) = crate::detail::apply::MergeByKeyControlApply::apply_keys2::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            KernelOp<R, Less>,
+        >(
             policy,
-            (left_first_key, left_second_key),
-            crate::detail::device::SoAView1 { source: left_value },
-            (right_first_key, right_second_key),
-            crate::detail::device::SoAView1 {
-                source: right_value,
-            },
-            KernelOp::<R, Less>::new(),
+            &left_first_key,
+            &left_second_key,
+            &right_first_key,
+            &right_second_key,
         )?;
-        key_output.write_from_inner(policy, key_inner)?;
-        value_output.write_from_inner(policy, value_inner)
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "merge_by_key value output must match value shape".to_string(),
+        })?;
+        let apply = crate::detail::apply::MergePayloadApply::new(&control);
+        apply.apply_expr_into(policy, &left_first_key, &right_first_key, &key_out0)?;
+        apply.apply_expr_into(policy, &left_second_key, &right_second_key, &key_out1)?;
+        apply.apply_expr_into(policy, &left_value, &right_value, &value_out)
     }
 
     fn reduce_by_three_key_dispatch<K1, K2, K3, KeyEq, Op, KeyOutput, ValueOutput>(
@@ -1908,18 +2272,79 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let values = self.into_inner_with_policy(policy)?;
-        let (key_inner, value_inner) = crate::detail::reduce_by_key(
+        let values = self.into_inner_with_policy(policy)?.0;
+        ensure_same_len(values.len, first_key.len)?;
+        if first_key.len == 0 {
+            return Ok(0);
+        }
+        let head_flags = crate::detail::read::unique_tuple3_flags_read::<
+            crate::detail::device::DeviceColumnView<R, K1>,
+            crate::detail::device::DeviceColumnView<R, K2>,
+            crate::detail::device::DeviceColumnView<R, K3>,
+            KernelOp<R, KeyEq>,
+        >(policy, &first_key, &second_key, &third_key)?;
+        let end_flags = end_flags_from_head_flags(policy, head_flags.clone(), first_key.len)?;
+        let len_u32 = u32::try_from(first_key.len)
+            .map_err(|_| Error::LengthTooLarge { len: first_key.len })?;
+        let output_selection = crate::detail::primitives::select::selected_rank_from_flags(
             policy,
-            (first_key, second_key, third_key),
-            values,
-            KernelOp::<R, KeyEq>::new(),
-            init,
-            KernelOp::<R, Op>::new(),
+            first_key.len,
+            len_u32,
+            end_flags.clone(),
         )?;
-        let len = mindex_from_usize(key_inner.0.len())?;
-        key_output.write_prefix_from_inner(policy, key_inner)?;
-        value_output.write_prefix_from_inner(policy, value_inner)?;
+        let output_count =
+            crate::detail::primitives::select::selected_count(policy, &output_selection)?;
+        let segment = crate::detail::control::SegmentControl::from_head_end_flags(
+            head_flags,
+            end_flags,
+            first_key.len,
+            len_u32,
+        );
+        let reduce_control = crate::detail::control::ReduceByKeyControl::from_segment(
+            segment,
+            output_selection,
+            output_count,
+        );
+        let key_out0 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K1>(
+                &key_output,
+                0,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out1 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K2>(
+                &key_output,
+                1,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key key output must match key shape".to_string(),
+            })?;
+        let key_out2 =
+            <KeyOutput as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<K3>(
+                &key_output,
+                2,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key key output must match key shape".to_string(),
+            })?;
+        let value_out = <ValueOutput as sealed::MIterMutDispatch<R>>::column_mut_view_inner::<T>(
+            &value_output,
+        )?
+        .ok_or_else(|| Error::Launch {
+            message: "reduce_by_key value output must match value shape".to_string(),
+        })?;
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &reduce_control.output_selection,
+            reduce_control.output_count,
+        );
+        payload_apply.apply_expr_into(policy, &first_key, &key_out0)?;
+        payload_apply.apply_expr_into(policy, &second_key, &key_out1)?;
+        payload_apply.apply_expr_into(policy, &third_key, &key_out2)?;
+        crate::detail::apply::SegmentedReduceApply::new(&reduce_control)
+            .apply_expr_into::<_, KernelOp<R, Op>>(policy, &values, init.0, &value_out)?;
+        let len = mindex_from_usize(reduce_control.output_count)?;
         Ok(len)
     }
 
