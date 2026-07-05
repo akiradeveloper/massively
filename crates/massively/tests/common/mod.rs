@@ -20,6 +20,13 @@ pub(crate) fn exec() -> Executor<WgpuRuntime> {
 pub(crate) struct Sum;
 
 #[cubecl::cube]
+impl ReductionOp<WgpuRuntime, f32> for Sum {
+    fn apply(lhs: f32, rhs: f32) -> f32 {
+        lhs + rhs
+    }
+}
+
+#[cubecl::cube]
 impl ReductionOp<WgpuRuntime, (f32,)> for Sum {
     fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
         (lhs.0 + rhs.0,)
@@ -92,6 +99,13 @@ impl BinaryPredicateOp<WgpuRuntime, (f32,)> for Less {
     }
 }
 
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, f32> for Less {
+    fn apply(lhs: f32, rhs: f32) -> bool {
+        lhs < rhs
+    }
+}
+
 pub(crate) struct EqualF32;
 
 #[cubecl::cube]
@@ -101,12 +115,26 @@ impl BinaryPredicateOp<WgpuRuntime, (f32,)> for EqualF32 {
     }
 }
 
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, f32> for EqualF32 {
+    fn apply(lhs: f32, rhs: f32) -> bool {
+        lhs == rhs
+    }
+}
+
 pub(crate) struct LessU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<WgpuRuntime, (u32,)> for LessU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 < rhs.0
+    }
+}
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, u32> for LessU32 {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
@@ -209,12 +237,30 @@ impl BinaryPredicateOp<WgpuRuntime, (u32,)> for EqualU32 {
     }
 }
 
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, u32> for EqualU32 {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
+    }
+}
+
 pub(crate) struct SameParityU32;
 
 #[cubecl::cube]
 impl BinaryPredicateOp<WgpuRuntime, (u32,)> for SameParityU32 {
     fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
         lhs.0 % 2 == rhs.0 % 2
+    }
+}
+
+pub(crate) struct GreaterThanF32;
+
+#[cubecl::cube]
+impl PredicateOp<WgpuRuntime, f32> for GreaterThanF32 {
+    type Env = f32;
+
+    fn apply(limit: f32, input: f32) -> bool {
+        input > limit
     }
 }
 
@@ -266,6 +312,16 @@ impl UnaryOp<WgpuRuntime, (f32,)> for Double {
 
     fn apply(_env: (), input: (f32,)) -> (f32,) {
         (input.0 * 2.0,)
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, f32> for Double {
+    type Env = ();
+    type Output = (f32,);
+
+    fn apply(_env: (), input: f32) -> (f32,) {
+        (input * 2.0,)
     }
 }
 

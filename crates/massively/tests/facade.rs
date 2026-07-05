@@ -235,7 +235,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
 {
     massively::reverse(exec, source, out)
 }
@@ -250,7 +249,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::sort(exec, source, less, out)
@@ -321,7 +319,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
 {
     massively::gather(exec, source, indices, out)
 }
@@ -336,7 +333,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
 {
     massively::copy_where(exec, source, stencil, out)
 }
@@ -390,7 +386,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
 {
     massively::remove_where(exec, source, stencil, out)
 }
@@ -405,7 +400,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
     massively::partition(exec, source, pred, (), out)
@@ -434,7 +428,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
     Pred: BinaryPredicateOp<R, S1::Item>,
 {
     massively::unique(exec, source, pred, out)
@@ -450,7 +443,6 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    S1::Item: MAlloc<R>,
     Op: ReductionOp<R, S1::Item>,
 {
     massively::adjacent_difference(exec, source, op, out)

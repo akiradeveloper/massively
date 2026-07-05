@@ -9,7 +9,7 @@ pub trait MIterMutDispatch<R: Runtime>: Sized {
         &self,
     ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, T>>, Error>
     where
-        T: Scalar,
+        T: MStorageElement,
     {
         Ok(None)
     }
@@ -19,7 +19,7 @@ pub trait MIterMutDispatch<R: Runtime>: Sized {
         index: usize,
     ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, T>>, Error>
     where
-        T: Scalar,
+        T: MStorageElement,
     {
         if index == 0 {
             self.column_mut_view_inner::<T>()

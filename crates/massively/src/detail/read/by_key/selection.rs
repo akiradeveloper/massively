@@ -54,7 +54,7 @@ pub(crate) trait KernelUniqueByKeyCall<Values, Eq>: Sized {
 impl<KeySource, Eq> KernelUniqueByKeyKeys<Eq> for KeySource
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Eq: BinaryPredicateOp<KeySource::Item>,
 {
@@ -81,7 +81,7 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple1 {
         impl<KeySource, Eq> KernelUniqueByKeyKeys<Eq> for $target
         where
             KeySource: KernelColumn + KernelColumnAt<S0>,
-            KeySource::Item: Scalar + 'static,
+            KeySource::Item: MStorageElement + 'static,
             KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
             Eq: BinaryPredicateOp<KeySource::Item>,
         {
@@ -104,7 +104,7 @@ impl_kernel_unique_by_key_keys_tuple1!(DeviceSoA1<KeySource>, source);
 impl<KeySource, Eq> KernelUniqueByKeyKeys<Eq> for (KeySource,)
 where
     KeySource: KernelColumn + KernelColumnAt<S0>,
-    KeySource::Item: Scalar + 'static,
+    KeySource::Item: MStorageElement + 'static,
     KeySource::Expr: DeviceGpuExpr<KeySource::Item>,
     Eq: BinaryPredicateOp<(KeySource::Item,)>,
     crate::detail::api::Tuple1Less<Eq>: BinaryPredicateOp<KeySource::Item>,
@@ -129,8 +129,8 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            Left::Item: Scalar + 'static,
-            Right::Item: Scalar + 'static,
+            Left::Item: MStorageElement + 'static,
+            Right::Item: MStorageElement + 'static,
             Left::Expr: DeviceGpuExpr<Left::Item>,
             Right::Expr: DeviceGpuExpr<Right::Item>,
             Eq: BinaryPredicateOp<(Left::Item, Right::Item)>,
@@ -194,9 +194,9 @@ macro_rules! impl_kernel_unique_by_key_keys_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            First::Item: Scalar + 'static,
-            Second::Item: Scalar + 'static,
-            Third::Item: Scalar + 'static,
+            First::Item: MStorageElement + 'static,
+            Second::Item: MStorageElement + 'static,
+            Third::Item: MStorageElement + 'static,
             First::Expr: DeviceGpuExpr<First::Item>,
             Second::Expr: DeviceGpuExpr<Second::Item>,
             Third::Expr: DeviceGpuExpr<Third::Item>,
@@ -282,7 +282,7 @@ where
 impl<ValueSource> KernelUniqueByKeyValues for ValueSource
 where
     ValueSource: KernelColumn + KernelColumnAt<S0>,
-    ValueSource::Item: Scalar + 'static,
+    ValueSource::Item: MStorageElement + 'static,
     ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
 {
     type Runtime = ValueSource::Runtime;
@@ -311,7 +311,7 @@ macro_rules! impl_kernel_unique_by_key_values_tuple1 {
         impl<ValueSource> KernelUniqueByKeyValues for $target
         where
             ValueSource: KernelColumn + KernelColumnAt<S0>,
-            ValueSource::Item: Scalar + 'static,
+            ValueSource::Item: MStorageElement + 'static,
             ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
         {
             type Runtime = ValueSource::Runtime;
@@ -353,8 +353,8 @@ macro_rules! impl_kernel_unique_by_key_values_tuple2 {
         where
             Left: KernelColumn + KernelColumnAt<S0>,
             Right: KernelColumn<Runtime = Left::Runtime> + KernelColumnAt<S0>,
-            Left::Item: Scalar + 'static,
-            Right::Item: Scalar + 'static,
+            Left::Item: MStorageElement + 'static,
+            Right::Item: MStorageElement + 'static,
             Left::Expr: DeviceGpuExpr<Left::Item>,
             Right::Expr: DeviceGpuExpr<Right::Item>,
         {
@@ -417,9 +417,9 @@ macro_rules! impl_kernel_unique_by_key_values_tuple3 {
             First: KernelColumn + KernelColumnAt<S0>,
             Second: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
             Third: KernelColumn<Runtime = First::Runtime> + KernelColumnAt<S0>,
-            First::Item: Scalar + 'static,
-            Second::Item: Scalar + 'static,
-            Third::Item: Scalar + 'static,
+            First::Item: MStorageElement + 'static,
+            Second::Item: MStorageElement + 'static,
+            Third::Item: MStorageElement + 'static,
             First::Expr: DeviceGpuExpr<First::Item>,
             Second::Expr: DeviceGpuExpr<Second::Item>,
             Third::Expr: DeviceGpuExpr<Third::Item>,

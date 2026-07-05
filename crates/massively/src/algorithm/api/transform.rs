@@ -20,24 +20,30 @@ where
 }
 
 /// Applies a unary transform where the `u32` stencil flag is non-zero.
-pub fn transform_where<R, Input, Output, Op>(
+pub fn transform_where<R, Input, Stencil, Output, Op>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
     env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    stencil: DeviceSlice<'_, R, u32>,
+    stencil: Stencil,
     out: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Input: MIter<R>,
+    Stencil: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Op: op::UnaryOp<R, Input::Item, Output = Output::Item>,
 {
     validate_input(exec, &source)?;
-    validate_device_slice(exec, &stencil)?;
+    validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = u32_stencil(exec.policy(), stencil, false)?;
+    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
+        stencil,
+        exec.policy(),
+        false,
+        false,
+    )?;
     <Input as sealed::MIterDispatch<R>>::transform_where_dispatch(
         source,
         exec.policy(),

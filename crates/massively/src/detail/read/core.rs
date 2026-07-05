@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) trait KernelScalarRead<R: Runtime>: Sized {
-    type Item: Scalar + 'static;
+    type Item: MStorageElement + 'static;
     type Args;
     type Expr;
 
@@ -34,7 +34,7 @@ impl<R, S> KernelScalarRead<R> for S
 where
     R: Runtime,
     S: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
-    S::Item: Scalar + 'static,
+    S::Item: MStorageElement + 'static,
 {
     type Item = S::Item;
     type Args = KernelColumnBindings;

@@ -25,9 +25,7 @@ where
     RightValues: massively::MIter<WgpuRuntime, Item = LeftValues::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, LeftKeys::Item>,
     KeyOutput: massively::MIterMut<WgpuRuntime, Item = LeftKeys::Item>,
-    LeftKeys::Item: massively::MAlloc<WgpuRuntime>,
     ValueOutput: massively::MIterMut<WgpuRuntime, Item = LeftValues::Item>,
-    LeftValues::Item: massively::MAlloc<WgpuRuntime>,
 {
     merge_by_key(
         exec,

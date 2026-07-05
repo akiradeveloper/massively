@@ -6,7 +6,8 @@ use cubecl::prelude::Runtime;
 use crate::Error;
 use crate::detail::dispatch;
 use crate::index::{MIndex, usize_from_mindex};
-use crate::runtime::{Executor, Scalar};
+use crate::runtime::Executor;
+use crate::value::MStorageElement;
 
 /// Owned device column.
 #[derive(Debug)]
@@ -72,7 +73,7 @@ where
 impl<R, T> dispatch::ToHostDispatch<R> for DeviceVec<R, T>
 where
     R: Runtime,
-    T: Scalar,
+    T: MStorageElement,
 {
     type Output = Vec<T>;
 
@@ -140,10 +141,23 @@ where
 
     pub(crate) fn column_view(&self) -> crate::detail::device::DeviceColumnView<R, T>
     where
-        T: Scalar,
+        T: MStorageElement,
     {
         crate::detail::device::DeviceColumnView::from_slice(
             &self.source.inner,
+            usize_from_mindex(self.offset),
+            usize_from_mindex(self.len),
+        )
+    }
+
+    pub(crate) fn aux_u32_column_view(&self) -> crate::detail::device::DeviceColumnView<R, u32> {
+        let source = crate::detail::DeviceVec::from_handle(
+            self.source.inner.policy_id(),
+            self.source.inner.handle.clone(),
+            self.source.inner.mindex_len(),
+        );
+        crate::detail::device::DeviceColumnView::from_slice(
+            &source,
             usize_from_mindex(self.offset),
             usize_from_mindex(self.len),
         )
@@ -153,7 +167,7 @@ where
 impl<'a, R, T> dispatch::ToHostDispatch<R> for DeviceSlice<'a, R, T>
 where
     R: Runtime,
-    T: Scalar,
+    T: MStorageElement,
 {
     type Output = Vec<T>;
 

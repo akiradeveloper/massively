@@ -260,39 +260,82 @@ where
 /// explicit key comparator.
 pub struct Equal;
 
+macro_rules! impl_scalar_binary_predicates {
+    ($( $ty:ty ),+ $(,)?) => {
+        $(
+            #[cube]
+            impl<R> BinaryPredicateOp<R, $ty> for Equal
+            where
+                R: cubecl::prelude::Runtime,
+            {
+                fn apply(lhs: $ty, rhs: $ty) -> bool {
+                    lhs == rhs
+                }
+            }
+
+            #[cube]
+            impl<R> BinaryPredicateOp<R, $ty> for Less
+            where
+                R: cubecl::prelude::Runtime,
+            {
+                fn apply(lhs: $ty, rhs: $ty) -> bool {
+                    lhs < rhs
+                }
+            }
+        )+
+    };
+}
+
 #[cube]
 impl<R, T> BinaryPredicateOp<R, (T,)> for Equal
 where
     R: cubecl::prelude::Runtime,
-    T: CubePrimitive + CubeElement + PartialEq,
+    T: crate::MItem<R>,
+    (T,): crate::MItem<R> + CubeType<ExpandType = (<T as CubeType>::ExpandType,)>,
+    Self: BinaryPredicateOp<R, T>,
 {
     fn apply(lhs: (T,), rhs: (T,)) -> bool {
-        lhs.0 == rhs.0
+        <Self as BinaryPredicateOp<R, T>>::apply(lhs.0, rhs.0)
     }
 }
 
 #[cube]
-impl<R, A, C> BinaryPredicateOp<R, (A, C)> for Equal
+impl<R, A, B> BinaryPredicateOp<R, (A, B)> for Equal
 where
     R: cubecl::prelude::Runtime,
-    A: CubePrimitive + CubeElement + PartialEq,
-    C: CubePrimitive + CubeElement + PartialEq,
+    A: crate::MItem<R>,
+    B: crate::MItem<R>,
+    (A, B): crate::MItem<R>
+        + CubeType<ExpandType = (<A as CubeType>::ExpandType, <B as CubeType>::ExpandType)>,
+    Self: BinaryPredicateOp<R, A> + BinaryPredicateOp<R, B>,
 {
-    fn apply(lhs: (A, C), rhs: (A, C)) -> bool {
-        lhs.0 == rhs.0 && lhs.1 == rhs.1
+    fn apply(lhs: (A, B), rhs: (A, B)) -> bool {
+        <Self as BinaryPredicateOp<R, A>>::apply(lhs.0, rhs.0)
+            && <Self as BinaryPredicateOp<R, B>>::apply(lhs.1, rhs.1)
     }
 }
 
 #[cube]
-impl<R, A, C, D> BinaryPredicateOp<R, (A, C, D)> for Equal
+impl<R, A, B, C> BinaryPredicateOp<R, (A, B, C)> for Equal
 where
     R: cubecl::prelude::Runtime,
-    A: CubePrimitive + CubeElement + PartialEq,
-    C: CubePrimitive + CubeElement + PartialEq,
-    D: CubePrimitive + CubeElement + PartialEq,
+    A: crate::MItem<R>,
+    B: crate::MItem<R>,
+    C: crate::MItem<R>,
+    (A, B, C): crate::MItem<R>
+        + CubeType<
+            ExpandType = (
+                <A as CubeType>::ExpandType,
+                <B as CubeType>::ExpandType,
+                <C as CubeType>::ExpandType,
+            ),
+        >,
+    Self: BinaryPredicateOp<R, A> + BinaryPredicateOp<R, B> + BinaryPredicateOp<R, C>,
 {
-    fn apply(lhs: (A, C, D), rhs: (A, C, D)) -> bool {
-        lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
+    fn apply(lhs: (A, B, C), rhs: (A, B, C)) -> bool {
+        <Self as BinaryPredicateOp<R, A>>::apply(lhs.0, rhs.0)
+            && <Self as BinaryPredicateOp<R, B>>::apply(lhs.1, rhs.1)
+            && <Self as BinaryPredicateOp<R, C>>::apply(lhs.2, rhs.2)
     }
 }
 
@@ -303,37 +346,63 @@ pub struct Less;
 impl<R, T> BinaryPredicateOp<R, (T,)> for Less
 where
     R: cubecl::prelude::Runtime,
-    T: CubePrimitive + CubeElement + PartialOrd,
+    T: crate::MItem<R>,
+    (T,): crate::MItem<R> + CubeType<ExpandType = (<T as CubeType>::ExpandType,)>,
+    Self: BinaryPredicateOp<R, T>,
 {
     fn apply(lhs: (T,), rhs: (T,)) -> bool {
-        lhs.0 < rhs.0
+        <Self as BinaryPredicateOp<R, T>>::apply(lhs.0, rhs.0)
+    }
+}
+
+impl_scalar_binary_predicates!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+#[cube]
+impl<R, A, B> BinaryPredicateOp<R, (A, B)> for Less
+where
+    R: cubecl::prelude::Runtime,
+    A: crate::MItem<R>,
+    B: crate::MItem<R>,
+    A::ExpandType: Clone,
+    (A, B): crate::MItem<R>
+        + CubeType<ExpandType = (<A as CubeType>::ExpandType, <B as CubeType>::ExpandType)>,
+    Self: BinaryPredicateOp<R, A> + BinaryPredicateOp<R, B>,
+    Equal: BinaryPredicateOp<R, A>,
+{
+    fn apply(lhs: (A, B), rhs: (A, B)) -> bool {
+        <Self as BinaryPredicateOp<R, A>>::apply(lhs.0.clone(), rhs.0.clone())
+            || (<Equal as BinaryPredicateOp<R, A>>::apply(lhs.0, rhs.0)
+                && <Self as BinaryPredicateOp<R, B>>::apply(lhs.1, rhs.1))
     }
 }
 
 #[cube]
-impl<R, A, C> BinaryPredicateOp<R, (A, C)> for Less
+impl<R, A, B, C> BinaryPredicateOp<R, (A, B, C)> for Less
 where
     R: cubecl::prelude::Runtime,
-    A: CubePrimitive + CubeElement + PartialOrd,
-    C: CubePrimitive + CubeElement + PartialOrd,
+    A: crate::MItem<R>,
+    B: crate::MItem<R>,
+    C: crate::MItem<R>,
+    A::ExpandType: Clone,
+    B::ExpandType: Clone,
+    (A, B, C): crate::MItem<R>
+        + CubeType<
+            ExpandType = (
+                <A as CubeType>::ExpandType,
+                <B as CubeType>::ExpandType,
+                <C as CubeType>::ExpandType,
+            ),
+        >,
+    Self: BinaryPredicateOp<R, A> + BinaryPredicateOp<R, B> + BinaryPredicateOp<R, C>,
+    Equal: BinaryPredicateOp<R, A> + BinaryPredicateOp<R, B>,
 {
-    fn apply(lhs: (A, C), rhs: (A, C)) -> bool {
-        lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
-    }
-}
-
-#[cube]
-impl<R, A, C, D> BinaryPredicateOp<R, (A, C, D)> for Less
-where
-    R: cubecl::prelude::Runtime,
-    A: CubePrimitive + CubeElement + PartialOrd,
-    C: CubePrimitive + CubeElement + PartialOrd,
-    D: CubePrimitive + CubeElement + PartialOrd,
-{
-    fn apply(lhs: (A, C, D), rhs: (A, C, D)) -> bool {
-        lhs.0 < rhs.0
-            || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
-            || (lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 < rhs.2)
+    fn apply(lhs: (A, B, C), rhs: (A, B, C)) -> bool {
+        <Self as BinaryPredicateOp<R, A>>::apply(lhs.0.clone(), rhs.0.clone())
+            || (<Equal as BinaryPredicateOp<R, A>>::apply(lhs.0.clone(), rhs.0.clone())
+                && <Self as BinaryPredicateOp<R, B>>::apply(lhs.1.clone(), rhs.1.clone()))
+            || (<Equal as BinaryPredicateOp<R, A>>::apply(lhs.0, rhs.0)
+                && <Equal as BinaryPredicateOp<R, B>>::apply(lhs.1, rhs.1)
+                && <Self as BinaryPredicateOp<R, C>>::apply(lhs.2, rhs.2))
     }
 }
 

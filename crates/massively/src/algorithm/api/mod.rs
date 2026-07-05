@@ -3,11 +3,10 @@
 use cubecl::prelude::Runtime;
 
 use crate::detail::dispatch as sealed;
-use crate::detail::op_adapter::{KernelOp, StencilFlag};
 use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
-use crate::runtime::{DeviceSlice, Executor};
+use crate::runtime::Executor;
 
 pub use crate::Error;
 
@@ -25,45 +24,6 @@ where
     Output: MIterMut<R>,
 {
     <Output as sealed::MIterMutDispatch<R>>::validate_executor(output, exec)
-}
-
-fn validate_device_slice<R, T>(
-    exec: &Executor<R>,
-    slice: &DeviceSlice<'_, R, T>,
-) -> Result<(), Error>
-where
-    R: Runtime,
-{
-    exec.ensure_policy_id(slice.policy_id())
-}
-
-fn u32_stencil<R>(
-    policy: &crate::detail::CubePolicy<R>,
-    stencil: DeviceSlice<'_, R, u32>,
-    invert: bool,
-) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
-where
-    R: Runtime,
-{
-    crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<_, KernelOp<R, StencilFlag>>(
-        policy,
-        &(stencil.column_view(),),
-        invert,
-    )
-}
-
-fn u32_stencil_flags<R>(
-    policy: &crate::detail::CubePolicy<R>,
-    stencil: DeviceSlice<'_, R, u32>,
-    invert: bool,
-) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
-where
-    R: Runtime,
-{
-    crate::detail::api::PrecomputedSelection::from_stencil_flags_with_policy::<
-        _,
-        KernelOp<R, StencilFlag>,
-    >(policy, &(stencil.column_view(),), invert)
 }
 
 mod indexed;

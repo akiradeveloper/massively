@@ -2586,7 +2586,7 @@ macro_rules! impl_miter_soa {
         impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
             ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
@@ -2622,7 +2622,7 @@ macro_rules! impl_miter_soa {
         impl<'a, R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
             ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
@@ -2763,7 +2763,7 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -2787,7 +2787,7 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<(), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -2807,7 +2807,7 @@ macro_rules! impl_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -2831,7 +2831,7 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -2855,9 +2855,9 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -2887,9 +2887,9 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -2914,8 +2914,8 @@ macro_rules! impl_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -2944,8 +2944,8 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3046,8 +3046,8 @@ macro_rules! impl_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3093,8 +3093,8 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3139,9 +3139,9 @@ macro_rules! impl_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3195,9 +3195,9 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3289,8 +3289,8 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3326,8 +3326,8 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3405,8 +3405,8 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3443,8 +3443,8 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3480,9 +3480,9 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3525,9 +3525,9 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3570,9 +3570,9 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3616,9 +3616,9 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3658,7 +3658,7 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3684,7 +3684,7 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3710,7 +3710,7 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -3738,7 +3738,7 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -3765,7 +3765,7 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
@@ -3797,7 +3797,7 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
@@ -3829,9 +3829,9 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
@@ -3897,9 +3897,9 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
@@ -4007,8 +4007,8 @@ macro_rules! impl_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
@@ -4063,8 +4063,8 @@ macro_rules! impl_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
@@ -4116,7 +4116,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -4149,7 +4149,7 @@ macro_rules! impl_miter_soa {
             ) -> Result<(), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -4180,8 +4180,8 @@ macro_rules! impl_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -4216,8 +4216,8 @@ macro_rules! impl_miter_soa {
             ) -> Result<(), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -4250,9 +4250,9 @@ macro_rules! impl_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -4297,9 +4297,9 @@ macro_rules! impl_miter_soa {
             ) -> Result<(), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -4388,11 +4388,11 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
@@ -4418,12 +4418,11 @@ macro_rules! impl_miter_soa {
                 indices: Indices,
             ) -> Result<Output, Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 $(
                     let $tmp = crate::detail::apply::IndexedExprApply::gather_expr(
@@ -4966,12 +4965,11 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 let mask = stencil.mask();
                 $(
@@ -5000,11 +4998,11 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
@@ -5032,12 +5030,11 @@ macro_rules! impl_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 let mask = stencil.mask();
                 $(
@@ -5494,7 +5491,7 @@ macro_rules! impl_miter_mut_soa {
         impl<'a, R, $( $ty ),+> MIterMut<R> for $name<$( DeviceSliceMut<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
             ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
@@ -5650,7 +5647,7 @@ macro_rules! impl_miter_mut_soa {
         impl<'a, R, $( $ty ),+> sealed::MIterMutDispatch<R> for $name<$( DeviceSliceMut<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
             ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
@@ -5673,7 +5670,7 @@ macro_rules! impl_miter_mut_soa {
                 Error,
             >
             where
-                U: Scalar,
+                U: MStorageElement,
             {
                 $(
                     if index == $idx {
@@ -5701,7 +5698,7 @@ macro_rules! impl_wide_miter_soa {
         impl<'a, R, $( $ty ),+> MIter<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
             ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
@@ -5737,7 +5734,7 @@ macro_rules! impl_wide_miter_soa {
         impl<'a, R, $( $ty ),+> sealed::MIterDispatch<R> for $name<$( crate::runtime::DeviceSlice<'a, R, $ty> ),+>
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
             ($( $ty, )+): MAlloc<R, Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
                 View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
             >,
@@ -5871,7 +5868,7 @@ macro_rules! impl_wide_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -5896,7 +5893,7 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<(), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -5917,7 +5914,7 @@ macro_rules! impl_wide_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -5945,7 +5942,7 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -5973,8 +5970,8 @@ macro_rules! impl_wide_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -5999,8 +5996,8 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6021,8 +6018,8 @@ macro_rules! impl_wide_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6066,8 +6063,8 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6109,7 +6106,7 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6130,7 +6127,7 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6151,7 +6148,7 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6173,7 +6170,7 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6194,7 +6191,7 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
@@ -6221,7 +6218,7 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K,)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
@@ -6247,7 +6244,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6275,7 +6272,7 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K: Scalar + 'static,
+                K: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K,)>,
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6298,8 +6295,8 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6325,8 +6322,8 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6352,8 +6349,8 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6381,8 +6378,8 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6409,8 +6406,8 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
@@ -6443,8 +6440,8 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
@@ -6477,8 +6474,8 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6513,8 +6510,8 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6542,9 +6539,9 @@ macro_rules! impl_wide_miter_soa {
                 _less: Less,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6571,9 +6568,9 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6601,9 +6598,9 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -6640,9 +6637,9 @@ macro_rules! impl_wide_miter_soa {
             ) -> Result<(), Error>
             where
                 RightValues: MIter<R, Item = <Self as MIter<R>>::Item>,
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Less: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -6870,12 +6867,11 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
@@ -6901,12 +6897,11 @@ macro_rules! impl_wide_miter_soa {
                 indices: Indices,
             ) -> Result<Output, Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 $(
                     let $tmp = crate::detail::apply::IndexedExprApply::gather_expr(
@@ -6926,12 +6921,11 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 let mask = stencil.mask();
                 $(
@@ -6960,11 +6954,11 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr: crate::expr::GpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 $(
                     let $tmp = <Output as sealed::MIterMutDispatch<R>>::column_mut_view_by_index_inner::<$ty>(
@@ -6992,12 +6986,11 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                Indices: crate::detail::device::KernelColumn<Runtime = R, Item = u32>
-                    + crate::detail::device::KernelColumnAt<crate::detail::device::S0>,
-                <Indices as crate::detail::device::KernelColumn>::Expr:
-                    crate::expr::GpuExpr<u32> + crate::expr::DeviceGpuExpr<u32>,
+                Indices: MIter<R, Item = MIndex>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
+                let indices =
+                    <Indices as sealed::MIterDispatch<R>>::index_column_dispatch(indices, policy)?;
                 let input = self.into_inner_with_policy(policy)?;
                 let mask = stencil.mask();
                 $(
@@ -7833,9 +7826,9 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -7862,9 +7855,9 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -7891,9 +7884,9 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<Output, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -7922,9 +7915,9 @@ macro_rules! impl_wide_miter_soa {
                 output: Output,
             ) -> Result<(), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
@@ -7952,9 +7945,9 @@ macro_rules! impl_wide_miter_soa {
                 _op: Op,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
@@ -7988,9 +7981,9 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 KeyEq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 Op: op::ReductionOp<R, <Self as MIter<R>>::Item>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
@@ -8020,9 +8013,9 @@ macro_rules! impl_wide_miter_soa {
                 _eq: Eq,
             ) -> Result<(KeyOutput, ValueOutput), Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
@@ -8074,9 +8067,9 @@ macro_rules! impl_wide_miter_soa {
                 value_output: ValueOutput,
             ) -> Result<MIndex, Error>
             where
-                K1: Scalar + 'static,
-                K2: Scalar + 'static,
-                K3: Scalar + 'static,
+                K1: MStorageElement + 'static,
+                K2: MStorageElement + 'static,
+                K3: MStorageElement + 'static,
                 Eq: op::BinaryPredicateOp<R, (K1, K2, K3)>,
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,

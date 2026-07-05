@@ -90,6 +90,44 @@ fn tuple1_transform_returns_soa1_storage() {
 }
 
 #[test]
+fn device_slice_transform_reads_scalar_item() {
+    let exec = exec();
+    let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let output = exec.to_device(&[0.0_f32; 3]).unwrap();
+
+    transform(
+        &exec,
+        input.slice(..),
+        Double,
+        (),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 4.0, 6.0]);
+}
+
+#[test]
+fn device_slice_transform_where_reads_scalar_item() {
+    let exec = exec();
+    let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let output = exec.to_device(&[100.0_f32; 3]).unwrap();
+
+    transform_where(
+        &exec,
+        input.slice(..),
+        Double,
+        (),
+        stencil.slice(..),
+        massively::SoA1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![2.0, 100.0, 6.0]);
+}
+
+#[test]
 fn transform_can_write_in_place_for_single_column() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();

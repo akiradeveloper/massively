@@ -101,19 +101,41 @@ macro_rules! alloc_inner {
     }};
 }
 
+macro_rules! impl_scalar_mitem {
+    ($( $ty:ty ),+ $(,)?) => {
+        $(
+            impl<R> MItem<R> for $ty
+            where
+                R: Runtime,
+                $ty: MStorageElement + 'static,
+            {
+            }
+
+            impl<R> sealed::MItemDispatch<R> for $ty
+            where
+                R: Runtime,
+                $ty: MStorageElement + 'static,
+            {
+            }
+        )+
+    };
+}
+
+impl_scalar_mitem!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
 macro_rules! impl_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
         impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: MStorageElement, )+
         {
         }
 
         impl<R, $( $ty ),+> MAlloc<R> for ($( $ty, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: MStorageElement, )+
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
@@ -132,7 +154,7 @@ macro_rules! impl_mitem_tuple {
         impl<R, $( $ty ),+> StorageFromInner<R> for soa_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
         {
             type Item = ($( $ty, )+);
 
@@ -152,8 +174,36 @@ macro_rules! impl_mitem_tuple {
         impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: MStorageElement, )+
         {
+            fn transform_scalar_input<Input, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: crate::detail::device::DeviceColumnView<R, Input>,
+                op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
+            where
+                Input: MStorageElement + MItem<R>,
+                Op: op::UnaryOp<R, Input, Output = Self>,
+                Self: crate::detail::TransformUnaryOutput<
+                    R,
+                    Input,
+                    KernelScalarInputOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelScalarInputOp<R, Op>>(policy, input, env)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
             fn transform_unary<Input, Op>(
                 policy: &crate::detail::CubePolicy<R>,
                 input: crate::detail::device::DeviceColumnView<
@@ -164,7 +214,7 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                Input: Scalar,
+                Input: MStorageElement,
                 Op: op::UnaryOp<R, (Input,), Output = Self>,
                 Self: crate::detail::TransformUnaryOutput<
                     R,
@@ -199,8 +249,8 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                Left: Scalar,
-                Right: Scalar,
+                Left: MStorageElement,
+                Right: MStorageElement,
                 Op: op::UnaryOp<R, (Left, Right), Output = Self>,
                 Self: crate::detail::TransformSoA2Output<
                     R,
@@ -240,9 +290,9 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
                 Self: crate::detail::TransformSoA3Output<
                     R,
@@ -275,10 +325,10 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
                 Self: crate::detail::TransformSoA4Output<
                     R,
@@ -313,11 +363,11 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
-                Fifth: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
+                Fifth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
                 Self: crate::detail::TransformSoA5Output<
                     R,
@@ -355,12 +405,12 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
-                Fifth: Scalar,
-                Sixth: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
+                Fifth: MStorageElement,
+                Sixth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
                 Self: crate::detail::TransformSoA6Output<
                     R,
@@ -400,13 +450,13 @@ macro_rules! impl_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
-                Fifth: Scalar,
-                Sixth: Scalar,
-                Seventh: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
+                Fifth: MStorageElement,
+                Sixth: MStorageElement,
+                Seventh: MStorageElement,
                 Op: op::UnaryOp<
                     R,
                     (First, Second, Third, Fourth, Fifth, Sixth, Seventh),
@@ -463,14 +513,14 @@ macro_rules! impl_wide_mitem_tuple {
         impl<R, $( $ty ),+> MItem<R> for ($( $ty, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: MStorageElement, )+
         {
         }
 
         impl<R, $( $ty ),+> MAlloc<R> for ($( $ty, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: MStorageElement, )+
         {
             type Inner = ($( crate::detail::DeviceVec<R, $ty>, )+);
             type View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+);
@@ -489,7 +539,7 @@ macro_rules! impl_wide_mitem_tuple {
         impl<R, $( $ty ),+> StorageFromInner<R> for soa_type!($( DeviceVec<R, $ty> ),+)
         where
             R: Runtime,
-            $( $ty: Scalar + 'static, )+
+            $( $ty: MStorageElement + 'static, )+
         {
             type Item = ($( $ty, )+);
 
@@ -509,8 +559,36 @@ macro_rules! impl_wide_mitem_tuple {
         impl<R, $( $ty ),+> sealed::MItemDispatch<R> for ($( $ty, )+)
         where
             R: Runtime,
-            $( $ty: Scalar, )+
+            $( $ty: MStorageElement, )+
         {
+            fn transform_scalar_input<Input, Op>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: crate::detail::device::DeviceColumnView<R, Input>,
+                op: Op,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MAlloc<R>>::Inner, Error>
+            where
+                Input: MStorageElement + MItem<R>,
+                Op: op::UnaryOp<R, Input, Output = Self>,
+                Self: crate::detail::TransformUnaryOutput<
+                    R,
+                    Input,
+                    KernelScalarInputOp<R, Op>,
+                >,
+                <Self as crate::detail::MItemStorage<
+                    R,
+                >>::Storage: crate::detail::MaterializeOutput<
+                    Runtime = R,
+                    Output = ($(
+                        crate::detail::DeviceVec<R, $ty>,
+                    )+),
+                >,
+            {
+                let _ = op;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelScalarInputOp<R, Op>>(policy, input, env)?;
+                crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
             fn transform_unary<Input, Op>(
                 policy: &crate::detail::CubePolicy<R>,
                 input: crate::detail::device::DeviceColumnView<
@@ -521,7 +599,7 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                Input: Scalar,
+                Input: MStorageElement,
                 Op: op::UnaryOp<R, (Input,), Output = Self>,
                 Self: crate::detail::TransformUnaryOutput<
                     R,
@@ -556,8 +634,8 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                Left: Scalar,
-                Right: Scalar,
+                Left: MStorageElement,
+                Right: MStorageElement,
                 Op: op::UnaryOp<R, (Left, Right), Output = Self>,
                 Self: crate::detail::TransformSoA2Output<
                     R,
@@ -597,9 +675,9 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
                 Self: crate::detail::TransformSoA3Output<
                     R,
@@ -632,10 +710,10 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
                 Self: crate::detail::TransformSoA4Output<
                     R,
@@ -670,11 +748,11 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
-                Fifth: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
+                Fifth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
                 Self: crate::detail::TransformSoA5Output<
                     R,
@@ -712,12 +790,12 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
-                Fifth: Scalar,
-                Sixth: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
+                Fifth: MStorageElement,
+                Sixth: MStorageElement,
                 Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
                 Self: crate::detail::TransformSoA6Output<
                     R,
@@ -757,13 +835,13 @@ macro_rules! impl_wide_mitem_tuple {
                 env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
-                First: Scalar,
-                Second: Scalar,
-                Third: Scalar,
-                Fourth: Scalar,
-                Fifth: Scalar,
-                Sixth: Scalar,
-                Seventh: Scalar,
+                First: MStorageElement,
+                Second: MStorageElement,
+                Third: MStorageElement,
+                Fourth: MStorageElement,
+                Fifth: MStorageElement,
+                Sixth: MStorageElement,
+                Seventh: MStorageElement,
                 Op: op::UnaryOp<
                     R,
                     (First, Second, Third, Fourth, Fifth, Sixth, Seventh),

@@ -1,6 +1,23 @@
 use super::*;
 
 pub trait MItemDispatch<R: Runtime>: Sized {
+    fn transform_scalar_input<Input, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        input: crate::detail::device::DeviceColumnView<R, Input>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
+    where
+        Self: MAlloc<R>,
+        Input: MStorageElement + crate::value::MItem<R>,
+        Op: op::UnaryOp<R, Input, Output = Self>,
+    {
+        let _ = (policy, input, op, env);
+        Err(Error::Launch {
+            message: "transform is not supported for this input/output item shape".to_string(),
+        })
+    }
+
     fn transform_unary<Input, Op>(
         policy: &crate::detail::CubePolicy<R>,
         input: crate::detail::device::DeviceColumnView<R, Input>,
@@ -9,7 +26,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        Input: Scalar,
+        Input: MStorageElement,
         Op: op::UnaryOp<R, (Input,), Output = Self>,
     {
         let _ = (policy, input, op, env);
@@ -27,8 +44,8 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        Left: Scalar,
-        Right: Scalar,
+        Left: MStorageElement,
+        Right: MStorageElement,
         Op: op::UnaryOp<R, (Left, Right), Output = Self>,
     {
         let _ = (policy, left, right, op, env);
@@ -47,9 +64,9 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        First: Scalar,
-        Second: Scalar,
-        Third: Scalar,
+        First: MStorageElement,
+        Second: MStorageElement,
+        Third: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
     {
         let _ = (policy, first, second, third, op, env);
@@ -69,10 +86,10 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        First: Scalar,
-        Second: Scalar,
-        Third: Scalar,
-        Fourth: Scalar,
+        First: MStorageElement,
+        Second: MStorageElement,
+        Third: MStorageElement,
+        Fourth: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
     {
         let _ = (policy, first, second, third, fourth, op, env);
@@ -93,11 +110,11 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        First: Scalar,
-        Second: Scalar,
-        Third: Scalar,
-        Fourth: Scalar,
-        Fifth: Scalar,
+        First: MStorageElement,
+        Second: MStorageElement,
+        Third: MStorageElement,
+        Fourth: MStorageElement,
+        Fifth: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
     {
         let _ = (policy, first, second, third, fourth, fifth, op, env);
@@ -120,12 +137,12 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        First: Scalar,
-        Second: Scalar,
-        Third: Scalar,
-        Fourth: Scalar,
-        Fifth: Scalar,
-        Sixth: Scalar,
+        First: MStorageElement,
+        Second: MStorageElement,
+        Third: MStorageElement,
+        Fourth: MStorageElement,
+        Fifth: MStorageElement,
+        Sixth: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
     {
         let _ = (policy, first, second, third, fourth, fifth, sixth, op, env);
@@ -149,13 +166,13 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
-        First: Scalar,
-        Second: Scalar,
-        Third: Scalar,
-        Fourth: Scalar,
-        Fifth: Scalar,
-        Sixth: Scalar,
-        Seventh: Scalar,
+        First: MStorageElement,
+        Second: MStorageElement,
+        Third: MStorageElement,
+        Fourth: MStorageElement,
+        Fifth: MStorageElement,
+        Sixth: MStorageElement,
+        Seventh: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth, Seventh), Output = Self>,
     {
         let _ = (
