@@ -1,7 +1,7 @@
 use super::DeviceVec;
 use crate::{
     error::{Error, ensure_same_len},
-    expr::{DeviceGpuExpr, GpuExpr, Slot0, Slot1, Slot2, Slot3},
+    expr::{DeviceGpuExpr, GpuExpr, Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6},
     index::usize_from_mindex,
     policy::CubePolicy,
 };
@@ -92,6 +92,12 @@ pub struct S2;
 pub struct S3;
 #[doc(hidden)]
 pub struct S4;
+#[doc(hidden)]
+pub struct S5;
+#[doc(hidden)]
+pub struct S6;
+#[doc(hidden)]
+pub struct S7;
 
 /// Internal scalar-column expression that can be lowered into GPU kernels.
 ///
@@ -611,7 +617,7 @@ impl KernelColumnBindings {
         self.slot_offsets.push(offset);
     }
 
-    fn finish(&mut self) {
+    pub(crate) fn finish(&mut self) {
         if self.slots.is_empty() {
             self.slots.push((self.input.clone(), self.input_len));
             self.slot_offsets.push(self.input_offset);
@@ -638,6 +644,17 @@ impl KernelColumnBindings {
     ) -> Result<cubecl::server::Handle, Error> {
         let mut offsets = [0_u32; 4];
         for (index, offset) in self.slot_offsets.iter().take(4).enumerate() {
+            offsets[index] = crate::index::mindex_from_usize(*offset)?;
+        }
+        Ok(client.create_from_slice(u32::as_bytes(&offsets)))
+    }
+
+    pub(crate) fn slot_offsets7_handle<R: Runtime>(
+        &self,
+        client: &ComputeClient<R>,
+    ) -> Result<cubecl::server::Handle, Error> {
+        let mut offsets = [0_u32; 7];
+        for (index, offset) in self.slot_offsets.iter().take(7).enumerate() {
             offsets[index] = crate::index::mindex_from_usize(*offset)?;
         }
         Ok(client.create_from_slice(u32::as_bytes(&offsets)))
@@ -743,6 +760,45 @@ where
     }
 }
 
+impl<'a, R, T> KernelColumnAt<S4> for &'a DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot4<T>;
+    type Next = S5;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
+impl<'a, R, T> KernelColumnAt<S5> for &'a DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot5<T>;
+    type Next = S6;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
+impl<'a, R, T> KernelColumnAt<S6> for &'a DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot6<T>;
+    type Next = S7;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
 impl<R, T> KernelColumn for DeviceColumnView<R, T>
 where
     R: Runtime,
@@ -831,6 +887,48 @@ where
     }
 }
 
+impl<R, T> KernelColumnAt<S4> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot4<T>;
+    type Next = S5;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S5> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot5<T>;
+    type Next = S6;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S6> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot6<T>;
+    type Next = S7;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
 impl<R, T> KernelColumn for DeviceVec<R, T>
 where
     R: Runtime,
@@ -901,6 +999,45 @@ where
 {
     type ExprAt = Slot3<T>;
     type Next = S4;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S4> for DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot4<T>;
+    type Next = S5;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S5> for DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot5<T>;
+    type Next = S6;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S6> for DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot6<T>;
+    type Next = S7;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
         bindings.push(self.handle.clone(), usize_from_mindex(self.len));

@@ -13,7 +13,7 @@ where
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::all_of_dispatch(source, exec.policy(), pred, env)
+    source.all_of_with_policy(exec.policy(), pred, env)
 }
 
 /// Returns whether any element satisfies `pred`.
@@ -29,7 +29,7 @@ where
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::any_of_dispatch(source, exec.policy(), pred, env)
+    source.any_of_with_policy(exec.policy(), pred, env)
 }
 
 /// Counts elements satisfying `pred`.
@@ -45,7 +45,7 @@ where
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::count_if_dispatch(source, exec.policy(), pred, env)
+    source.count_if_with_policy(exec.policy(), pred, env)
 }
 
 /// Finds the first element satisfying `pred`.
@@ -61,7 +61,7 @@ where
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::find_if_dispatch(source, exec.policy(), pred, env)
+    source.find_if_with_policy(exec.policy(), pred, env)
 }
 
 /// Returns whether input is partitioned by `pred`.
@@ -77,7 +77,7 @@ where
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::is_partitioned_dispatch(source, exec.policy(), pred, env)
+    source.is_partitioned_with_policy(exec.policy(), pred, env)
 }
 
 /// Returns whether no elements satisfy `pred`.
@@ -93,7 +93,7 @@ where
     Pred: op::PredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::none_of_dispatch(source, exec.policy(), pred, env)
+    source.none_of_with_policy(exec.policy(), pred, env)
 }
 
 /// Partitions elements by `pred`.
@@ -112,11 +112,5 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::partition_into_dispatch(
-        source,
-        exec.policy(),
-        pred,
-        env,
-        out,
-    )
+    source.partition_with_policy(exec.policy(), pred, env, out)
 }

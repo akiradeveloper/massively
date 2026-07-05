@@ -31,8 +31,9 @@ GPU上のデータ領域を表す。
 GPUで計算を行うに当たって、AoSよりSoAの方が性能上有利。
 DeviceSliceをTupleでまとめ、MIterにした上で計算に使う。
 
-MIter<n> = Zipn(DeviceSlice, DeviceSlice, ...)
-MIterMut<n> = Zipn(DeviceSliceMut, DeviceSliceMut, ...)
+- DeviceSlice<T>: MIter<Item = T>
+- Zipn(MIter<A>, MIter<B>, ...): MIter<(A,B,...)>
+- Zipn(DeviceSliceMut, DeviceSliceMut, ...): MIterMut
 
 ## アルゴリズム
 

@@ -1,5 +1,4 @@
 use super::*;
-
 /// Computes adjacent differences.
 pub fn adjacent_difference<R, Input, Op, Output>(
     exec: &Executor<R>,
@@ -15,12 +14,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::adjacent_difference_into_dispatch(
-        source,
-        exec.policy(),
-        op,
-        out,
-    )
+    source.adjacent_difference_with_policy(exec.policy(), op, out)
 }
 
 /// Computes an exclusive scan.
@@ -39,13 +33,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::exclusive_scan_into_dispatch(
-        source,
-        exec.policy(),
-        init,
-        op,
-        out,
-    )
+    source.exclusive_scan_with_policy(exec.policy(), init, op, out)
 }
 
 /// Exclusive scan by key.
@@ -69,15 +57,7 @@ where
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
     validate_output(exec, &out)?;
-    <Keys as sealed::MIterDispatch<R>>::exclusive_scan_by_key_into_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        key_eq,
-        init,
-        op,
-        out,
-    )
+    keys.exclusive_scan_by_key_with_policy(exec.policy(), values, key_eq, init, op, out)
 }
 
 /// Computes an inclusive scan.
@@ -95,12 +75,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::inclusive_scan_into_dispatch(
-        source,
-        exec.policy(),
-        op,
-        out,
-    )
+    source.inclusive_scan_with_policy(exec.policy(), op, out)
 }
 
 /// Inclusive scan by key.
@@ -123,12 +98,5 @@ where
     validate_input(exec, &keys)?;
     validate_input(exec, &values)?;
     validate_output(exec, &out)?;
-    <Keys as sealed::MIterDispatch<R>>::inclusive_scan_by_key_into_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        key_eq,
-        op,
-        out,
-    )
+    keys.inclusive_scan_by_key_with_policy(exec.policy(), values, key_eq, op, out)
 }

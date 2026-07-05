@@ -1,5 +1,4 @@
 use super::*;
-
 /// Copies elements whose `u32` stencil flag is non-zero.
 pub fn copy_where<R, Input, Stencil, Output>(
     exec: &Executor<R>,
@@ -16,18 +15,8 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
-        stencil,
-        exec.policy(),
-        false,
-        false,
-    )?;
-    <Input as sealed::MIterDispatch<R>>::copy_where_into_dispatch(
-        source,
-        exec.policy(),
-        stencil,
-        out,
-    )
+    let stencil = stencil.stencil_selection_with_policy(exec.policy(), false, false)?;
+    source.copy_selected_with_policy(exec.policy(), stencil, out)
 }
 
 /// Removes elements whose `u32` stencil flag is non-zero.
@@ -46,18 +35,8 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
-        stencil,
-        exec.policy(),
-        true,
-        false,
-    )?;
-    <Input as sealed::MIterDispatch<R>>::remove_where_into_dispatch(
-        source,
-        exec.policy(),
-        stencil,
-        out,
-    )
+    let stencil = stencil.stencil_selection_with_policy(exec.policy(), true, false)?;
+    source.copy_selected_with_policy(exec.policy(), stencil, out)
 }
 
 /// Replaces elements whose `u32` stencil flag is non-zero.
@@ -74,12 +53,7 @@ where
 {
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
-        stencil,
-        exec.policy(),
-        false,
-        true,
-    )?;
+    let stencil = stencil.stencil_selection_with_policy(exec.policy(), false, true)?;
     out.replace_where_inner(exec.policy(), replacement, stencil)
 }
 

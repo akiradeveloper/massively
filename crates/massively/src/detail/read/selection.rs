@@ -2150,6 +2150,145 @@ where
     Ok(flag)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn tuple7_view_set_membership_flags_read<R, A, B, C, D, E, F, G, Less>(
+    policy: &CubePolicy<R>,
+    candidate_a: &crate::detail::device::DeviceColumnView<R, A>,
+    candidate_b: &crate::detail::device::DeviceColumnView<R, B>,
+    candidate_c: &crate::detail::device::DeviceColumnView<R, C>,
+    candidate_d: &crate::detail::device::DeviceColumnView<R, D>,
+    candidate_e: &crate::detail::device::DeviceColumnView<R, E>,
+    candidate_f: &crate::detail::device::DeviceColumnView<R, F>,
+    candidate_g: &crate::detail::device::DeviceColumnView<R, G>,
+    source_a: &crate::detail::device::DeviceColumnView<R, A>,
+    source_b: &crate::detail::device::DeviceColumnView<R, B>,
+    source_c: &crate::detail::device::DeviceColumnView<R, C>,
+    source_d: &crate::detail::device::DeviceColumnView<R, D>,
+    source_e: &crate::detail::device::DeviceColumnView<R, E>,
+    source_f: &crate::detail::device::DeviceColumnView<R, F>,
+    source_g: &crate::detail::device::DeviceColumnView<R, G>,
+    keep_intersection: bool,
+) -> Result<cubecl::server::Handle, Error>
+where
+    R: Runtime,
+    A: MStorageElement + 'static,
+    B: MStorageElement + 'static,
+    C: MStorageElement + 'static,
+    D: MStorageElement + 'static,
+    E: MStorageElement + 'static,
+    F: MStorageElement + 'static,
+    G: MStorageElement + 'static,
+    Less: BinaryPredicateOp<(A, B, C, D, E, F, G)>,
+{
+    let len = candidate_a.len;
+    ensure_same_len(candidate_b.len, len)?;
+    ensure_same_len(candidate_c.len, len)?;
+    ensure_same_len(candidate_d.len, len)?;
+    ensure_same_len(candidate_e.len, len)?;
+    ensure_same_len(candidate_f.len, len)?;
+    ensure_same_len(candidate_g.len, len)?;
+    let source_len = source_a.len;
+    ensure_same_len(source_b.len, source_len)?;
+    ensure_same_len(source_c.len, source_len)?;
+    ensure_same_len(source_d.len, source_len)?;
+    ensure_same_len(source_e.len, source_len)?;
+    ensure_same_len(source_f.len, source_len)?;
+    ensure_same_len(source_g.len, source_len)?;
+
+    let client = policy.client();
+    if len == 0 {
+        return Ok(policy.empty_handle());
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let source_len_u32 =
+        u32::try_from(source_len).map_err(|_| Error::LengthTooLarge { len: source_len })?;
+    let candidate_offsets = [
+        u32::try_from(candidate_a.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_a.offset,
+        })?,
+        u32::try_from(candidate_b.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_b.offset,
+        })?,
+        u32::try_from(candidate_c.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_c.offset,
+        })?,
+        u32::try_from(candidate_d.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_d.offset,
+        })?,
+        u32::try_from(candidate_e.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_e.offset,
+        })?,
+        u32::try_from(candidate_f.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_f.offset,
+        })?,
+        u32::try_from(candidate_g.offset).map_err(|_| Error::LengthTooLarge {
+            len: candidate_g.offset,
+        })?,
+    ];
+    let source_offsets = [
+        u32::try_from(source_a.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_a.offset,
+        })?,
+        u32::try_from(source_b.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_b.offset,
+        })?,
+        u32::try_from(source_c.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_c.offset,
+        })?,
+        u32::try_from(source_d.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_d.offset,
+        })?,
+        u32::try_from(source_e.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_e.offset,
+        })?,
+        u32::try_from(source_f.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_f.offset,
+        })?,
+        u32::try_from(source_g.offset).map_err(|_| Error::LengthTooLarge {
+            len: source_g.offset,
+        })?,
+    ];
+    let candidate_offsets = client.create_from_slice(u32::as_bytes(&candidate_offsets));
+    let source_offsets = client.create_from_slice(u32::as_bytes(&source_offsets));
+    let candidate_len = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let source_len_handle = client.create_from_slice(u32::as_bytes(&[source_len_u32]));
+    let keep = [if keep_intersection { 1_u32 } else { 0_u32 }];
+    let keep = client.create_from_slice(u32::as_bytes(&keep));
+    let flags = client.empty(len * std::mem::size_of::<u32>());
+    let block_count = crate::detail::api::search::search_block_count(len)?;
+
+    unsafe {
+        tuple7_view_set_membership_flags_kernel::launch_unchecked::<A, B, C, D, E, F, G, Less, R>(
+            client,
+            CubeCount::Static(block_count, 1, 1),
+            CubeDim::new_1d(crate::detail::api::search::BLOCK_SEARCH_SIZE),
+            BufferArg::from_raw_parts(candidate_a.source.handle.clone(), candidate_a.source.len()),
+            BufferArg::from_raw_parts(candidate_b.source.handle.clone(), candidate_b.source.len()),
+            BufferArg::from_raw_parts(candidate_c.source.handle.clone(), candidate_c.source.len()),
+            BufferArg::from_raw_parts(candidate_d.source.handle.clone(), candidate_d.source.len()),
+            BufferArg::from_raw_parts(candidate_e.source.handle.clone(), candidate_e.source.len()),
+            BufferArg::from_raw_parts(candidate_f.source.handle.clone(), candidate_f.source.len()),
+            BufferArg::from_raw_parts(candidate_g.source.handle.clone(), candidate_g.source.len()),
+            BufferArg::from_raw_parts(candidate_offsets.clone(), 7),
+            BufferArg::from_raw_parts(source_a.source.handle.clone(), source_a.source.len()),
+            BufferArg::from_raw_parts(source_b.source.handle.clone(), source_b.source.len()),
+            BufferArg::from_raw_parts(source_c.source.handle.clone(), source_c.source.len()),
+            BufferArg::from_raw_parts(source_d.source.handle.clone(), source_d.source.len()),
+            BufferArg::from_raw_parts(source_e.source.handle.clone(), source_e.source.len()),
+            BufferArg::from_raw_parts(source_f.source.handle.clone(), source_f.source.len()),
+            BufferArg::from_raw_parts(source_g.source.handle.clone(), source_g.source.len()),
+            BufferArg::from_raw_parts(source_offsets.clone(), 7),
+            BufferArg::from_raw_parts(candidate_len.clone(), 1),
+            BufferArg::from_raw_parts(source_len_handle.clone(), 1),
+            BufferArg::from_raw_parts(keep.clone(), 1),
+            BufferArg::from_raw_parts(flags.clone(), len),
+        );
+    }
+
+    Ok(flags)
+}
+
 impl<Source, Pred> KernelUniqueInput<Pred> for Source
 where
     Source: KernelColumn + KernelColumnAt<S0>,

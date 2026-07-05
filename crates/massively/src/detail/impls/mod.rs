@@ -3,10 +3,8 @@ use std::any::Any;
 use cubecl::prelude::*;
 
 use crate::Error;
-use crate::detail::dispatch::{self as sealed, array_from_inner};
-use crate::detail::op_adapter::{
-    KernelOp, KernelScalarInputOp, KernelScalarTuple1Op, KernelTuple1Op, StencilFlag,
-};
+use crate::detail::dispatch as sealed;
+use crate::detail::op_adapter::{KernelOp, KernelScalarInputOp, StencilFlag};
 use crate::error::ensure_same_len;
 use crate::index::{MIndex, mindex_from_usize, usize_from_mindex};
 use crate::iter::{MIter, MIterMut, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
