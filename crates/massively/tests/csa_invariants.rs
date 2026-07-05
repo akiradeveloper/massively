@@ -29,25 +29,6 @@ fn rust_sources_under(relative: &str) -> Vec<(String, String)> {
     sources
 }
 
-fn function_bodies<'a>(source: &'a str, needle: &str) -> Vec<&'a str> {
-    let mut bodies = Vec::new();
-    let mut cursor = 0;
-    while let Some(relative_start) = source[cursor..].find(needle) {
-        let start = cursor + relative_start;
-        let line_start = source[..start].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
-        let indent = &source[line_start..start];
-        let next_fn = format!("\n{indent}fn ");
-        let rest_start = start + needle.len();
-        let end = source[rest_start..]
-            .find(&next_fn)
-            .map(|idx| rest_start + idx)
-            .unwrap_or(source.len());
-        bodies.push(&source[start..end]);
-        cursor = rest_start;
-    }
-    bodies
-}
-
 #[test]
 fn selection_control_objects_do_not_bind_payload_handles() {
     let source = read("src/detail/control/selection.rs");
@@ -107,7 +88,7 @@ fn selection_family_has_no_legacy_handles_or_aliases() {
 #[test]
 fn partition_payload_application_uses_split_rank_control() {
     let read_selection = read("src/detail/read/selection.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
     let payload = read("src/detail/apply/selection.rs");
 
     assert!(
@@ -115,7 +96,7 @@ fn partition_payload_application_uses_split_rank_control() {
         "read partition should build SplitRankControl before payload application"
     );
     assert!(
-        tuple_impls.contains("split_rank_from_selected"),
+        read_kernel.contains("split_rank_from_selected"),
         "wide tuple partition should build SplitRankControl before payload application"
     );
     assert!(
@@ -129,7 +110,7 @@ fn partition_payload_application_uses_split_rank_control() {
     );
     assert!(
         read_selection.contains("SplitPayloadApply::new")
-            && tuple_impls.contains("SplitPayloadApply::new"),
+            && read_kernel.contains("SplitPayloadApply::new"),
         "partition call sites should use the CSA split payload-apply boundary"
     );
 }
@@ -260,25 +241,34 @@ fn transform_dispatch_uses_transform_payload_apply() {
 }
 
 #[test]
-fn public_by_key_apis_use_direct_write_dispatch() {
+fn public_algorithm_apis_hide_iterator_lowering_details() {
     for relative in [
         "src/algorithm/api/scan.rs",
         "src/algorithm/api/reduce.rs",
         "src/algorithm/api/ordering.rs",
         "src/algorithm/api/unique.rs",
+        "src/algorithm/api/indexed.rs",
+        "src/algorithm/api/selection.rs",
+        "src/algorithm/api/set.rs",
+        "src/algorithm/api/search.rs",
+        "src/algorithm/api/predicate.rs",
+        "src/algorithm/api/transform.rs",
     ] {
         let source = read(relative);
         for forbidden in [
-            "sort_by_key_dispatch(",
-            "unique_by_key_dispatch(",
-            "inclusive_scan_by_key_dispatch(",
-            "exclusive_scan_by_key_dispatch(",
-            "reduce_by_key_dispatch(",
-            "merge_by_key_dispatch(",
+            "MIterDispatch",
+            "MIterMutDispatch",
+            "MExecutableIter",
+            "MAlloc",
+            "KernelRead",
+            "lower_read(",
+            "into_alloc_view_with_policy",
+            " as MAlloc",
+            "as crate::value::MAlloc",
         ] {
             assert!(
                 !source.contains(forbidden),
-                "{relative} must not call owned-return by-key dispatch method {forbidden}"
+                "{relative} must not expose internal iterator lowering detail {forbidden}"
             );
         }
     }
@@ -287,54 +277,45 @@ fn public_by_key_apis_use_direct_write_dispatch() {
     let unique = read("src/algorithm/api/unique.rs");
     let scan = read("src/algorithm/api/scan.rs");
     let reduce = read("src/algorithm/api/reduce.rs");
-    assert!(ordering.contains("sort_by_key_into_dispatch"));
-    assert!(ordering.contains("merge_by_key_into_dispatch"));
-    assert!(unique.contains("unique_by_key_into_dispatch"));
-    assert!(scan.contains("inclusive_scan_by_key_into_dispatch"));
-    assert!(scan.contains("exclusive_scan_by_key_into_dispatch"));
-    assert!(reduce.contains("reduce_by_key_into_dispatch"));
+    assert!(ordering.contains("sort_by_key_with_policy"));
+    assert!(ordering.contains("merge_by_key_with_policy"));
+    assert!(unique.contains("unique_by_key_with_policy"));
+    assert!(scan.contains("inclusive_scan_by_key_with_policy"));
+    assert!(scan.contains("exclusive_scan_by_key_with_policy"));
+    assert!(reduce.contains("reduce_by_key_with_policy"));
 }
 
 #[test]
-fn by_key_direct_write_defaults_do_not_allocate_owned_outputs() {
-    let dispatch = read("src/detail/dispatch/iter.rs");
-    for method in [
-        "fn sort_by_key_into_dispatch",
-        "fn unique_by_key_into_dispatch",
-        "fn inclusive_scan_by_key_into_dispatch",
-        "fn exclusive_scan_by_key_into_dispatch",
-        "fn reduce_by_key_into_dispatch",
-        "fn merge_by_key_into_dispatch",
-    ] {
-        let start = dispatch
-            .find(method)
-            .unwrap_or_else(|| panic!("{method} should exist in MIterDispatch"));
-        let rest = &dispatch[start..];
-        let end = rest
-            .find("\n    fn ")
-            .map(|idx| start + idx)
-            .unwrap_or(dispatch.len());
-        let body = &dispatch[start..end];
-        assert!(
-            body.contains("unsupported("),
-            "{method} default should reject unsupported shapes directly"
-        );
-        assert!(
-            !body.contains("StorageFromInner"),
-            "{method} default must not require owned output storage"
-        );
-        assert!(
-            !body.contains("write_from_inner") && !body.contains("write_prefix_from_inner"),
-            "{method} default must not allocate and copy through owned output"
-        );
-    }
+fn legacy_miter_dispatch_module_is_removed() {
+    let dispatch_mod = read("src/detail/dispatch/mod.rs");
+    let iter = read("src/iter/mod.rs");
+
+    assert!(
+        !crate_root().join("src/detail/dispatch/iter.rs").exists()
+            && !crate_root()
+                .join("src/detail/dispatch/iter_mut.rs")
+                .exists()
+            && !dispatch_mod.contains("mod iter;")
+            && !dispatch_mod.contains("mod iter_mut;")
+            && !dispatch_mod.contains("MIterDispatch")
+            && !dispatch_mod.contains("MIterMutDispatch")
+            && !iter.contains("MExecutableIter"),
+        "legacy MIterDispatch/MIterMutDispatch/MExecutableIter surface should not exist"
+    );
+    assert!(
+        iter.contains("type Read: crate::detail::read::KernelRead")
+            && iter.contains("fn lower_read(")
+            && iter.contains("fn validate_executor("),
+        "MIter should own the hidden lowering hooks needed by public MIter APIs"
+    );
 }
 
 #[test]
 fn scan_by_key_into_writes_through_segmented_scan_apply() {
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
     let scan_apply = read("src/detail/apply/scan.rs");
+    let read_scan = read("src/detail/read/by_key/scan.rs");
+    let api_scan = read("src/algorithm/api/scan.rs");
+    let iter = read("src/iter/mod.rs");
     let scan_kernels = read("src/detail/kernels/scan.rs");
 
     assert!(
@@ -363,55 +344,30 @@ fn scan_by_key_into_writes_through_segmented_scan_apply() {
         "SegmentedScanApply should expose direct-output wide tuple scan-by-key helpers"
     );
     assert!(
-        single_impls.contains(".inclusive_expr_into::<")
-            && single_impls.contains(".exclusive_expr_into::<"),
-        "single-column scan_by_key into dispatch should call direct-output SegmentedScanApply helpers"
+        read_scan
+            .matches("SegmentedScanApply::new(control)")
+            .count()
+            >= 7
+            && read_scan.contains("apply.inclusive_expr::<")
+            && read_scan.contains("apply.exclusive_expr::<")
+            && read_scan.contains("apply.inclusive_expr2::<")
+            && read_scan.contains("apply.exclusive_expr2::<")
+            && read_scan.contains("apply.inclusive_expr3::<")
+            && read_scan.contains("apply.exclusive_expr3::<")
+            && read_scan.contains("apply.inclusive_views7::<")
+            && read_scan.contains("apply.exclusive_views7::<"),
+        "scan_by_key read paths should call SegmentedScanApply helpers for scalar, tuple, and wide values"
     );
     assert!(
-        tuple_impls.contains("impl_tuple_inclusive_scan_by_key_values_into_body")
-            && tuple_impls.contains("impl_tuple_exclusive_scan_by_key_values_into_body")
-            && tuple_impls.contains(".inclusive_expr2_into::<")
-            && tuple_impls.contains(".exclusive_expr2_into::<")
-            && tuple_impls.contains(".inclusive_expr3_into::<")
-            && tuple_impls.contains(".exclusive_expr3_into::<"),
-        "tuple scan_by_key into dispatch should call direct-output SegmentedScanApply helpers"
-    );
-    assert!(
-        tuple_impls.contains("impl_wide_inclusive_scan_by_key_values_into_body")
-            && tuple_impls.contains("impl_wide_exclusive_scan_by_key_values_into_body")
-            && tuple_impls.contains(".inclusive_views7_into::<")
-            && tuple_impls.contains(".exclusive_views7_into::<"),
-        "wide tuple scan_by_key into dispatch should call direct-output SegmentedScanApply helpers"
-    );
-    for (path, source) in [
-        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
-        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
-    ] {
-        for method in [
-            "fn inclusive_scan_by_single_key_into_dispatch",
-            "fn inclusive_scan_by_two_key_into_dispatch",
-            "fn inclusive_scan_by_three_key_into_dispatch",
-            "fn inclusive_scan_by_key_into_dispatch",
-            "fn exclusive_scan_by_single_key_into_dispatch",
-            "fn exclusive_scan_by_two_key_into_dispatch",
-            "fn exclusive_scan_by_three_key_into_dispatch",
-            "fn exclusive_scan_by_key_into_dispatch",
-        ] {
-            for body in function_bodies(source, method) {
-                assert!(
-                    !body.contains("crate::detail::inclusive_scan_by_key(")
-                        && !body.contains("crate::detail::exclusive_scan_by_key(")
-                        && !body.contains("write_from_inner(policy, inner)"),
-                    "{method} in {path} should not materialize owned scan_by_key output"
-                );
-            }
-        }
-    }
-    assert!(
-        single_impls.contains("column_mut_view_inner::<T>")
-            && single_impls.contains("inclusive_scan_by_key output must match input shape")
-            && single_impls.contains("exclusive_scan_by_key output must match input shape"),
-        "single-column scan_by_key into dispatch should lower caller output to a typed mutable column"
+        api_scan.contains("inclusive_scan_by_key_with_policy")
+            && api_scan.contains("exclusive_scan_by_key_with_policy")
+            && !api_scan.contains("lower_read(")
+            && !api_scan.contains("KernelRead")
+            && iter.contains("fn inclusive_scan_by_key_with_policy")
+            && iter.contains("fn exclusive_scan_by_key_with_policy")
+            && iter.contains("inclusive_scan_by_key_read")
+            && iter.contains("exclusive_scan_by_key_read"),
+        "public scan_by_key APIs should delegate to hidden MIter lowering hooks before execution"
     );
     assert!(
         scan_kernels.contains("output_offset: &[u32]")
@@ -449,17 +405,17 @@ fn apply_objects_live_under_detail_apply() {
 
 #[test]
 fn selection_call_sites_use_payload_apply_vocabulary() {
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
     let read_selection = read("src/detail/read/selection.rs");
     let by_key_reduce = read("src/detail/read/by_key/reduce.rs");
     let by_key_selection = read("src/detail/read/by_key/selection.rs");
 
     assert!(
-        tuple_impls.contains("SelectedPayloadApply::new"),
+        read_kernel.contains("SelectedPayloadApply::new"),
         "wide tuple selection paths should use typed selected payload apply"
     );
     assert!(
-        tuple_impls.contains("SplitPayloadApply::new"),
+        read_kernel.contains("SplitPayloadApply::new"),
         "wide tuple partition should use typed split payload apply"
     );
     assert!(
@@ -477,19 +433,19 @@ fn selection_call_sites_use_payload_apply_vocabulary() {
         "by-key selection and reduce should use typed selected payload apply"
     );
     assert!(
-        !tuple_impls.contains("let handles =") && !read_selection.contains("let handles ="),
+        !read_kernel.contains("let handles =") && !read_selection.contains("let handles ="),
         "SelectedRankControl values should not use legacy handles naming"
     );
     assert!(
-        !tuple_impls.contains("device_expr_compact_with_selection_with_policy")
+        !read_kernel.contains("device_expr_compact_with_selection_with_policy")
             && !read_selection.contains("device_expr_compact_with_selection_with_policy")
             && !by_key_reduce.contains("compact_value_with_count"),
         "selection call sites should not name compact implementation helpers directly"
     );
     assert!(
-        !tuple_impls.contains("device_expr_apply_selected_with_policy")
-            && !tuple_impls.contains("device_expr_apply_split_with_policy")
-            && !tuple_impls.contains("device_value_apply_selected_with_policy")
+        !read_kernel.contains("device_expr_apply_selected_with_policy")
+            && !read_kernel.contains("device_expr_apply_split_with_policy")
+            && !read_kernel.contains("device_value_apply_selected_with_policy")
             && !read_selection.contains("device_expr_apply_selected_with_policy")
             && !read_selection.contains("device_expr_apply_split_with_policy")
             && !read_selection.contains("device_value_apply_selected_with_policy")
@@ -613,7 +569,7 @@ fn tuple_selected_payload_apply_has_fused_apply_kernels() {
 #[test]
 fn tuple_split_payload_apply_has_fused_apply_kernels() {
     let payload = read("src/detail/apply/selection.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
     let expr_selection = read("src/detail/api/expr/selection.rs");
     let kernels = read("src/detail/kernels/expr.rs");
 
@@ -627,8 +583,8 @@ fn tuple_split_payload_apply_has_fused_apply_kernels() {
         "SplitPayloadApply tuple hooks should call split apply helpers"
     );
     assert!(
-        tuple_impls.contains("SplitPayloadApply::new")
-            && tuple_impls.contains("payload_apply.$selected_apply"),
+        read_kernel.contains("SplitPayloadApply::new(&split_rank")
+            && read_kernel.contains("payload_apply.$apply"),
         "wide tuple partition should route through the arity-specific split apply hook"
     );
     assert!(
@@ -687,6 +643,7 @@ fn mask_consumers_use_mask_apply_boundaries() {
     let api_mod = read("src/detail/api/mod.rs");
     let single_impls = read("src/detail/impls/iter/single.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
 
     assert!(
         payload.contains("struct MaskWriteApply")
@@ -712,8 +669,8 @@ fn mask_consumers_use_mask_apply_boundaries() {
         "detail api should not expose mask apply objects or raw mask wrapper re-exports"
     );
     assert!(
-        single_impls.contains("MaskedIndexedExprApply::gather_where_expr_into")
-            && single_impls.contains("MaskedIndexedExprApply::scatter_where_expr_into")
+        read_kernel.contains("MaskedIndexedExprApply::gather_where_expr_into")
+            && read_kernel.contains("MaskedIndexedExprApply::scatter_where_expr_into")
             && single_impls.contains("MaskWriteApply::new(&mask, &output)")
             && !single_impls.contains("device_expr_gather_where_into_with_control")
             && !single_impls.contains("device_expr_scatter_where_into_with_control")
@@ -721,8 +678,14 @@ fn mask_consumers_use_mask_apply_boundaries() {
         "single-column mask consumers should use typed mask apply objects"
     );
     assert!(
-        tuple_impls.contains("MaskedIndexedExprApply::gather_where_expr_into")
-            && tuple_impls.contains("MaskedIndexedExprApply::scatter_where_expr_into")
+        read_kernel
+            .matches("MaskedIndexedExprApply::gather_where_expr_into")
+            .count()
+            >= 2
+            && read_kernel
+                .matches("MaskedIndexedExprApply::scatter_where_expr_into")
+                .count()
+                >= 2
             && tuple_impls.contains("MaskWriteApply::new(&mask, &output.$idx)")
             && !tuple_impls.contains("device_expr_gather_where_into_with_control")
             && !tuple_impls.contains("device_expr_scatter_where_into_with_control")
@@ -768,43 +731,32 @@ fn sort_by_key_values_use_permutation_payload_apply() {
 
 #[test]
 fn sort_by_key_into_writes_through_permutation_payload_apply() {
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_ordering = read("src/detail/read/by_key/ordering.rs");
+    let api_ordering = read("src/algorithm/api/ordering.rs");
 
     assert!(
-        single_impls.contains("PermutationPayloadApply::new(&control)")
-            && single_impls.contains("apply.apply_expr_into(policy, &values, &value_out)")
-            && tuple_impls.contains("impl_tuple_sort_by_key_values_into_body")
-            && tuple_impls.contains("impl_wide_sort_by_key_values_into_body"),
-        "sort_by_key into dispatch should route payload writes through PermutationPayloadApply"
+        read_ordering
+            .matches("PermutationPayloadApply::new(control)")
+            .count()
+            >= 4
+            && read_ordering.contains("apply.apply_expr(policy")
+            && read_ordering.contains("apply.apply_expr2(policy")
+            && read_ordering.contains("apply.apply_expr3(policy")
+            && read_ordering.contains("apply.apply_expr7("),
+        "sort_by_key read paths should route value payloads through PermutationPayloadApply"
     );
-
-    for (path, source) in [
-        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
-        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
-    ] {
-        for method in [
-            "fn sort_by_single_key_into_dispatch",
-            "fn sort_by_two_key_into_dispatch",
-            "fn sort_by_three_key_into_dispatch",
-            "fn sort_by_key_into_dispatch",
-        ] {
-            for body in function_bodies(source, method) {
-                assert!(
-                    !body.contains("crate::detail::sort_by_key(")
-                        && !body.contains("key_output.write_from_inner(policy, key_inner)")
-                        && !body.contains("value_output.write_from_inner(policy, value_inner)"),
-                    "{method} in {path} should not materialize owned sort_by_key output"
-                );
-            }
-        }
-    }
+    assert!(
+        api_ordering.contains("keys.sort_by_key_with_policy")
+            && !api_ordering.contains("sort_by_key_dispatch")
+            && !api_ordering.contains("crate::detail::sort_by_key("),
+        "public sort_by_key API should stay on the MIter hidden method surface"
+    );
 }
 
 #[test]
 fn merge_by_key_into_writes_through_merge_payload_apply() {
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_ordering = read("src/detail/read/by_key/ordering.rs");
+    let api_ordering = read("src/algorithm/api/ordering.rs");
     let payload = read("src/detail/apply/merge.rs");
 
     assert!(
@@ -813,41 +765,31 @@ fn merge_by_key_into_writes_through_merge_payload_apply() {
         "MergePayloadApply should expose direct-output merge-by-key payload application"
     );
     assert!(
-        single_impls.contains("MergeByKeyControlApply::apply_keys1")
-            && single_impls.contains("MergePayloadApply::new(&control)")
-            && single_impls
-                .contains("apply.apply_expr_into(policy, &left_value, &right_value, &value_out)")
-            && tuple_impls.contains("impl_tuple_merge_by_key_values_into_body")
-            && tuple_impls.contains("impl_wide_merge_by_key_values_into_body"),
-        "merge_by_key into dispatch should route payload writes through MergePayloadApply"
+        read_ordering.contains("MergeByKeyControlApply::apply_keys1")
+            && read_ordering.contains("MergeByKeyControlApply::apply_keys2")
+            && read_ordering.contains("MergeByKeyControlApply::apply_keys3")
+            && read_ordering
+                .matches("MergePayloadApply::new(control)")
+                .count()
+                >= 4
+            && read_ordering.contains("apply.apply_expr(policy")
+            && read_ordering.contains("apply.apply_expr2(")
+            && read_ordering.contains("apply.apply_expr3(")
+            && read_ordering.contains("apply.apply_expr7("),
+        "merge_by_key read paths should route keys through MergeByKeyControlApply and values through MergePayloadApply"
     );
-
-    for (path, source) in [
-        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
-        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
-    ] {
-        for method in [
-            "fn merge_by_single_key_same_into_dispatch",
-            "fn merge_by_two_key_same_into_dispatch",
-            "fn merge_by_three_key_same_into_dispatch",
-            "fn merge_by_key_into_dispatch",
-        ] {
-            for body in function_bodies(source, method) {
-                assert!(
-                    !body.contains("crate::detail::merge_by_key(")
-                        && !body.contains("key_output.write_from_inner(policy, key_inner)")
-                        && !body.contains("value_output.write_from_inner(policy, value_inner)"),
-                    "{method} in {path} should not materialize owned merge_by_key output"
-                );
-            }
-        }
-    }
+    assert!(
+        api_ordering.contains("left_keys.merge_by_key_with_policy")
+            && !api_ordering.contains("merge_by_key_dispatch")
+            && !api_ordering.contains("crate::detail::merge_by_key("),
+        "public merge_by_key API should stay on the MIter hidden method surface"
+    );
 }
 
 #[test]
 fn unique_by_key_into_writes_through_selected_payload_apply() {
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_selection = read("src/detail/read/by_key/selection.rs");
+    let api_unique = read("src/algorithm/api/unique.rs");
     let payload = read("src/detail/apply/selection.rs");
 
     assert!(
@@ -856,40 +798,27 @@ fn unique_by_key_into_writes_through_selected_payload_apply() {
         "SelectedPayloadApply should expose direct-output compact application"
     );
     assert!(
-        single_impls.contains("unique_one_flags_read")
-            && single_impls.contains("payload_apply.apply_expr_into(policy, &values, &value_out)")
-            && tuple_impls.contains("impl_tuple_unique_by_key_values_into_body")
-            && tuple_impls.contains("impl_wide_unique_by_key_values_into_body"),
-        "unique_by_key into dispatch should route payload writes through SelectedPayloadApply"
+        read_selection.contains("unique_one_flags_read")
+            && read_selection.matches("SelectedPayloadApply::new(").count() >= 4
+            && read_selection.contains("payload_apply.apply_expr(policy")
+            && read_selection
+                .matches("payload_apply.apply_expr(policy")
+                .count()
+                >= 7,
+        "unique_by_key read paths should route selected keys/values through SelectedPayloadApply"
     );
-
-    for (path, source) in [
-        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
-        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
-    ] {
-        for method in [
-            "fn unique_by_single_key_into_dispatch",
-            "fn unique_by_two_key_into_dispatch",
-            "fn unique_by_three_key_into_dispatch",
-            "fn unique_by_key_into_dispatch",
-        ] {
-            for body in function_bodies(source, method) {
-                assert!(
-                    !body.contains("crate::detail::unique_by_key(")
-                        && !body.contains("key_output.write_prefix_from_inner(policy, key_inner)")
-                        && !body
-                            .contains("value_output.write_prefix_from_inner(policy, value_inner)"),
-                    "{method} in {path} should not materialize owned unique_by_key output"
-                );
-            }
-        }
-    }
+    assert!(
+        api_unique.contains("keys.unique_by_key_with_policy")
+            && !api_unique.contains("unique_by_key_dispatch")
+            && !api_unique.contains("crate::detail::unique_by_key("),
+        "public unique_by_key API should stay on the MIter hidden method surface"
+    );
 }
 
 #[test]
 fn reduce_by_key_into_writes_through_segmented_reduce_apply() {
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_reduce = read("src/detail/read/by_key/reduce.rs");
+    let api_reduce = read("src/algorithm/api/reduce.rs");
     let apply = read("src/detail/apply/reduce.rs");
 
     assert!(
@@ -901,34 +830,22 @@ fn reduce_by_key_into_writes_through_segmented_reduce_apply() {
         "SegmentedReduceApply should expose direct-output reduce-by-key value application"
     );
     assert!(
-        single_impls.contains("SegmentedReduceApply::new(&reduce_control)")
-            && single_impls.contains("apply_expr_into::<_, KernelOp<R, Op>>")
-            && tuple_impls.contains("impl_tuple_reduce_by_key_values_into_body")
-            && tuple_impls.contains("impl_wide_reduce_by_key_values_into_body"),
-        "reduce_by_key into dispatch should route payload writes through SegmentedReduceApply"
+        read_reduce
+            .matches("SegmentedReduceApply::new(control)")
+            .count()
+            >= 4
+            && read_reduce.contains("apply.apply_expr::<ValueSource, Op>")
+            && read_reduce.contains("apply.apply_expr2::<ValueA, ValueB, Op>")
+            && read_reduce.contains("apply.apply_expr3::<ValueA, ValueB, ValueC, Op>")
+            && read_reduce.contains("apply.apply_views7::<A, B, C, D, E, F, G, Op>"),
+        "reduce_by_key read paths should route values through SegmentedReduceApply"
     );
-
-    for (path, source) in [
-        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
-        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
-    ] {
-        for method in [
-            "fn reduce_by_single_key_into_dispatch",
-            "fn reduce_by_two_key_into_dispatch",
-            "fn reduce_by_three_key_into_dispatch",
-            "fn reduce_by_key_into_dispatch",
-        ] {
-            for body in function_bodies(source, method) {
-                assert!(
-                    !body.contains("crate::detail::reduce_by_key(")
-                        && !body.contains("key_output.write_prefix_from_inner(policy, key_inner)")
-                        && !body
-                            .contains("value_output.write_prefix_from_inner(policy, value_inner)"),
-                    "{method} in {path} should not materialize owned reduce_by_key output"
-                );
-            }
-        }
-    }
+    assert!(
+        api_reduce.contains("keys.reduce_by_key_with_policy")
+            && !api_reduce.contains("reduce_by_key_dispatch")
+            && !api_reduce.contains("crate::detail::reduce_by_key("),
+        "public reduce_by_key API should stay on the MIter hidden method surface"
+    );
 }
 
 #[test]
@@ -1007,31 +924,16 @@ fn merge_by_key_keys_use_merge_by_key_control_apply() {
 
 #[test]
 fn wide_sort_values_use_permutation_payload_apply() {
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
-    let macro_start = tuple_impls
-        .find("macro_rules! impl_wide_sort_dispatch_body")
-        .expect("wide sort dispatch macro should exist");
-    let macro_end = tuple_impls[macro_start..]
-        .find("macro_rules! impl_wide_sort_by_three_key_dispatch_body")
-        .map(|offset| macro_start + offset)
-        .expect("next wide sort-by-key macro should delimit sort dispatch");
-    let wide_sort = &tuple_impls[macro_start..macro_end];
+    let item_impls = read("src/detail/impls/item.rs");
 
     assert!(
-        wide_sort
-            .matches("OrderingControl::from_sorted_indices(&indices)")
-            .count()
-            == 4
-            && wide_sort
-                .matches("PermutationPayloadApply::new(control.permutation())")
-                .count()
-                == 4
-            && wide_sort.contains("apply.apply_expr4")
-            && wide_sort.contains("apply.apply_expr5")
-            && wide_sort.contains("apply.apply_expr6")
-            && wide_sort.contains("apply.apply_expr7")
-            && !wide_sort.contains("device_expr_gather_with_policy"),
-        "wide tuple sort should lower sorted indices to OrderingControl and apply payload through PermutationPayloadApply"
+        item_impls.contains("OrderingControl::from_sorted_indices(&indices)")
+            && item_impls.contains("PermutationPayloadApply::new(control.permutation())")
+            && item_impls.contains("apply.apply_expr4")
+            && item_impls.contains("apply.apply_expr5")
+            && item_impls.contains("apply.apply_expr6")
+            && item_impls.contains("apply.apply_expr7"),
+        "wide tuple sort read paths should lower sorted indices to OrderingControl and apply payload through PermutationPayloadApply"
     );
 }
 
@@ -1051,8 +953,7 @@ fn gather_read_uses_permutation_payload_apply() {
 fn indexed_expr_dispatch_uses_indexed_expr_apply() {
     let payload = read("src/detail/apply/permutation.rs");
     let api_mod = read("src/detail/api/mod.rs");
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
 
     assert!(
         payload.contains("struct IndexedExprApply")
@@ -1073,21 +974,22 @@ fn indexed_expr_dispatch_uses_indexed_expr_apply() {
         "detail api should not expose indexed expr apply objects or raw indexed wrapper re-exports"
     );
     assert!(
-        single_impls.contains("IndexedExprApply::gather_expr_into")
-            && single_impls.contains("IndexedExprApply::gather_expr")
-            && single_impls.contains("IndexedExprApply::scatter_expr_into")
-            && !single_impls.contains("device_expr_gather_into_with_policy")
-            && !single_impls.contains("device_expr_gather_with_policy")
-            && !single_impls.contains("device_expr_scatter_into_with_policy"),
+        read_kernel.contains("IndexedExprApply::gather_expr_into")
+            && read_kernel.contains("IndexedExprApply::scatter_expr_into")
+            && !read_kernel.contains("device_expr_gather_into_with_policy")
+            && !read_kernel.contains("device_expr_gather_with_policy")
+            && !read_kernel.contains("device_expr_scatter_into_with_policy"),
         "single-column indexed dispatch should use IndexedExprApply"
     );
     assert!(
-        tuple_impls.contains("IndexedExprApply::gather_expr_into")
-            && tuple_impls.contains("IndexedExprApply::gather_expr")
-            && tuple_impls.contains("IndexedExprApply::scatter_expr_into")
-            && !tuple_impls.contains("device_expr_gather_into_with_policy")
-            && !tuple_impls.contains("device_expr_gather_with_policy")
-            && !tuple_impls.contains("device_expr_scatter_into_with_policy"),
+        read_kernel
+            .matches("IndexedExprApply::gather_expr_into")
+            .count()
+            >= 2
+            && read_kernel
+                .matches("IndexedExprApply::scatter_expr_into")
+                .count()
+                >= 2,
         "tuple indexed dispatch should use IndexedExprApply"
     );
 }
@@ -1157,6 +1059,7 @@ fn fill_and_concat_use_payload_apply_boundaries() {
     let api_mod = read("src/detail/api/mod.rs");
     let single_impls = read("src/detail/impls/iter/single.rs");
     let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let item_impls = read("src/detail/impls/item.rs");
 
     assert!(
         materialize_payload.contains("struct FillWriteApply")
@@ -1183,7 +1086,7 @@ fn fill_and_concat_use_payload_apply_boundaries() {
     );
     assert!(
         tuple_impls.contains("FillWriteApply::new(&output.$idx)")
-            && tuple_impls.contains("ConcatPayloadApply::apply_values")
+            && item_impls.contains("ConcatPayloadApply::apply_values")
             && !tuple_impls.contains("fill_slice_with_policy")
             && !tuple_impls.contains("concat_device_with_policy"),
         "tuple fill and wide concat should use typed apply objects"
@@ -1197,7 +1100,7 @@ fn materialize_payload_paths_use_materialize_payload_apply() {
     let memory = read("src/detail/api/memory.rs");
     let gather = read("src/detail/read/gather.rs");
     let scatter = read("src/detail/read/scatter.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let item_impls = read("src/detail/impls/item.rs");
 
     assert!(
         payload.contains("struct MaterializePayloadApply")
@@ -1214,7 +1117,7 @@ fn materialize_payload_paths_use_materialize_payload_apply() {
         memory.contains("MaterializePayloadApply::collect_expr")
             && gather.contains("MaterializePayloadApply::collect_expr")
             && scatter.contains("MaterializePayloadApply::collect_expr")
-            && tuple_impls.contains("MaterializePayloadApply::collect_expr"),
+            && item_impls.contains("MaterializePayloadApply::collect_expr"),
         "owned materialize call sites should use MaterializePayloadApply"
     );
 
@@ -1329,7 +1232,7 @@ fn scan_by_key_values_use_segmented_scan_apply() {
 fn linear_scan_values_use_linear_scan_apply() {
     let apply = read("src/detail/apply/scan.rs");
     let call_sites = read("src/detail/read/scan.rs");
-    let wide_call_sites = read("src/detail/impls/iter/tuple.rs");
+    let wide_call_sites = read("src/detail/read/kernel.rs");
 
     assert!(
         apply.contains("fn inclusive_expr1")
@@ -1364,12 +1267,17 @@ fn linear_scan_values_use_linear_scan_apply() {
         "linear scan read paths should route through LinearScanApply"
     );
     assert!(
-        wide_call_sites.contains("LinearScanApply::inclusive_views4")
-            && wide_call_sites.contains("LinearScanApply::inclusive_views7")
-            && wide_call_sites.contains("LinearScanApply::exclusive_views4")
-            && wide_call_sites.contains("LinearScanApply::exclusive_views7")
-            && wide_call_sites.contains("LinearScanApply::adjacent_views4")
-            && wide_call_sites.contains("LinearScanApply::adjacent_views7")
+        wide_call_sites
+            .contains("impl_wide_zip_scan!(ZipRead4, inclusive_views4, exclusive_views4")
+            && wide_call_sites
+                .contains("impl_wide_zip_scan!(ZipRead7, inclusive_views7, exclusive_views7")
+            && wide_call_sites
+                .contains("impl_wide_zip_adjacent_difference!(ZipRead4, adjacent_views4")
+            && wide_call_sites
+                .contains("impl_wide_zip_adjacent_difference!(ZipRead7, adjacent_views7")
+            && wide_call_sites.contains("LinearScanApply::$inclusive")
+            && wide_call_sites.contains("LinearScanApply::$exclusive")
+            && wide_call_sites.contains("LinearScanApply::$apply")
             && !wide_call_sites.contains("inclusive_scan_tuple7_device_views")
             && !wide_call_sites.contains("exclusive_scan_tuple7_device_views")
             && !wide_call_sites.contains("adjacent_difference_tuple7_device_views"),
@@ -1381,7 +1289,7 @@ fn linear_scan_values_use_linear_scan_apply() {
 fn linear_reduce_values_use_linear_reduce_apply() {
     let apply = read("src/detail/apply/reduce.rs");
     let call_sites = read("src/detail/read/reduce.rs");
-    let wide_call_sites = read("src/detail/impls/iter/tuple.rs");
+    let wide_call_sites = read("src/detail/read/kernel.rs");
 
     assert!(
         apply.contains("fn apply_expr1")
@@ -1399,8 +1307,9 @@ fn linear_reduce_values_use_linear_reduce_apply() {
         "linear reduce read paths should route through LinearReduceApply"
     );
     assert!(
-        wide_call_sites.contains("LinearReduceApply::apply_views4")
-            && wide_call_sites.contains("LinearReduceApply::apply_views7")
+        wide_call_sites.contains("impl_flat_zip_reduce_wide!(ZipRead4, apply_views4")
+            && wide_call_sites.contains("impl_flat_zip_reduce_wide!(ZipRead7, apply_views7")
+            && wide_call_sites.contains("LinearReduceApply::$method")
             && !wide_call_sites.contains("reduce_tuple7_device_expr"),
         "linear wide tuple reduce dispatch should route through LinearReduceApply instead of primitives"
     );
@@ -1410,8 +1319,6 @@ fn linear_reduce_values_use_linear_reduce_apply() {
 fn reduce_by_key_values_use_segmented_reduce_apply() {
     let apply = read("src/detail/apply/reduce.rs");
     let call_sites = read("src/detail/read/by_key/reduce.rs");
-    let single_impls = read("src/detail/impls/iter/single.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
 
     assert!(
         apply.contains("struct SegmentedReduceApply")
@@ -1445,15 +1352,15 @@ fn reduce_by_key_values_use_segmented_reduce_apply() {
         "reduce-by-key value arities should apply payload through SegmentedReduceApply"
     );
     assert!(
-        single_impls.contains("SegmentedReduceApply::new(&reduce_control)")
-            && tuple_impls.contains("SegmentedReduceApply::new(&reduce_control)")
-            && tuple_impls.contains("SegmentedReduceApply::new(&$control)")
-            && !single_impls.contains("reduce_by_key_apply_init_kernel")
-            && !tuple_impls.contains("reduce_by_key_apply_init_kernel")
-            && !tuple_impls.contains("reduce_by_key_tuple2_apply_init_kernel")
-            && !tuple_impls.contains("reduce_by_key_tuple3_apply_init_kernel")
-            && !tuple_impls.contains("reduce_by_key_tuple7_apply_init_kernel"),
-        "iterator reduce-by-key dispatch should route apply-init work through SegmentedReduceApply"
+        call_sites
+            .matches("SegmentedReduceApply::new(control)")
+            .count()
+            >= 7
+            && !call_sites.contains("reduce_by_key_apply_init_kernel")
+            && !call_sites.contains("reduce_by_key_tuple2_apply_init_kernel")
+            && !call_sites.contains("reduce_by_key_tuple3_apply_init_kernel")
+            && !call_sites.contains("reduce_by_key_tuple7_apply_init_kernel"),
+        "reduce-by-key read paths should route apply-init work through SegmentedReduceApply"
     );
 }
 
@@ -1617,7 +1524,7 @@ fn search_queries_use_search_control_and_query_apply() {
     let search_apply = read("src/detail/apply/search.rs");
     let search = read("src/detail/api/search.rs");
     let selection = read("src/detail/read/selection.rs");
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
 
     assert!(
         control.contains("struct SearchControl")
@@ -1668,9 +1575,8 @@ fn search_queries_use_search_control_and_query_apply() {
         "partition query readback should use SearchControl through QueryApply"
     );
     assert!(
-        tuple_impls.matches("SearchControl::from_flags").count() >= 5
-            && tuple_impls.contains("QueryApply::first_flag")
-            && !tuple_impls.contains("primitives::search::first_flag"),
+        read_kernel.contains("SearchControl::from_flags")
+            && read_kernel.contains("QueryApply::first_flag"),
         "wide tuple search fast paths should use SearchControl and QueryApply for readback"
     );
 }
@@ -1781,18 +1687,18 @@ fn csa_documentation_names_active_family_boundaries() {
 
 #[test]
 fn wide_tuple_selection_reuses_selected_rank_for_copy_and_remove_where() {
-    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
 
     assert!(
-        tuple_impls.contains("let selected_rank = stencil.selected_rank();"),
+        read_kernel.contains("let selected_rank = stencil.selected_rank();"),
         "wide tuple copy/remove where should reuse the precomputed SelectedRankControl"
     );
     assert!(
-        tuple_impls.contains("SelectedPayloadApply::new(selected_rank, count)"),
+        read_kernel.contains("SelectedPayloadApply::new(selected_rank, count)"),
         "wide tuple copy/remove where should apply a shared SelectedRankControl through payload apply"
     );
     assert!(
-        !tuple_impls.contains("stencil.selected_rank().flag.clone()"),
+        !read_kernel.contains("stencil.selected_rank().flag.clone()"),
         "wide tuple copy/remove where must not rebuild rank from cloned stencil flags per column"
     );
 }
@@ -1835,6 +1741,7 @@ fn raw_kernel_launches_stay_in_csa_implementation_boundaries() {
         "src/detail/api/selection_control.rs",
         "src/detail/apply/reduce.rs",
         "src/detail/apply/search.rs",
+        "src/detail/impls/item.rs",
         "src/detail/impls/iter/tuple.rs",
         "src/detail/impls/mod.rs",
         "src/detail/kernels/expr.rs",
@@ -1852,6 +1759,7 @@ fn raw_kernel_launches_stay_in_csa_implementation_boundaries() {
         "src/detail/read/by_key/reduce.rs",
         "src/detail/read/by_key/scan.rs",
         "src/detail/read/gather.rs",
+        "src/detail/read/kernel.rs",
         "src/detail/read/selection.rs",
     ];
 

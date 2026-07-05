@@ -38,6 +38,7 @@ const BLOCK_UNIQUE_SIZE: u32 = 256;
 pub(in crate::detail) mod by_key;
 mod core;
 mod gather;
+mod kernel;
 mod ordering;
 mod reduce;
 mod scan;
@@ -47,6 +48,11 @@ mod selection;
 
 #[allow(unused_imports)]
 pub(crate) use core::*;
+pub(crate) use kernel::{
+    ColumnRead, KernelReadBoundMany, ScanByKeyValueItem, ZipRead1, ZipRead2, ZipRead3, ZipRead4,
+    ZipRead5, ZipRead6, ZipRead7, materialize_logical3_read,
+};
+pub use kernel::{KernelRead, KernelReadAt};
 
 #[allow(unused_imports)]
 pub(crate) use by_key::*;

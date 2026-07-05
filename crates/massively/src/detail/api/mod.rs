@@ -16,18 +16,16 @@ pub(in crate::detail) use expr::{
     device_expr_selected_rank_with_policy, device_expr_selection_flags_with_policy,
 };
 pub use memory::{
-    MItemStorage, MaterializeOutput, TransformUnaryOutput, TransformZip2Output,
-    TransformZip3Output, TransformZip4Output, TransformZip5Output, TransformZip6Output,
-    TransformZip7Output,
+    MItemStorage, MaterializeOutput, TransformLogical3Output, TransformLogical7Output,
+    TransformUnaryOutput, TransformZip2Output, TransformZip3Output, TransformZip4Output,
+    TransformZip5Output, TransformZip6Output, TransformZip7Output,
 };
 pub(in crate::detail) use ordering::{
     device_expr_merge_by_key_values_into_with_control_with_policy,
     device_expr_merge_by_key_values_with_control_with_policy,
 };
-pub use ordering::{
-    merge, merge_by_key, reverse, set_difference, set_intersection, set_union, sort, sort_by_key,
-};
-pub use reduce::{reduce, reduce_by_key};
+pub use ordering::{merge, reverse, set_difference, set_intersection, set_union, sort};
+pub use reduce::reduce;
 pub use scan::{
     adjacent_difference, exclusive_scan, exclusive_scan_by_key, inclusive_scan,
     inclusive_scan_by_key,
@@ -37,9 +35,9 @@ pub use search::{
     lower_bound_many, max_element, min_element, minmax_element, mismatch, upper_bound_many,
 };
 pub use selection::{
-    all_of, any_of, copy_where, count_if, find_if, is_partitioned, none_of, partition, remove_if,
+    all_of, any_of, copy_where, count_if, find_if, is_partitioned, none_of, partition,
 };
-pub use sequence::{replace_where, unique, unique_by_key};
+pub use sequence::unique;
 
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},

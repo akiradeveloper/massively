@@ -12,7 +12,7 @@ where
     Pred: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::adjacent_find_dispatch(source, exec.policy(), pred)
+    source.adjacent_find_with_policy(exec.policy(), pred)
 }
 
 /// Returns whether two inputs are equal under `eq`.
@@ -30,7 +30,7 @@ where
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left as sealed::MIterDispatch<R>>::equal_dispatch(left, exec.policy(), right, eq)
+    left.equal_with_policy(exec.policy(), right, eq)
 }
 
 /// Finds the first input element equal to any needle.
@@ -48,7 +48,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_input(exec, &needles)?;
-    <Input as sealed::MIterDispatch<R>>::find_first_of_dispatch(source, exec.policy(), needles, eq)
+    source.find_first_of_with_policy(exec.policy(), needles, eq)
 }
 
 /// Returns whether input is sorted.
@@ -63,7 +63,7 @@ where
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::is_sorted_dispatch(source, exec.policy(), less)
+    source.is_sorted_with_policy(exec.policy(), less)
 }
 
 /// Returns the first position where sorted order is broken.
@@ -78,7 +78,7 @@ where
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::is_sorted_until_dispatch(source, exec.policy(), less)
+    source.is_sorted_until_with_policy(exec.policy(), less)
 }
 
 /// Lexicographically compares two inputs.
@@ -96,12 +96,7 @@ where
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left as sealed::MIterDispatch<R>>::lexicographical_compare_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-    )
+    left.lexicographical_compare_with_policy(exec.policy(), right, less)
 }
 
 /// Finds the lower bound of each value in a sorted input.
@@ -121,12 +116,7 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &values)?;
     exec.ensure_policy_id(out.source.inner.policy_id())?;
-    let bounds = <Input as sealed::MIterDispatch<R>>::lower_bound_dispatch(
-        source,
-        exec.policy(),
-        values,
-        less,
-    )?;
+    let bounds = source.lower_bound_many_with_policy(exec.policy(), values, less)?;
     exec.copy(bounds.slice(..), out)
 }
 
@@ -142,7 +132,7 @@ where
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::max_element_dispatch(source, exec.policy(), less)
+    source.max_element_with_policy(exec.policy(), less)
 }
 
 /// Finds the minimum element index.
@@ -157,7 +147,7 @@ where
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::min_element_dispatch(source, exec.policy(), less)
+    source.min_element_with_policy(exec.policy(), less)
 }
 
 /// Finds both minimum and maximum element indices.
@@ -172,7 +162,7 @@ where
     Less: op::BinaryPredicateOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::minmax_element_dispatch(source, exec.policy(), less)
+    source.minmax_element_with_policy(exec.policy(), less)
 }
 
 /// Finds the first mismatch between two inputs.
@@ -190,7 +180,7 @@ where
 {
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
-    <Left as sealed::MIterDispatch<R>>::mismatch_dispatch(left, exec.policy(), right, eq)
+    left.mismatch_with_policy(exec.policy(), right, eq)
 }
 
 /// Finds the upper bound of each value in a sorted input.
@@ -210,11 +200,6 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &values)?;
     exec.ensure_policy_id(out.source.inner.policy_id())?;
-    let bounds = <Input as sealed::MIterDispatch<R>>::upper_bound_dispatch(
-        source,
-        exec.policy(),
-        values,
-        less,
-    )?;
+    let bounds = source.upper_bound_many_with_policy(exec.policy(), values, less)?;
     exec.copy(bounds.slice(..), out)
 }

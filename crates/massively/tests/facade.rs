@@ -39,6 +39,30 @@ fn zip_types_are_exported() {
     let _: Zip2<_, _> = Zip2(1_u32, 2_u32);
 }
 
+fn assert_mitem<T: massively::MItem<WgpuRuntime>>() {}
+
+#[test]
+fn nested_tuple_values_are_logical_mitems() {
+    assert_mitem::<((u32, (f32, u32)), (i32,))>();
+}
+
+fn assert_miter_item<R, Iter, Item>()
+where
+    R: Runtime,
+    Iter: massively::MIter<R, Item = Item>,
+    Item: massively::MItem<R>,
+{
+}
+
+#[test]
+fn nested_zip_values_are_logical_miters() {
+    type Slice<'a, T> = massively::DeviceSlice<'a, WgpuRuntime, T>;
+    type Pair<'a> = massively::Zip2<Slice<'a, u32>, Slice<'a, f32>>;
+    type Nested<'a> = massively::Zip2<Pair<'a>, Slice<'a, i32>>;
+
+    assert_miter_item::<WgpuRuntime, Nested<'static>, ((u32, f32), i32)>();
+}
+
 struct AddOne;
 
 #[cubecl::cube]
@@ -339,10 +363,10 @@ where
     massively::gather(exec, source, indices, out)
 }
 
-fn copy_where2<R, S1, S2>(
+fn copy_where2<'a, R, S1, S2>(
     exec: &Executor<R>,
     source: S1,
-    stencil: DeviceSlice<'_, R, u32>,
+    stencil: DeviceSlice<'a, R, u32>,
     out: S2,
 ) -> Result<massively::MIndex, massively::Error>
 where
@@ -458,6 +482,7 @@ fn adjacent_difference2<R, S1, S2, Op>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: massively::MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Op: ReductionOp<R, S1::Item>,
 {

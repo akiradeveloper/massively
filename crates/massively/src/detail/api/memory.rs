@@ -1,11 +1,11 @@
 use crate::{
     detail::op::kernel::UnaryOp,
     device::{
-        DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, S0, StorageKernelColumn, Zip,
-        Zip1, Zip2, Zip3,
+        DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, KernelColumnBindings, S0,
+        StorageKernelColumn, Zip, Zip1, Zip2, Zip3,
     },
     error::Error,
-    expr::DeviceGpuExpr,
+    expr::{DeviceGpuExpr, LogicalDeviceExpr3, LogicalDeviceExpr7},
     kernels::*,
     policy::CubePolicy,
 };
@@ -299,6 +299,553 @@ impl_wide_transform_unary_output!(
 impl_wide_transform_unary_output!(
     transform_tuple1_to_tuple7_kernel,
     (A: output_a, B: output_b, C: output_c, D: output_d, E: output_e, F: output_f, G: output_g)
+);
+
+#[doc(hidden)]
+pub trait TransformLogical3Output<R, Input, LeafA, LeafB, LeafC, Expr, Op>:
+    MItemStorage<R>
+where
+    R: Runtime,
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive + CubeElement,
+    LeafB: CubePrimitive + CubeElement,
+    LeafC: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    Op: UnaryOp<Input, Output = Self>,
+{
+    fn run_logical3(
+        policy: &CubePolicy<R>,
+        bindings: KernelColumnBindings,
+        len: usize,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
+}
+
+impl<R, Input, LeafA, LeafB, LeafC, Expr, OutA, Op>
+    TransformLogical3Output<R, Input, LeafA, LeafB, LeafC, Expr, Op> for (OutA,)
+where
+    R: Runtime,
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive + CubeElement,
+    LeafB: CubePrimitive + CubeElement,
+    LeafC: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive + CubeElement,
+    Op: UnaryOp<Input, Output = (OutA,)>,
+{
+    fn run_logical3(
+        policy: &CubePolicy<R>,
+        bindings: KernelColumnBindings,
+        len: usize,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+        let client = policy.client();
+        let output_a = client.empty(len * std::mem::size_of::<OutA>());
+        if len != 0 {
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let offsets = bindings.slot_offsets_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 = u32::try_from(block_count)
+                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                transform_logical3_to_tuple1_kernel::launch_unchecked::<
+                    Input,
+                    LeafA,
+                    LeafB,
+                    LeafC,
+                    Expr,
+                    OutA,
+                    Op,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    env,
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 4),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(output_a.clone(), len),
+                );
+            }
+        }
+        Ok(Zip1 {
+            source: DeviceVec::from_handle(policy.id(), output_a, len),
+        })
+    }
+}
+
+impl<R, Input, LeafA, LeafB, LeafC, Expr, OutA, OutB, Op>
+    TransformLogical3Output<R, Input, LeafA, LeafB, LeafC, Expr, Op> for (OutA, OutB)
+where
+    R: Runtime,
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive + CubeElement,
+    LeafB: CubePrimitive + CubeElement,
+    LeafC: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive + CubeElement,
+    OutB: CubePrimitive + CubeElement,
+    Op: UnaryOp<Input, Output = (OutA, OutB)>,
+{
+    fn run_logical3(
+        policy: &CubePolicy<R>,
+        bindings: KernelColumnBindings,
+        len: usize,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+        let client = policy.client();
+        let output_a = client.empty(len * std::mem::size_of::<OutA>());
+        let output_b = client.empty(len * std::mem::size_of::<OutB>());
+        if len != 0 {
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let offsets = bindings.slot_offsets_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 = u32::try_from(block_count)
+                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                transform_logical3_to_tuple2_kernel::launch_unchecked::<
+                    Input,
+                    LeafA,
+                    LeafB,
+                    LeafC,
+                    Expr,
+                    OutA,
+                    OutB,
+                    Op,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    env,
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 4),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(output_a.clone(), len),
+                    BufferArg::from_raw_parts(output_b.clone(), len),
+                );
+            }
+        }
+        Ok(Zip2 {
+            left: DeviceVec::from_handle(policy.id(), output_a, len),
+            right: DeviceVec::from_handle(policy.id(), output_b, len),
+        })
+    }
+}
+
+impl<R, Input, LeafA, LeafB, LeafC, Expr, OutA, OutB, OutC, Op>
+    TransformLogical3Output<R, Input, LeafA, LeafB, LeafC, Expr, Op> for (OutA, OutB, OutC)
+where
+    R: Runtime,
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive + CubeElement,
+    LeafB: CubePrimitive + CubeElement,
+    LeafC: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive + CubeElement,
+    OutB: CubePrimitive + CubeElement,
+    OutC: CubePrimitive + CubeElement,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC)>,
+{
+    fn run_logical3(
+        policy: &CubePolicy<R>,
+        bindings: KernelColumnBindings,
+        len: usize,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+        let client = policy.client();
+        let output_a = client.empty(len * std::mem::size_of::<OutA>());
+        let output_b = client.empty(len * std::mem::size_of::<OutB>());
+        let output_c = client.empty(len * std::mem::size_of::<OutC>());
+        if len != 0 {
+            let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+            let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+            let offsets = bindings.slot_offsets_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 = u32::try_from(block_count)
+                .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                transform_logical3_to_tuple3_kernel::launch_unchecked::<
+                    Input,
+                    LeafA,
+                    LeafB,
+                    LeafC,
+                    Expr,
+                    OutA,
+                    OutB,
+                    OutC,
+                    Op,
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    env,
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 4),
+                    BufferArg::from_raw_parts(len_handle.clone(), 1),
+                    BufferArg::from_raw_parts(output_a.clone(), len),
+                    BufferArg::from_raw_parts(output_b.clone(), len),
+                    BufferArg::from_raw_parts(output_c.clone(), len),
+                );
+            }
+        }
+        Ok(Zip3 {
+            first: DeviceVec::from_handle(policy.id(), output_a, len),
+            second: DeviceVec::from_handle(policy.id(), output_b, len),
+            third: DeviceVec::from_handle(policy.id(), output_c, len),
+        })
+    }
+}
+
+macro_rules! impl_transform_logical3_wide_output {
+    (
+        $kernel:ident,
+        ($( $out_ty:ident : $out_handle:ident ),+),
+        $storage:expr
+    ) => {
+        impl<R, Input, LeafA, LeafB, LeafC, Expr, $( $out_ty, )+ Op>
+            TransformLogical3Output<R, Input, LeafA, LeafB, LeafC, Expr, Op> for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            Input: CubeType + 'static + Send + Sync,
+            LeafA: CubePrimitive + CubeElement,
+            LeafB: CubePrimitive + CubeElement,
+            LeafC: CubePrimitive + CubeElement,
+            Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+            $( $out_ty: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<Input, Output = ($( $out_ty, )+)>,
+        {
+            fn run_logical3(
+                policy: &CubePolicy<R>,
+                bindings: KernelColumnBindings,
+                len: usize,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let client = policy.client();
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out_ty>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let offsets = bindings.slot_offsets_handle(client)?;
+                    let slot0 = bindings.slot_or_first(0);
+                    let slot1 = bindings.slot_or_first(1);
+                    let slot2 = bindings.slot_or_first(2);
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<
+                            Input,
+                            LeafA,
+                            LeafB,
+                            LeafC,
+                            Expr,
+                            $( $out_ty, )+
+                            Op,
+                            R,
+                        >(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            env,
+                            BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                            BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                            BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                            BufferArg::from_raw_parts(offsets.clone(), 4),
+                            BufferArg::from_raw_parts(len_handle.clone(), 1),
+                            $(
+                                BufferArg::from_raw_parts($out_handle.clone(), len),
+                            )+
+                        );
+                    }
+                }
+                Ok($storage(policy, len, $( $out_handle ),+))
+            }
+        }
+    };
+}
+
+impl_transform_logical3_wide_output!(
+    transform_logical3_to_tuple4_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d),
+    logical7_tuple4_storage
+);
+impl_transform_logical3_wide_output!(
+    transform_logical3_to_tuple5_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e),
+    logical7_tuple5_storage
+);
+impl_transform_logical3_wide_output!(
+    transform_logical3_to_tuple6_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f),
+    logical7_tuple6_storage
+);
+impl_transform_logical3_wide_output!(
+    transform_logical3_to_tuple7_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f, OutG: output_g),
+    logical7_tuple7_storage
+);
+
+#[doc(hidden)]
+pub trait TransformLogical7Output<
+    R,
+    Input,
+    Leaf0,
+    Leaf1,
+    Leaf2,
+    Leaf3,
+    Leaf4,
+    Leaf5,
+    Leaf6,
+    Expr,
+    Op,
+>: MItemStorage<R> where
+    R: Runtime,
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive + CubeElement,
+    Leaf1: CubePrimitive + CubeElement,
+    Leaf2: CubePrimitive + CubeElement,
+    Leaf3: CubePrimitive + CubeElement,
+    Leaf4: CubePrimitive + CubeElement,
+    Leaf5: CubePrimitive + CubeElement,
+    Leaf6: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Op: UnaryOp<Input, Output = Self>,
+{
+    fn run_logical7(
+        policy: &CubePolicy<R>,
+        bindings: KernelColumnBindings,
+        len: usize,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
+}
+
+macro_rules! impl_transform_logical7_output {
+    (
+        $kernel:ident,
+        ($( $out_ty:ident : $out_handle:ident ),+),
+        $storage:expr
+    ) => {
+        impl<R, Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr, $( $out_ty, )+ Op>
+            TransformLogical7Output<
+                R,
+                Input,
+                Leaf0,
+                Leaf1,
+                Leaf2,
+                Leaf3,
+                Leaf4,
+                Leaf5,
+                Leaf6,
+                Expr,
+                Op,
+            > for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            Input: CubeType + 'static + Send + Sync,
+            Leaf0: CubePrimitive + CubeElement,
+            Leaf1: CubePrimitive + CubeElement,
+            Leaf2: CubePrimitive + CubeElement,
+            Leaf3: CubePrimitive + CubeElement,
+            Leaf4: CubePrimitive + CubeElement,
+            Leaf5: CubePrimitive + CubeElement,
+            Leaf6: CubePrimitive + CubeElement,
+            Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            $( $out_ty: CubePrimitive + CubeElement, )+
+            Op: UnaryOp<Input, Output = ($( $out_ty, )+)>,
+        {
+            fn run_logical7(
+                policy: &CubePolicy<R>,
+                bindings: KernelColumnBindings,
+                len: usize,
+                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let client = policy.client();
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out_ty>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let offsets = bindings.slot_offsets7_handle(client)?;
+                    let slot0 = bindings.slot_or_first(0);
+                    let slot1 = bindings.slot_or_first(1);
+                    let slot2 = bindings.slot_or_first(2);
+                    let slot3 = bindings.slot_or_first(3);
+                    let slot4 = bindings.slot_or_first(4);
+                    let slot5 = bindings.slot_or_first(5);
+                    let slot6 = bindings.slot_or_first(6);
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<
+                            Input,
+                            Leaf0,
+                            Leaf1,
+                            Leaf2,
+                            Leaf3,
+                            Leaf4,
+                            Leaf5,
+                            Leaf6,
+                            Expr,
+                            $( $out_ty, )+
+                            Op,
+                            R,
+                        >(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            env,
+                            BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                            BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                            BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                            BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                            BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                            BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                            BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                            BufferArg::from_raw_parts(offsets.clone(), 7),
+                            BufferArg::from_raw_parts(len_handle.clone(), 1),
+                            $(
+                                BufferArg::from_raw_parts($out_handle.clone(), len),
+                            )+
+                        );
+                    }
+                }
+                Ok($storage(policy, len, $( $out_handle ),+))
+            }
+        }
+    };
+}
+
+fn logical7_zip1_storage<R: Runtime, A>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    output_a: cubecl::server::Handle,
+) -> Zip1<DeviceVec<R, A>>
+where
+    A: CubePrimitive + CubeElement,
+{
+    Zip1 {
+        source: DeviceVec::from_handle(policy.id(), output_a, len),
+    }
+}
+
+fn logical7_zip2_storage<R: Runtime, A, B>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    output_a: cubecl::server::Handle,
+    output_b: cubecl::server::Handle,
+) -> Zip2<DeviceVec<R, A>, DeviceVec<R, B>>
+where
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+{
+    Zip2 {
+        left: DeviceVec::from_handle(policy.id(), output_a, len),
+        right: DeviceVec::from_handle(policy.id(), output_b, len),
+    }
+}
+
+fn logical7_zip3_storage<R: Runtime, A, B, C>(
+    policy: &CubePolicy<R>,
+    len: usize,
+    output_a: cubecl::server::Handle,
+    output_b: cubecl::server::Handle,
+    output_c: cubecl::server::Handle,
+) -> Zip3<DeviceVec<R, A>, DeviceVec<R, B>, DeviceVec<R, C>>
+where
+    A: CubePrimitive + CubeElement,
+    B: CubePrimitive + CubeElement,
+    C: CubePrimitive + CubeElement,
+{
+    Zip3 {
+        first: DeviceVec::from_handle(policy.id(), output_a, len),
+        second: DeviceVec::from_handle(policy.id(), output_b, len),
+        third: DeviceVec::from_handle(policy.id(), output_c, len),
+    }
+}
+
+macro_rules! define_logical7_tuple_storage {
+    ($name:ident, $( $ty:ident : $handle:ident ),+) => {
+        fn $name<R: Runtime, $( $ty ),+>(
+            policy: &CubePolicy<R>,
+            len: usize,
+            $( $handle: cubecl::server::Handle ),+
+        ) -> ($( DeviceVec<R, $ty>, )+)
+        where
+            $( $ty: CubePrimitive + CubeElement, )+
+        {
+            ($( DeviceVec::from_handle(policy.id(), $handle, len), )+)
+        }
+    };
+}
+
+define_logical7_tuple_storage!(logical7_tuple4_storage, A: output_a, B: output_b, C: output_c, D: output_d);
+define_logical7_tuple_storage!(logical7_tuple5_storage, A: output_a, B: output_b, C: output_c, D: output_d, E: output_e);
+define_logical7_tuple_storage!(logical7_tuple6_storage, A: output_a, B: output_b, C: output_c, D: output_d, E: output_e, F: output_f);
+define_logical7_tuple_storage!(logical7_tuple7_storage, A: output_a, B: output_b, C: output_c, D: output_d, E: output_e, F: output_f, G: output_g);
+
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple1_kernel,
+    (OutA: output_a),
+    logical7_zip1_storage
+);
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple2_kernel,
+    (OutA: output_a, OutB: output_b),
+    logical7_zip2_storage
+);
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple3_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c),
+    logical7_zip3_storage
+);
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple4_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d),
+    logical7_tuple4_storage
+);
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple5_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e),
+    logical7_tuple5_storage
+);
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple6_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f),
+    logical7_tuple6_storage
+);
+impl_transform_logical7_output!(
+    transform_logical7_to_tuple7_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f, OutG: output_g),
+    logical7_tuple7_storage
 );
 
 macro_rules! impl_transform_tuple_output {

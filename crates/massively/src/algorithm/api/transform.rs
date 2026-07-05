@@ -16,7 +16,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::transform_dispatch(source, exec.policy(), op, env, out)
+    source.transform_with_policy(exec.policy(), op, env, out)
 }
 
 /// Applies a unary transform where the `u32` stencil flag is non-zero.
@@ -38,18 +38,6 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
-        stencil,
-        exec.policy(),
-        false,
-        false,
-    )?;
-    <Input as sealed::MIterDispatch<R>>::transform_where_dispatch(
-        source,
-        exec.policy(),
-        op,
-        env,
-        stencil,
-        out,
-    )
+    let stencil = stencil.stencil_selection_with_policy(exec.policy(), false, false)?;
+    source.transform_where_with_policy(exec.policy(), op, env, stencil, out)
 }

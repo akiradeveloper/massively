@@ -416,6 +416,40 @@ fn tuple_transform_uses_flat_zip_input() {
 }
 
 #[test]
+fn tuple_transform_preserves_nested_zip_input_shape() {
+    let exec = exec();
+    let lhs = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
+    let rhs = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let bias = exec.to_device(&[100.0_f32, 200.0, 300.0]).unwrap();
+
+    let values = exec.to_device(&[0.0_f32; 3]).unwrap();
+    let tags = exec.to_device(&[0_u32; 3]).unwrap();
+    let adjusted_bias = exec.to_device(&[0.0_f32; 3]).unwrap();
+    transform(
+        &exec,
+        massively::Zip2(
+            massively::Zip2(lhs.slice(..), rhs.slice(..)),
+            bias.slice(..),
+        ),
+        NestedTuple3MixedSplit,
+        (),
+        massively::Zip3(
+            values.slice_mut(..),
+            tags.slice_mut(..),
+            adjusted_bias.slice_mut(..),
+        ),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&values).unwrap(), vec![101.0, 202.0, 303.0]);
+    assert_eq!(exec.to_host(&tags).unwrap(), vec![11, 21, 31]);
+    assert_eq!(
+        exec.to_host(&adjusted_bias).unwrap(),
+        vec![101.0, 202.0, 303.0]
+    );
+}
+
+#[test]
 fn transform_accepts_heterogeneous_tuple_inputs() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();

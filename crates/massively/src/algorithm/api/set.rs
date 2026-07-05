@@ -18,13 +18,7 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    <Left as sealed::MIterDispatch<R>>::set_difference_into_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-        out,
-    )
+    left.set_difference_with_policy(exec.policy(), right, less, out)
 }
 
 /// Computes the sorted set intersection of two sorted inputs.
@@ -45,13 +39,7 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    <Left as sealed::MIterDispatch<R>>::set_intersection_into_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-        out,
-    )
+    left.set_intersection_with_policy(exec.policy(), right, less, out)
 }
 
 /// Computes the sorted set union of two sorted inputs.
@@ -72,11 +60,5 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    <Left as sealed::MIterDispatch<R>>::set_union_into_dispatch(
-        left,
-        exec.policy(),
-        right,
-        less,
-        out,
-    )
+    left.set_union_with_policy(exec.policy(), right, less, out)
 }

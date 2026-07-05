@@ -13,7 +13,7 @@ where
     Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    <Input as sealed::MIterDispatch<R>>::reduce_dispatch(source, exec.policy(), init, op)
+    source.reduce_value_with_policy(exec.policy(), init, op)
 }
 
 /// Reduces consecutive values with equal keys.
@@ -40,14 +40,5 @@ where
     validate_input(exec, &values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    <Keys as sealed::MIterDispatch<R>>::reduce_by_key_into_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        key_eq,
-        init,
-        op,
-        out_k,
-        out_v,
-    )
+    keys.reduce_by_key_with_policy(exec.policy(), values, key_eq, init, op, out_k, out_v)
 }

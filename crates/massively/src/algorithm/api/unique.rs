@@ -1,5 +1,4 @@
 use super::*;
-
 /// Removes consecutive duplicates under `pred`.
 pub fn unique<R, Input, Pred, Output>(
     exec: &Executor<R>,
@@ -15,7 +14,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::unique_into_dispatch(source, exec.policy(), pred, out)
+    source.unique_with_policy(exec.policy(), pred, out)
 }
 
 /// Removes consecutive duplicate keys and keeps their values.
@@ -39,12 +38,5 @@ where
     validate_input(exec, &values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    <Keys as sealed::MIterDispatch<R>>::unique_by_key_into_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        eq,
-        out_k,
-        out_v,
-    )
+    keys.unique_by_key_with_policy(exec.policy(), values, eq, out_k, out_v)
 }

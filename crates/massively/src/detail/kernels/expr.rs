@@ -1,6 +1,9 @@
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp},
-    expr::{DeviceGpuExpr, GpuExpr},
+    expr::{
+        DeviceGpuExpr, GpuExpr, LogicalDeviceExpr3, LogicalDeviceExpr7, LogicalDevicePack3,
+        LogicalDevicePack7,
+    },
 };
 use cubecl::prelude::*;
 
@@ -259,6 +262,2542 @@ define_transform_tuple_to_tuple_kernel!(
     (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
     (OutA: output_a: 0, OutB: output_b: 1, OutC: output_c: 2, OutD: output_d: 3)
 );
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple1_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA,)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple2_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple3_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple4_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple5_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    OutE: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD, OutE)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+    output_e: &mut [OutE],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple6_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    OutE: CubePrimitive,
+    OutF: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD, OutE, OutF)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+    output_e: &mut [OutE],
+    output_f: &mut [OutF],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+        output_f[global] = output.5;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical3_to_tuple7_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    OutE: CubePrimitive,
+    OutF: CubePrimitive,
+    OutG: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD, OutE, OutF, OutG)>,
+>(
+    env: Op::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+    output_e: &mut [OutE],
+    output_f: &mut [OutF],
+    output_g: &mut [OutG],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+        output_f[global] = output.5;
+        output_g[global] = output.6;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_predicate_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    Pred: PredicateOp<Input>,
+>(
+    env: Pred::Env,
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    invert: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply(env, Expr::eval3(slot0, slot1, slot2, slot_offsets, global));
+        flags[global] = if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_mismatch_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeftLeafA: CubePrimitive,
+    LeftLeafB: CubePrimitive,
+    LeftLeafC: CubePrimitive,
+    RightLeafA: CubePrimitive,
+    RightLeafB: CubePrimitive,
+    RightLeafC: CubePrimitive,
+    LeftExpr: LogicalDeviceExpr3<Input, LeftLeafA, LeftLeafB, LeftLeafC>,
+    RightExpr: LogicalDeviceExpr3<Input, RightLeafA, RightLeafB, RightLeafC>,
+    Eq: BinaryPredicateOp<Input>,
+>(
+    left_slot0: &[LeftLeafA],
+    left_slot1: &[LeftLeafB],
+    left_slot2: &[LeftLeafC],
+    left_slot_offsets: &[u32],
+    right_slot0: &[RightLeafA],
+    right_slot1: &[RightLeafB],
+    right_slot2: &[RightLeafC],
+    right_slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let left = LeftExpr::eval3(
+            left_slot0,
+            left_slot1,
+            left_slot2,
+            left_slot_offsets,
+            global,
+        );
+        let right = RightExpr::eval3(
+            right_slot0,
+            right_slot1,
+            right_slot2,
+            right_slot_offsets,
+            global,
+        );
+        flags[global] = if Eq::apply(left, right) { 0u32 } else { 1u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_adjacent_find_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    Pred: BinaryPredicateOp<Input>,
+>(
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let left = Expr::eval3(slot0, slot1, slot2, slot_offsets, global);
+        let right = Expr::eval3(slot0, slot1, slot2, slot_offsets, global + 1);
+        flags[global] = if Pred::apply(left, right) { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_sorted_break_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let current = Expr::eval3(slot0, slot1, slot2, slot_offsets, global);
+        let next = Expr::eval3(slot0, slot1, slot2, slot_offsets, global + 1);
+        flags[global] = if Less::apply(next, current) {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_minmax_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    min_flags: &mut [u32],
+    max_flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let mut is_min = true;
+        let mut is_max = true;
+        let mut index = 0usize;
+        while index < (len[0] as usize) {
+            if Less::apply(
+                Expr::eval3(slot0, slot1, slot2, slot_offsets, index),
+                Expr::eval3(slot0, slot1, slot2, slot_offsets, global),
+            ) {
+                is_min = false;
+            }
+            if Less::apply(
+                Expr::eval3(slot0, slot1, slot2, slot_offsets, global),
+                Expr::eval3(slot0, slot1, slot2, slot_offsets, index),
+            ) {
+                is_max = false;
+            }
+            if index < global
+                && !Less::apply(
+                    Expr::eval3(slot0, slot1, slot2, slot_offsets, global),
+                    Expr::eval3(slot0, slot1, slot2, slot_offsets, index),
+                )
+                && !Less::apply(
+                    Expr::eval3(slot0, slot1, slot2, slot_offsets, index),
+                    Expr::eval3(slot0, slot1, slot2, slot_offsets, global),
+                )
+            {
+                is_min = false;
+                is_max = false;
+            }
+            index += 1usize;
+        }
+        min_flags[global] = if is_min { 1u32 } else { 0u32 };
+        max_flags[global] = if is_max { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_lower_bound_many_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    SourceLeafA: CubePrimitive,
+    SourceLeafB: CubePrimitive,
+    SourceLeafC: CubePrimitive,
+    ValueLeafA: CubePrimitive,
+    ValueLeafB: CubePrimitive,
+    ValueLeafC: CubePrimitive,
+    SourceExpr: LogicalDeviceExpr3<Input, SourceLeafA, SourceLeafB, SourceLeafC>,
+    ValueExpr: LogicalDeviceExpr3<Input, ValueLeafA, ValueLeafB, ValueLeafC>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    source0: &[SourceLeafA],
+    source1: &[SourceLeafB],
+    source2: &[SourceLeafC],
+    source_offsets: &[u32],
+    value0: &[ValueLeafA],
+    value1: &[ValueLeafB],
+    value2: &[ValueLeafC],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let candidate = SourceExpr::eval3(source0, source1, source2, source_offsets, mid);
+            if Less::apply(
+                candidate,
+                ValueExpr::eval3(value0, value1, value2, value_offsets, global),
+            ) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_upper_bound_many_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    SourceLeafA: CubePrimitive,
+    SourceLeafB: CubePrimitive,
+    SourceLeafC: CubePrimitive,
+    ValueLeafA: CubePrimitive,
+    ValueLeafB: CubePrimitive,
+    ValueLeafC: CubePrimitive,
+    SourceExpr: LogicalDeviceExpr3<Input, SourceLeafA, SourceLeafB, SourceLeafC>,
+    ValueExpr: LogicalDeviceExpr3<Input, ValueLeafA, ValueLeafB, ValueLeafC>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    source0: &[SourceLeafA],
+    source1: &[SourceLeafB],
+    source2: &[SourceLeafC],
+    source_offsets: &[u32],
+    value0: &[ValueLeafA],
+    value1: &[ValueLeafB],
+    value2: &[ValueLeafC],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let candidate = SourceExpr::eval3(source0, source1, source2, source_offsets, mid);
+            if !Less::apply(
+                ValueExpr::eval3(value0, value1, value2, value_offsets, global),
+                candidate,
+            ) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_reduce_expr_partials_kernel<
+    Item: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Expr: LogicalDeviceExpr3<Item, LeafA, LeafB, LeafC>,
+    Pack: LogicalDevicePack3<Item, LeafA, LeafB, LeafC> + 'static + Send + Sync,
+    Op: BinaryOp<Item>,
+>(
+    slot0: &[LeafA],
+    slot1: &[LeafB],
+    slot2: &[LeafC],
+    slot_offsets: &[u32],
+    len: &[u32],
+    partial_a: &mut [LeafA],
+    partial_b: &mut [LeafB],
+    partial_c: &mut [LeafC],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let logical_len = len[0] as usize;
+    let mut values_a = Shared::<[LeafA]>::new_slice(cube_dim);
+    let mut values_b = Shared::<[LeafB]>::new_slice(cube_dim);
+    let mut values_c = Shared::<[LeafC]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let step = (CUBE_DIM as usize) * partial_a.len();
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let first = Expr::eval3(slot0, slot1, slot2, slot_offsets, 0);
+    let first = Pack::unpack(first);
+    let acc_a = RuntimeCell::<LeafA>::new(first.0);
+    let acc_b = RuntimeCell::<LeafB>::new(first.1);
+    let acc_c = RuntimeCell::<LeafC>::new(first.2);
+
+    while i.read() < logical_len {
+        if has_value.read() != 0 {
+            let value = Expr::eval3(slot0, slot1, slot2, slot_offsets, i.read());
+            let next = Op::apply(Pack::pack(acc_a.read(), acc_b.read(), acc_c.read()), value);
+            let next = Pack::unpack(next);
+            acc_a.store(next.0);
+            acc_b.store(next.1);
+            acc_c.store(next.2);
+        } else {
+            let value = Expr::eval3(slot0, slot1, slot2, slot_offsets, i.read());
+            let value = Pack::unpack(value);
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            acc_c.store(value.2);
+            has_value.store(1u32);
+        }
+        i.store(i.read() + step);
+    }
+
+    values_a[unit] = acc_a.read();
+    values_b[unit] = acc_b.read();
+    values_c[unit] = acc_c.read();
+    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(cube_dim / 2);
+    while stride.read() > 0 {
+        if unit < stride.read() && valid[unit + stride.read()] != 0 {
+            if valid[unit] != 0 {
+                let next = Op::apply(
+                    Pack::pack(values_a[unit], values_b[unit], values_c[unit]),
+                    Pack::pack(
+                        values_a[unit + stride.read()],
+                        values_b[unit + stride.read()],
+                        values_c[unit + stride.read()],
+                    ),
+                );
+                let next = Pack::unpack(next);
+                values_a[unit] = next.0;
+                values_b[unit] = next.1;
+                values_c[unit] = next.2;
+            } else {
+                values_a[unit] = values_a[unit + stride.read()];
+                values_b[unit] = values_b[unit + stride.read()];
+                values_c[unit] = values_c[unit + stride.read()];
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() / 2);
+    }
+
+    if unit == 0 && valid[0] != 0 {
+        partial_a[CUBE_POS as usize] = values_a[0];
+        partial_b[CUBE_POS as usize] = values_b[0];
+        partial_c[CUBE_POS as usize] = values_c[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_reduce_partials_kernel<
+    Item: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Pack: LogicalDevicePack3<Item, LeafA, LeafB, LeafC> + 'static + Send + Sync,
+    Op: BinaryOp<Item>,
+>(
+    input_a: &[LeafA],
+    input_b: &[LeafB],
+    input_c: &[LeafC],
+    len: &[u32],
+    partial_a: &mut [LeafA],
+    partial_b: &mut [LeafB],
+    partial_c: &mut [LeafC],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let logical_len = len[0] as usize;
+    let mut values_a = Shared::<[LeafA]>::new_slice(cube_dim);
+    let mut values_b = Shared::<[LeafB]>::new_slice(cube_dim);
+    let mut values_c = Shared::<[LeafC]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let step = (CUBE_DIM as usize) * partial_a.len();
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let acc_a = RuntimeCell::<LeafA>::new(input_a[0]);
+    let acc_b = RuntimeCell::<LeafB>::new(input_b[0]);
+    let acc_c = RuntimeCell::<LeafC>::new(input_c[0]);
+
+    while i.read() < logical_len {
+        if has_value.read() != 0 {
+            let value = Pack::pack(input_a[i.read()], input_b[i.read()], input_c[i.read()]);
+            let next = Op::apply(Pack::pack(acc_a.read(), acc_b.read(), acc_c.read()), value);
+            let next = Pack::unpack(next);
+            acc_a.store(next.0);
+            acc_b.store(next.1);
+            acc_c.store(next.2);
+        } else {
+            let value = Pack::pack(input_a[i.read()], input_b[i.read()], input_c[i.read()]);
+            let value = Pack::unpack(value);
+            acc_a.store(value.0);
+            acc_b.store(value.1);
+            acc_c.store(value.2);
+            has_value.store(1u32);
+        }
+        i.store(i.read() + step);
+    }
+
+    values_a[unit] = acc_a.read();
+    values_b[unit] = acc_b.read();
+    values_c[unit] = acc_c.read();
+    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(cube_dim / 2);
+    while stride.read() > 0 {
+        if unit < stride.read() && valid[unit + stride.read()] != 0 {
+            if valid[unit] != 0 {
+                let next = Op::apply(
+                    Pack::pack(values_a[unit], values_b[unit], values_c[unit]),
+                    Pack::pack(
+                        values_a[unit + stride.read()],
+                        values_b[unit + stride.read()],
+                        values_c[unit + stride.read()],
+                    ),
+                );
+                let next = Pack::unpack(next);
+                values_a[unit] = next.0;
+                values_b[unit] = next.1;
+                values_c[unit] = next.2;
+            } else {
+                values_a[unit] = values_a[unit + stride.read()];
+                values_b[unit] = values_b[unit + stride.read()];
+                values_c[unit] = values_c[unit + stride.read()];
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() / 2);
+    }
+
+    if unit == 0 && valid[0] != 0 {
+        partial_a[CUBE_POS as usize] = values_a[0];
+        partial_b[CUBE_POS as usize] = values_b[0];
+        partial_c[CUBE_POS as usize] = values_c[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical3_reduce_finalize_kernel<
+    Item: CubeType + 'static + Send + Sync,
+    LeafA: CubePrimitive,
+    LeafB: CubePrimitive,
+    LeafC: CubePrimitive,
+    Pack: LogicalDevicePack3<Item, LeafA, LeafB, LeafC> + 'static + Send + Sync,
+    Op: BinaryOp<Item>,
+>(
+    partial_a: &[LeafA],
+    partial_b: &[LeafB],
+    partial_c: &[LeafC],
+    init_a: &[LeafA],
+    init_b: &[LeafB],
+    init_c: &[LeafC],
+    output_a: &mut [LeafA],
+    output_b: &mut [LeafB],
+    output_c: &mut [LeafC],
+) {
+    if UNIT_POS == 0 {
+        let output = Op::apply(
+            Pack::pack(init_a[0], init_b[0], init_c[0]),
+            Pack::pack(partial_a[0], partial_b[0], partial_c[0]),
+        );
+        let output = Pack::unpack(output);
+        output_a[0] = output.0;
+        output_b[0] = output.1;
+        output_c[0] = output.2;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_reduce_expr_partials_kernel<
+    Item: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+        + 'static
+        + Send
+        + Sync,
+    Op: BinaryOp<Item>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    partial0: &mut [Leaf0],
+    partial1: &mut [Leaf1],
+    partial2: &mut [Leaf2],
+    partial3: &mut [Leaf3],
+    partial4: &mut [Leaf4],
+    partial5: &mut [Leaf5],
+    partial6: &mut [Leaf6],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let logical_len = len[0] as usize;
+    let mut values0 = Shared::<[Leaf0]>::new_slice(cube_dim);
+    let mut values1 = Shared::<[Leaf1]>::new_slice(cube_dim);
+    let mut values2 = Shared::<[Leaf2]>::new_slice(cube_dim);
+    let mut values3 = Shared::<[Leaf3]>::new_slice(cube_dim);
+    let mut values4 = Shared::<[Leaf4]>::new_slice(cube_dim);
+    let mut values5 = Shared::<[Leaf5]>::new_slice(cube_dim);
+    let mut values6 = Shared::<[Leaf6]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let step = (CUBE_DIM as usize) * partial0.len();
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let first = Expr::eval7(
+        slot0,
+        slot1,
+        slot2,
+        slot3,
+        slot4,
+        slot5,
+        slot6,
+        slot_offsets,
+        0,
+    );
+    let first = Pack::unpack(first);
+    let acc0 = RuntimeCell::<Leaf0>::new(first.0);
+    let acc1 = RuntimeCell::<Leaf1>::new(first.1);
+    let acc2 = RuntimeCell::<Leaf2>::new(first.2);
+    let acc3 = RuntimeCell::<Leaf3>::new(first.3);
+    let acc4 = RuntimeCell::<Leaf4>::new(first.4);
+    let acc5 = RuntimeCell::<Leaf5>::new(first.5);
+    let acc6 = RuntimeCell::<Leaf6>::new(first.6);
+
+    while i.read() < logical_len {
+        if has_value.read() != 0 {
+            let value = Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                i.read(),
+            );
+            let next = Op::apply(
+                Pack::pack(
+                    acc0.read(),
+                    acc1.read(),
+                    acc2.read(),
+                    acc3.read(),
+                    acc4.read(),
+                    acc5.read(),
+                    acc6.read(),
+                ),
+                value,
+            );
+            let next = Pack::unpack(next);
+            acc0.store(next.0);
+            acc1.store(next.1);
+            acc2.store(next.2);
+            acc3.store(next.3);
+            acc4.store(next.4);
+            acc5.store(next.5);
+            acc6.store(next.6);
+        } else {
+            let value = Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                i.read(),
+            );
+            let value = Pack::unpack(value);
+            acc0.store(value.0);
+            acc1.store(value.1);
+            acc2.store(value.2);
+            acc3.store(value.3);
+            acc4.store(value.4);
+            acc5.store(value.5);
+            acc6.store(value.6);
+            has_value.store(1u32);
+        }
+        i.store(i.read() + step);
+    }
+
+    values0[unit] = acc0.read();
+    values1[unit] = acc1.read();
+    values2[unit] = acc2.read();
+    values3[unit] = acc3.read();
+    values4[unit] = acc4.read();
+    values5[unit] = acc5.read();
+    values6[unit] = acc6.read();
+    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(cube_dim / 2);
+    while stride.read() > 0 {
+        if unit < stride.read() && valid[unit + stride.read()] != 0 {
+            if valid[unit] != 0 {
+                let next = Op::apply(
+                    Pack::pack(
+                        values0[unit],
+                        values1[unit],
+                        values2[unit],
+                        values3[unit],
+                        values4[unit],
+                        values5[unit],
+                        values6[unit],
+                    ),
+                    Pack::pack(
+                        values0[unit + stride.read()],
+                        values1[unit + stride.read()],
+                        values2[unit + stride.read()],
+                        values3[unit + stride.read()],
+                        values4[unit + stride.read()],
+                        values5[unit + stride.read()],
+                        values6[unit + stride.read()],
+                    ),
+                );
+                let next = Pack::unpack(next);
+                values0[unit] = next.0;
+                values1[unit] = next.1;
+                values2[unit] = next.2;
+                values3[unit] = next.3;
+                values4[unit] = next.4;
+                values5[unit] = next.5;
+                values6[unit] = next.6;
+            } else {
+                values0[unit] = values0[unit + stride.read()];
+                values1[unit] = values1[unit + stride.read()];
+                values2[unit] = values2[unit + stride.read()];
+                values3[unit] = values3[unit + stride.read()];
+                values4[unit] = values4[unit + stride.read()];
+                values5[unit] = values5[unit + stride.read()];
+                values6[unit] = values6[unit + stride.read()];
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() / 2);
+    }
+
+    if unit == 0 && valid[0] != 0 {
+        partial0[CUBE_POS as usize] = values0[0];
+        partial1[CUBE_POS as usize] = values1[0];
+        partial2[CUBE_POS as usize] = values2[0];
+        partial3[CUBE_POS as usize] = values3[0];
+        partial4[CUBE_POS as usize] = values4[0];
+        partial5[CUBE_POS as usize] = values5[0];
+        partial6[CUBE_POS as usize] = values6[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_reduce_partials_kernel<
+    Item: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+        + 'static
+        + Send
+        + Sync,
+    Op: BinaryOp<Item>,
+>(
+    input0: &[Leaf0],
+    input1: &[Leaf1],
+    input2: &[Leaf2],
+    input3: &[Leaf3],
+    input4: &[Leaf4],
+    input5: &[Leaf5],
+    input6: &[Leaf6],
+    len: &[u32],
+    partial0: &mut [Leaf0],
+    partial1: &mut [Leaf1],
+    partial2: &mut [Leaf2],
+    partial3: &mut [Leaf3],
+    partial4: &mut [Leaf4],
+    partial5: &mut [Leaf5],
+    partial6: &mut [Leaf6],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let logical_len = len[0] as usize;
+    let mut values0 = Shared::<[Leaf0]>::new_slice(cube_dim);
+    let mut values1 = Shared::<[Leaf1]>::new_slice(cube_dim);
+    let mut values2 = Shared::<[Leaf2]>::new_slice(cube_dim);
+    let mut values3 = Shared::<[Leaf3]>::new_slice(cube_dim);
+    let mut values4 = Shared::<[Leaf4]>::new_slice(cube_dim);
+    let mut values5 = Shared::<[Leaf5]>::new_slice(cube_dim);
+    let mut values6 = Shared::<[Leaf6]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let step = (CUBE_DIM as usize) * partial0.len();
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let acc0 = RuntimeCell::<Leaf0>::new(input0[0]);
+    let acc1 = RuntimeCell::<Leaf1>::new(input1[0]);
+    let acc2 = RuntimeCell::<Leaf2>::new(input2[0]);
+    let acc3 = RuntimeCell::<Leaf3>::new(input3[0]);
+    let acc4 = RuntimeCell::<Leaf4>::new(input4[0]);
+    let acc5 = RuntimeCell::<Leaf5>::new(input5[0]);
+    let acc6 = RuntimeCell::<Leaf6>::new(input6[0]);
+
+    while i.read() < logical_len {
+        if has_value.read() != 0 {
+            let value = Pack::pack(
+                input0[i.read()],
+                input1[i.read()],
+                input2[i.read()],
+                input3[i.read()],
+                input4[i.read()],
+                input5[i.read()],
+                input6[i.read()],
+            );
+            let next = Op::apply(
+                Pack::pack(
+                    acc0.read(),
+                    acc1.read(),
+                    acc2.read(),
+                    acc3.read(),
+                    acc4.read(),
+                    acc5.read(),
+                    acc6.read(),
+                ),
+                value,
+            );
+            let next = Pack::unpack(next);
+            acc0.store(next.0);
+            acc1.store(next.1);
+            acc2.store(next.2);
+            acc3.store(next.3);
+            acc4.store(next.4);
+            acc5.store(next.5);
+            acc6.store(next.6);
+        } else {
+            acc0.store(input0[i.read()]);
+            acc1.store(input1[i.read()]);
+            acc2.store(input2[i.read()]);
+            acc3.store(input3[i.read()]);
+            acc4.store(input4[i.read()]);
+            acc5.store(input5[i.read()]);
+            acc6.store(input6[i.read()]);
+            has_value.store(1u32);
+        }
+        i.store(i.read() + step);
+    }
+
+    values0[unit] = acc0.read();
+    values1[unit] = acc1.read();
+    values2[unit] = acc2.read();
+    values3[unit] = acc3.read();
+    values4[unit] = acc4.read();
+    values5[unit] = acc5.read();
+    values6[unit] = acc6.read();
+    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(cube_dim / 2);
+    while stride.read() > 0 {
+        if unit < stride.read() && valid[unit + stride.read()] != 0 {
+            if valid[unit] != 0 {
+                let next = Op::apply(
+                    Pack::pack(
+                        values0[unit],
+                        values1[unit],
+                        values2[unit],
+                        values3[unit],
+                        values4[unit],
+                        values5[unit],
+                        values6[unit],
+                    ),
+                    Pack::pack(
+                        values0[unit + stride.read()],
+                        values1[unit + stride.read()],
+                        values2[unit + stride.read()],
+                        values3[unit + stride.read()],
+                        values4[unit + stride.read()],
+                        values5[unit + stride.read()],
+                        values6[unit + stride.read()],
+                    ),
+                );
+                let next = Pack::unpack(next);
+                values0[unit] = next.0;
+                values1[unit] = next.1;
+                values2[unit] = next.2;
+                values3[unit] = next.3;
+                values4[unit] = next.4;
+                values5[unit] = next.5;
+                values6[unit] = next.6;
+            } else {
+                values0[unit] = values0[unit + stride.read()];
+                values1[unit] = values1[unit + stride.read()];
+                values2[unit] = values2[unit + stride.read()];
+                values3[unit] = values3[unit + stride.read()];
+                values4[unit] = values4[unit + stride.read()];
+                values5[unit] = values5[unit + stride.read()];
+                values6[unit] = values6[unit + stride.read()];
+                valid[unit] = 1u32;
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() / 2);
+    }
+
+    if unit == 0 && valid[0] != 0 {
+        partial0[CUBE_POS as usize] = values0[0];
+        partial1[CUBE_POS as usize] = values1[0];
+        partial2[CUBE_POS as usize] = values2[0];
+        partial3[CUBE_POS as usize] = values3[0];
+        partial4[CUBE_POS as usize] = values4[0];
+        partial5[CUBE_POS as usize] = values5[0];
+        partial6[CUBE_POS as usize] = values6[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_reduce_finalize_kernel<
+    Item: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+        + 'static
+        + Send
+        + Sync,
+    Op: BinaryOp<Item>,
+>(
+    partial0: &[Leaf0],
+    partial1: &[Leaf1],
+    partial2: &[Leaf2],
+    partial3: &[Leaf3],
+    partial4: &[Leaf4],
+    partial5: &[Leaf5],
+    partial6: &[Leaf6],
+    init0: &[Leaf0],
+    init1: &[Leaf1],
+    init2: &[Leaf2],
+    init3: &[Leaf3],
+    init4: &[Leaf4],
+    init5: &[Leaf5],
+    init6: &[Leaf6],
+    output0: &mut [Leaf0],
+    output1: &mut [Leaf1],
+    output2: &mut [Leaf2],
+    output3: &mut [Leaf3],
+    output4: &mut [Leaf4],
+    output5: &mut [Leaf5],
+    output6: &mut [Leaf6],
+) {
+    if UNIT_POS == 0 {
+        let output = Op::apply(
+            Pack::pack(
+                init0[0], init1[0], init2[0], init3[0], init4[0], init5[0], init6[0],
+            ),
+            Pack::pack(
+                partial0[0],
+                partial1[0],
+                partial2[0],
+                partial3[0],
+                partial4[0],
+                partial5[0],
+                partial6[0],
+            ),
+        );
+        let output = Pack::unpack(output);
+        output0[0] = output.0;
+        output1[0] = output.1;
+        output2[0] = output.2;
+        output3[0] = output.3;
+        output4[0] = output.4;
+        output5[0] = output.5;
+        output6[0] = output.6;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple1_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA,)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple2_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple3_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple4_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple5_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    OutE: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD, OutE)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+    output_e: &mut [OutE],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple6_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    OutE: CubePrimitive,
+    OutF: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD, OutE, OutF)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+    output_e: &mut [OutE],
+    output_f: &mut [OutF],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+        output_f[global] = output.5;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn transform_logical7_to_tuple7_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    OutA: CubePrimitive,
+    OutB: CubePrimitive,
+    OutC: CubePrimitive,
+    OutD: CubePrimitive,
+    OutE: CubePrimitive,
+    OutF: CubePrimitive,
+    OutG: CubePrimitive,
+    Op: UnaryOp<Input, Output = (OutA, OutB, OutC, OutD, OutE, OutF, OutG)>,
+>(
+    env: Op::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_a: &mut [OutA],
+    output_b: &mut [OutB],
+    output_c: &mut [OutC],
+    output_d: &mut [OutD],
+    output_e: &mut [OutE],
+    output_f: &mut [OutF],
+    output_g: &mut [OutG],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let output = Op::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        output_a[global] = output.0;
+        output_b[global] = output.1;
+        output_c[global] = output.2;
+        output_d[global] = output.3;
+        output_e[global] = output.4;
+        output_f[global] = output.5;
+        output_g[global] = output.6;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_predicate_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Pred: PredicateOp<Input>,
+>(
+    env: Pred::Env,
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    invert: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let selected = Pred::apply(
+            env,
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        );
+        flags[global] = if (invert[0] == 0u32 && selected) || (invert[0] != 0u32 && !selected) {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_mismatch_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeftLeaf0: CubePrimitive,
+    LeftLeaf1: CubePrimitive,
+    LeftLeaf2: CubePrimitive,
+    LeftLeaf3: CubePrimitive,
+    LeftLeaf4: CubePrimitive,
+    LeftLeaf5: CubePrimitive,
+    LeftLeaf6: CubePrimitive,
+    RightLeaf0: CubePrimitive,
+    RightLeaf1: CubePrimitive,
+    RightLeaf2: CubePrimitive,
+    RightLeaf3: CubePrimitive,
+    RightLeaf4: CubePrimitive,
+    RightLeaf5: CubePrimitive,
+    RightLeaf6: CubePrimitive,
+    LeftExpr: LogicalDeviceExpr7<
+            Input,
+            LeftLeaf0,
+            LeftLeaf1,
+            LeftLeaf2,
+            LeftLeaf3,
+            LeftLeaf4,
+            LeftLeaf5,
+            LeftLeaf6,
+        >,
+    RightExpr: LogicalDeviceExpr7<
+            Input,
+            RightLeaf0,
+            RightLeaf1,
+            RightLeaf2,
+            RightLeaf3,
+            RightLeaf4,
+            RightLeaf5,
+            RightLeaf6,
+        >,
+    Eq: BinaryPredicateOp<Input>,
+>(
+    left_slot0: &[LeftLeaf0],
+    left_slot1: &[LeftLeaf1],
+    left_slot2: &[LeftLeaf2],
+    left_slot3: &[LeftLeaf3],
+    left_slot4: &[LeftLeaf4],
+    left_slot5: &[LeftLeaf5],
+    left_slot6: &[LeftLeaf6],
+    left_slot_offsets: &[u32],
+    right_slot0: &[RightLeaf0],
+    right_slot1: &[RightLeaf1],
+    right_slot2: &[RightLeaf2],
+    right_slot3: &[RightLeaf3],
+    right_slot4: &[RightLeaf4],
+    right_slot5: &[RightLeaf5],
+    right_slot6: &[RightLeaf6],
+    right_slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let left = LeftExpr::eval7(
+            left_slot0,
+            left_slot1,
+            left_slot2,
+            left_slot3,
+            left_slot4,
+            left_slot5,
+            left_slot6,
+            left_slot_offsets,
+            global,
+        );
+        let right = RightExpr::eval7(
+            right_slot0,
+            right_slot1,
+            right_slot2,
+            right_slot3,
+            right_slot4,
+            right_slot5,
+            right_slot6,
+            right_slot_offsets,
+            global,
+        );
+        flags[global] = if Eq::apply(left, right) { 0u32 } else { 1u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_find_first_of_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    InputLeaf0: CubePrimitive,
+    InputLeaf1: CubePrimitive,
+    InputLeaf2: CubePrimitive,
+    InputLeaf3: CubePrimitive,
+    InputLeaf4: CubePrimitive,
+    InputLeaf5: CubePrimitive,
+    InputLeaf6: CubePrimitive,
+    NeedleLeaf0: CubePrimitive,
+    NeedleLeaf1: CubePrimitive,
+    NeedleLeaf2: CubePrimitive,
+    NeedleLeaf3: CubePrimitive,
+    NeedleLeaf4: CubePrimitive,
+    NeedleLeaf5: CubePrimitive,
+    NeedleLeaf6: CubePrimitive,
+    InputExpr: LogicalDeviceExpr7<
+            Input,
+            InputLeaf0,
+            InputLeaf1,
+            InputLeaf2,
+            InputLeaf3,
+            InputLeaf4,
+            InputLeaf5,
+            InputLeaf6,
+        >,
+    NeedleExpr: LogicalDeviceExpr7<
+            Input,
+            NeedleLeaf0,
+            NeedleLeaf1,
+            NeedleLeaf2,
+            NeedleLeaf3,
+            NeedleLeaf4,
+            NeedleLeaf5,
+            NeedleLeaf6,
+        >,
+    Eq: BinaryPredicateOp<Input>,
+>(
+    input_slot0: &[InputLeaf0],
+    input_slot1: &[InputLeaf1],
+    input_slot2: &[InputLeaf2],
+    input_slot3: &[InputLeaf3],
+    input_slot4: &[InputLeaf4],
+    input_slot5: &[InputLeaf5],
+    input_slot6: &[InputLeaf6],
+    input_slot_offsets: &[u32],
+    needle_slot0: &[NeedleLeaf0],
+    needle_slot1: &[NeedleLeaf1],
+    needle_slot2: &[NeedleLeaf2],
+    needle_slot3: &[NeedleLeaf3],
+    needle_slot4: &[NeedleLeaf4],
+    needle_slot5: &[NeedleLeaf5],
+    needle_slot6: &[NeedleLeaf6],
+    needle_slot_offsets: &[u32],
+    needle_len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let needle = RuntimeCell::<usize>::new(0usize);
+        let found = RuntimeCell::<u32>::new(0u32);
+        while needle.read() < needle_len[0] as usize {
+            let value = InputExpr::eval7(
+                input_slot0,
+                input_slot1,
+                input_slot2,
+                input_slot3,
+                input_slot4,
+                input_slot5,
+                input_slot6,
+                input_slot_offsets,
+                global,
+            );
+            let candidate = NeedleExpr::eval7(
+                needle_slot0,
+                needle_slot1,
+                needle_slot2,
+                needle_slot3,
+                needle_slot4,
+                needle_slot5,
+                needle_slot6,
+                needle_slot_offsets,
+                needle.read(),
+            );
+            if Eq::apply(value, candidate) {
+                found.store(1u32);
+            }
+            needle.store(needle.read() + 1usize);
+        }
+        flags[global] = found.read();
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_lexicographical_diff_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeftLeaf0: CubePrimitive,
+    LeftLeaf1: CubePrimitive,
+    LeftLeaf2: CubePrimitive,
+    LeftLeaf3: CubePrimitive,
+    LeftLeaf4: CubePrimitive,
+    LeftLeaf5: CubePrimitive,
+    LeftLeaf6: CubePrimitive,
+    RightLeaf0: CubePrimitive,
+    RightLeaf1: CubePrimitive,
+    RightLeaf2: CubePrimitive,
+    RightLeaf3: CubePrimitive,
+    RightLeaf4: CubePrimitive,
+    RightLeaf5: CubePrimitive,
+    RightLeaf6: CubePrimitive,
+    LeftExpr: LogicalDeviceExpr7<
+            Input,
+            LeftLeaf0,
+            LeftLeaf1,
+            LeftLeaf2,
+            LeftLeaf3,
+            LeftLeaf4,
+            LeftLeaf5,
+            LeftLeaf6,
+        >,
+    RightExpr: LogicalDeviceExpr7<
+            Input,
+            RightLeaf0,
+            RightLeaf1,
+            RightLeaf2,
+            RightLeaf3,
+            RightLeaf4,
+            RightLeaf5,
+            RightLeaf6,
+        >,
+    Less: BinaryPredicateOp<Input>,
+>(
+    left_slot0: &[LeftLeaf0],
+    left_slot1: &[LeftLeaf1],
+    left_slot2: &[LeftLeaf2],
+    left_slot3: &[LeftLeaf3],
+    left_slot4: &[LeftLeaf4],
+    left_slot5: &[LeftLeaf5],
+    left_slot6: &[LeftLeaf6],
+    left_slot_offsets: &[u32],
+    right_slot0: &[RightLeaf0],
+    right_slot1: &[RightLeaf1],
+    right_slot2: &[RightLeaf2],
+    right_slot3: &[RightLeaf3],
+    right_slot4: &[RightLeaf4],
+    right_slot5: &[RightLeaf5],
+    right_slot6: &[RightLeaf6],
+    right_slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let left = LeftExpr::eval7(
+            left_slot0,
+            left_slot1,
+            left_slot2,
+            left_slot3,
+            left_slot4,
+            left_slot5,
+            left_slot6,
+            left_slot_offsets,
+            global,
+        );
+        let right = RightExpr::eval7(
+            right_slot0,
+            right_slot1,
+            right_slot2,
+            right_slot3,
+            right_slot4,
+            right_slot5,
+            right_slot6,
+            right_slot_offsets,
+            global,
+        );
+        if Less::apply(left, right) {
+            flags[global] = 1u32;
+        } else {
+            let left = LeftExpr::eval7(
+                left_slot0,
+                left_slot1,
+                left_slot2,
+                left_slot3,
+                left_slot4,
+                left_slot5,
+                left_slot6,
+                left_slot_offsets,
+                global,
+            );
+            let right = RightExpr::eval7(
+                right_slot0,
+                right_slot1,
+                right_slot2,
+                right_slot3,
+                right_slot4,
+                right_slot5,
+                right_slot6,
+                right_slot_offsets,
+                global,
+            );
+            flags[global] = if Less::apply(right, left) { 1u32 } else { 0u32 };
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_lexicographical_compare_at_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    LeftLeaf0: CubePrimitive,
+    LeftLeaf1: CubePrimitive,
+    LeftLeaf2: CubePrimitive,
+    LeftLeaf3: CubePrimitive,
+    LeftLeaf4: CubePrimitive,
+    LeftLeaf5: CubePrimitive,
+    LeftLeaf6: CubePrimitive,
+    RightLeaf0: CubePrimitive,
+    RightLeaf1: CubePrimitive,
+    RightLeaf2: CubePrimitive,
+    RightLeaf3: CubePrimitive,
+    RightLeaf4: CubePrimitive,
+    RightLeaf5: CubePrimitive,
+    RightLeaf6: CubePrimitive,
+    LeftExpr: LogicalDeviceExpr7<
+            Input,
+            LeftLeaf0,
+            LeftLeaf1,
+            LeftLeaf2,
+            LeftLeaf3,
+            LeftLeaf4,
+            LeftLeaf5,
+            LeftLeaf6,
+        >,
+    RightExpr: LogicalDeviceExpr7<
+            Input,
+            RightLeaf0,
+            RightLeaf1,
+            RightLeaf2,
+            RightLeaf3,
+            RightLeaf4,
+            RightLeaf5,
+            RightLeaf6,
+        >,
+    Less: BinaryPredicateOp<Input>,
+>(
+    left_slot0: &[LeftLeaf0],
+    left_slot1: &[LeftLeaf1],
+    left_slot2: &[LeftLeaf2],
+    left_slot3: &[LeftLeaf3],
+    left_slot4: &[LeftLeaf4],
+    left_slot5: &[LeftLeaf5],
+    left_slot6: &[LeftLeaf6],
+    left_slot_offsets: &[u32],
+    right_slot0: &[RightLeaf0],
+    right_slot1: &[RightLeaf1],
+    right_slot2: &[RightLeaf2],
+    right_slot3: &[RightLeaf3],
+    right_slot4: &[RightLeaf4],
+    right_slot5: &[RightLeaf5],
+    right_slot6: &[RightLeaf6],
+    right_slot_offsets: &[u32],
+    index: &[u32],
+    output: &mut [u32],
+) {
+    if UNIT_POS == 0 {
+        let i = index[0] as usize;
+        let left = LeftExpr::eval7(
+            left_slot0,
+            left_slot1,
+            left_slot2,
+            left_slot3,
+            left_slot4,
+            left_slot5,
+            left_slot6,
+            left_slot_offsets,
+            i,
+        );
+        let right = RightExpr::eval7(
+            right_slot0,
+            right_slot1,
+            right_slot2,
+            right_slot3,
+            right_slot4,
+            right_slot5,
+            right_slot6,
+            right_slot_offsets,
+            i,
+        );
+        output[0] = if Less::apply(left, right) { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_adjacent_find_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Pred: BinaryPredicateOp<Input>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let left = Expr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            global,
+        );
+        let right = Expr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            global + 1,
+        );
+        flags[global] = if Pred::apply(left, right) { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_scan_by_key_head_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    KeyEq: BinaryPredicateOp<Input>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        if global == 0usize {
+            flags[global] = 1u32;
+        } else {
+            let previous = Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global - 1usize,
+            );
+            let current = Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            );
+            flags[global] = if KeyEq::apply(previous, current) {
+                0u32
+            } else {
+                1u32
+            };
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_sorted_break_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() {
+        let current = Expr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            global,
+        );
+        let next = Expr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            global + 1,
+        );
+        flags[global] = if Less::apply(next, current) {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_minmax_flags_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    min_flags: &mut [u32],
+    max_flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let mut is_min = true;
+        let mut is_max = true;
+        let mut index = 0usize;
+        while index < (len[0] as usize) {
+            if Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    index,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    global,
+                ),
+            ) {
+                is_min = false;
+            }
+            if Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    global,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    index,
+                ),
+            ) {
+                is_max = false;
+            }
+            if index < global
+                && !Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        global,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        index,
+                    ),
+                )
+                && !Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        index,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        global,
+                    ),
+                )
+            {
+                is_min = false;
+                is_max = false;
+            }
+            index += 1usize;
+        }
+        min_flags[global] = if is_min { 1u32 } else { 0u32 };
+        max_flags[global] = if is_max { 1u32 } else { 0u32 };
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_lower_bound_many_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    SourceLeaf0: CubePrimitive,
+    SourceLeaf1: CubePrimitive,
+    SourceLeaf2: CubePrimitive,
+    SourceLeaf3: CubePrimitive,
+    SourceLeaf4: CubePrimitive,
+    SourceLeaf5: CubePrimitive,
+    SourceLeaf6: CubePrimitive,
+    ValueLeaf0: CubePrimitive,
+    ValueLeaf1: CubePrimitive,
+    ValueLeaf2: CubePrimitive,
+    ValueLeaf3: CubePrimitive,
+    ValueLeaf4: CubePrimitive,
+    ValueLeaf5: CubePrimitive,
+    ValueLeaf6: CubePrimitive,
+    SourceExpr: LogicalDeviceExpr7<
+            Input,
+            SourceLeaf0,
+            SourceLeaf1,
+            SourceLeaf2,
+            SourceLeaf3,
+            SourceLeaf4,
+            SourceLeaf5,
+            SourceLeaf6,
+        >,
+    ValueExpr: LogicalDeviceExpr7<
+            Input,
+            ValueLeaf0,
+            ValueLeaf1,
+            ValueLeaf2,
+            ValueLeaf3,
+            ValueLeaf4,
+            ValueLeaf5,
+            ValueLeaf6,
+        >,
+    Less: BinaryPredicateOp<Input>,
+>(
+    source0: &[SourceLeaf0],
+    source1: &[SourceLeaf1],
+    source2: &[SourceLeaf2],
+    source3: &[SourceLeaf3],
+    source4: &[SourceLeaf4],
+    source5: &[SourceLeaf5],
+    source6: &[SourceLeaf6],
+    source_offsets: &[u32],
+    value0: &[ValueLeaf0],
+    value1: &[ValueLeaf1],
+    value2: &[ValueLeaf2],
+    value3: &[ValueLeaf3],
+    value4: &[ValueLeaf4],
+    value5: &[ValueLeaf5],
+    value6: &[ValueLeaf6],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let candidate = SourceExpr::eval7(
+                source0,
+                source1,
+                source2,
+                source3,
+                source4,
+                source5,
+                source6,
+                source_offsets,
+                mid,
+            );
+            if Less::apply(
+                candidate,
+                ValueExpr::eval7(
+                    value0,
+                    value1,
+                    value2,
+                    value3,
+                    value4,
+                    value5,
+                    value6,
+                    value_offsets,
+                    global,
+                ),
+            ) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_upper_bound_many_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    SourceLeaf0: CubePrimitive,
+    SourceLeaf1: CubePrimitive,
+    SourceLeaf2: CubePrimitive,
+    SourceLeaf3: CubePrimitive,
+    SourceLeaf4: CubePrimitive,
+    SourceLeaf5: CubePrimitive,
+    SourceLeaf6: CubePrimitive,
+    ValueLeaf0: CubePrimitive,
+    ValueLeaf1: CubePrimitive,
+    ValueLeaf2: CubePrimitive,
+    ValueLeaf3: CubePrimitive,
+    ValueLeaf4: CubePrimitive,
+    ValueLeaf5: CubePrimitive,
+    ValueLeaf6: CubePrimitive,
+    SourceExpr: LogicalDeviceExpr7<
+            Input,
+            SourceLeaf0,
+            SourceLeaf1,
+            SourceLeaf2,
+            SourceLeaf3,
+            SourceLeaf4,
+            SourceLeaf5,
+            SourceLeaf6,
+        >,
+    ValueExpr: LogicalDeviceExpr7<
+            Input,
+            ValueLeaf0,
+            ValueLeaf1,
+            ValueLeaf2,
+            ValueLeaf3,
+            ValueLeaf4,
+            ValueLeaf5,
+            ValueLeaf6,
+        >,
+    Less: BinaryPredicateOp<Input>,
+>(
+    source0: &[SourceLeaf0],
+    source1: &[SourceLeaf1],
+    source2: &[SourceLeaf2],
+    source3: &[SourceLeaf3],
+    source4: &[SourceLeaf4],
+    source5: &[SourceLeaf5],
+    source6: &[SourceLeaf6],
+    source_offsets: &[u32],
+    value0: &[ValueLeaf0],
+    value1: &[ValueLeaf1],
+    value2: &[ValueLeaf2],
+    value3: &[ValueLeaf3],
+    value4: &[ValueLeaf4],
+    value5: &[ValueLeaf5],
+    value6: &[ValueLeaf6],
+    value_offsets: &[u32],
+    source_len: &[u32],
+    value_len: &[u32],
+    output: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (value_len[0] as usize) {
+        let mut first = 0usize;
+        let mut count = source_len[0] as usize;
+        while count > 0usize {
+            let step = count / 2usize;
+            let mid = first + step;
+            let candidate = SourceExpr::eval7(
+                source0,
+                source1,
+                source2,
+                source3,
+                source4,
+                source5,
+                source6,
+                source_offsets,
+                mid,
+            );
+            if !Less::apply(
+                ValueExpr::eval7(
+                    value0,
+                    value1,
+                    value2,
+                    value3,
+                    value4,
+                    value5,
+                    value6,
+                    value_offsets,
+                    global,
+                ),
+                candidate,
+            ) {
+                first = mid + 1usize;
+                count = count - step - 1usize;
+            } else {
+                count = step;
+            }
+        }
+        output[global] = first as u32;
+    }
+}
+
 define_transform_tuple_to_tuple_kernel!(
     transform_tuple3_to_tuple5_kernel,
     (TyA: input_a: input_a_offset, TyB: input_b: input_b_offset, TyC: input_c: input_c_offset),
@@ -2647,6 +5186,106 @@ define_tuple_membership_device_expr_flags_kernel!(
         candidate_c_slot0, candidate_c_slot1, candidate_c_slot2, candidate_c_slot3, candidate_c_offsets /
         SortedExprC:
         sorted_c_slot0, sorted_c_slot1, sorted_c_slot2, sorted_c_slot3, sorted_c_offsets)
+);
+define_tuple_membership_device_expr_flags_kernel!(
+    tuple4_membership_device_expr_flags_kernel,
+    (TyA: ExprA:
+        candidate_a_slot0, candidate_a_slot1, candidate_a_slot2, candidate_a_slot3, candidate_a_offsets /
+        SortedExprA:
+        sorted_a_slot0, sorted_a_slot1, sorted_a_slot2, sorted_a_slot3, sorted_a_offsets,
+     TyB: ExprB:
+        candidate_b_slot0, candidate_b_slot1, candidate_b_slot2, candidate_b_slot3, candidate_b_offsets /
+        SortedExprB:
+        sorted_b_slot0, sorted_b_slot1, sorted_b_slot2, sorted_b_slot3, sorted_b_offsets,
+     TyC: ExprC:
+        candidate_c_slot0, candidate_c_slot1, candidate_c_slot2, candidate_c_slot3, candidate_c_offsets /
+        SortedExprC:
+        sorted_c_slot0, sorted_c_slot1, sorted_c_slot2, sorted_c_slot3, sorted_c_offsets,
+     TyD: ExprD:
+        candidate_d_slot0, candidate_d_slot1, candidate_d_slot2, candidate_d_slot3, candidate_d_offsets /
+        SortedExprD:
+        sorted_d_slot0, sorted_d_slot1, sorted_d_slot2, sorted_d_slot3, sorted_d_offsets)
+);
+define_tuple_membership_device_expr_flags_kernel!(
+    tuple5_membership_device_expr_flags_kernel,
+    (TyA: ExprA:
+        candidate_a_slot0, candidate_a_slot1, candidate_a_slot2, candidate_a_slot3, candidate_a_offsets /
+        SortedExprA:
+        sorted_a_slot0, sorted_a_slot1, sorted_a_slot2, sorted_a_slot3, sorted_a_offsets,
+     TyB: ExprB:
+        candidate_b_slot0, candidate_b_slot1, candidate_b_slot2, candidate_b_slot3, candidate_b_offsets /
+        SortedExprB:
+        sorted_b_slot0, sorted_b_slot1, sorted_b_slot2, sorted_b_slot3, sorted_b_offsets,
+     TyC: ExprC:
+        candidate_c_slot0, candidate_c_slot1, candidate_c_slot2, candidate_c_slot3, candidate_c_offsets /
+        SortedExprC:
+        sorted_c_slot0, sorted_c_slot1, sorted_c_slot2, sorted_c_slot3, sorted_c_offsets,
+     TyD: ExprD:
+        candidate_d_slot0, candidate_d_slot1, candidate_d_slot2, candidate_d_slot3, candidate_d_offsets /
+        SortedExprD:
+        sorted_d_slot0, sorted_d_slot1, sorted_d_slot2, sorted_d_slot3, sorted_d_offsets,
+     TyE: ExprE:
+        candidate_e_slot0, candidate_e_slot1, candidate_e_slot2, candidate_e_slot3, candidate_e_offsets /
+        SortedExprE:
+        sorted_e_slot0, sorted_e_slot1, sorted_e_slot2, sorted_e_slot3, sorted_e_offsets)
+);
+define_tuple_membership_device_expr_flags_kernel!(
+    tuple6_membership_device_expr_flags_kernel,
+    (TyA: ExprA:
+        candidate_a_slot0, candidate_a_slot1, candidate_a_slot2, candidate_a_slot3, candidate_a_offsets /
+        SortedExprA:
+        sorted_a_slot0, sorted_a_slot1, sorted_a_slot2, sorted_a_slot3, sorted_a_offsets,
+     TyB: ExprB:
+        candidate_b_slot0, candidate_b_slot1, candidate_b_slot2, candidate_b_slot3, candidate_b_offsets /
+        SortedExprB:
+        sorted_b_slot0, sorted_b_slot1, sorted_b_slot2, sorted_b_slot3, sorted_b_offsets,
+     TyC: ExprC:
+        candidate_c_slot0, candidate_c_slot1, candidate_c_slot2, candidate_c_slot3, candidate_c_offsets /
+        SortedExprC:
+        sorted_c_slot0, sorted_c_slot1, sorted_c_slot2, sorted_c_slot3, sorted_c_offsets,
+     TyD: ExprD:
+        candidate_d_slot0, candidate_d_slot1, candidate_d_slot2, candidate_d_slot3, candidate_d_offsets /
+        SortedExprD:
+        sorted_d_slot0, sorted_d_slot1, sorted_d_slot2, sorted_d_slot3, sorted_d_offsets,
+     TyE: ExprE:
+        candidate_e_slot0, candidate_e_slot1, candidate_e_slot2, candidate_e_slot3, candidate_e_offsets /
+        SortedExprE:
+        sorted_e_slot0, sorted_e_slot1, sorted_e_slot2, sorted_e_slot3, sorted_e_offsets,
+     TyF: ExprF:
+        candidate_f_slot0, candidate_f_slot1, candidate_f_slot2, candidate_f_slot3, candidate_f_offsets /
+        SortedExprF:
+        sorted_f_slot0, sorted_f_slot1, sorted_f_slot2, sorted_f_slot3, sorted_f_offsets)
+);
+define_tuple_membership_device_expr_flags_kernel!(
+    tuple7_membership_device_expr_flags_kernel,
+    (TyA: ExprA:
+        candidate_a_slot0, candidate_a_slot1, candidate_a_slot2, candidate_a_slot3, candidate_a_offsets /
+        SortedExprA:
+        sorted_a_slot0, sorted_a_slot1, sorted_a_slot2, sorted_a_slot3, sorted_a_offsets,
+     TyB: ExprB:
+        candidate_b_slot0, candidate_b_slot1, candidate_b_slot2, candidate_b_slot3, candidate_b_offsets /
+        SortedExprB:
+        sorted_b_slot0, sorted_b_slot1, sorted_b_slot2, sorted_b_slot3, sorted_b_offsets,
+     TyC: ExprC:
+        candidate_c_slot0, candidate_c_slot1, candidate_c_slot2, candidate_c_slot3, candidate_c_offsets /
+        SortedExprC:
+        sorted_c_slot0, sorted_c_slot1, sorted_c_slot2, sorted_c_slot3, sorted_c_offsets,
+     TyD: ExprD:
+        candidate_d_slot0, candidate_d_slot1, candidate_d_slot2, candidate_d_slot3, candidate_d_offsets /
+        SortedExprD:
+        sorted_d_slot0, sorted_d_slot1, sorted_d_slot2, sorted_d_slot3, sorted_d_offsets,
+     TyE: ExprE:
+        candidate_e_slot0, candidate_e_slot1, candidate_e_slot2, candidate_e_slot3, candidate_e_offsets /
+        SortedExprE:
+        sorted_e_slot0, sorted_e_slot1, sorted_e_slot2, sorted_e_slot3, sorted_e_offsets,
+     TyF: ExprF:
+        candidate_f_slot0, candidate_f_slot1, candidate_f_slot2, candidate_f_slot3, candidate_f_offsets /
+        SortedExprF:
+        sorted_f_slot0, sorted_f_slot1, sorted_f_slot2, sorted_f_slot3, sorted_f_offsets,
+     TyG: ExprG:
+        candidate_g_slot0, candidate_g_slot1, candidate_g_slot2, candidate_g_slot3, candidate_g_offsets /
+        SortedExprG:
+        sorted_g_slot0, sorted_g_slot1, sorted_g_slot2, sorted_g_slot3, sorted_g_offsets)
 );
 
 macro_rules! define_tuple_minmax_device_expr_kernels {

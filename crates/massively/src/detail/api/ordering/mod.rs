@@ -471,6 +471,243 @@ where
     Ok(flag)
 }
 
+macro_rules! define_tuple_membership_expr_flags_with_policy {
+    (
+        $fn_name:ident,
+        $kernel_name:ident,
+        (
+            $first_candidate_ty:ident: $first_candidate:ident,
+            $first_candidate_bindings:ident, $first_candidate_offsets:ident,
+            $first_candidate_slot0:ident, $first_candidate_slot1:ident,
+            $first_candidate_slot2:ident, $first_candidate_slot3:ident /
+            $first_sorted_ty:ident: $first_sorted:ident,
+            $first_sorted_bindings:ident, $first_sorted_offsets:ident,
+            $first_sorted_slot0:ident, $first_sorted_slot1:ident,
+            $first_sorted_slot2:ident, $first_sorted_slot3:ident
+        )
+        $(,
+        (
+            $candidate_ty:ident: $candidate:ident,
+            $candidate_bindings:ident, $candidate_offsets:ident,
+            $candidate_slot0:ident, $candidate_slot1:ident,
+            $candidate_slot2:ident, $candidate_slot3:ident /
+            $sorted_ty:ident: $sorted:ident,
+            $sorted_bindings:ident, $sorted_offsets:ident,
+            $sorted_slot0:ident, $sorted_slot1:ident,
+            $sorted_slot2:ident, $sorted_slot3:ident
+        ))+
+    ) => {
+        #[allow(clippy::too_many_arguments)]
+        pub(in crate::detail) fn $fn_name<
+            $first_candidate_ty,
+            $( $candidate_ty, )+
+            $first_sorted_ty,
+            $( $sorted_ty, )+
+            Less,
+        >(
+            policy: &CubePolicy<$first_candidate_ty::Runtime>,
+            $first_candidate: &$first_candidate_ty,
+            $( $candidate: &$candidate_ty, )+
+            $first_sorted: &$first_sorted_ty,
+            $( $sorted: &$sorted_ty, )+
+            keep_present: bool,
+        ) -> Result<cubecl::server::Handle, Error>
+        where
+            $first_candidate_ty: KernelColumn + KernelColumnAt<S0>,
+            $(
+                $candidate_ty: KernelColumn<Runtime = $first_candidate_ty::Runtime>
+                    + KernelColumnAt<S0>,
+            )+
+            $first_sorted_ty:
+                KernelColumn<Runtime = $first_candidate_ty::Runtime, Item = $first_candidate_ty::Item>
+                + KernelColumnAt<S0>,
+            $(
+                $sorted_ty:
+                    KernelColumn<Runtime = $first_candidate_ty::Runtime, Item = $candidate_ty::Item>
+                    + KernelColumnAt<S0>,
+            )+
+            $first_candidate_ty::Item: CubePrimitive + CubeElement,
+            $first_candidate_ty::Expr: DeviceGpuExpr<$first_candidate_ty::Item>,
+            $first_sorted_ty::Expr: DeviceGpuExpr<$first_sorted_ty::Item>,
+            $(
+                $candidate_ty::Item: CubePrimitive + CubeElement,
+                $candidate_ty::Expr: DeviceGpuExpr<$candidate_ty::Item>,
+                $sorted_ty::Expr: DeviceGpuExpr<$sorted_ty::Item>,
+            )+
+            Less: BinaryPredicateOp<(
+                $first_candidate_ty::Item,
+                $( $candidate_ty::Item, )+
+            )>,
+        {
+            $first_candidate.validate()?;
+            $( $candidate.validate()?; )+
+            $first_sorted.validate()?;
+            $( $sorted.validate()?; )+
+            $( super::ensure_same_len($first_candidate.len(), $candidate.len())?; )+
+            $( super::ensure_same_len($first_sorted.len(), $sorted.len())?; )+
+            let len = $first_candidate.len();
+            let client = policy.client();
+            let flag = client.empty(len * std::mem::size_of::<u32>());
+            if len != 0 {
+                let block_count = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+                let block_count_u32 = u32::try_from(block_count)
+                    .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                let candidate_len_u32 =
+                    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let sorted_len_u32 =
+                    u32::try_from($first_sorted.len()).map_err(|_| Error::LengthTooLarge {
+                        len: $first_sorted.len(),
+                    })?;
+                let candidate_len_handle =
+                    client.create_from_slice(u32::as_bytes(&[candidate_len_u32]));
+                let sorted_len_handle =
+                    client.create_from_slice(u32::as_bytes(&[sorted_len_u32]));
+                let keep = [if keep_present { 1_u32 } else { 0_u32 }];
+                let keep_handle = client.create_from_slice(u32::as_bytes(&keep));
+                let $first_candidate_bindings = $first_candidate.stage(policy)?;
+                $( let $candidate_bindings = $candidate.stage(policy)?; )+
+                let $first_sorted_bindings = $first_sorted.stage(policy)?;
+                $( let $sorted_bindings = $sorted.stage(policy)?; )+
+                let $first_candidate_offsets =
+                    $first_candidate_bindings.slot_offsets_handle(client)?;
+                $( let $candidate_offsets = $candidate_bindings.slot_offsets_handle(client)?; )+
+                let $first_sorted_offsets = $first_sorted_bindings.slot_offsets_handle(client)?;
+                $( let $sorted_offsets = $sorted_bindings.slot_offsets_handle(client)?; )+
+                let $first_candidate_slot0 = $first_candidate_bindings.slot_or_first(0);
+                let $first_candidate_slot1 = $first_candidate_bindings.slot_or_first(1);
+                let $first_candidate_slot2 = $first_candidate_bindings.slot_or_first(2);
+                let $first_candidate_slot3 = $first_candidate_bindings.slot_or_first(3);
+                $(
+                    let $candidate_slot0 = $candidate_bindings.slot_or_first(0);
+                    let $candidate_slot1 = $candidate_bindings.slot_or_first(1);
+                    let $candidate_slot2 = $candidate_bindings.slot_or_first(2);
+                    let $candidate_slot3 = $candidate_bindings.slot_or_first(3);
+                )+
+                let $first_sorted_slot0 = $first_sorted_bindings.slot_or_first(0);
+                let $first_sorted_slot1 = $first_sorted_bindings.slot_or_first(1);
+                let $first_sorted_slot2 = $first_sorted_bindings.slot_or_first(2);
+                let $first_sorted_slot3 = $first_sorted_bindings.slot_or_first(3);
+                $(
+                    let $sorted_slot0 = $sorted_bindings.slot_or_first(0);
+                    let $sorted_slot1 = $sorted_bindings.slot_or_first(1);
+                    let $sorted_slot2 = $sorted_bindings.slot_or_first(2);
+                    let $sorted_slot3 = $sorted_bindings.slot_or_first(3);
+                )+
+
+                unsafe {
+                    $kernel_name::launch_unchecked::<
+                        $first_candidate_ty::Item,
+                        $( $candidate_ty::Item, )+
+                        $first_candidate_ty::Expr,
+                        $( $candidate_ty::Expr, )+
+                        $first_sorted_ty::Expr,
+                        $( $sorted_ty::Expr, )+
+                        Less,
+                        $first_candidate_ty::Runtime,
+                    >(
+                        client,
+                        CubeCount::Static(block_count_u32, 1, 1),
+                        CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+                        unsafe { BufferArg::from_raw_parts($first_candidate_slot0.0.clone(), $first_candidate_slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_candidate_slot1.0.clone(), $first_candidate_slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_candidate_slot2.0.clone(), $first_candidate_slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_candidate_slot3.0.clone(), $first_candidate_slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_candidate_offsets.clone(), 4) },
+                        $(
+                            unsafe { BufferArg::from_raw_parts($candidate_slot0.0.clone(), $candidate_slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($candidate_slot1.0.clone(), $candidate_slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($candidate_slot2.0.clone(), $candidate_slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($candidate_slot3.0.clone(), $candidate_slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($candidate_offsets.clone(), 4) },
+                        )+
+                        unsafe { BufferArg::from_raw_parts(candidate_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts($first_sorted_slot0.0.clone(), $first_sorted_slot0.1) },
+                        unsafe { BufferArg::from_raw_parts($first_sorted_slot1.0.clone(), $first_sorted_slot1.1) },
+                        unsafe { BufferArg::from_raw_parts($first_sorted_slot2.0.clone(), $first_sorted_slot2.1) },
+                        unsafe { BufferArg::from_raw_parts($first_sorted_slot3.0.clone(), $first_sorted_slot3.1) },
+                        unsafe { BufferArg::from_raw_parts($first_sorted_offsets.clone(), 4) },
+                        $(
+                            unsafe { BufferArg::from_raw_parts($sorted_slot0.0.clone(), $sorted_slot0.1) },
+                            unsafe { BufferArg::from_raw_parts($sorted_slot1.0.clone(), $sorted_slot1.1) },
+                            unsafe { BufferArg::from_raw_parts($sorted_slot2.0.clone(), $sorted_slot2.1) },
+                            unsafe { BufferArg::from_raw_parts($sorted_slot3.0.clone(), $sorted_slot3.1) },
+                            unsafe { BufferArg::from_raw_parts($sorted_offsets.clone(), 4) },
+                        )+
+                        unsafe { BufferArg::from_raw_parts(sorted_len_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(keep_handle.clone(), 1) },
+                        unsafe { BufferArg::from_raw_parts(flag.clone(), len) },
+                    );
+                }
+            }
+            Ok(flag)
+        }
+    };
+}
+
+define_tuple_membership_expr_flags_with_policy!(
+    tuple4_membership_expr_flags_with_policy,
+    tuple4_membership_device_expr_flags_kernel,
+    (CandidateA: candidate_a, candidate_a_bindings, candidate_a_offsets, ca0, ca1, ca2, ca3 /
+     SortedA: sorted_a, sorted_a_bindings, sorted_a_offsets, sa0, sa1, sa2, sa3),
+    (CandidateB: candidate_b, candidate_b_bindings, candidate_b_offsets, cb0, cb1, cb2, cb3 /
+     SortedB: sorted_b, sorted_b_bindings, sorted_b_offsets, sb0, sb1, sb2, sb3),
+    (CandidateC: candidate_c, candidate_c_bindings, candidate_c_offsets, cc0, cc1, cc2, cc3 /
+     SortedC: sorted_c, sorted_c_bindings, sorted_c_offsets, sc0, sc1, sc2, sc3),
+    (CandidateD: candidate_d, candidate_d_bindings, candidate_d_offsets, cd0, cd1, cd2, cd3 /
+     SortedD: sorted_d, sorted_d_bindings, sorted_d_offsets, sd0, sd1, sd2, sd3)
+);
+
+define_tuple_membership_expr_flags_with_policy!(
+    tuple5_membership_expr_flags_with_policy,
+    tuple5_membership_device_expr_flags_kernel,
+    (CandidateA: candidate_a, candidate_a_bindings, candidate_a_offsets, ca0, ca1, ca2, ca3 /
+     SortedA: sorted_a, sorted_a_bindings, sorted_a_offsets, sa0, sa1, sa2, sa3),
+    (CandidateB: candidate_b, candidate_b_bindings, candidate_b_offsets, cb0, cb1, cb2, cb3 /
+     SortedB: sorted_b, sorted_b_bindings, sorted_b_offsets, sb0, sb1, sb2, sb3),
+    (CandidateC: candidate_c, candidate_c_bindings, candidate_c_offsets, cc0, cc1, cc2, cc3 /
+     SortedC: sorted_c, sorted_c_bindings, sorted_c_offsets, sc0, sc1, sc2, sc3),
+    (CandidateD: candidate_d, candidate_d_bindings, candidate_d_offsets, cd0, cd1, cd2, cd3 /
+     SortedD: sorted_d, sorted_d_bindings, sorted_d_offsets, sd0, sd1, sd2, sd3),
+    (CandidateE: candidate_e, candidate_e_bindings, candidate_e_offsets, ce0, ce1, ce2, ce3 /
+     SortedE: sorted_e, sorted_e_bindings, sorted_e_offsets, se0, se1, se2, se3)
+);
+
+define_tuple_membership_expr_flags_with_policy!(
+    tuple6_membership_expr_flags_with_policy,
+    tuple6_membership_device_expr_flags_kernel,
+    (CandidateA: candidate_a, candidate_a_bindings, candidate_a_offsets, ca0, ca1, ca2, ca3 /
+     SortedA: sorted_a, sorted_a_bindings, sorted_a_offsets, sa0, sa1, sa2, sa3),
+    (CandidateB: candidate_b, candidate_b_bindings, candidate_b_offsets, cb0, cb1, cb2, cb3 /
+     SortedB: sorted_b, sorted_b_bindings, sorted_b_offsets, sb0, sb1, sb2, sb3),
+    (CandidateC: candidate_c, candidate_c_bindings, candidate_c_offsets, cc0, cc1, cc2, cc3 /
+     SortedC: sorted_c, sorted_c_bindings, sorted_c_offsets, sc0, sc1, sc2, sc3),
+    (CandidateD: candidate_d, candidate_d_bindings, candidate_d_offsets, cd0, cd1, cd2, cd3 /
+     SortedD: sorted_d, sorted_d_bindings, sorted_d_offsets, sd0, sd1, sd2, sd3),
+    (CandidateE: candidate_e, candidate_e_bindings, candidate_e_offsets, ce0, ce1, ce2, ce3 /
+     SortedE: sorted_e, sorted_e_bindings, sorted_e_offsets, se0, se1, se2, se3),
+    (CandidateF: candidate_f, candidate_f_bindings, candidate_f_offsets, cf0, cf1, cf2, cf3 /
+     SortedF: sorted_f, sorted_f_bindings, sorted_f_offsets, sf0, sf1, sf2, sf3)
+);
+
+define_tuple_membership_expr_flags_with_policy!(
+    tuple7_membership_expr_flags_with_policy,
+    tuple7_membership_device_expr_flags_kernel,
+    (CandidateA: candidate_a, candidate_a_bindings, candidate_a_offsets, ca0, ca1, ca2, ca3 /
+     SortedA: sorted_a, sorted_a_bindings, sorted_a_offsets, sa0, sa1, sa2, sa3),
+    (CandidateB: candidate_b, candidate_b_bindings, candidate_b_offsets, cb0, cb1, cb2, cb3 /
+     SortedB: sorted_b, sorted_b_bindings, sorted_b_offsets, sb0, sb1, sb2, sb3),
+    (CandidateC: candidate_c, candidate_c_bindings, candidate_c_offsets, cc0, cc1, cc2, cc3 /
+     SortedC: sorted_c, sorted_c_bindings, sorted_c_offsets, sc0, sc1, sc2, sc3),
+    (CandidateD: candidate_d, candidate_d_bindings, candidate_d_offsets, cd0, cd1, cd2, cd3 /
+     SortedD: sorted_d, sorted_d_bindings, sorted_d_offsets, sd0, sd1, sd2, sd3),
+    (CandidateE: candidate_e, candidate_e_bindings, candidate_e_offsets, ce0, ce1, ce2, ce3 /
+     SortedE: sorted_e, sorted_e_bindings, sorted_e_offsets, se0, se1, se2, se3),
+    (CandidateF: candidate_f, candidate_f_bindings, candidate_f_offsets, cf0, cf1, cf2, cf3 /
+     SortedF: sorted_f, sorted_f_bindings, sorted_f_offsets, sf0, sf1, sf2, sf3),
+    (CandidateG: candidate_g, candidate_g_bindings, candidate_g_offsets, cg0, cg1, cg2, cg3 /
+     SortedG: sorted_g, sorted_g_bindings, sorted_g_offsets, sg0, sg1, sg2, sg3)
+);
+
 pub(in crate::detail) fn device_expr_set_difference_with_policy<Left, Right, Less>(
     policy: &CubePolicy<Left::Runtime>,
     left: &Left,
@@ -1506,7 +1743,6 @@ pub use reverse::reverse;
 
 mod by_key;
 mod sort;
-pub use by_key::{merge_by_key, sort_by_key};
 pub use sort::sort;
 
 /// Merges two sorted read-only inputs into owned device storage.

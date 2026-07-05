@@ -2,7 +2,6 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::detail::dispatch as sealed;
 use crate::index::MIndex;
 use crate::iter::{MIter, MIterMut};
 use crate::op;
@@ -15,7 +14,7 @@ where
     R: Runtime,
     Input: MIter<R>,
 {
-    <Input as sealed::MIterDispatch<R>>::validate_executor(input, exec)
+    input.validate_executor(exec)
 }
 
 fn validate_output<R, Output>(exec: &Executor<R>, output: &Output) -> Result<(), Error>
@@ -23,7 +22,7 @@ where
     R: Runtime,
     Output: MIterMut<R>,
 {
-    <Output as sealed::MIterMutDispatch<R>>::validate_executor(output, exec)
+    output.validate_executor(exec)
 }
 
 mod indexed;

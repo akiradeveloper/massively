@@ -454,6 +454,18 @@ impl UnaryOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedSplit {
     }
 }
 
+pub(crate) struct NestedTuple3MixedSplit;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, ((f32, u32), f32)> for NestedTuple3MixedSplit {
+    type Env = ();
+    type Output = (f32, u32, f32);
+
+    fn apply(_env: (), input: ((f32, u32), f32)) -> (f32, u32, f32) {
+        (input.0.0 + input.1, input.0.1 + 1, input.1 + input.0.0)
+    }
+}
+
 pub(crate) struct Tuple4MixedSplit;
 
 #[cubecl::cube]
@@ -592,6 +604,17 @@ impl PredicateOp<WgpuRuntime, (f32, u32, f32)> for Tuple3MixedTagIsTwenty {
 
     fn apply(_env: (), input: (f32, u32, f32)) -> bool {
         input.1 == 20 && input.2 > 0.0
+    }
+}
+
+pub(crate) struct NestedTuple3MixedTagIsTwenty;
+
+#[cubecl::cube]
+impl PredicateOp<WgpuRuntime, ((f32, u32), f32)> for NestedTuple3MixedTagIsTwenty {
+    type Env = ();
+
+    fn apply(_env: (), input: ((f32, u32), f32)) -> bool {
+        input.0.1 == 20 && input.1 > 0.0
     }
 }
 

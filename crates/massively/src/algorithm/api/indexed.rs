@@ -16,7 +16,8 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &indices)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::gather_dispatch(source, exec.policy(), indices, out)
+    let indices = indices.index_column_with_policy(exec.policy())?;
+    source.gather_with_policy(exec.policy(), indices, out)
 }
 
 /// Gathers elements whose `u32` stencil flag is non-zero.
@@ -38,19 +39,9 @@ where
     validate_input(exec, &indices)?;
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
-        stencil,
-        exec.policy(),
-        false,
-        true,
-    )?;
-    <Input as sealed::MIterDispatch<R>>::gather_where_dispatch(
-        source,
-        exec.policy(),
-        indices,
-        stencil,
-        out,
-    )
+    let stencil = stencil.stencil_selection_with_policy(exec.policy(), false, true)?;
+    let indices = indices.index_column_with_policy(exec.policy())?;
+    source.gather_where_with_policy(exec.policy(), indices, stencil, out)
 }
 
 /// Scatters values into `out`.
@@ -69,7 +60,8 @@ where
     validate_input(exec, &source)?;
     validate_input(exec, &indices)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::scatter_dispatch(source, exec.policy(), indices, out)
+    let indices = indices.index_column_with_policy(exec.policy())?;
+    source.scatter_with_policy(exec.policy(), indices, out)
 }
 
 /// Scatters values whose `u32` stencil flag is non-zero into a newly allocated output.
@@ -91,17 +83,7 @@ where
     validate_input(exec, &indices)?;
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
-    let stencil = <Stencil as sealed::MIterDispatch<R>>::stencil_selection_dispatch(
-        stencil,
-        exec.policy(),
-        false,
-        true,
-    )?;
-    <Input as sealed::MIterDispatch<R>>::scatter_where_dispatch(
-        source,
-        exec.policy(),
-        indices,
-        stencil,
-        out,
-    )
+    let stencil = stencil.stencil_selection_with_policy(exec.policy(), false, true)?;
+    let indices = indices.index_column_with_policy(exec.policy())?;
+    source.scatter_where_with_policy(exec.policy(), indices, stencil, out)
 }

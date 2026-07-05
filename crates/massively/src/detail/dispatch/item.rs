@@ -75,6 +75,56 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         })
     }
 
+    fn transform_logical3<Input, LeafA, LeafB, LeafC, Expr, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        bindings: crate::detail::device::KernelColumnBindings,
+        len: usize,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
+    where
+        Self: MAlloc<R>,
+        Input: crate::value::MItem<R> + Send + Sync,
+        LeafA: MStorageElement,
+        LeafB: MStorageElement,
+        LeafC: MStorageElement,
+        Expr: crate::expr::LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
+        Op: op::UnaryOp<R, Input, Output = Self>,
+    {
+        let _ = (policy, bindings, len, op, env);
+        Err(Error::Launch {
+            message: "transform is not supported for this logical input shape".to_string(),
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn transform_logical7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr, Op>(
+        policy: &crate::detail::CubePolicy<R>,
+        bindings: crate::detail::device::KernelColumnBindings,
+        len: usize,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+    ) -> Result<<Self as MAlloc<R>>::Inner, Error>
+    where
+        Self: MAlloc<R>,
+        Input: crate::value::MItem<R> + Send + Sync,
+        Leaf0: MStorageElement,
+        Leaf1: MStorageElement,
+        Leaf2: MStorageElement,
+        Leaf3: MStorageElement,
+        Leaf4: MStorageElement,
+        Leaf5: MStorageElement,
+        Leaf6: MStorageElement,
+        Expr:
+            crate::expr::LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+        Op: op::UnaryOp<R, Input, Output = Self>,
+    {
+        let _ = (policy, bindings, len, op, env);
+        Err(Error::Launch {
+            message: "transform is not supported for this logical input shape".to_string(),
+        })
+    }
+
     fn transform_quaternary<First, Second, Third, Fourth, Op>(
         policy: &crate::detail::CubePolicy<R>,
         first: crate::detail::device::DeviceColumnView<R, First>,

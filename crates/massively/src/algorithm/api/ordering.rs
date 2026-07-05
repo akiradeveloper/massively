@@ -18,7 +18,7 @@ where
     validate_input(exec, &left)?;
     validate_input(exec, &right)?;
     validate_output(exec, &out)?;
-    <Left as sealed::MIterDispatch<R>>::merge_into_dispatch(left, exec.policy(), right, less, out)
+    left.merge_with_policy(exec.policy(), right, less, out)
 }
 
 /// Merges two sorted key-value ranges by key.
@@ -48,11 +48,10 @@ where
     validate_input(exec, &right_values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    <LeftKeys as sealed::MIterDispatch<R>>::merge_by_key_into_dispatch(
-        left_keys,
+    left_keys.merge_by_key_with_policy(
         exec.policy(),
-        right_keys,
         left_values,
+        right_keys,
         right_values,
         less,
         out_k,
@@ -73,7 +72,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::reverse_into_dispatch(source, exec.policy(), out)
+    source.reverse_with_policy(exec.policy(), out)
 }
 
 /// Sorts a massively iterator.
@@ -91,7 +90,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    <Input as sealed::MIterDispatch<R>>::sort_into_dispatch(source, exec.policy(), less, out)
+    source.sort_with_policy(exec.policy(), less, out)
 }
 
 /// Sorts key-value pairs by key.
@@ -115,14 +114,7 @@ where
     validate_input(exec, &values)?;
     validate_output(exec, &out_k)?;
     validate_output(exec, &out_v)?;
-    <Keys as sealed::MIterDispatch<R>>::sort_by_key_into_dispatch(
-        keys,
-        exec.policy(),
-        values,
-        less,
-        out_k,
-        out_v,
-    )
+    keys.sort_by_key_with_policy(exec.policy(), values, less, out_k, out_v)
 }
 
 /// Stable sort. The current lower implementation is stable.
