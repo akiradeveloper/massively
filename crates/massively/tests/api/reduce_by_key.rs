@@ -11,13 +11,6 @@ fn count_reduced_values_after_allocated_slice<Values, Op, Pred>(
 where
     Values: massively::MIter<WgpuRuntime>,
     Values::Item: massively::MAlloc<WgpuRuntime>,
-    <Values::Item as massively::MAlloc<WgpuRuntime>>::Storage:
-        massively::ToSlice + massively::ToSliceMut,
-    for<'a> <<Values::Item as massively::MAlloc<WgpuRuntime>>::Storage as massively::ToSlice>::Slice<'a>:
-        massively::MIter<WgpuRuntime, Item = Values::Item>,
-    for<'a> <<Values::Item as massively::MAlloc<WgpuRuntime>>::Storage as massively::ToSliceMut>::SliceMut<
-        'a,
-    >: massively::MIterMut<WgpuRuntime, Item = Values::Item>,
     Op: ReductionOp<WgpuRuntime, Values::Item>,
     Pred: PredicateOp<WgpuRuntime, Values::Item, Env = ()>,
 {

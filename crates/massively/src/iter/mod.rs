@@ -8,7 +8,7 @@ use crate::Error;
 use crate::detail::dispatch;
 use crate::index::MIndex;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
-use crate::value::{MAlloc, MItem};
+use crate::value::{MAlloc, MItem, StorageFromInner};
 
 /// Single-column structure-of-arrays container.
 #[derive(Clone, Copy, Debug)]
@@ -84,7 +84,7 @@ impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for SoA7<A, B, C, D, E, F,
 
 /// Device-backed value that can produce a read-only slice view.
 pub trait ToSlice {
-    type Slice<'a>
+    type Slice<'a>: ToSlice
     where
         Self: 'a;
 
@@ -94,8 +94,8 @@ pub trait ToSlice {
 }
 
 /// Device-backed value that can produce a mutable slice view.
-pub trait ToSliceMut {
-    type SliceMut<'a>
+pub trait ToSliceMut: ToSlice {
+    type SliceMut<'a>: ToSlice + ToSliceMut
     where
         Self: 'a;
 
@@ -395,8 +395,25 @@ impl_soa_slice_api!(SoA5<A: 0, B: 1, C: 2, D: 3, E: 4>);
 impl_soa_slice_api!(SoA6<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5>);
 impl_soa_slice_api!(SoA7<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6>);
 
+/// Allocated device storage that can be sliced back into algorithm views.
+pub trait MAllocStorage<R: Runtime>: StorageFromInner<R> + ToSlice + ToSliceMut
+where
+    for<'a> <Self as ToSlice>::Slice<'a>: MIter<R, Item = Self::Item>,
+    for<'a> <Self as ToSliceMut>::SliceMut<'a>: MIterMut<R, Item = Self::Item>,
+{
+}
+
+impl<R, T> MAllocStorage<R> for T
+where
+    R: Runtime,
+    T: StorageFromInner<R> + ToSlice + ToSliceMut,
+    for<'a> <T as ToSlice>::Slice<'a>: MIter<R, Item = T::Item>,
+    for<'a> <T as ToSliceMut>::SliceMut<'a>: MIterMut<R, Item = T::Item>,
+{
+}
+
 /// Massively iterator.
-pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
+pub trait MIter<R: Runtime>: ToSlice + dispatch::MIterDispatch<R> + Sized {
     type Item: MItem<R>;
 
     #[doc(hidden)]
@@ -414,7 +431,7 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
     }
 
     #[doc(hidden)]
-    fn into_view_with_policy(
+    fn into_alloc_view_with_policy(
         self,
         policy: &crate::detail::CubePolicy<R>,
     ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
@@ -431,7 +448,9 @@ pub trait MIter<R: Runtime>: dispatch::MIterDispatch<R> + Sized {
 }
 
 /// Mutable massively iterator used as an explicit algorithm output.
-pub trait MIterMut<R: Runtime>: dispatch::MIterMutDispatch<R> + Sized {
+pub trait MIterMut<R: Runtime>:
+    ToSlice + ToSliceMut + dispatch::MIterMutDispatch<R> + Sized
+{
     type Item: MAlloc<R>;
 
     #[doc(hidden)]

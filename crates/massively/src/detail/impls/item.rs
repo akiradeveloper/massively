@@ -505,8 +505,8 @@ macro_rules! impl_mitem_tuple {
 }
 
 impl_mitem_tuple!(A: a);
-impl_mitem_tuple!(A: a, B0: b);
-impl_mitem_tuple!(A: a, B0: b, C: c);
+impl_mitem_tuple!(A: a, B: b);
+impl_mitem_tuple!(A: a, B: b, C: c);
 
 macro_rules! impl_wide_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
@@ -875,7 +875,7 @@ macro_rules! impl_wide_mitem_tuple {
     };
 }
 
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f);
-impl_wide_mitem_tuple!(A: a, B0: b, C: c, D: d, E: e, F: f, G: g);
+impl_wide_mitem_tuple!(A: a, B: b, C: c, D: d);
+impl_wide_mitem_tuple!(A: a, B: b, C: c, D: d, E: e);
+impl_wide_mitem_tuple!(A: a, B: b, C: c, D: d, E: e, F: f);
+impl_wide_mitem_tuple!(A: a, B: b, C: c, D: d, E: e, F: f, G: g);

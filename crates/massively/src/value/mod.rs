@@ -5,6 +5,7 @@ use cubecl::prelude::{CubeElement, CubePrimitive, CubeType, Runtime};
 use crate::Error;
 use crate::detail::dispatch;
 use crate::index::MIndex;
+use crate::iter::{MAllocStorage, MIter, MIterMut, ToSlice, ToSliceMut};
 use crate::runtime::Executor;
 
 /// Logical item handled by massively algorithms.
@@ -21,7 +22,11 @@ pub trait MStorageElement: CubePrimitive + CubeElement {}
 impl<T> MStorageElement for T where T: CubePrimitive + CubeElement {}
 
 /// Logical item that has an owned/writable SoA device storage shape.
-pub trait MAlloc<R: Runtime>: MItem<R> {
+pub trait MAlloc<R: Runtime>: MItem<R>
+where
+    for<'a> <<Self as MAlloc<R>>::Storage as ToSlice>::Slice<'a>: MIter<R, Item = Self>,
+    for<'a> <<Self as MAlloc<R>>::Storage as ToSliceMut>::SliceMut<'a>: MIterMut<R, Item = Self>,
+{
     #[doc(hidden)]
     type Inner;
 
@@ -29,7 +34,7 @@ pub trait MAlloc<R: Runtime>: MItem<R> {
     type View;
 
     #[doc(hidden)]
-    type Storage: StorageFromInner<R, Item = Self>;
+    type Storage: MAllocStorage<R, Item = Self>;
 
     #[doc(hidden)]
     fn storage_from_inner(inner: Self::Inner) -> Self::Storage;

@@ -14,9 +14,6 @@ where
     R: cubecl::prelude::Runtime,
     Input: MIter<R>,
     Input::Item: MAlloc<R>,
-    <Input::Item as MAlloc<R>>::Storage: ToSliceMut,
-    for<'a> <<Input::Item as MAlloc<R>>::Storage as ToSliceMut>::SliceMut<'a>:
-        MIterMut<R, Item = Input::Item>,
 {
     let out = exec.alloc::<Input::Item>(len)?;
     scatter(exec, source, indices, out.slice_mut(..))?;

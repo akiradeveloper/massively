@@ -41,7 +41,9 @@ pub use algorithm::{
 };
 pub use error::Error;
 pub use index::MIndex;
-pub use iter::{MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice, ToSliceMut};
+pub use iter::{
+    MAllocStorage, MIter, MIterMut, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice, ToSliceMut,
+};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use value::{MAlloc, MItem, MStorageElement};
 
@@ -51,8 +53,9 @@ pub use value::{MAlloc, MItem, MStorageElement};
 /// `massively::` namespace.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,
-        MStorageElement, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice, ToSliceMut,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MAllocStorage, MIndex, MItem,
+        MIter, MIterMut, MStorageElement, SoA1, SoA2, SoA3, SoA4, SoA5, SoA6, SoA7, ToSlice,
+        ToSliceMut,
     };
 }
 

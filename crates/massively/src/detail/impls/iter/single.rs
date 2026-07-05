@@ -24,7 +24,7 @@ where
         Ok(self.column_view())
     }
 
-    fn into_view_with_policy(
+    fn into_alloc_view_with_policy(
         self,
         policy: &crate::detail::CubePolicy<R>,
     ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
@@ -373,7 +373,7 @@ where
         Ok((self.0.column_view(),))
     }
 
-    fn into_view_with_policy(
+    fn into_alloc_view_with_policy(
         self,
         policy: &crate::detail::CubePolicy<R>,
     ) -> Result<<Self::Item as MAlloc<R>>::View, Error> {
@@ -1603,8 +1603,8 @@ where
         KeyOutput: StorageFromInner<R, Item = (K,)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_view_with_policy(policy)?.0;
-        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let left_value = self.into_alloc_view_with_policy(policy)?.0;
+        let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             crate::detail::device::SoAView1 { source: left_keys },
@@ -1638,8 +1638,8 @@ where
         KeyOutput: MIterMut<R, Item = (K,)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_view_with_policy(policy)?.0;
-        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let left_value = self.into_alloc_view_with_policy(policy)?.0;
+        let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             crate::detail::device::SoAView1 { source: left_keys },
@@ -1675,8 +1675,8 @@ where
         KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_view_with_policy(policy)?.0;
-        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let left_value = self.into_alloc_view_with_policy(policy)?.0;
+        let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key, left_third_key),
@@ -1724,8 +1724,8 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_view_with_policy(policy)?.0;
-        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let left_value = self.into_alloc_view_with_policy(policy)?.0;
+        let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key, left_third_key),
@@ -1758,8 +1758,8 @@ where
         KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
         ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_view_with_policy(policy)?.0;
-        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let left_value = self.into_alloc_view_with_policy(policy)?.0;
+        let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key),
@@ -1796,8 +1796,8 @@ where
         KeyOutput: MIterMut<R, Item = (K1, K2)>,
         ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
     {
-        let left_value = self.into_view_with_policy(policy)?.0;
-        let right_value = right_values.into_view_with_policy(policy)?.0;
+        let left_value = self.into_alloc_view_with_policy(policy)?.0;
+        let right_value = right_values.into_alloc_view_with_policy(policy)?.0;
         let (key_inner, value_inner) = crate::detail::merge_by_key(
             policy,
             (left_first_key, left_second_key),
@@ -1940,8 +1940,8 @@ where
         KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: StorageFromInner<R, Item = <LeftValues as MIter<R>>::Item>,
     {
-        let (left_keys,) = self.into_view_with_policy(policy)?;
-        let (right_keys,) = right_keys.into_view_with_policy(policy)?;
+        let (left_keys,) = self.into_alloc_view_with_policy(policy)?;
+        let (right_keys,) = right_keys.into_alloc_view_with_policy(policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_single_key_same_dispatch(
             left_values,
             policy,
@@ -1978,8 +1978,8 @@ where
         KeyOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
         ValueOutput: MIterMut<R, Item = <LeftValues as MIter<R>>::Item>,
     {
-        let (left_keys,) = self.into_view_with_policy(policy)?;
-        let (right_keys,) = right_keys.into_view_with_policy(policy)?;
+        let (left_keys,) = self.into_alloc_view_with_policy(policy)?;
+        let (right_keys,) = right_keys.into_alloc_view_with_policy(policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_single_key_same_into_dispatch(
             left_values,
             policy,
@@ -2521,8 +2521,8 @@ where
     {
         let inner = crate::detail::lower_bound_many(
             policy,
-            self.into_view_with_policy(policy)?,
-            values.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            values.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(crate::runtime::DeviceVec::from_inner(inner))
@@ -2540,8 +2540,8 @@ where
     {
         let inner = crate::detail::upper_bound_many(
             policy,
-            self.into_view_with_policy(policy)?,
-            values.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            values.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(crate::runtime::DeviceVec::from_inner(inner))
@@ -2657,8 +2657,8 @@ where
     {
         crate::detail::equal(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -2675,8 +2675,8 @@ where
     {
         crate::detail::mismatch(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -2693,8 +2693,8 @@ where
     {
         crate::detail::find_first_of(
             policy,
-            self.into_view_with_policy(policy)?,
-            needles.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            needles.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Eq>::new(),
         )
     }
@@ -2711,8 +2711,8 @@ where
     {
         crate::detail::lexicographical_compare(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )
     }
@@ -2730,8 +2730,8 @@ where
     {
         let inner = crate::detail::merge(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -2751,8 +2751,8 @@ where
     {
         let inner = crate::detail::merge(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         output.write_from_inner(policy, inner)
@@ -2771,8 +2771,8 @@ where
     {
         let inner = crate::detail::set_union(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -2792,8 +2792,8 @@ where
     {
         let inner = crate::detail::set_union(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         let len = inner.0.len() as MIndex;
@@ -2814,8 +2814,8 @@ where
     {
         let inner = crate::detail::set_intersection(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -2835,8 +2835,8 @@ where
     {
         let inner = crate::detail::set_intersection(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         let len = inner.0.len() as MIndex;
@@ -2857,8 +2857,8 @@ where
     {
         let inner = crate::detail::set_difference(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         Ok(array_from_inner::<R, (T,), Output>(inner))
@@ -2878,8 +2878,8 @@ where
     {
         let inner = crate::detail::set_difference(
             policy,
-            self.into_view_with_policy(policy)?,
-            right.into_view_with_policy(policy)?,
+            self.into_alloc_view_with_policy(policy)?,
+            right.into_alloc_view_with_policy(policy)?,
             KernelOp::<R, Less>::new(),
         )?;
         let len = inner.0.len() as MIndex;
