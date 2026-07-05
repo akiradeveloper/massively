@@ -307,7 +307,7 @@ macro_rules! impl_reduce_by_key_into_dispatch_body {
 
 macro_rules! impl_merge_by_key_dispatch_body {
     ($policy:ident, $right_keys:ident, $left_values:ident, $right_values:ident, $less:ident, $left_input:ident; 0, 1) => {{
-        let right_input = $right_keys.into_view_with_policy($policy)?;
+        let right_input = $right_keys.into_alloc_view_with_policy($policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_two_key_same_dispatch(
             $left_values,
             $policy,
@@ -320,7 +320,7 @@ macro_rules! impl_merge_by_key_dispatch_body {
         )
     }};
     ($policy:ident, $right_keys:ident, $left_values:ident, $right_values:ident, $less:ident, $left_input:ident; 0, 1, 2) => {{
-        let right_input = $right_keys.into_view_with_policy($policy)?;
+        let right_input = $right_keys.into_alloc_view_with_policy($policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_three_key_same_dispatch(
             $left_values,
             $policy,
@@ -381,7 +381,7 @@ macro_rules! impl_wide_transform_dispatch_body {
 
 macro_rules! impl_merge_by_key_into_dispatch_body {
     ($policy:ident, $right_keys:ident, $left_values:ident, $right_values:ident, $less:ident, $left_input:ident, $key_output:ident, $value_output:ident; 0, 1) => {{
-        let right_input = $right_keys.into_view_with_policy($policy)?;
+        let right_input = $right_keys.into_alloc_view_with_policy($policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_two_key_same_into_dispatch(
             $left_values,
             $policy,
@@ -396,7 +396,7 @@ macro_rules! impl_merge_by_key_into_dispatch_body {
         )
     }};
     ($policy:ident, $right_keys:ident, $left_values:ident, $right_values:ident, $less:ident, $left_input:ident, $key_output:ident, $value_output:ident; 0, 1, 2) => {{
-        let right_input = $right_keys.into_view_with_policy($policy)?;
+        let right_input = $right_keys.into_alloc_view_with_policy($policy)?;
         <LeftValues as sealed::MIterDispatch<R>>::merge_by_three_key_same_into_dispatch(
             $left_values,
             $policy,
@@ -2610,7 +2610,7 @@ macro_rules! impl_miter_soa {
                 Ok(($( self.$idx.column_view(), )+))
             }
 
-            fn into_view_with_policy(
+            fn into_alloc_view_with_policy(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<<Self::Item as MAlloc<R>>::View, Error> {
@@ -4121,8 +4121,8 @@ macro_rules! impl_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     crate::detail::device::SoAView1 { source: left_keys },
@@ -4154,8 +4154,8 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     crate::detail::device::SoAView1 { source: left_keys },
@@ -4186,8 +4186,8 @@ macro_rules! impl_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key),
@@ -4222,8 +4222,8 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key),
@@ -4257,8 +4257,8 @@ macro_rules! impl_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key, left_third_key),
@@ -4304,8 +4304,8 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key, left_third_key),
@@ -4335,7 +4335,7 @@ macro_rules! impl_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 ValueOutput: StorageFromInner<R, Item = <LeftValues as MIter<R>>::Item>,
             {
-                let left_input = self.into_view_with_policy(policy)?;
+                let left_input = self.into_alloc_view_with_policy(policy)?;
                 impl_merge_by_key_dispatch_body!(
                     policy, right_keys, left_values, right_values, less, left_input; $( $idx ),+
                 )
@@ -4367,7 +4367,7 @@ macro_rules! impl_miter_soa {
                 KeyOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 ValueOutput: MIterMut<R, Item = <LeftValues as MIter<R>>::Item>,
             {
-                let left_input = self.into_view_with_policy(policy)?;
+                let left_input = self.into_alloc_view_with_policy(policy)?;
                 impl_merge_by_key_into_dispatch_body!(
                     policy,
                     right_keys,
@@ -4901,8 +4901,8 @@ macro_rules! impl_miter_soa {
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
-                let values = values.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
+                let values = values.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::lower_bound_many(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -4922,8 +4922,8 @@ macro_rules! impl_miter_soa {
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
-                let values = values.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
+                let values = values.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::upper_bound_many(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -5066,8 +5066,8 @@ macro_rules! impl_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 crate::detail::equal(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5086,8 +5086,8 @@ macro_rules! impl_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 crate::detail::mismatch(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5106,8 +5106,8 @@ macro_rules! impl_miter_soa {
                 Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
-                let needles = needles.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
+                let needles = needles.into_alloc_view_with_policy(policy)?;
                 crate::detail::find_first_of(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -5126,8 +5126,8 @@ macro_rules! impl_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 crate::detail::lexicographical_compare(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5147,8 +5147,8 @@ macro_rules! impl_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::merge(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5170,8 +5170,8 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::merge(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5192,8 +5192,8 @@ macro_rules! impl_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::set_union(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5215,8 +5215,8 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::set_union(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5239,8 +5239,8 @@ macro_rules! impl_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::set_intersection(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5262,8 +5262,8 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::set_intersection(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5286,8 +5286,8 @@ macro_rules! impl_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::set_difference(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5309,8 +5309,8 @@ macro_rules! impl_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let inner = crate::detail::set_difference(
                     policy,
                     impl_miter_view!(left; $( $idx ),+),
@@ -5722,7 +5722,7 @@ macro_rules! impl_wide_miter_soa {
                 Ok(($( self.$idx.column_view(), )+))
             }
 
-            fn into_view_with_policy(
+            fn into_alloc_view_with_policy(
                 self,
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<<Self::Item as MAlloc<R>>::View, Error> {
@@ -6249,8 +6249,8 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = (K,)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = impl_wide_merge_by_single_key_dispatch_body!(
                     policy, left_values, right_values, left_keys, right_keys, Less; $( $idx ),+
                 )?;
@@ -6277,8 +6277,8 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: MIterMut<R, Item = (K,)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = impl_wide_merge_by_single_key_dispatch_body!(
                     policy, left_values, right_values, left_keys, right_keys, Less; $( $idx ),+
                 )?;
@@ -6480,8 +6480,8 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = (K1, K2)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key),
@@ -6516,8 +6516,8 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: MIterMut<R, Item = (K1, K2)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key),
@@ -6605,8 +6605,8 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: StorageFromInner<R, Item = (K1, K2, K3)>,
                 ValueOutput: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key, left_third_key),
@@ -6644,8 +6644,8 @@ macro_rules! impl_wide_miter_soa {
                 KeyOutput: MIterMut<R, Item = (K1, K2, K3)>,
                 ValueOutput: MIterMut<R, Item = <Self as MIter<R>>::Item>,
             {
-                let left_values = self.into_view_with_policy(policy)?;
-                let right_values = right_values.into_view_with_policy(policy)?;
+                let left_values = self.into_alloc_view_with_policy(policy)?;
+                let right_values = right_values.into_alloc_view_with_policy(policy)?;
                 let (key_inner, value_inner) = crate::detail::merge_by_key(
                     policy,
                     (left_first_key, left_second_key, left_third_key),
@@ -7245,7 +7245,7 @@ macro_rules! impl_wide_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
                 crate::detail::min_element(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -7261,7 +7261,7 @@ macro_rules! impl_wide_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
                 crate::detail::max_element(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -7277,7 +7277,7 @@ macro_rules! impl_wide_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
                 crate::detail::minmax_element(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -7293,7 +7293,7 @@ macro_rules! impl_wide_miter_soa {
             where
                 Pred: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
                 impl_wide_binary_predicate_views!(
                     policy,
                     input,
@@ -7315,8 +7315,8 @@ macro_rules! impl_wide_miter_soa {
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
-                let values = values.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
+                let values = values.into_alloc_view_with_policy(policy)?;
                 Ok(crate::runtime::DeviceVec::from_inner(
                     impl_wide_binary_predicate_views!(
                         policy,
@@ -7340,8 +7340,8 @@ macro_rules! impl_wide_miter_soa {
                 Values: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
-                let values = values.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
+                let values = values.into_alloc_view_with_policy(policy)?;
                 Ok(crate::runtime::DeviceVec::from_inner(
                     impl_wide_binary_predicate_views!(
                         policy,
@@ -7363,7 +7363,7 @@ macro_rules! impl_wide_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
                 crate::detail::is_sorted_until(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -7379,7 +7379,7 @@ macro_rules! impl_wide_miter_soa {
             where
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
                 crate::detail::is_sorted(
                     policy,
                     impl_miter_view!(input; $( $idx ),+),
@@ -7397,8 +7397,8 @@ macro_rules! impl_wide_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 Ok(impl_wide_binary_predicate_views!(
                     policy,
                     left,
@@ -7421,8 +7421,8 @@ macro_rules! impl_wide_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 impl_wide_binary_predicate_views!(
                     policy,
                     left,
@@ -7444,8 +7444,8 @@ macro_rules! impl_wide_miter_soa {
                 Needles: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Eq: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let input = self.into_view_with_policy(policy)?;
-                let needles = needles.into_view_with_policy(policy)?;
+                let input = self.into_alloc_view_with_policy(policy)?;
+                let needles = needles.into_alloc_view_with_policy(policy)?;
                 impl_wide_binary_predicate_views!(
                     policy,
                     input,
@@ -7467,8 +7467,8 @@ macro_rules! impl_wide_miter_soa {
                 Right: MIter<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 impl_wide_binary_predicate_views!(
                     policy,
                     left,
@@ -7491,8 +7491,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 $(
                     let $tmp = {
                         let left = crate::detail::apply::MaterializePayloadApply::collect_expr(
@@ -7527,8 +7527,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 $(
                     let $tmp = {
                         let left = crate::detail::apply::MaterializePayloadApply::collect_expr(
@@ -7562,8 +7562,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let right_extra_flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
                     policy,
                     right,
@@ -7617,8 +7617,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let right_extra_flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
                     policy,
                     right,
@@ -7673,8 +7673,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
                     policy,
                     left,
@@ -7711,8 +7711,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
                     policy,
                     left,
@@ -7750,8 +7750,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: StorageFromInner<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
                     policy,
                     left,
@@ -7788,8 +7788,8 @@ macro_rules! impl_wide_miter_soa {
                 Output: MIterMut<R, Item = <Self as MIter<R>>::Item>,
                 Less: op::BinaryPredicateOp<R, <Self as MIter<R>>::Item>,
             {
-                let left = self.into_view_with_policy(policy)?;
-                let right = right.into_view_with_policy(policy)?;
+                let left = self.into_alloc_view_with_policy(policy)?;
+                let right = right.into_alloc_view_with_policy(policy)?;
                 let flags: cubecl::server::Handle = impl_wide_binary_predicate_views!(
                     policy,
                     left,

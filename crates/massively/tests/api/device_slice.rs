@@ -61,9 +61,6 @@ where
     R: Runtime,
     Input: massively::MIter<R>,
     Input::Item: massively::MAlloc<R>,
-    <Input::Item as massively::MAlloc<R>>::Storage: massively::ToSliceMut,
-    for<'a> <<Input::Item as massively::MAlloc<R>>::Storage as massively::ToSliceMut>::SliceMut<'a>:
-        massively::MIterMut<R, Item = Input::Item>,
 {
     let out = exec.alloc::<Input::Item>(len)?;
     scatter(exec, source, indices, out.slice_mut(..))?;
@@ -87,6 +84,59 @@ fn executor_alloc_can_create_temporary_buffer_from_miter_item() {
 
     assert_eq!(exec.to_host(&out_values).unwrap(), vec![20.0, 30.0, 10.0]);
     assert_eq!(exec.to_host(&out_ids).unwrap(), vec![2, 3, 1]);
+}
+
+fn assert_miter_can_be_sliced_twice<R, Input>(input: &Input)
+where
+    R: Runtime,
+    Input: massively::MIter<R>,
+{
+    let slice = input.slice(..);
+    let _slice = slice.slice(..);
+}
+
+fn assert_miter_mut_can_be_sliced_twice<R, Output>(output: &Output)
+where
+    R: Runtime,
+    Output: massively::MIterMut<R>,
+{
+    let slice = output.slice(..);
+    let _slice = slice.slice(..);
+
+    let slice_mut = output.slice_mut(..);
+    let slice = slice_mut.slice(..);
+    let _slice = slice.slice(..);
+    let _slice_mut = slice_mut.slice_mut(..);
+}
+
+fn assert_alloc_storage_can_be_sliced_repeatedly<R, Storage>(storage: &Storage)
+where
+    R: Runtime,
+    Storage: massively::MAllocStorage<R>,
+    for<'a> <Storage as massively::ToSlice>::Slice<'a>: massively::MIter<R, Item = Storage::Item>,
+    for<'a> <Storage as massively::ToSliceMut>::SliceMut<'a>:
+        massively::MIterMut<R, Item = Storage::Item>,
+{
+    let slice = storage.slice(..);
+    let slice = slice.slice(..);
+    let _slice = slice.slice(..);
+
+    let slice_mut = storage.slice_mut(..);
+    let _slice_mut = slice_mut.slice_mut(..);
+}
+
+#[test]
+fn generic_slice_contracts_allow_repeated_slicing() {
+    let exec = exec();
+    let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let soa = massively::SoA1(exec.to_device(&[1_u32, 2, 3, 4]).unwrap());
+
+    assert_miter_can_be_sliced_twice::<WgpuRuntime, _>(&input.slice(..));
+    assert_miter_can_be_sliced_twice::<WgpuRuntime, _>(&soa.slice(..));
+
+    assert_miter_mut_can_be_sliced_twice::<WgpuRuntime, _>(&soa.slice_mut(..));
+
+    assert_alloc_storage_can_be_sliced_repeatedly::<WgpuRuntime, _>(&soa);
 }
 
 #[test]
