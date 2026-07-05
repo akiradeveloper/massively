@@ -1,6 +1,6 @@
 use crate::{
     detail::api::expr,
-    device::{DeviceVec, KernelColumn, KernelColumnAt, S0},
+    device::{DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, S0},
     error::Error,
     expr::DeviceGpuExpr,
     primitives::select,
@@ -33,6 +33,27 @@ impl<'a> SelectedPayloadApply<'a> {
             expr,
             self.control,
             self.count,
+        )
+    }
+
+    pub(in crate::detail) fn apply_expr_into<ExprSource>(
+        &self,
+        policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
+        expr: &ExprSource,
+        output: &DeviceColumnMutView<ExprSource::Runtime, ExprSource::Item>,
+    ) -> Result<(), Error>
+    where
+        ExprSource: KernelColumn + KernelColumnAt<S0>,
+        ExprSource::Runtime: Runtime,
+        ExprSource::Item: CubePrimitive + CubeElement,
+        ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
+    {
+        expr::selection::device_expr_compact_into_with_selection_with_policy(
+            policy,
+            expr,
+            self.control,
+            self.count,
+            output,
         )
     }
 

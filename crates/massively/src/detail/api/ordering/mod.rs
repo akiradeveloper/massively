@@ -2,8 +2,8 @@ use super::memory::{MaterializeOutput, materialize};
 use crate::{
     detail::op::kernel::BinaryPredicateOp,
     device::{
-        DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA1, SoA2, SoA3, SoAView1,
-        SoAView2, SoAView3,
+        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, ReadOnlySoA, S0, SoA1, SoA2,
+        SoA3, SoAView1, SoAView2, SoAView3,
     },
     error::Error,
     expr::DeviceGpuExpr,
@@ -966,6 +966,9 @@ where
     let out_value_handle = client.empty(len * std::mem::size_of::<LeftValue::Item>());
 
     if len != 0 {
+        let output_offset = client.create_from_slice(u32::as_bytes(&[0]));
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
         let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
         let num_blocks_u32 =
             u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
@@ -1004,12 +1007,93 @@ where
                 unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
                 unsafe { BufferArg::from_raw_parts(control.source_sides.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(control.source_indices.clone(), len) },
+                unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(out_value_handle.clone(), len) },
             );
         }
     }
 
     Ok(DeviceVec::from_handle(policy.id(), out_value_handle, len))
+}
+
+pub(crate) fn device_expr_merge_by_key_values_into_with_control_with_policy<LeftValue, RightValue>(
+    policy: &CubePolicy<LeftValue::Runtime>,
+    left_values: &LeftValue,
+    right_values: &RightValue,
+    control: &ordering::MergeByKeyControl,
+    output: &DeviceColumnMutView<LeftValue::Runtime, LeftValue::Item>,
+) -> Result<(), Error>
+where
+    LeftValue: KernelColumn + KernelColumnAt<S0>,
+    RightValue:
+        KernelColumn<Runtime = LeftValue::Runtime, Item = LeftValue::Item> + KernelColumnAt<S0>,
+    LeftValue::Item: CubePrimitive + CubeElement,
+    LeftValue::Expr: DeviceGpuExpr<LeftValue::Item>,
+    RightValue::Expr: DeviceGpuExpr<RightValue::Item>,
+{
+    left_values.validate()?;
+    right_values.validate()?;
+    super::ensure_same_len(left_values.len(), control.left_len)?;
+    super::ensure_same_len(right_values.len(), control.right_len)?;
+    super::ensure_same_len(output.len, control.len)?;
+
+    let len = control.len;
+    if len == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let output_offset_u32 =
+        u32::try_from(output.offset).map_err(|_| Error::LengthTooLarge { len: output.offset })?;
+    let output_offset = client.create_from_slice(u32::as_bytes(&[output_offset_u32]));
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
+    let num_blocks_u32 =
+        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let left_bindings = left_values.stage(policy)?;
+    let right_bindings = right_values.stage(policy)?;
+    let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
+    let right_slot_offsets = right_bindings.slot_offsets_handle(client)?;
+    let left_slot0 = left_bindings.slots.first().unwrap();
+    let left_slot1 = left_bindings.slots.get(1).unwrap_or(left_slot0);
+    let left_slot2 = left_bindings.slots.get(2).unwrap_or(left_slot0);
+    let left_slot3 = left_bindings.slots.get(3).unwrap_or(left_slot0);
+    let right_slot0 = right_bindings.slots.first().unwrap();
+    let right_slot1 = right_bindings.slots.get(1).unwrap_or(right_slot0);
+    let right_slot2 = right_bindings.slots.get(2).unwrap_or(right_slot0);
+    let right_slot3 = right_bindings.slots.get(3).unwrap_or(right_slot0);
+
+    unsafe {
+        merge_by_key_values_from_control_device_expr_kernel::launch_unchecked::<
+            LeftValue::Item,
+            LeftValue::Expr,
+            RightValue::Expr,
+            LeftValue::Runtime,
+        >(
+            client,
+            CubeCount::Static(num_blocks_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_ORDERING_SIZE),
+            unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(control.source_sides.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(control.source_indices.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+
+    Ok(())
 }
 
 impl<Left, Right, Less> crate::detail::read::KernelPairOrderingInput<SoAView1<Right>, Less>

@@ -134,6 +134,7 @@ where
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let output_offset = offset_handle(client, 0)?;
     let block_count_u32 = api_expr_block_count(selected_rank.len)?;
 
     unsafe {
@@ -152,11 +153,71 @@ where
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
             unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
             unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), count) },
         );
     }
 
     Ok(DeviceVec::from_handle(policy.id(), output_handle, count))
+}
+
+pub(in crate::detail) fn device_expr_compact_into_with_selection_with_policy<ExprSource>(
+    policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
+    expr: &ExprSource,
+    selected_rank: &select::SelectedRankControl,
+    count: usize,
+    output: &DeviceColumnMutView<ExprSource::Runtime, ExprSource::Item>,
+) -> Result<(), Error>
+where
+    ExprSource: KernelColumn + KernelColumnAt<S0>,
+    ExprSource::Runtime: Runtime,
+    ExprSource::Item: CubePrimitive + CubeElement,
+    ExprSource::Expr: DeviceGpuExpr<ExprSource::Item>,
+{
+    expr.validate()?;
+    ensure_same_len(expr.len(), selected_rank.len)?;
+    if count > output.len {
+        return Err(Error::LengthMismatch {
+            input: count,
+            output: output.len,
+        });
+    }
+    if selected_rank.len == 0 || count == 0 {
+        return Ok(());
+    }
+
+    let client = policy.client();
+    let bindings = expr.stage(policy)?;
+    let slot_offsets = bindings.slot_offsets_handle(client)?;
+    let slot0 = bindings.slots.first().unwrap();
+    let slot1 = bindings.slots.get(1).unwrap_or(slot0);
+    let slot2 = bindings.slots.get(2).unwrap_or(slot0);
+    let slot3 = bindings.slots.get(3).unwrap_or(slot0);
+    let output_offset = offset_handle(client, output.offset)?;
+    let block_count_u32 = api_expr_block_count(selected_rank.len)?;
+
+    unsafe {
+        compact_scatter_device_expr_kernel::launch_unchecked::<
+            ExprSource::Item,
+            ExprSource::Expr,
+            ExprSource::Runtime,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
+            unsafe { BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len) },
+            unsafe { BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len) },
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot_offsets.clone(), 4) },
+            unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
+        );
+    }
+
+    Ok(())
 }
 
 pub(in crate::detail) fn device_expr_apply_selected2_with_policy<Left, Right>(

@@ -25,9 +25,25 @@ fn query_u32(len: usize) -> Vec<u32> {
 fn check_search(exec: &Executor<WgpuRuntime>) {
     let input = exec.to_device(&[0_u32, 0, 2, 2, 2]).unwrap();
     let values = exec.to_device(&[0_u32, 1, 2]).unwrap();
-    let lower = lower_bound(exec, SoA1(input.slice(..)), SoA1(values.slice(..)), Less).unwrap();
+    let lower = exec.to_device(&[0_u32; 3]).unwrap();
+    lower_bound(
+        exec,
+        SoA1(input.slice(..)),
+        SoA1(values.slice(..)),
+        Less,
+        lower.slice_mut(..),
+    )
+    .unwrap();
     assert_eq!(exec.to_host(&lower).unwrap(), vec![0, 2, 2]);
-    let upper = upper_bound(exec, SoA1(input.slice(..)), SoA1(values.slice(..)), Less).unwrap();
+    let upper = exec.to_device(&[0_u32; 3]).unwrap();
+    upper_bound(
+        exec,
+        SoA1(input.slice(..)),
+        SoA1(values.slice(..)),
+        Less,
+        upper.slice_mut(..),
+    )
+    .unwrap();
     assert_eq!(exec.to_host(&upper).unwrap(), vec![2, 2, 5]);
 }
 
@@ -40,18 +56,20 @@ fn bench_search(c: &mut Criterion) {
         for &len in SIZES {
             let input = exec.to_device(&ascending_u32(len)).unwrap();
             let values = exec.to_device(&query_u32(len)).unwrap();
+            let output = exec.to_device(&vec![0_u32; len]).unwrap();
             sync(&exec);
             lower_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output = lower_bound(
+                    lower_bound(
                         &exec,
                         SoA1(black_box(input.slice(..))),
                         SoA1(black_box(values.slice(..))),
                         Less,
+                        black_box(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);
-                    black_box(output)
+                    black_box(&output)
                 })
             });
         }
@@ -66,18 +84,20 @@ fn bench_search(c: &mut Criterion) {
         for &len in SIZES {
             let input = exec.to_device(&ascending_u32(len)).unwrap();
             let values = exec.to_device(&query_u32(len)).unwrap();
+            let output = exec.to_device(&vec![0_u32; len]).unwrap();
             sync(&exec);
             upper_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
                 iter_gpu(b, || {
-                    let output = upper_bound(
+                    upper_bound(
                         &exec,
                         SoA1(black_box(input.slice(..))),
                         SoA1(black_box(values.slice(..))),
                         Less,
+                        black_box(output.slice_mut(..)),
                     )
                     .unwrap();
                     sync(&exec);
-                    black_box(output)
+                    black_box(&output)
                 })
             });
         }

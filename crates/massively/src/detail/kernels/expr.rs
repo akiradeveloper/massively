@@ -5235,6 +5235,7 @@ pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceG
     slot2: &[T],
     slot3: &[T],
     slot_offsets: &[u32],
+    output_offset: &[u32],
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
@@ -5242,7 +5243,7 @@ pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceG
     let global = (CUBE_POS as usize) * cube_dim + unit;
     if global < flags.len() && flags[global] != 0u32 {
         let position = positions[global];
-        output[(position - 1u32) as usize] =
+        output[output_offset[0] as usize + (position - 1u32) as usize] =
             Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
     }
 }

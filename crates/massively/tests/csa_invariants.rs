@@ -29,6 +29,25 @@ fn rust_sources_under(relative: &str) -> Vec<(String, String)> {
     sources
 }
 
+fn function_bodies<'a>(source: &'a str, needle: &str) -> Vec<&'a str> {
+    let mut bodies = Vec::new();
+    let mut cursor = 0;
+    while let Some(relative_start) = source[cursor..].find(needle) {
+        let start = cursor + relative_start;
+        let line_start = source[..start].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
+        let indent = &source[line_start..start];
+        let next_fn = format!("\n{indent}fn ");
+        let rest_start = start + needle.len();
+        let end = source[rest_start..]
+            .find(&next_fn)
+            .map(|idx| rest_start + idx)
+            .unwrap_or(source.len());
+        bodies.push(&source[start..end]);
+        cursor = rest_start;
+    }
+    bodies
+}
+
 #[test]
 fn selection_control_objects_do_not_bind_payload_handles() {
     let source = read("src/detail/control/selection.rs");
@@ -237,6 +256,175 @@ fn transform_dispatch_uses_transform_payload_apply() {
             && item_impls.contains("TransformPayloadApply::soa7")
             && !item_impls.contains(">>::run(policy"),
         "MItem transform dispatch should route through TransformPayloadApply"
+    );
+}
+
+#[test]
+fn public_by_key_apis_use_direct_write_dispatch() {
+    for relative in [
+        "src/algorithm/api/scan.rs",
+        "src/algorithm/api/reduce.rs",
+        "src/algorithm/api/ordering.rs",
+        "src/algorithm/api/unique.rs",
+    ] {
+        let source = read(relative);
+        for forbidden in [
+            "sort_by_key_dispatch(",
+            "unique_by_key_dispatch(",
+            "inclusive_scan_by_key_dispatch(",
+            "exclusive_scan_by_key_dispatch(",
+            "reduce_by_key_dispatch(",
+            "merge_by_key_dispatch(",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "{relative} must not call owned-return by-key dispatch method {forbidden}"
+            );
+        }
+    }
+
+    let ordering = read("src/algorithm/api/ordering.rs");
+    let unique = read("src/algorithm/api/unique.rs");
+    let scan = read("src/algorithm/api/scan.rs");
+    let reduce = read("src/algorithm/api/reduce.rs");
+    assert!(ordering.contains("sort_by_key_into_dispatch"));
+    assert!(ordering.contains("merge_by_key_into_dispatch"));
+    assert!(unique.contains("unique_by_key_into_dispatch"));
+    assert!(scan.contains("inclusive_scan_by_key_into_dispatch"));
+    assert!(scan.contains("exclusive_scan_by_key_into_dispatch"));
+    assert!(reduce.contains("reduce_by_key_into_dispatch"));
+}
+
+#[test]
+fn by_key_direct_write_defaults_do_not_allocate_owned_outputs() {
+    let dispatch = read("src/detail/dispatch/iter.rs");
+    for method in [
+        "fn sort_by_key_into_dispatch",
+        "fn unique_by_key_into_dispatch",
+        "fn inclusive_scan_by_key_into_dispatch",
+        "fn exclusive_scan_by_key_into_dispatch",
+        "fn reduce_by_key_into_dispatch",
+        "fn merge_by_key_into_dispatch",
+    ] {
+        let start = dispatch
+            .find(method)
+            .unwrap_or_else(|| panic!("{method} should exist in MIterDispatch"));
+        let rest = &dispatch[start..];
+        let end = rest
+            .find("\n    fn ")
+            .map(|idx| start + idx)
+            .unwrap_or(dispatch.len());
+        let body = &dispatch[start..end];
+        assert!(
+            body.contains("unsupported("),
+            "{method} default should reject unsupported shapes directly"
+        );
+        assert!(
+            !body.contains("StorageFromInner"),
+            "{method} default must not require owned output storage"
+        );
+        assert!(
+            !body.contains("write_from_inner") && !body.contains("write_prefix_from_inner"),
+            "{method} default must not allocate and copy through owned output"
+        );
+    }
+}
+
+#[test]
+fn scan_by_key_into_writes_through_segmented_scan_apply() {
+    let single_impls = read("src/detail/impls/iter/single.rs");
+    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let scan_apply = read("src/detail/apply/scan.rs");
+    let scan_kernels = read("src/detail/kernels/scan.rs");
+
+    assert!(
+        scan_apply.contains("fn inclusive_expr_into")
+            && scan_apply.contains("inclusive_scan_by_flags_one_into")
+            && scan_apply.contains("fn exclusive_expr_into")
+            && scan_apply.contains("exclusive_scan_by_flags_one_into"),
+        "SegmentedScanApply should expose direct-output single-column scan-by-key helpers"
+    );
+    assert!(
+        scan_apply.contains("fn inclusive_expr2_into")
+            && scan_apply.contains("inclusive_scan_by_flags_two_into")
+            && scan_apply.contains("fn exclusive_expr2_into")
+            && scan_apply.contains("exclusive_scan_by_flags_two_into")
+            && scan_apply.contains("fn inclusive_expr3_into")
+            && scan_apply.contains("inclusive_scan_by_flags_three_into")
+            && scan_apply.contains("fn exclusive_expr3_into")
+            && scan_apply.contains("exclusive_scan_by_flags_three_into"),
+        "SegmentedScanApply should expose direct-output tuple scan-by-key helpers"
+    );
+    assert!(
+        scan_apply.contains("fn inclusive_views7_into")
+            && scan_apply.contains("inclusive_scan_by_flags_seven_views_into")
+            && scan_apply.contains("fn exclusive_views7_into")
+            && scan_apply.contains("exclusive_scan_by_flags_seven_views_into"),
+        "SegmentedScanApply should expose direct-output wide tuple scan-by-key helpers"
+    );
+    assert!(
+        single_impls.contains(".inclusive_expr_into::<")
+            && single_impls.contains(".exclusive_expr_into::<"),
+        "single-column scan_by_key into dispatch should call direct-output SegmentedScanApply helpers"
+    );
+    assert!(
+        tuple_impls.contains("impl_tuple_inclusive_scan_by_key_values_into_body")
+            && tuple_impls.contains("impl_tuple_exclusive_scan_by_key_values_into_body")
+            && tuple_impls.contains(".inclusive_expr2_into::<")
+            && tuple_impls.contains(".exclusive_expr2_into::<")
+            && tuple_impls.contains(".inclusive_expr3_into::<")
+            && tuple_impls.contains(".exclusive_expr3_into::<"),
+        "tuple scan_by_key into dispatch should call direct-output SegmentedScanApply helpers"
+    );
+    assert!(
+        tuple_impls.contains("impl_wide_inclusive_scan_by_key_values_into_body")
+            && tuple_impls.contains("impl_wide_exclusive_scan_by_key_values_into_body")
+            && tuple_impls.contains(".inclusive_views7_into::<")
+            && tuple_impls.contains(".exclusive_views7_into::<"),
+        "wide tuple scan_by_key into dispatch should call direct-output SegmentedScanApply helpers"
+    );
+    for (path, source) in [
+        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
+        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
+    ] {
+        for method in [
+            "fn inclusive_scan_by_single_key_into_dispatch",
+            "fn inclusive_scan_by_two_key_into_dispatch",
+            "fn inclusive_scan_by_three_key_into_dispatch",
+            "fn inclusive_scan_by_key_into_dispatch",
+            "fn exclusive_scan_by_single_key_into_dispatch",
+            "fn exclusive_scan_by_two_key_into_dispatch",
+            "fn exclusive_scan_by_three_key_into_dispatch",
+            "fn exclusive_scan_by_key_into_dispatch",
+        ] {
+            for body in function_bodies(source, method) {
+                assert!(
+                    !body.contains("crate::detail::inclusive_scan_by_key(")
+                        && !body.contains("crate::detail::exclusive_scan_by_key(")
+                        && !body.contains("write_from_inner(policy, inner)"),
+                    "{method} in {path} should not materialize owned scan_by_key output"
+                );
+            }
+        }
+    }
+    assert!(
+        single_impls.contains("column_mut_view_inner::<T>")
+            && single_impls.contains("inclusive_scan_by_key output must match input shape")
+            && single_impls.contains("exclusive_scan_by_key output must match input shape"),
+        "single-column scan_by_key into dispatch should lower caller output to a typed mutable column"
+    );
+    assert!(
+        scan_kernels.contains("output_offset: &[u32]")
+            && scan_kernels.contains("output[output_offset[0] as usize + global]"),
+        "single-column scan-by-key kernels should support DeviceSliceMut output offsets"
+    );
+    assert!(
+        scan_kernels.contains("output_offsets: &[u32]")
+            && scan_kernels.contains("output_a[output_offsets[0] as usize + global]")
+            && scan_kernels.contains("output_b[output_offsets[1] as usize + global]")
+            && scan_kernels.contains("output_c[output_offsets[2] as usize + global]")
+            && scan_kernels.contains("output_g[output_offsets[6] as usize + global]"),
+        "tuple scan-by-key kernels should support per-column DeviceSliceMut output offsets"
     );
 }
 
@@ -570,9 +758,177 @@ fn sort_by_key_values_use_permutation_payload_apply() {
     assert!(
         payload.contains("struct PermutationPayloadApply")
             && payload.contains("control: &'a crate::detail::control::PermutationControl")
-            && payload.contains("device_expr_gather_with_policy(policy, expr, &indices)"),
+            && payload.contains("device_expr_gather_with_policy(policy, expr, &indices)")
+            && payload.contains("fn apply_expr_into")
+            && payload
+                .contains("device_expr_gather_into_with_policy(policy, expr, &indices, output)"),
         "PermutationPayloadApply should own the gather implementation boundary"
     );
+}
+
+#[test]
+fn sort_by_key_into_writes_through_permutation_payload_apply() {
+    let single_impls = read("src/detail/impls/iter/single.rs");
+    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+
+    assert!(
+        single_impls.contains("PermutationPayloadApply::new(&control)")
+            && single_impls.contains("apply.apply_expr_into(policy, &values, &value_out)")
+            && tuple_impls.contains("impl_tuple_sort_by_key_values_into_body")
+            && tuple_impls.contains("impl_wide_sort_by_key_values_into_body"),
+        "sort_by_key into dispatch should route payload writes through PermutationPayloadApply"
+    );
+
+    for (path, source) in [
+        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
+        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
+    ] {
+        for method in [
+            "fn sort_by_single_key_into_dispatch",
+            "fn sort_by_two_key_into_dispatch",
+            "fn sort_by_three_key_into_dispatch",
+            "fn sort_by_key_into_dispatch",
+        ] {
+            for body in function_bodies(source, method) {
+                assert!(
+                    !body.contains("crate::detail::sort_by_key(")
+                        && !body.contains("key_output.write_from_inner(policy, key_inner)")
+                        && !body.contains("value_output.write_from_inner(policy, value_inner)"),
+                    "{method} in {path} should not materialize owned sort_by_key output"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn merge_by_key_into_writes_through_merge_payload_apply() {
+    let single_impls = read("src/detail/impls/iter/single.rs");
+    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let payload = read("src/detail/apply/merge.rs");
+
+    assert!(
+        payload.contains("fn apply_expr_into")
+            && payload.contains("device_expr_merge_by_key_values_into_with_control_with_policy("),
+        "MergePayloadApply should expose direct-output merge-by-key payload application"
+    );
+    assert!(
+        single_impls.contains("MergeByKeyControlApply::apply_keys1")
+            && single_impls.contains("MergePayloadApply::new(&control)")
+            && single_impls
+                .contains("apply.apply_expr_into(policy, &left_value, &right_value, &value_out)")
+            && tuple_impls.contains("impl_tuple_merge_by_key_values_into_body")
+            && tuple_impls.contains("impl_wide_merge_by_key_values_into_body"),
+        "merge_by_key into dispatch should route payload writes through MergePayloadApply"
+    );
+
+    for (path, source) in [
+        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
+        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
+    ] {
+        for method in [
+            "fn merge_by_single_key_same_into_dispatch",
+            "fn merge_by_two_key_same_into_dispatch",
+            "fn merge_by_three_key_same_into_dispatch",
+            "fn merge_by_key_into_dispatch",
+        ] {
+            for body in function_bodies(source, method) {
+                assert!(
+                    !body.contains("crate::detail::merge_by_key(")
+                        && !body.contains("key_output.write_from_inner(policy, key_inner)")
+                        && !body.contains("value_output.write_from_inner(policy, value_inner)"),
+                    "{method} in {path} should not materialize owned merge_by_key output"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn unique_by_key_into_writes_through_selected_payload_apply() {
+    let single_impls = read("src/detail/impls/iter/single.rs");
+    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let payload = read("src/detail/apply/selection.rs");
+
+    assert!(
+        payload.contains("fn apply_expr_into")
+            && payload.contains("device_expr_compact_into_with_selection_with_policy("),
+        "SelectedPayloadApply should expose direct-output compact application"
+    );
+    assert!(
+        single_impls.contains("unique_one_flags_read")
+            && single_impls.contains("payload_apply.apply_expr_into(policy, &values, &value_out)")
+            && tuple_impls.contains("impl_tuple_unique_by_key_values_into_body")
+            && tuple_impls.contains("impl_wide_unique_by_key_values_into_body"),
+        "unique_by_key into dispatch should route payload writes through SelectedPayloadApply"
+    );
+
+    for (path, source) in [
+        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
+        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
+    ] {
+        for method in [
+            "fn unique_by_single_key_into_dispatch",
+            "fn unique_by_two_key_into_dispatch",
+            "fn unique_by_three_key_into_dispatch",
+            "fn unique_by_key_into_dispatch",
+        ] {
+            for body in function_bodies(source, method) {
+                assert!(
+                    !body.contains("crate::detail::unique_by_key(")
+                        && !body.contains("key_output.write_prefix_from_inner(policy, key_inner)")
+                        && !body
+                            .contains("value_output.write_prefix_from_inner(policy, value_inner)"),
+                    "{method} in {path} should not materialize owned unique_by_key output"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn reduce_by_key_into_writes_through_segmented_reduce_apply() {
+    let single_impls = read("src/detail/impls/iter/single.rs");
+    let tuple_impls = read("src/detail/impls/iter/tuple.rs");
+    let apply = read("src/detail/apply/reduce.rs");
+
+    assert!(
+        apply.contains("fn apply_expr_into")
+            && apply.contains("fn apply_expr2_into")
+            && apply.contains("fn apply_expr3_into")
+            && apply.contains("fn apply_views7_into")
+            && apply.contains("reduce_by_key_tuple7_scanned_values_into"),
+        "SegmentedReduceApply should expose direct-output reduce-by-key value application"
+    );
+    assert!(
+        single_impls.contains("SegmentedReduceApply::new(&reduce_control)")
+            && single_impls.contains("apply_expr_into::<_, KernelOp<R, Op>>")
+            && tuple_impls.contains("impl_tuple_reduce_by_key_values_into_body")
+            && tuple_impls.contains("impl_wide_reduce_by_key_values_into_body"),
+        "reduce_by_key into dispatch should route payload writes through SegmentedReduceApply"
+    );
+
+    for (path, source) in [
+        ("src/detail/impls/iter/single.rs", single_impls.as_str()),
+        ("src/detail/impls/iter/tuple.rs", tuple_impls.as_str()),
+    ] {
+        for method in [
+            "fn reduce_by_single_key_into_dispatch",
+            "fn reduce_by_two_key_into_dispatch",
+            "fn reduce_by_three_key_into_dispatch",
+            "fn reduce_by_key_into_dispatch",
+        ] {
+            for body in function_bodies(source, method) {
+                assert!(
+                    !body.contains("crate::detail::reduce_by_key(")
+                        && !body.contains("key_output.write_prefix_from_inner(policy, key_inner)")
+                        && !body
+                            .contains("value_output.write_prefix_from_inner(policy, value_inner)"),
+                    "{method} in {path} should not materialize owned reduce_by_key output"
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -1395,7 +1751,7 @@ fn search_many_kernel_launches_stay_inside_payload_apply() {
 
 #[test]
 fn csa_documentation_names_active_family_boundaries() {
-    let csa = fs::read_to_string(crate_root().join("../../doc/CSA.md"))
+    let csa = fs::read_to_string(crate_root().join("../../doc.ai/ALGORITHM_CSA.md"))
         .expect("CSA design doc should be readable");
 
     for token in [
@@ -1411,7 +1767,9 @@ fn csa_documentation_names_active_family_boundaries() {
         "MergeControl",
         "MergeByKeyControlApply",
         "MergePayloadApply",
-        "Multi-column support should be centralized",
+        "arity multiplication",
+        "多列対応は各 algorithm call site ではなく、主に apply 側の責務にする",
+        "control generation",
     ] {
         assert!(
             csa.contains(token),

@@ -5,8 +5,8 @@ use crate::{
         api::{Tuple4AsTuple7BinaryOp, Tuple5AsTuple7BinaryOp, Tuple6AsTuple7BinaryOp},
         control::{ReduceByKeyControl, ScanByKeyControl},
         device::{
-            DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, KernelColumnBindings, S0,
-            SoA2 as DeviceSoA2, SoA3 as DeviceSoA3,
+            DeviceColumnMutView, DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt,
+            KernelColumnBindings, S0, SoA2 as DeviceSoA2, SoA3 as DeviceSoA3,
         },
         op::kernel::BinaryOp,
         primitives::{
@@ -315,6 +315,64 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         payload_apply.apply_value::<R, ValueSource::Item>(policy, reduced_value_handle)
     }
 
+    pub(in crate::detail) fn apply_expr_into<ValueSource, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        source: &ValueSource,
+        init: ValueSource::Item,
+        output: &DeviceColumnMutView<R, ValueSource::Item>,
+    ) -> Result<(), Error>
+    where
+        ValueSource: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueSource::Item: MStorageElement + 'static,
+        ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
+        Op: BinaryOp<(ValueSource::Item,)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let client = policy.client();
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = crate::detail::apply::SegmentedScanApply::new(&scan_control);
+        let inclusive = scan_apply.inclusive_expr::<ValueSource, Op>(policy, source)?;
+
+        let len_handle = client.create_from_slice(u32::as_bytes(&[self.control.len_u32]));
+        let init_handle = client.create_from_slice(ValueSource::Item::as_bytes(&[init]));
+        let reduced_value_handle =
+            client.empty(self.control.len * std::mem::size_of::<ValueSource::Item>());
+        let num_blocks = self
+            .control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_apply_init_kernel::launch_unchecked::<
+                ValueSource::Item,
+                Op,
+                ValueSource::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(init_handle.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_value_handle.clone(), self.control.len),
+            );
+        }
+
+        let reduced = DeviceVec::from_handle(policy.id(), reduced_value_handle, self.control.len);
+        let reduced_view = DeviceColumnView::from_column(&reduced);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &self.control.output_selection,
+            self.control.output_count,
+        );
+        payload_apply.apply_expr_into(policy, &reduced_view, output)
+    }
+
     pub(in crate::detail) fn apply_expr2<ValueA, ValueB, Op>(
         &self,
         policy: &CubePolicy<R>,
@@ -377,6 +435,78 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
             left: payload_apply.apply_value::<R, ValueA::Item>(policy, reduced_a_handle)?,
             right: payload_apply.apply_value::<R, ValueB::Item>(policy, reduced_b_handle)?,
         })
+    }
+
+    pub(in crate::detail) fn apply_expr2_into<ValueA, ValueB, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &ValueA,
+        b: &ValueB,
+        init: (ValueA::Item, ValueB::Item),
+        out_a: &DeviceColumnMutView<R, ValueA::Item>,
+        out_b: &DeviceColumnMutView<R, ValueB::Item>,
+    ) -> Result<(), Error>
+    where
+        ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueA::Item: MStorageElement + 'static,
+        ValueB::Item: MStorageElement + 'static,
+        ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+        ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+        (ValueA::Item, ValueB::Item): MItem<R>,
+        Op: BinaryOp<(ValueA::Item, ValueB::Item)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let client = policy.client();
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = crate::detail::apply::SegmentedScanApply::new(&scan_control);
+        let inclusive = scan_apply.inclusive_expr2::<ValueA, ValueB, Op>(policy, a, b)?;
+
+        let len_handle = client.create_from_slice(u32::as_bytes(&[self.control.len_u32]));
+        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
+        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
+        let reduced_a_handle = client.empty(self.control.len * std::mem::size_of::<ValueA::Item>());
+        let reduced_b_handle = client.empty(self.control.len * std::mem::size_of::<ValueB::Item>());
+        let num_blocks = self
+            .control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_tuple2_apply_init_kernel::launch_unchecked::<
+                ValueA::Item,
+                ValueB::Item,
+                Op,
+                ValueA::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.left.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(inclusive.right.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), self.control.len),
+            );
+        }
+
+        let reduced_a = DeviceVec::from_handle(policy.id(), reduced_a_handle, self.control.len);
+        let reduced_b = DeviceVec::from_handle(policy.id(), reduced_b_handle, self.control.len);
+        let view_a = DeviceColumnView::from_column(&reduced_a);
+        let view_b = DeviceColumnView::from_column(&reduced_b);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &self.control.output_selection,
+            self.control.output_count,
+        );
+        payload_apply.apply_expr_into(policy, &view_a, out_a)?;
+        payload_apply.apply_expr_into(policy, &view_b, out_b)
     }
 
     pub(in crate::detail) fn apply_expr3<ValueA, ValueB, ValueC, Op>(
@@ -461,6 +591,94 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
             third: payload_apply.apply_value::<R, ValueC::Item>(policy, reduced_c_handle)?,
         })
     }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn apply_expr3_into<ValueA, ValueB, ValueC, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &ValueA,
+        b: &ValueB,
+        c: &ValueC,
+        init: (ValueA::Item, ValueB::Item, ValueC::Item),
+        out_a: &DeviceColumnMutView<R, ValueA::Item>,
+        out_b: &DeviceColumnMutView<R, ValueB::Item>,
+        out_c: &DeviceColumnMutView<R, ValueC::Item>,
+    ) -> Result<(), Error>
+    where
+        ValueA: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueB: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueC: KernelColumn<Runtime = R> + KernelColumnAt<S0>,
+        ValueA::Item: MStorageElement + 'static,
+        ValueB::Item: MStorageElement + 'static,
+        ValueC::Item: MStorageElement + 'static,
+        ValueA::Expr: DeviceGpuExpr<ValueA::Item>,
+        ValueB::Expr: DeviceGpuExpr<ValueB::Item>,
+        ValueC::Expr: DeviceGpuExpr<ValueC::Item>,
+        (ValueA::Item, ValueB::Item, ValueC::Item): MItem<R>,
+        Op: BinaryOp<(ValueA::Item, ValueB::Item, ValueC::Item)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let client = policy.client();
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = crate::detail::apply::SegmentedScanApply::new(&scan_control);
+        let inclusive =
+            scan_apply.inclusive_expr3::<ValueA, ValueB, ValueC, Op>(policy, a, b, c)?;
+
+        let len_handle = client.create_from_slice(u32::as_bytes(&[self.control.len_u32]));
+        let init_a = client.create_from_slice(ValueA::Item::as_bytes(&[init.0]));
+        let init_b = client.create_from_slice(ValueB::Item::as_bytes(&[init.1]));
+        let init_c = client.create_from_slice(ValueC::Item::as_bytes(&[init.2]));
+        let reduced_a_handle = client.empty(self.control.len * std::mem::size_of::<ValueA::Item>());
+        let reduced_b_handle = client.empty(self.control.len * std::mem::size_of::<ValueB::Item>());
+        let reduced_c_handle = client.empty(self.control.len * std::mem::size_of::<ValueC::Item>());
+        let num_blocks = self
+            .control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+
+        unsafe {
+            reduce_by_key_tuple3_apply_init_kernel::launch_unchecked::<
+                ValueA::Item,
+                ValueB::Item,
+                ValueC::Item,
+                Op,
+                ValueA::Runtime,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts(inclusive.first.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(inclusive.second.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(inclusive.third.handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(init_c.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), self.control.len),
+                BufferArg::from_raw_parts(reduced_c_handle.clone(), self.control.len),
+            );
+        }
+
+        let reduced_a = DeviceVec::from_handle(policy.id(), reduced_a_handle, self.control.len);
+        let reduced_b = DeviceVec::from_handle(policy.id(), reduced_b_handle, self.control.len);
+        let reduced_c = DeviceVec::from_handle(policy.id(), reduced_c_handle, self.control.len);
+        let view_a = DeviceColumnView::from_column(&reduced_a);
+        let view_b = DeviceColumnView::from_column(&reduced_b);
+        let view_c = DeviceColumnView::from_column(&reduced_c);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &self.control.output_selection,
+            self.control.output_count,
+        );
+        payload_apply.apply_expr_into(policy, &view_a, out_a)?;
+        payload_apply.apply_expr_into(policy, &view_b, out_b)?;
+        payload_apply.apply_expr_into(policy, &view_c, out_c)
+    }
 }
 
 macro_rules! reduce_by_key_tuple7_scanned_values {
@@ -538,6 +756,96 @@ macro_rules! reduce_by_key_tuple7_scanned_values {
             payload_apply.apply_value::<R, $ty5>($policy, reduced_f_handle)?,
             payload_apply.apply_value::<R, $ty6>($policy, reduced_g_handle)?,
         ))
+    }};
+}
+
+macro_rules! reduce_by_key_tuple7_scanned_values_into {
+    ($policy:ident, $control:ident, $inclusive:ident, $init:expr, $out0:ident, $out1:ident, $out2:ident, $out3:ident, $out4:ident, $out5:ident, $out6:ident; $ty0:ident, $ty1:ident, $ty2:ident, $ty3:ident, $ty4:ident, $ty5:ident, $ty6:ident; $op:ty) => {{
+        let client = $policy.client();
+        let len_handle = client.create_from_slice(u32::as_bytes(&[$control.len_u32]));
+        let init_a = client.create_from_slice($ty0::as_bytes(&[$init.0]));
+        let init_b = client.create_from_slice($ty1::as_bytes(&[$init.1]));
+        let init_c = client.create_from_slice($ty2::as_bytes(&[$init.2]));
+        let init_d = client.create_from_slice($ty3::as_bytes(&[$init.3]));
+        let init_e = client.create_from_slice($ty4::as_bytes(&[$init.4]));
+        let init_f = client.create_from_slice($ty5::as_bytes(&[$init.5]));
+        let init_g = client.create_from_slice($ty6::as_bytes(&[$init.6]));
+        let reduced_a_handle = client.empty($control.len * std::mem::size_of::<$ty0>());
+        let reduced_b_handle = client.empty($control.len * std::mem::size_of::<$ty1>());
+        let reduced_c_handle = client.empty($control.len * std::mem::size_of::<$ty2>());
+        let reduced_d_handle = client.empty($control.len * std::mem::size_of::<$ty3>());
+        let reduced_e_handle = client.empty($control.len * std::mem::size_of::<$ty4>());
+        let reduced_f_handle = client.empty($control.len * std::mem::size_of::<$ty5>());
+        let reduced_g_handle = client.empty($control.len * std::mem::size_of::<$ty6>());
+        let num_blocks = $control
+            .len
+            .div_ceil(primitive_scan::BLOCK_SCAN_SIZE as usize);
+        let num_blocks_u32 =
+            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        unsafe {
+            reduce_by_key_tuple7_apply_init_kernel::launch_unchecked::<
+                $ty0,
+                $ty1,
+                $ty2,
+                $ty3,
+                $ty4,
+                $ty5,
+                $ty6,
+                $op,
+                R,
+            >(
+                client,
+                CubeCount::Static(num_blocks_u32, 1, 1),
+                CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
+                BufferArg::from_raw_parts($inclusive.0.handle.clone(), $control.len),
+                BufferArg::from_raw_parts($inclusive.1.handle.clone(), $control.len),
+                BufferArg::from_raw_parts($inclusive.2.handle.clone(), $control.len),
+                BufferArg::from_raw_parts($inclusive.3.handle.clone(), $control.len),
+                BufferArg::from_raw_parts($inclusive.4.handle.clone(), $control.len),
+                BufferArg::from_raw_parts($inclusive.5.handle.clone(), $control.len),
+                BufferArg::from_raw_parts($inclusive.6.handle.clone(), $control.len),
+                BufferArg::from_raw_parts(init_a.clone(), 1),
+                BufferArg::from_raw_parts(init_b.clone(), 1),
+                BufferArg::from_raw_parts(init_c.clone(), 1),
+                BufferArg::from_raw_parts(init_d.clone(), 1),
+                BufferArg::from_raw_parts(init_e.clone(), 1),
+                BufferArg::from_raw_parts(init_f.clone(), 1),
+                BufferArg::from_raw_parts(init_g.clone(), 1),
+                BufferArg::from_raw_parts(len_handle.clone(), 1),
+                BufferArg::from_raw_parts(reduced_a_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_b_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_c_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_d_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_e_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_f_handle.clone(), $control.len),
+                BufferArg::from_raw_parts(reduced_g_handle.clone(), $control.len),
+            );
+        }
+        let reduced_a = DeviceVec::from_handle($policy.id(), reduced_a_handle, $control.len);
+        let reduced_b = DeviceVec::from_handle($policy.id(), reduced_b_handle, $control.len);
+        let reduced_c = DeviceVec::from_handle($policy.id(), reduced_c_handle, $control.len);
+        let reduced_d = DeviceVec::from_handle($policy.id(), reduced_d_handle, $control.len);
+        let reduced_e = DeviceVec::from_handle($policy.id(), reduced_e_handle, $control.len);
+        let reduced_f = DeviceVec::from_handle($policy.id(), reduced_f_handle, $control.len);
+        let reduced_g = DeviceVec::from_handle($policy.id(), reduced_g_handle, $control.len);
+        let view_a = DeviceColumnView::from_column(&reduced_a);
+        let view_b = DeviceColumnView::from_column(&reduced_b);
+        let view_c = DeviceColumnView::from_column(&reduced_c);
+        let view_d = DeviceColumnView::from_column(&reduced_d);
+        let view_e = DeviceColumnView::from_column(&reduced_e);
+        let view_f = DeviceColumnView::from_column(&reduced_f);
+        let view_g = DeviceColumnView::from_column(&reduced_g);
+        let payload_apply = crate::detail::apply::SelectedPayloadApply::new(
+            &$control.output_selection,
+            $control.output_count,
+        );
+        payload_apply.apply_expr_into($policy, &view_a, $out0)?;
+        payload_apply.apply_expr_into($policy, &view_b, $out1)?;
+        payload_apply.apply_expr_into($policy, &view_c, $out2)?;
+        payload_apply.apply_expr_into($policy, &view_d, $out3)?;
+        payload_apply.apply_expr_into($policy, &view_e, $out4)?;
+        payload_apply.apply_expr_into($policy, &view_f, $out5)?;
+        payload_apply.apply_expr_into($policy, &view_g, $out6)
     }};
 }
 
@@ -754,6 +1062,220 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
         let control = self.control;
         reduce_by_key_tuple7_scanned_values!(
             policy, control, inclusive, init;
+            A, B, C, D, E, F, G;
+            Op
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn apply_views4_into<A, B, C, D, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        init: (A, B, C, D),
+        out_a: &DeviceColumnMutView<R, A>,
+        out_b: &DeviceColumnMutView<R, B>,
+        out_c: &DeviceColumnMutView<R, C>,
+        out_d: &DeviceColumnMutView<R, D>,
+    ) -> Result<(), Error>
+    where
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        Op: BinaryOp<(A, B, C, D)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let dummy4 = primitive_range::indices_mindex(policy, a.len)?;
+        let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
+        let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
+        let dummy4 = DeviceColumnView::from_column(&dummy4);
+        let dummy5 = DeviceColumnView::from_column(&dummy5);
+        let dummy6 = DeviceColumnView::from_column(&dummy6);
+        let dummy_out4 = primitive_range::indices_mindex(policy, self.control.output_count)?;
+        let dummy_out5 = primitive_range::indices_mindex(policy, self.control.output_count)?;
+        let dummy_out6 = primitive_range::indices_mindex(policy, self.control.output_count)?;
+        let dummy_out4 = DeviceColumnMutView::from_slice(&dummy_out4, 0, self.control.output_count);
+        let dummy_out5 = DeviceColumnMutView::from_slice(&dummy_out5, 0, self.control.output_count);
+        let dummy_out6 = DeviceColumnMutView::from_slice(&dummy_out6, 0, self.control.output_count);
+        self.apply_views7_into::<A, B, C, D, u32, u32, u32, Tuple4AsTuple7BinaryOp<Op>>(
+            policy,
+            a,
+            b,
+            c,
+            d,
+            &dummy4,
+            &dummy5,
+            &dummy6,
+            (init.0, init.1, init.2, init.3, 0, 0, 0),
+            out_a,
+            out_b,
+            out_c,
+            out_d,
+            &dummy_out4,
+            &dummy_out5,
+            &dummy_out6,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn apply_views5_into<A, B, C, D, E, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        e: &DeviceColumnView<R, E>,
+        init: (A, B, C, D, E),
+        out_a: &DeviceColumnMutView<R, A>,
+        out_b: &DeviceColumnMutView<R, B>,
+        out_c: &DeviceColumnMutView<R, C>,
+        out_d: &DeviceColumnMutView<R, D>,
+        out_e: &DeviceColumnMutView<R, E>,
+    ) -> Result<(), Error>
+    where
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        Op: BinaryOp<(A, B, C, D, E)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let dummy5 = primitive_range::indices_mindex(policy, a.len)?;
+        let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
+        let dummy5 = DeviceColumnView::from_column(&dummy5);
+        let dummy6 = DeviceColumnView::from_column(&dummy6);
+        let dummy_out5 = primitive_range::indices_mindex(policy, self.control.output_count)?;
+        let dummy_out6 = primitive_range::indices_mindex(policy, self.control.output_count)?;
+        let dummy_out5 = DeviceColumnMutView::from_slice(&dummy_out5, 0, self.control.output_count);
+        let dummy_out6 = DeviceColumnMutView::from_slice(&dummy_out6, 0, self.control.output_count);
+        self.apply_views7_into::<A, B, C, D, E, u32, u32, Tuple5AsTuple7BinaryOp<Op>>(
+            policy,
+            a,
+            b,
+            c,
+            d,
+            e,
+            &dummy5,
+            &dummy6,
+            (init.0, init.1, init.2, init.3, init.4, 0, 0),
+            out_a,
+            out_b,
+            out_c,
+            out_d,
+            out_e,
+            &dummy_out5,
+            &dummy_out6,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn apply_views6_into<A, B, C, D, E, F, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        e: &DeviceColumnView<R, E>,
+        f: &DeviceColumnView<R, F>,
+        init: (A, B, C, D, E, F),
+        out_a: &DeviceColumnMutView<R, A>,
+        out_b: &DeviceColumnMutView<R, B>,
+        out_c: &DeviceColumnMutView<R, C>,
+        out_d: &DeviceColumnMutView<R, D>,
+        out_e: &DeviceColumnMutView<R, E>,
+        out_f: &DeviceColumnMutView<R, F>,
+    ) -> Result<(), Error>
+    where
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        Op: BinaryOp<(A, B, C, D, E, F)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let dummy6 = primitive_range::indices_mindex(policy, a.len)?;
+        let dummy6 = DeviceColumnView::from_column(&dummy6);
+        let dummy_out6 = primitive_range::indices_mindex(policy, self.control.output_count)?;
+        let dummy_out6 = DeviceColumnMutView::from_slice(&dummy_out6, 0, self.control.output_count);
+        self.apply_views7_into::<A, B, C, D, E, F, u32, Tuple6AsTuple7BinaryOp<Op>>(
+            policy,
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            &dummy6,
+            (init.0, init.1, init.2, init.3, init.4, init.5, 0),
+            out_a,
+            out_b,
+            out_c,
+            out_d,
+            out_e,
+            out_f,
+            &dummy_out6,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::detail) fn apply_views7_into<A, B, C, D, E, F, G, Op>(
+        &self,
+        policy: &CubePolicy<R>,
+        a: &DeviceColumnView<R, A>,
+        b: &DeviceColumnView<R, B>,
+        c: &DeviceColumnView<R, C>,
+        d: &DeviceColumnView<R, D>,
+        e: &DeviceColumnView<R, E>,
+        f: &DeviceColumnView<R, F>,
+        g: &DeviceColumnView<R, G>,
+        init: (A, B, C, D, E, F, G),
+        out_a: &DeviceColumnMutView<R, A>,
+        out_b: &DeviceColumnMutView<R, B>,
+        out_c: &DeviceColumnMutView<R, C>,
+        out_d: &DeviceColumnMutView<R, D>,
+        out_e: &DeviceColumnMutView<R, E>,
+        out_f: &DeviceColumnMutView<R, F>,
+        out_g: &DeviceColumnMutView<R, G>,
+    ) -> Result<(), Error>
+    where
+        A: MStorageElement + 'static,
+        B: MStorageElement + 'static,
+        C: MStorageElement + 'static,
+        D: MStorageElement + 'static,
+        E: MStorageElement + 'static,
+        F: MStorageElement + 'static,
+        G: MStorageElement + 'static,
+        Op: BinaryOp<(A, B, C, D, E, F, G)>,
+    {
+        if self.control.len == 0 {
+            return Ok(());
+        }
+
+        let scan_control: ScanByKeyControl<R> = self.control.into();
+        let scan_apply = crate::detail::apply::SegmentedScanApply::new(&scan_control);
+        let inclusive =
+            scan_apply.inclusive_views7::<A, B, C, D, E, F, G, Op>(policy, a, b, c, d, e, f, g)?;
+        let control = self.control;
+        reduce_by_key_tuple7_scanned_values_into!(
+            policy, control, inclusive, init, out_a, out_b, out_c, out_d, out_e, out_f, out_g;
             A, B, C, D, E, F, G;
             Op
         )

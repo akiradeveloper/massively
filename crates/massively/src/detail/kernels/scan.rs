@@ -66,6 +66,7 @@ pub(crate) fn inclusive_scan_by_flags_device_expr_kernel<
     value_slot_offsets: &[u32],
     head_flags: &[u32],
     len: &[u32],
+    output_offset: &[u32],
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
@@ -101,7 +102,7 @@ pub(crate) fn inclusive_scan_by_flags_device_expr_kernel<
             acc.store(value.0);
             index.store(index.read() + 1usize);
         }
-        output[global] = acc.read();
+        output[output_offset[0] as usize + global] = acc.read();
     }
 }
 
@@ -119,6 +120,7 @@ pub(crate) fn exclusive_scan_by_flags_device_expr_kernel<
     head_flags: &[u32],
     init: &[T],
     len: &[u32],
+    output_offset: &[u32],
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
@@ -147,7 +149,7 @@ pub(crate) fn exclusive_scan_by_flags_device_expr_kernel<
             acc.store(value.0);
             index.store(index.read() + 1usize);
         }
-        output[global] = acc.read();
+        output[output_offset[0] as usize + global] = acc.read();
     }
 }
 
@@ -171,6 +173,7 @@ pub(crate) fn inclusive_scan_tuple2_by_flags_device_expr_kernel<
     b_offsets: &[u32],
     head_flags: &[u32],
     len: &[u32],
+    output_offsets: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
 ) {
@@ -212,8 +215,8 @@ pub(crate) fn inclusive_scan_tuple2_by_flags_device_expr_kernel<
             acc_b.store(value.1);
             index.store(index.read() + 1usize);
         }
-        output_a[global] = acc_a.read();
-        output_b[global] = acc_b.read();
+        output_a[output_offsets[0] as usize + global] = acc_a.read();
+        output_b[output_offsets[1] as usize + global] = acc_b.read();
     }
 }
 
@@ -239,6 +242,7 @@ pub(crate) fn exclusive_scan_tuple2_by_flags_device_expr_kernel<
     init_a: &[A],
     init_b: &[B],
     len: &[u32],
+    output_offsets: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
 ) {
@@ -266,8 +270,8 @@ pub(crate) fn exclusive_scan_tuple2_by_flags_device_expr_kernel<
             acc_b.store(value.1);
             index.store(index.read() + 1usize);
         }
-        output_a[global] = acc_a.read();
-        output_b[global] = acc_b.read();
+        output_a[output_offsets[0] as usize + global] = acc_a.read();
+        output_b[output_offsets[1] as usize + global] = acc_b.read();
     }
 }
 
@@ -298,6 +302,7 @@ pub(crate) fn inclusive_scan_tuple3_by_flags_device_expr_kernel<
     c_offsets: &[u32],
     head_flags: &[u32],
     len: &[u32],
+    output_offsets: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
     output_c: &mut [C],
@@ -350,9 +355,9 @@ pub(crate) fn inclusive_scan_tuple3_by_flags_device_expr_kernel<
             acc_c.store(value.2);
             index.store(index.read() + 1usize);
         }
-        output_a[global] = acc_a.read();
-        output_b[global] = acc_b.read();
-        output_c[global] = acc_c.read();
+        output_a[output_offsets[0] as usize + global] = acc_a.read();
+        output_b[output_offsets[1] as usize + global] = acc_b.read();
+        output_c[output_offsets[2] as usize + global] = acc_c.read();
     }
 }
 
@@ -386,6 +391,7 @@ pub(crate) fn exclusive_scan_tuple3_by_flags_device_expr_kernel<
     init_b: &[B],
     init_c: &[C],
     len: &[u32],
+    output_offsets: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
     output_c: &mut [C],
@@ -417,9 +423,9 @@ pub(crate) fn exclusive_scan_tuple3_by_flags_device_expr_kernel<
             acc_c.store(value.2);
             index.store(index.read() + 1usize);
         }
-        output_a[global] = acc_a.read();
-        output_b[global] = acc_b.read();
-        output_c[global] = acc_c.read();
+        output_a[output_offsets[0] as usize + global] = acc_a.read();
+        output_b[output_offsets[1] as usize + global] = acc_b.read();
+        output_c[output_offsets[2] as usize + global] = acc_c.read();
     }
 }
 
@@ -444,6 +450,7 @@ pub(crate) fn inclusive_scan_tuple7_by_flags_view_kernel<
     offsets: &[u32],
     head_flags: &[u32],
     len: &[u32],
+    output_offsets: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
     output_c: &mut [C],
@@ -499,13 +506,13 @@ pub(crate) fn inclusive_scan_tuple7_by_flags_view_kernel<
             acc_g.store(value.6);
             index.store(index.read() + 1usize);
         }
-        output_a[global] = acc_a.read();
-        output_b[global] = acc_b.read();
-        output_c[global] = acc_c.read();
-        output_d[global] = acc_d.read();
-        output_e[global] = acc_e.read();
-        output_f[global] = acc_f.read();
-        output_g[global] = acc_g.read();
+        output_a[output_offsets[0] as usize + global] = acc_a.read();
+        output_b[output_offsets[1] as usize + global] = acc_b.read();
+        output_c[output_offsets[2] as usize + global] = acc_c.read();
+        output_d[output_offsets[3] as usize + global] = acc_d.read();
+        output_e[output_offsets[4] as usize + global] = acc_e.read();
+        output_f[output_offsets[5] as usize + global] = acc_f.read();
+        output_g[output_offsets[6] as usize + global] = acc_g.read();
     }
 }
 
@@ -537,6 +544,7 @@ pub(crate) fn exclusive_scan_tuple7_by_flags_view_kernel<
     init_f: &[F],
     init_g: &[G],
     len: &[u32],
+    output_offsets: &[u32],
     output_a: &mut [A],
     output_b: &mut [B],
     output_c: &mut [C],
@@ -592,13 +600,13 @@ pub(crate) fn exclusive_scan_tuple7_by_flags_view_kernel<
             acc_g.store(value.6);
             index.store(index.read() + 1usize);
         }
-        output_a[global] = acc_a.read();
-        output_b[global] = acc_b.read();
-        output_c[global] = acc_c.read();
-        output_d[global] = acc_d.read();
-        output_e[global] = acc_e.read();
-        output_f[global] = acc_f.read();
-        output_g[global] = acc_g.read();
+        output_a[output_offsets[0] as usize + global] = acc_a.read();
+        output_b[output_offsets[1] as usize + global] = acc_b.read();
+        output_c[output_offsets[2] as usize + global] = acc_c.read();
+        output_d[output_offsets[3] as usize + global] = acc_d.read();
+        output_e[output_offsets[4] as usize + global] = acc_e.read();
+        output_f[output_offsets[5] as usize + global] = acc_f.read();
+        output_g[output_offsets[6] as usize + global] = acc_g.read();
     }
 }
 
