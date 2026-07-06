@@ -55,11 +55,23 @@ macro_rules! impl_miter_zip {
                 MStorageElement,
         {
             type Item = ($( <$ty as MIter<R>>::Item, )+);
+            type Slice<'a>
+                = $name<$( <$ty as MIter<R>>::Slice<'a> ),+>
+            where
+                Self: 'a;
             type Inner = ($( <$ty as MIter<R>>::Inner, )+);
             type Read = crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+>;
 
             fn len(&self) -> MIndex {
-                MIter::len(&self.0)
+                self.0.len()
+            }
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: std::ops::RangeBounds<MIndex>,
+            {
+                let range = crate::iter::normalize_zip_range(self.len(), range);
+                $name($( self.$idx.slice(range.clone()) ),+)
             }
 
             fn into_inner(self) -> Self::Inner {
@@ -73,7 +85,7 @@ macro_rules! impl_miter_zip {
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
                 $(
                     self.$idx.validate_executor(exec)?;
-                    ensure_same_len(MIter::len(&self.$idx), MIter::len(&self.0))?;
+                    ensure_same_len(self.$idx.len(), self.0.len())?;
                 )+
                 Ok(())
             }
@@ -219,10 +231,34 @@ macro_rules! impl_miter_mut_zip {
             >,
         {
             type Item = ($( $ty, )+);
+            type Slice<'b>
+                = $name<$( crate::runtime::DeviceSlice<'b, R, $ty> ),+>
+            where
+                Self: 'b;
+            type SliceMut<'b>
+                = $name<$( DeviceSliceMut<'b, R, $ty> ),+>
+            where
+                Self: 'b;
             type Inner = ($( crate::detail::device::DeviceColumnMutView<R, $ty>, )+);
 
             fn len(&self) -> MIndex {
                 self.0.len()
+            }
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: std::ops::RangeBounds<MIndex>,
+            {
+                let range = crate::iter::normalize_zip_range(self.len(), range);
+                $name($( self.$idx.slice(range.clone()) ),+)
+            }
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            where
+                Bounds: std::ops::RangeBounds<MIndex>,
+            {
+                let range = crate::iter::normalize_zip_range(self.len(), range);
+                $name($( self.$idx.slice_mut(range.clone()) ),+)
             }
 
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -277,7 +313,7 @@ macro_rules! impl_miter_mut_zip {
                 policy: &crate::detail::CubePolicy<R>,
                 inner: <Self::Item as MAlloc<R>>::Inner,
             ) -> Result<(), Error> {
-                let output = self.into_inner();
+                let output = <Self as MIterMut<R>>::into_inner(self);
                 $(
                     {
                         let input =
@@ -294,7 +330,7 @@ macro_rules! impl_miter_mut_zip {
                 policy: &crate::detail::CubePolicy<R>,
                 inner: <Self::Item as MAlloc<R>>::Inner,
             ) -> Result<(), Error> {
-                let mut output = self.into_inner();
+                let mut output = <Self as MIterMut<R>>::into_inner(self);
                 $(
                     {
                         let input =
@@ -319,7 +355,7 @@ macro_rules! impl_miter_mut_zip {
                 selected: <Self::Item as MAlloc<R>>::Inner,
                 rejected: <Self::Item as MAlloc<R>>::Inner,
             ) -> Result<(), Error> {
-                let output = self.into_inner();
+                let output = <Self as MIterMut<R>>::into_inner(self);
                 $(
                     {
                         let selected_input =
@@ -355,7 +391,7 @@ macro_rules! impl_miter_mut_zip {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<(), Error>
             {
-                let output = self.into_inner();
+                let output = <Self as MIterMut<R>>::into_inner(self);
                 $(
                     {
                         let input =
@@ -379,7 +415,7 @@ macro_rules! impl_miter_mut_zip {
                 stencil: crate::detail::api::PrecomputedSelection<R>,
             ) -> Result<(), Error>
             {
-                let output = self.into_inner();
+                let output = <Self as MIterMut<R>>::into_inner(self);
                 let mask = stencil.mask();
                 $(
                     crate::detail::apply::MaskWriteApply::new(&mask, &output.$idx)
@@ -394,7 +430,7 @@ macro_rules! impl_miter_mut_zip {
                 value: Self::Item,
             ) -> Result<(), Error>
             {
-                let output = self.into_inner();
+                let output = <Self as MIterMut<R>>::into_inner(self);
                 $(
                     crate::detail::apply::FillWriteApply::new(&output.$idx)
                         .fill_value(policy, value.$idx)?;
@@ -425,11 +461,23 @@ macro_rules! impl_wide_miter_zip {
                     >,
         {
             type Item = ($( <$ty as MIter<R>>::Item, )+);
+            type Slice<'a>
+                = $name<$( <$ty as MIter<R>>::Slice<'a> ),+>
+            where
+                Self: 'a;
             type Inner = ($( <$ty as MIter<R>>::Inner, )+);
             type Read = crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+>;
 
             fn len(&self) -> MIndex {
-                MIter::len(&self.0)
+                self.0.len()
+            }
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: std::ops::RangeBounds<MIndex>,
+            {
+                let range = crate::iter::normalize_zip_range(self.len(), range);
+                $name($( self.$idx.slice(range.clone()) ),+)
             }
 
             fn into_inner(self) -> Self::Inner {
@@ -443,7 +491,7 @@ macro_rules! impl_wide_miter_zip {
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
                 $(
                     self.$idx.validate_executor(exec)?;
-                    ensure_same_len(MIter::len(&self.$idx), MIter::len(&self.0))?;
+                    ensure_same_len(self.$idx.len(), self.0.len())?;
                 )+
                 Ok(())
             }

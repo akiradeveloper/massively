@@ -9,6 +9,7 @@ fn set_difference_with_generic_right<Left, Right, Less, Output>(
 ) -> Result<massively::MIndex, massively::Error>
 where
     Left: massively::MIter<WgpuRuntime>,
+    Left::Item: massively::MAlloc<WgpuRuntime>,
     Right: massively::MIter<WgpuRuntime, Item = Left::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, Left::Item>,
     Output: massively::MIterMut<WgpuRuntime, Item = Left::Item>,

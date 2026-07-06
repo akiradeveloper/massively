@@ -20,7 +20,9 @@ fn merge_by_key_with_generic_right<
 ) -> Result<(), massively::Error>
 where
     LeftKeys: massively::MIter<WgpuRuntime>,
+    LeftKeys::Item: massively::MAlloc<WgpuRuntime>,
     LeftValues: massively::MIter<WgpuRuntime>,
+    LeftValues::Item: massively::MAlloc<WgpuRuntime>,
     RightKeys: massively::MIter<WgpuRuntime, Item = LeftKeys::Item>,
     RightValues: massively::MIter<WgpuRuntime, Item = LeftValues::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, LeftKeys::Item>,

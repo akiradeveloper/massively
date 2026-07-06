@@ -8,7 +8,7 @@ use crate::Error;
 use crate::detail::dispatch;
 use crate::index::MIndex;
 use crate::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec};
-use crate::value::{MAlloc, MItem, StorageFromInner};
+use crate::value::{MAlloc, MItem, MStorageElement, StorageFromInner};
 
 /// Single-column Zip container.
 #[derive(Clone, Copy, Debug)]
@@ -82,131 +82,6 @@ impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for Zip7<A, B, C, D, E, F,
     }
 }
 
-/// Device-backed value that can produce a read-only slice view.
-pub trait ToSlice {
-    type Slice<'a>: ToSlice
-    where
-        Self: 'a;
-
-    fn len(&self) -> MIndex;
-
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: RangeBounds<MIndex>;
-}
-
-/// Device-backed value that can produce a mutable slice view.
-pub trait ToSliceMut: ToSlice {
-    type SliceMut<'a>: ToSlice + ToSliceMut
-    where
-        Self: 'a;
-
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-    where
-        Bounds: RangeBounds<MIndex>;
-}
-
-impl<R, T> ToSlice for DeviceVec<R, T>
-where
-    R: Runtime,
-{
-    type Slice<'a>
-        = DeviceSlice<'a, R, T>
-    where
-        Self: 'a;
-
-    fn len(&self) -> MIndex {
-        self.len()
-    }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: RangeBounds<MIndex>,
-    {
-        DeviceVec::slice(self, range)
-    }
-}
-
-impl<R, T> ToSliceMut for DeviceVec<R, T>
-where
-    R: Runtime,
-{
-    type SliceMut<'a>
-        = DeviceSliceMut<'a, R, T>
-    where
-        Self: 'a;
-
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-    where
-        Bounds: RangeBounds<MIndex>,
-    {
-        DeviceVec::slice_mut(self, range)
-    }
-}
-
-impl<'a, R, T> ToSlice for DeviceSlice<'a, R, T>
-where
-    R: Runtime,
-{
-    type Slice<'b>
-        = DeviceSlice<'b, R, T>
-    where
-        Self: 'b;
-
-    fn len(&self) -> MIndex {
-        self.len()
-    }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: RangeBounds<MIndex>,
-    {
-        DeviceSlice::slice(self, range)
-    }
-}
-
-impl<'a, R, T> ToSlice for DeviceSliceMut<'a, R, T>
-where
-    R: Runtime,
-{
-    type Slice<'b>
-        = DeviceSlice<'b, R, T>
-    where
-        Self: 'b;
-
-    fn len(&self) -> MIndex {
-        self.len()
-    }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: RangeBounds<MIndex>,
-    {
-        DeviceSliceMut::slice(self, range)
-    }
-}
-
-impl<'a, R, T> ToSliceMut for DeviceSliceMut<'a, R, T>
-where
-    R: Runtime,
-{
-    type SliceMut<'b>
-        = DeviceSliceMut<'b, R, T>
-    where
-        Self: 'b;
-
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-    where
-        Bounds: RangeBounds<MIndex>,
-    {
-        DeviceSliceMut::slice_mut(self, range)
-    }
-}
-
 pub(crate) fn normalize_zip_range<Bounds>(len: MIndex, range: Bounds) -> Range<MIndex>
 where
     Bounds: RangeBounds<MIndex>,
@@ -249,6 +124,47 @@ macro_rules! impl_zip_slice_api {
 
             /// Returns mutable device slices for the given logical row range.
             pub fn slice_mut<Bounds>(&self, range: Bounds) -> $name<$( DeviceSliceMut<'_, R, $ty> ),+>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                let range = normalize_zip_range(self.0.len(), range);
+                $name($( self.$idx.slice_mut(range.clone()) ),+)
+            }
+        }
+
+        impl<R, $( $ty ),+> MStorage<R> for $name<$( DeviceVec<R, $ty> ),+>
+        where
+            R: Runtime,
+            Self: StorageFromInner<R, Item = ($( $ty, )+)>,
+            ($( $ty, )+): MAlloc<R,
+                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+                View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
+            >,
+            $( $ty: MStorageElement + 'static, )+
+        {
+            type Slice<'a>
+                = $name<$( DeviceSlice<'a, R, $ty> ),+>
+            where
+                Self: 'a;
+
+            type SliceMut<'a>
+                = $name<$( DeviceSliceMut<'a, R, $ty> ),+>
+            where
+                Self: 'a;
+
+            fn len(&self) -> MIndex {
+                self.0.len()
+            }
+
+            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            where
+                Bounds: RangeBounds<MIndex>,
+            {
+                let range = normalize_zip_range(self.0.len(), range);
+                $name($( self.$idx.slice(range.clone()) ),+)
+            }
+
+            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
             where
                 Bounds: RangeBounds<MIndex>,
             {
@@ -328,117 +244,32 @@ impl_zip_slice_api!(Zip5<A: 0, B: 1, C: 2, D: 3, E: 4>);
 impl_zip_slice_api!(Zip6<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5>);
 impl_zip_slice_api!(Zip7<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6>);
 
-macro_rules! impl_zip_slice_traits {
-    ($name:ident < $first:ident : $first_idx:tt >) => {
-        impl<$first> ToSlice for $name<$first>
-        where
-            $first: ToSlice,
-        {
-            type Slice<'a>
-                = $name<<$first as ToSlice>::Slice<'a>>
-            where
-                Self: 'a;
-
-            fn len(&self) -> MIndex {
-                self.$first_idx.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: RangeBounds<MIndex>,
-            {
-                let range = normalize_zip_range(self.len(), range);
-                $name(self.$first_idx.slice(range))
-            }
-        }
-
-        impl<$first> ToSliceMut for $name<$first>
-        where
-            $first: ToSliceMut,
-        {
-            type SliceMut<'a>
-                = $name<<$first as ToSliceMut>::SliceMut<'a>>
-            where
-                Self: 'a;
-
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-            where
-                Bounds: RangeBounds<MIndex>,
-            {
-                let range = normalize_zip_range(self.len(), range);
-                $name(self.$first_idx.slice_mut(range))
-            }
-        }
-    };
-
-    ($name:ident < $first:ident : $first_idx:tt, $( $ty:ident : $idx:tt ),+ >) => {
-        impl<$first, $( $ty ),+> ToSlice for $name<$first, $( $ty ),+>
-        where
-            $first: ToSlice,
-            $( $ty: ToSlice, )+
-        {
-            type Slice<'a>
-                = $name<<$first as ToSlice>::Slice<'a>, $( <$ty as ToSlice>::Slice<'a> ),+>
-            where
-                Self: 'a;
-
-            fn len(&self) -> MIndex {
-                self.$first_idx.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: RangeBounds<MIndex>,
-            {
-                let range = normalize_zip_range(self.len(), range);
-                $name(self.$first_idx.slice(range.clone()), $( self.$idx.slice(range.clone()) ),+)
-            }
-        }
-
-        impl<$first, $( $ty ),+> ToSliceMut for $name<$first, $( $ty ),+>
-        where
-            $first: ToSliceMut,
-            $( $ty: ToSliceMut, )+
-        {
-            type SliceMut<'a>
-                = $name<<$first as ToSliceMut>::SliceMut<'a>, $( <$ty as ToSliceMut>::SliceMut<'a> ),+>
-            where
-                Self: 'a;
-
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-            where
-                Bounds: RangeBounds<MIndex>,
-            {
-                let range = normalize_zip_range(self.len(), range);
-                $name(self.$first_idx.slice_mut(range.clone()), $( self.$idx.slice_mut(range.clone()) ),+)
-            }
-        }
-    };
-}
-
-impl_zip_slice_traits!(Zip1<A: 0>);
-impl_zip_slice_traits!(Zip2<A: 0, B: 1>);
-impl_zip_slice_traits!(Zip3<A: 0, B: 1, C: 2>);
-impl_zip_slice_traits!(Zip4<A: 0, B: 1, C: 2, D: 3>);
-impl_zip_slice_traits!(Zip5<A: 0, B: 1, C: 2, D: 3, E: 4>);
-impl_zip_slice_traits!(Zip6<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5>);
-impl_zip_slice_traits!(Zip7<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6>);
-
 /// Allocated device storage that can be sliced back into algorithm views.
-pub trait MAllocStorage<R: Runtime>: StorageFromInner<R> + ToSlice + ToSliceMut
+pub trait MStorage<R: Runtime>: StorageFromInner<R>
 where
-    for<'a> <Self as ToSlice>::Slice<'a>: MIter<R, Item = Self::Item>,
-    for<'a> <Self as ToSliceMut>::SliceMut<'a>: MIterMut<R, Item = Self::Item>,
+    Self::Item: MAlloc<R>,
 {
-}
+    type Slice<'a>: MIter<R, Item = Self::Item>
+    where
+        Self: 'a;
 
-impl<R, T> MAllocStorage<R> for T
-where
-    R: Runtime,
-    T: StorageFromInner<R> + ToSlice + ToSliceMut,
-    for<'a> <T as ToSlice>::Slice<'a>: MIter<R, Item = T::Item>,
-    for<'a> <T as ToSliceMut>::SliceMut<'a>: MIterMut<R, Item = T::Item>,
-{
+    type SliceMut<'a>: MIterMut<R, Item = Self::Item>
+    where
+        Self: 'a;
+
+    fn len(&self) -> MIndex;
+
+    fn is_empty(&self) -> bool {
+        MStorage::len(self) == 0
+    }
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
 }
 
 pub(crate) fn materialized_view_with_policy<R, Item>(
@@ -450,12 +281,26 @@ where
     Item: MAlloc<R>,
 {
     let storage = Item::storage_from_inner(inner);
-    storage.slice(..).into_alloc_view_with_policy(policy)
+    MStorage::slice(&storage, ..).into_alloc_view_with_policy(policy)
 }
 
-/// Massively iterator.
-pub trait MIter<R: Runtime>: ToSlice + Sized {
+/// Massively read iterator.
+pub trait MIter<R: Runtime>: Sized {
     type Item: MItem<R>;
+
+    type Slice<'a>
+    where
+        Self: 'a;
+
+    fn len(&self) -> MIndex;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
 
     #[doc(hidden)]
     type Inner;
@@ -533,6 +378,7 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
+        Output::Item: MAlloc<R> + dispatch::MItemDispatch<R>,
         Op: crate::op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -551,6 +397,7 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
+        Output::Item: MAlloc<R> + dispatch::MItemDispatch<R>,
         Op: crate::op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -1089,6 +936,7 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
         Eq: crate::op::BinaryPredicateOp<R, Self::Item>,
         KeyOutput: MIterMut<R, Item = Self::Item>,
         ValueOutput: MIterMut<R>,
+        ValueOutput::Item: MAlloc<R>,
     {
         let keys = self.into_alloc_view_with_policy(policy)?;
         let values = values.into_alloc_view_with_policy(policy)?;
@@ -1120,6 +968,7 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
         Op: crate::op::ReductionOp<R, Values::Item>,
         KeyOutput: MIterMut<R, Item = Self::Item>,
         ValueOutput: MIterMut<R>,
+        ValueOutput::Item: MAlloc<R>,
     {
         let keys = self.into_alloc_view_with_policy(policy)?;
         let values = values.into_alloc_view_with_policy(policy)?;
@@ -1178,6 +1027,7 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         KeyOutput: MIterMut<R, Item = Self::Item>,
         ValueOutput: MIterMut<R>,
+        ValueOutput::Item: MAlloc<R>,
     {
         let keys = self.into_alloc_view_with_policy(policy)?;
         let values = values.into_alloc_view_with_policy(policy)?;
@@ -1231,6 +1081,7 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         KeyOutput: MIterMut<R, Item = Self::Item>,
         ValueOutput: MIterMut<R>,
+        ValueOutput::Item: MAlloc<R>,
     {
         let left_keys = self.into_alloc_view_with_policy(policy)?;
         let right_keys = right_keys.into_alloc_view_with_policy(policy)?;
@@ -1305,19 +1156,33 @@ pub trait MIter<R: Runtime>: ToSlice + Sized {
         let right = right.into_alloc_view_with_policy(policy)?;
         <Self::Item as MAlloc<R>>::set_union_from_views(policy, left, right, less, output)
     }
-
-    /// Returns the logical length.
-    fn len(&self) -> MIndex;
-
-    /// Returns whether this slice has no elements.
-    fn is_empty(&self) -> bool {
-        <Self as MIter<R>>::len(self) == 0
-    }
 }
 
-/// Mutable massively iterator used as an explicit algorithm output.
-pub trait MIterMut<R: Runtime>: ToSlice + ToSliceMut + Sized {
+/// Massively mutable iterator used as an explicit algorithm destination.
+pub trait MIterMut<R: Runtime>: Sized {
     type Item: MAlloc<R>;
+
+    type Slice<'a>: MIter<R, Item = Self::Item>
+    where
+        Self: 'a;
+
+    type SliceMut<'a>: MIterMut<R, Item = Self::Item>
+    where
+        Self: 'a;
+
+    fn len(&self) -> MIndex;
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    where
+        Bounds: RangeBounds<MIndex>;
 
     #[doc(hidden)]
     fn validate_executor(&self, _exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
@@ -1360,14 +1225,18 @@ pub trait MIterMut<R: Runtime>: ToSlice + ToSliceMut + Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         inner: <Self::Item as MAlloc<R>>::Inner,
-    ) -> Result<(), Error>;
+    ) -> Result<(), Error>
+    where
+        Self::Item: MAlloc<R>;
 
     #[doc(hidden)]
     fn write_prefix_from_inner(
         self,
         policy: &crate::detail::CubePolicy<R>,
         inner: <Self::Item as MAlloc<R>>::Inner,
-    ) -> Result<(), Error>;
+    ) -> Result<(), Error>
+    where
+        Self::Item: MAlloc<R>;
 
     #[doc(hidden)]
     fn write_split_from_inner(
@@ -1375,7 +1244,9 @@ pub trait MIterMut<R: Runtime>: ToSlice + ToSliceMut + Sized {
         policy: &crate::detail::CubePolicy<R>,
         selected: <Self::Item as MAlloc<R>>::Inner,
         rejected: <Self::Item as MAlloc<R>>::Inner,
-    ) -> Result<(), Error>;
+    ) -> Result<(), Error>
+    where
+        Self::Item: MAlloc<R>;
 
     #[doc(hidden)]
     fn write_where_from_inner(
@@ -1383,7 +1254,9 @@ pub trait MIterMut<R: Runtime>: ToSlice + ToSliceMut + Sized {
         policy: &crate::detail::CubePolicy<R>,
         inner: <Self::Item as MAlloc<R>>::Inner,
         stencil: crate::detail::api::PrecomputedSelection<R>,
-    ) -> Result<(), Error>;
+    ) -> Result<(), Error>
+    where
+        Self::Item: MAlloc<R>;
 
     #[doc(hidden)]
     fn replace_where_inner(
@@ -1399,12 +1272,4 @@ pub trait MIterMut<R: Runtime>: ToSlice + ToSliceMut + Sized {
         policy: &crate::detail::CubePolicy<R>,
         value: Self::Item,
     ) -> Result<(), Error>;
-
-    /// Returns the logical length.
-    fn len(&self) -> MIndex;
-
-    /// Returns whether this output slice has no elements.
-    fn is_empty(&self) -> bool {
-        <Self as MIterMut<R>>::len(self) == 0
-    }
 }

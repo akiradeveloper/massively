@@ -5,7 +5,7 @@ use cubecl::prelude::{CubeElement, CubePrimitive, CubeType, Runtime};
 use crate::Error;
 use crate::detail::dispatch;
 use crate::index::MIndex;
-use crate::iter::{MAllocStorage, MIter, MIterMut, ToSlice, ToSliceMut};
+use crate::iter::{MIterMut, MStorage};
 use crate::op;
 use crate::runtime::Executor;
 
@@ -27,11 +27,7 @@ pub trait MStorageElement: CubePrimitive + CubeElement {}
 impl<T> MStorageElement for T where T: CubePrimitive + CubeElement {}
 
 /// Logical item that has an owned/writable Zip device storage shape.
-pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R>
-where
-    for<'a> <<Self as MAlloc<R>>::Storage as ToSlice>::Slice<'a>: MIter<R, Item = Self>,
-    for<'a> <<Self as MAlloc<R>>::Storage as ToSliceMut>::SliceMut<'a>: MIterMut<R, Item = Self>,
-{
+pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
     #[doc(hidden)]
     type Inner;
 
@@ -39,7 +35,7 @@ where
     type View;
 
     #[doc(hidden)]
-    type Storage: MAllocStorage<R, Item = Self>;
+    type Storage: MStorage<R, Item = Self>;
 
     #[doc(hidden)]
     fn storage_from_inner(inner: Self::Inner) -> Self::Storage;
