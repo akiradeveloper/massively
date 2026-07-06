@@ -7,8 +7,8 @@ fn find_first_of_with_generic_needles<Input, Needles, Eq>(
     eq: Eq,
 ) -> Option<massively::MIndex>
 where
-    Input: massively::MIter<WgpuRuntime>,
-    Needles: massively::MIter<WgpuRuntime, Item = Input::Item>,
+    Input: massively::iter::MIter<WgpuRuntime>,
+    Needles: massively::iter::MIter<WgpuRuntime, Item = Input::Item>,
     Eq: BinaryPredicateOp<WgpuRuntime, Input::Item>,
 {
     find_first_of(exec, input, needles, eq).unwrap()

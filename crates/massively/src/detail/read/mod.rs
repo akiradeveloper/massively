@@ -49,10 +49,10 @@ mod selection;
 #[allow(unused_imports)]
 pub(crate) use core::*;
 pub(crate) use kernel::{
-    ColumnRead, KernelReadBoundMany, ScanByKeyValueItem, ZipRead1, ZipRead2, ZipRead3, ZipRead4,
-    ZipRead5, ZipRead6, ZipRead7, materialize_logical3_read,
+    ColumnRead, ScanByKeyValueItem, SliceRead, ZipRead1, ZipRead2, ZipRead3, ZipRead4, ZipRead5,
+    ZipRead6, ZipRead7,
 };
-pub use kernel::{KernelRead, KernelReadAt};
+pub use kernel::{KernelRead, KernelReadBoundMany, KernelReadReduce};
 
 #[allow(unused_imports)]
 pub(crate) use by_key::*;

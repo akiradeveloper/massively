@@ -7,8 +7,8 @@ fn lower_bound_with_generic_values<Input, Values, Less>(
     less: Less,
 ) -> Vec<u32>
 where
-    Input: massively::MIter<WgpuRuntime>,
-    Values: massively::MIter<WgpuRuntime, Item = Input::Item>,
+    Input: massively::iter::MIter<WgpuRuntime>,
+    Values: massively::iter::MIter<WgpuRuntime, Item = Input::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, Input::Item>,
 {
     let output = exec.to_device(&[0_u32; 3]).unwrap();

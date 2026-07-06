@@ -107,6 +107,92 @@ where
     start..end
 }
 
+#[derive(Clone, Copy, Debug)]
+struct MIterSliceRange {
+    start: MIndex,
+    end: MIndex,
+}
+
+impl MIterSliceRange {
+    fn new(range: Range<MIndex>) -> Self {
+        Self {
+            start: range.start,
+            end: range.end,
+        }
+    }
+
+    fn len(self) -> MIndex {
+        self.end - self.start
+    }
+
+    fn to_range(self) -> Range<MIndex> {
+        self.start..self.end
+    }
+}
+
+/// Read-only slice adapter over an `MIter`.
+#[derive(Debug)]
+pub struct MIterSlice<'a, Iter> {
+    inner: &'a Iter,
+    range: MIterSliceRange,
+}
+
+impl<'a, Iter> MIterSlice<'a, Iter> {
+    pub(crate) fn new(inner: &'a Iter, range: Range<MIndex>) -> Self {
+        Self {
+            inner,
+            range: MIterSliceRange::new(range),
+        }
+    }
+}
+
+impl<'a, 'b, R, T> dispatch::ToHostDispatch<R> for MIterSlice<'a, DeviceSlice<'b, R, T>>
+where
+    R: Runtime,
+    T: MStorageElement,
+{
+    type Output = Vec<T>;
+
+    fn to_host_with(&self, exec: &crate::runtime::Executor<R>) -> Result<Self::Output, Error> {
+        dispatch::ToHostDispatch::to_host_with(
+            &DeviceSlice::slice(&self.inner, self.range.to_range()),
+            exec,
+        )
+    }
+}
+
+/// Mutable slice adapter over an `MIterMut`.
+#[derive(Debug)]
+pub struct MIterMutSliceMut<'a, Iter> {
+    inner: &'a Iter,
+    range: MIterSliceRange,
+}
+
+impl<'a, Iter> MIterMutSliceMut<'a, Iter> {
+    pub(crate) fn new(inner: &'a Iter, range: Range<MIndex>) -> Self {
+        Self {
+            inner,
+            range: MIterSliceRange::new(range),
+        }
+    }
+}
+
+/// Read-only slice adapter over an `MIterMut`.
+#[derive(Debug)]
+pub struct MIterMutSlice<'a, Iter> {
+    inner: &'a Iter,
+    range: MIterSliceRange,
+}
+
+impl<'a, Iter> MIterMutSlice<'a, Iter> {
+    pub(crate) fn new(inner: &'a Iter, range: Range<MIndex>) -> Self {
+        Self {
+            inner,
+            range: MIterSliceRange::new(range),
+        }
+    }
+}
+
 macro_rules! impl_zip_slice_api {
     ($name:ident < $( $ty:ident : $idx:tt ),+ >) => {
         impl<R, $( $ty ),+> $name<$( DeviceVec<R, $ty> ),+>
@@ -142,21 +228,11 @@ macro_rules! impl_zip_slice_api {
             >,
             $( $ty: MStorageElement + 'static, )+
         {
-            type Slice<'a>
-                = $name<$( DeviceSlice<'a, R, $ty> ),+>
-            where
-                Self: 'a;
-
-            type SliceMut<'a>
-                = $name<$( DeviceSliceMut<'a, R, $ty> ),+>
-            where
-                Self: 'a;
-
             fn len(&self) -> MIndex {
                 self.0.len()
             }
 
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+            fn slice<Bounds>(&self, range: Bounds) -> impl MIter<R, Item = Self::Item> + '_
             where
                 Bounds: RangeBounds<MIndex>,
             {
@@ -164,12 +240,20 @@ macro_rules! impl_zip_slice_api {
                 $name($( self.$idx.slice(range.clone()) ),+)
             }
 
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+            fn slice_mut<Bounds>(&self, range: Bounds) -> impl MIterMut<R, Item = Self::Item> + '_
             where
                 Bounds: RangeBounds<MIndex>,
             {
                 let range = normalize_zip_range(self.0.len(), range);
                 $name($( self.$idx.slice_mut(range.clone()) ),+)
+            }
+
+            fn into_alloc_view_with_policy(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<<Self::Item as MAlloc<R>>::View, Error> {
+                let _ = policy;
+                Ok(($( self.$idx.slice(..).column_view(), )+))
             }
         }
 
@@ -249,27 +333,25 @@ pub trait MStorage<R: Runtime>: StorageFromInner<R>
 where
     Self::Item: MAlloc<R>,
 {
-    type Slice<'a>: MIter<R, Item = Self::Item>
-    where
-        Self: 'a;
-
-    type SliceMut<'a>: MIterMut<R, Item = Self::Item>
-    where
-        Self: 'a;
-
     fn len(&self) -> MIndex;
 
     fn is_empty(&self) -> bool {
         MStorage::len(self) == 0
     }
 
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    fn slice<Bounds>(&self, range: Bounds) -> impl MIter<R, Item = Self::Item> + '_
     where
         Bounds: RangeBounds<MIndex>;
 
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    fn slice_mut<Bounds>(&self, range: Bounds) -> impl MIterMut<R, Item = Self::Item> + '_
     where
         Bounds: RangeBounds<MIndex>;
+
+    #[doc(hidden)]
+    fn into_alloc_view_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<<Self::Item as MAlloc<R>>::View, Error>;
 }
 
 pub(crate) fn materialized_view_with_policy<R, Item>(
@@ -281,16 +363,12 @@ where
     Item: MAlloc<R>,
 {
     let storage = Item::storage_from_inner(inner);
-    MStorage::slice(&storage, ..).into_alloc_view_with_policy(policy)
+    storage.into_alloc_view_with_policy(policy)
 }
 
 /// Massively read iterator.
 pub trait MIter<R: Runtime>: Sized {
     type Item: MItem<R>;
-
-    type Slice<'a>
-    where
-        Self: 'a;
 
     fn len(&self) -> MIndex;
 
@@ -298,23 +376,30 @@ pub trait MIter<R: Runtime>: Sized {
         self.len() == 0
     }
 
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    fn slice<Bounds>(&self, range: Bounds) -> MIterSlice<'_, Self>
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<MIndex>,
+    {
+        let range = normalize_zip_range(self.len(), range);
+        MIterSlice::new(self, range)
+    }
 
     #[doc(hidden)]
     type Inner;
 
     #[doc(hidden)]
-    type Read: crate::detail::read::KernelRead<R, Item = Self::Item>
-        + crate::detail::read::KernelReadAt<R, crate::detail::device::S0, LogicalItem = Self::Item>
-        + crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>;
+    type Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>;
 
     #[doc(hidden)]
     fn into_inner(self) -> Self::Inner;
 
     #[doc(hidden)]
-    fn lower_read(self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error>;
+    fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error>;
+
+    #[doc(hidden)]
+    fn lower_read(self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+        self.lower_read_ref(policy)
+    }
 
     #[doc(hidden)]
     fn validate_executor(&self, exec: &crate::runtime::Executor<R>) -> Result<(), Error>;
@@ -378,6 +463,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Output::Item: MAlloc<R> + dispatch::MItemDispatch<R>,
         Op: crate::op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -397,6 +483,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Output::Item: MAlloc<R> + dispatch::MItemDispatch<R>,
         Op: crate::op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -415,6 +502,7 @@ pub trait MIter<R: Runtime>: Sized {
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<MIndex, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::PredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -430,6 +518,7 @@ pub trait MIter<R: Runtime>: Sized {
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::PredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -445,6 +534,7 @@ pub trait MIter<R: Runtime>: Sized {
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::PredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -460,6 +550,7 @@ pub trait MIter<R: Runtime>: Sized {
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::PredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -475,6 +566,7 @@ pub trait MIter<R: Runtime>: Sized {
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<MIndex>, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::PredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -490,6 +582,7 @@ pub trait MIter<R: Runtime>: Sized {
         env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::PredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -505,12 +598,13 @@ pub trait MIter<R: Runtime>: Sized {
         op: Op,
     ) -> Result<Self::Item, Error>
     where
+        Self::Read: crate::detail::read::KernelReadReduce<R, Op, Item = Self::Item>,
         Op: crate::op::ReductionOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
         use crate::detail::read::KernelRead as _;
         read.validate()?;
-        read.reduce_value_read(policy, init, op)
+        crate::detail::read::KernelReadReduce::reduce_value(read, policy, init, op)
     }
 
     #[doc(hidden)]
@@ -520,6 +614,7 @@ pub trait MIter<R: Runtime>: Sized {
         pred: Pred,
     ) -> Result<Option<MIndex>, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Pred: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -536,6 +631,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Right: MIter<R, Item = Self::Item>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Right::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Eq: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let left = self.lower_read(policy)?;
@@ -554,6 +651,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<Option<MIndex>, Error>
     where
         Needles: MIter<R, Item = Self::Item>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Needles::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Eq: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -570,6 +669,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<bool, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -584,6 +684,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<MIndex, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -600,6 +701,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Right: MIter<R, Item = Self::Item>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Right::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let left = self.lower_read(policy)?;
@@ -618,6 +721,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
     where
         Values: MIter<R, Item = Self::Item>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Values::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Self::Item: Send + Sync,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
@@ -639,6 +744,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<crate::runtime::DeviceVec<R, MIndex>, Error>
     where
         Values: MIter<R, Item = Self::Item>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Values::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Self::Item: Send + Sync,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
@@ -658,6 +765,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<Option<MIndex>, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -672,6 +780,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<Option<MIndex>, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -686,6 +795,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<Option<(MIndex, MIndex)>, Error>
     where
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
@@ -702,6 +812,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<Option<MIndex>, Error>
     where
         Right: MIter<R, Item = Self::Item>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Right::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
         Eq: crate::op::BinaryPredicateOp<R, Self::Item>,
     {
         let left = self.lower_read(policy)?;
@@ -723,6 +835,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: MIter<R>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Values::Read: crate::detail::read::KernelReadBoundMany<R, Item = Values::Item>,
         Values::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Values::Item>,
         KeyEq: crate::op::BinaryPredicateOp<R, Self::Item>,
@@ -748,6 +862,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: MIter<R>,
+        Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
+        Values::Read: crate::detail::read::KernelReadBoundMany<R, Item = Values::Item>,
         Values::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Values::Item>,
         KeyEq: crate::op::BinaryPredicateOp<R, Self::Item>,
@@ -1158,17 +1274,72 @@ pub trait MIter<R: Runtime>: Sized {
     }
 }
 
+impl<R, Iter> MIter<R> for MIterSlice<'_, Iter>
+where
+    R: Runtime,
+    Iter: MIter<R>,
+    crate::detail::read::SliceRead<Iter::Read>:
+        crate::detail::read::KernelReadBoundMany<R, Item = Iter::Item>,
+{
+    type Item = Iter::Item;
+    type Inner = Iter::Inner;
+    type Read = crate::detail::read::SliceRead<Iter::Read>;
+
+    fn len(&self) -> MIndex {
+        self.range.len()
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        unreachable!("sliced read-only MIter lowering requires a CubePolicy")
+    }
+
+    fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+        Ok(crate::detail::read::SliceRead::new(
+            self.inner.lower_read_ref(policy)?,
+            self.range.start as usize,
+            self.range.len() as usize,
+        ))
+    }
+
+    fn validate_executor(&self, exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
+        self.inner.validate_executor(exec)
+    }
+}
+
+#[doc(hidden)]
+pub trait MIterReduce<R: Runtime, Op>: MIter<R> {
+    #[doc(hidden)]
+    fn reduce_value_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        init: Self::Item,
+        op: Op,
+    ) -> Result<Self::Item, Error>;
+}
+
+impl<R, Iter, Op> MIterReduce<R, Op> for Iter
+where
+    R: Runtime,
+    Iter: MIter<R>,
+    Iter::Read: crate::detail::read::KernelReadReduce<R, Op, Item = Iter::Item>,
+    Op: crate::op::ReductionOp<R, Iter::Item>,
+{
+    fn reduce_value_with_policy(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        init: Self::Item,
+        op: Op,
+    ) -> Result<Self::Item, Error> {
+        let read = self.lower_read(policy)?;
+        use crate::detail::read::KernelRead as _;
+        read.validate()?;
+        crate::detail::read::KernelReadReduce::reduce_value(read, policy, init, op)
+    }
+}
+
 /// Massively mutable iterator used as an explicit algorithm destination.
 pub trait MIterMut<R: Runtime>: Sized {
     type Item: MAlloc<R>;
-
-    type Slice<'a>: MIter<R, Item = Self::Item>
-    where
-        Self: 'a;
-
-    type SliceMut<'a>: MIterMut<R, Item = Self::Item>
-    where
-        Self: 'a;
 
     fn len(&self) -> MIndex;
 
@@ -1176,13 +1347,21 @@ pub trait MIterMut<R: Runtime>: Sized {
         self.len() == 0
     }
 
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
+    fn slice<Bounds>(&self, range: Bounds) -> MIterMutSlice<'_, Self>
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<MIndex>,
+    {
+        let range = normalize_zip_range(self.len(), range);
+        MIterMutSlice::new(self, range)
+    }
 
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
+    fn slice_mut<Bounds>(&self, range: Bounds) -> MIterMutSliceMut<'_, Self>
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<MIndex>,
+    {
+        let range = normalize_zip_range(self.len(), range);
+        MIterMutSliceMut::new(self, range)
+    }
 
     #[doc(hidden)]
     fn validate_executor(&self, _exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
@@ -1215,10 +1394,15 @@ pub trait MIterMut<R: Runtime>: Sized {
     }
 
     #[doc(hidden)]
-    type Inner;
+    type Inner: SlicedOutputInner<R, Self::Item>;
 
     #[doc(hidden)]
-    fn into_inner(self) -> Self::Inner;
+    fn inner(&self) -> Self::Inner;
+
+    #[doc(hidden)]
+    fn into_inner(self) -> Self::Inner {
+        self.inner()
+    }
 
     #[doc(hidden)]
     fn write_from_inner(
@@ -1272,4 +1456,198 @@ pub trait MIterMut<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         value: Self::Item,
     ) -> Result<(), Error>;
+}
+
+#[doc(hidden)]
+pub trait SlicedOutputInner<R: Runtime, Item: MAlloc<R>>: Sized {
+    type Read: crate::detail::read::KernelReadBoundMany<R, Item = Item>;
+
+    fn slice_inner(self, range: Range<MIndex>) -> Self;
+    fn into_read(self) -> Self::Read;
+    fn into_alloc_view(self) -> Item::View;
+    fn write_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: Item::Inner,
+    ) -> Result<(), Error>;
+    fn write_prefix_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: Item::Inner,
+    ) -> Result<(), Error>;
+    fn write_split_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        selected: Item::Inner,
+        rejected: Item::Inner,
+    ) -> Result<(), Error>;
+    fn write_where_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: Item::Inner,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
+    ) -> Result<(), Error>;
+    fn replace_where_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        replacement: Item,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
+    ) -> Result<(), Error>;
+    fn fill_inner(self, policy: &crate::detail::CubePolicy<R>, value: Item) -> Result<(), Error>;
+}
+
+impl<R, Output> MIterMut<R> for MIterMutSliceMut<'_, Output>
+where
+    R: Runtime,
+    Output: MIterMut<R>,
+    Output::Inner: SlicedOutputInner<R, Output::Item>,
+{
+    type Item = Output::Item;
+    type Inner = Output::Inner;
+
+    fn len(&self) -> MIndex {
+        self.range.len()
+    }
+
+    fn validate_executor(&self, exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
+        self.inner.validate_executor(exec)
+    }
+
+    fn column_mut_view_inner<T: 'static>(
+        &self,
+    ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, T>>, Error>
+    where
+        T: crate::value::MStorageElement,
+    {
+        let Some(mut view) = self.inner.column_mut_view_inner::<T>()? else {
+            return Ok(None);
+        };
+        view.offset += self.range.start as usize;
+        view.len = self.range.len() as usize;
+        Ok(Some(view))
+    }
+
+    fn column_mut_view_by_index_inner<T: 'static>(
+        &self,
+        index: usize,
+    ) -> Result<Option<crate::detail::device::DeviceColumnMutView<R, T>>, Error>
+    where
+        T: crate::value::MStorageElement,
+    {
+        let Some(mut view) = self.inner.column_mut_view_by_index_inner::<T>(index)? else {
+            return Ok(None);
+        };
+        view.offset += self.range.start as usize;
+        view.len = self.range.len() as usize;
+        Ok(Some(view))
+    }
+
+    fn inner(&self) -> Self::Inner {
+        self.inner.inner().slice_inner(self.range.to_range())
+    }
+
+    fn write_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: <Self::Item as MAlloc<R>>::Inner,
+    ) -> Result<(), Error> {
+        SlicedOutputInner::write_from_inner(MIterMut::into_inner(self), policy, inner)
+    }
+
+    fn write_prefix_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: <Self::Item as MAlloc<R>>::Inner,
+    ) -> Result<(), Error> {
+        SlicedOutputInner::write_prefix_from_inner(MIterMut::into_inner(self), policy, inner)
+    }
+
+    fn write_split_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        selected: <Self::Item as MAlloc<R>>::Inner,
+        rejected: <Self::Item as MAlloc<R>>::Inner,
+    ) -> Result<(), Error> {
+        SlicedOutputInner::write_split_from_inner(
+            MIterMut::into_inner(self),
+            policy,
+            selected,
+            rejected,
+        )
+    }
+
+    fn write_where_from_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        inner: <Self::Item as MAlloc<R>>::Inner,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
+    ) -> Result<(), Error> {
+        SlicedOutputInner::write_where_from_inner(
+            MIterMut::into_inner(self),
+            policy,
+            inner,
+            stencil,
+        )
+    }
+
+    fn replace_where_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        replacement: Self::Item,
+        stencil: crate::detail::api::PrecomputedSelection<R>,
+    ) -> Result<(), Error> {
+        SlicedOutputInner::replace_where_inner(
+            MIterMut::into_inner(self),
+            policy,
+            replacement,
+            stencil,
+        )
+    }
+
+    fn fill_inner(
+        self,
+        policy: &crate::detail::CubePolicy<R>,
+        value: Self::Item,
+    ) -> Result<(), Error> {
+        SlicedOutputInner::fill_inner(MIterMut::into_inner(self), policy, value)
+    }
+}
+
+impl<R, Output> MIter<R> for MIterMutSlice<'_, Output>
+where
+    R: Runtime,
+    Output: MIterMut<R>,
+    Output::Inner: SlicedOutputInner<R, Output::Item>,
+{
+    type Item = Output::Item;
+    type Inner = Output::Inner;
+    type Read = <Output::Inner as SlicedOutputInner<R, Output::Item>>::Read;
+
+    fn len(&self) -> MIndex {
+        self.range.len()
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        self.inner.inner().slice_inner(self.range.to_range())
+    }
+
+    fn lower_read_ref(&self, _policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+        Ok(SlicedOutputInner::into_read(
+            self.inner.inner().slice_inner(self.range.to_range()),
+        ))
+    }
+
+    fn validate_executor(&self, exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
+        self.inner.validate_executor(exec)
+    }
+
+    fn into_alloc_view_with_policy(
+        self,
+        _policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
+    where
+        Self::Item: MAlloc<R>,
+    {
+        Ok(SlicedOutputInner::into_alloc_view(self.into_inner()))
+    }
 }

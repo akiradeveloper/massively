@@ -40,7 +40,7 @@ pub use algorithm::{
 };
 pub use error::Error;
 pub use index::MIndex;
-pub use iter::{MIter, MIterMut, MStorage, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
+pub use iter::{MIter, MIterMut, MIterReduce, MStorage, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
 pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use value::{MAlloc, MItem, MStorageElement};
 
@@ -51,7 +51,7 @@ pub use value::{MAlloc, MItem, MStorageElement};
 pub mod prelude {
     pub use crate::{
         DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,
-        MStorage, MStorageElement, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7,
+        MIterReduce, MStorage, MStorageElement, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7,
     };
 }
 

@@ -303,10 +303,11 @@ fn legacy_miter_dispatch_module_is_removed() {
         "legacy MIterDispatch/MIterMutDispatch/MExecutableIter surface should not exist"
     );
     assert!(
-        iter.contains("type Read: crate::detail::read::KernelRead")
+        iter.contains("pub trait MIter")
+            && iter.contains("type Read: crate::detail::read::KernelRead")
             && iter.contains("fn lower_read(")
             && iter.contains("fn validate_executor("),
-        "MIter should own the hidden lowering hooks needed by public MIter APIs"
+        "MIter should own the hidden lowering hooks needed by public read APIs"
     );
 }
 
@@ -363,6 +364,7 @@ fn scan_by_key_into_writes_through_segmented_scan_apply() {
             && api_scan.contains("exclusive_scan_by_key_with_policy")
             && !api_scan.contains("lower_read(")
             && !api_scan.contains("KernelRead")
+            && iter.contains("pub trait MIter")
             && iter.contains("fn inclusive_scan_by_key_with_policy")
             && iter.contains("fn exclusive_scan_by_key_with_policy")
             && iter.contains("inclusive_scan_by_key_read")

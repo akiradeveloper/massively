@@ -49,7 +49,7 @@ fn nested_tuple_values_are_logical_mitems() {
 fn assert_miter_item<R, Iter, Item>()
 where
     R: Runtime,
-    Iter: massively::MIter<R, Item = Item>,
+    Iter: massively::iter::MIter<R, Item = Item>,
     Item: massively::MItem<R>,
 {
 }
@@ -205,7 +205,7 @@ fn transform2<R, S1, S2, Op>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S2: MIterMut<R>,
     S2::Item: MAlloc<R>,
     Op: UnaryOp<R, S1::Item, Output = S2::Item, Env = ()>,
@@ -221,7 +221,7 @@ fn transform3<R, S1, S2, Op>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R, Item = (u32,)>,
+    S1: massively::iter::MIter<R, Item = (u32,)>,
     S2: MIterMut<R, Item = (u32,)>,
     Op: UnaryOp<R, (u32,), Output = (u32,), Env = ()>,
 {
@@ -236,7 +236,7 @@ fn transform4<R, S1, S2, Op>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R, Item = (u32, u32)>,
+    S1: massively::iter::MIter<R, Item = (u32, u32)>,
     S2: MIterMut<R, Item = (u32, u32)>,
     Op: UnaryOp<R, (u32, u32), Output = (u32, u32), Env = ()>,
 {
@@ -251,7 +251,7 @@ fn transform5<R, S1, S2, Op>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R, Item = (u32, u32, u32)>,
+    S1: massively::iter::MIter<R, Item = (u32, u32, u32)>,
     S2: MIterMut<R, Item = (u32, u32, u32)>,
     Op: UnaryOp<R, (u32, u32, u32), Output = (u32, u32, u32), Env = ()>,
 {
@@ -265,7 +265,7 @@ fn transform_without_op<R, S1, S2>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R, Item = (u32,)>,
+    S1: massively::iter::MIter<R, Item = (u32,)>,
     S2: MIterMut<R, Item = (u32,)>,
 {
     massively::transform(exec, source, AddOne, (), out)
@@ -274,7 +274,7 @@ where
 fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1, out: S2) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
@@ -289,7 +289,7 @@ fn sort2<R, S1, S2, Less>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Less: BinaryPredicateOp<R, S1::Item>,
@@ -304,7 +304,7 @@ fn minmax_element2<R, S1, Less>(
 ) -> Result<Option<(massively::MIndex, massively::MIndex)>, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::minmax_element(exec, source, less)
@@ -317,7 +317,7 @@ fn adjacent_find2<R, S1, Pred>(
 ) -> Result<Option<massively::MIndex>, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     Pred: BinaryPredicateOp<R, S1::Item>,
 {
     massively::adjacent_find(exec, source, pred)
@@ -332,8 +332,8 @@ fn lower_bound2<R, S1, Values, Less>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
-    Values: MIter<R, Item = S1::Item>,
+    S1: massively::iter::MIter<R>,
+    Values: massively::iter::MIter<R, Item = S1::Item>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::lower_bound(exec, source, values, less, out)
@@ -346,7 +346,7 @@ fn is_sorted2<R, S1, Less>(
 ) -> Result<bool, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
     massively::is_sorted(exec, source, less)
@@ -360,7 +360,7 @@ fn gather2<R, S1, S2>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
@@ -375,7 +375,7 @@ fn copy_where2<'a, R, S1, S2>(
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
@@ -402,7 +402,7 @@ fn count_if2<R, S1, Pred>(
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
     massively::count_if(exec, source, pred, ())
@@ -415,7 +415,7 @@ fn find_if2<R, S1, Pred>(
 ) -> Result<Option<massively::MIndex>, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
     massively::find_if(exec, source, pred, ())
@@ -429,7 +429,7 @@ fn remove_where2<'a, R, S1, S2>(
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
@@ -444,7 +444,7 @@ fn partition2<R, S1, S2, Pred>(
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
@@ -459,7 +459,7 @@ fn is_partitioned2<R, S1, Pred>(
 ) -> Result<bool, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
     massively::is_partitioned(exec, source, pred, ())
@@ -473,7 +473,7 @@ fn unique2<R, S1, S2, Pred>(
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Pred: BinaryPredicateOp<R, S1::Item>,
@@ -489,7 +489,7 @@ fn adjacent_difference2<R, S1, S2, Op>(
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
-    S1: MIter<R>,
+    S1: massively::iter::MIter<R>,
     S1::Item: massively::MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Op: ReductionOp<R, S1::Item>,

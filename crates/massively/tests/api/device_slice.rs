@@ -59,7 +59,7 @@ fn scatter_into_allocated<R, Input>(
 ) -> Result<<Input::Item as massively::MAlloc<R>>::Storage, massively::Error>
 where
     R: Runtime,
-    Input: massively::MIter<R>,
+    Input: massively::iter::MIter<R>,
     Input::Item: massively::MAlloc<R>,
 {
     let out = exec.alloc::<Input::Item>(len)?;
@@ -86,12 +86,14 @@ fn executor_alloc_can_create_temporary_buffer_from_miter_item() {
     assert_eq!(exec.to_host(&out_ids).unwrap(), vec![2, 3, 1]);
 }
 
-fn assert_miter_can_be_sliced_twice<R, Input>(input: &Input)
+fn assert_miter_can_be_sliced_twice<R, Input>(input: Input)
 where
     R: Runtime,
-    Input: massively::MIter<R>,
+    Input: massively::iter::MIter<R>,
+    for<'a> massively::iter::MIterSlice<'a, Input>: massively::iter::MIter<R>,
 {
-    let _slice = input.slice(..);
+    let slice = input.slice(..);
+    let _slice = slice.slice(..);
 }
 
 fn assert_miter_mut_can_be_sliced_twice<R, Output>(output: &Output)
@@ -105,17 +107,13 @@ where
     let slice_mut = output.slice_mut(..);
     let slice = slice_mut.slice(..);
     let _slice = slice.slice(..);
-    let _slice_mut = slice_mut.slice_mut(..);
+    let _slice_mut = output.slice_mut(..).slice_mut(..);
 }
 
 fn assert_alloc_storage_can_be_sliced_repeatedly<R, Storage>(storage: &Storage)
 where
     R: Runtime,
     Storage: massively::MStorage<R>,
-    for<'a> <Storage as massively::MStorage<R>>::Slice<'a>:
-        massively::MIter<R, Item = Storage::Item>,
-    for<'a> <Storage as massively::MStorage<R>>::SliceMut<'a>:
-        massively::MIterMut<R, Item = Storage::Item>,
 {
     let slice = storage.slice(..);
     let _slice = slice.slice(..);
@@ -130,8 +128,8 @@ fn generic_slice_contracts_allow_repeated_slicing() {
     let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let zip = massively::Zip1(exec.to_device(&[1_u32, 2, 3, 4]).unwrap());
 
-    assert_miter_can_be_sliced_twice::<WgpuRuntime, _>(&input.slice(..));
-    assert_miter_can_be_sliced_twice::<WgpuRuntime, _>(&zip.slice(..));
+    assert_miter_can_be_sliced_twice::<WgpuRuntime, _>(input.slice(..));
+    assert_miter_can_be_sliced_twice::<WgpuRuntime, _>(zip.slice(..));
 
     assert_miter_mut_can_be_sliced_twice::<WgpuRuntime, _>(&zip.slice_mut(..));
 
@@ -891,20 +889,29 @@ fn empty_device_slice_is_valid_input() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
 
-    let slice = values.slice(1..1);
+    assert!(values.slice(1..1).is_empty());
+    assert_eq!(
+        exec.to_host(&values.slice(1..1)).unwrap(),
+        Vec::<f32>::new()
+    );
+
     let output = exec.to_device(&[] as &[f32]).unwrap();
     transform(
         &exec,
-        massively::Zip1(slice),
+        massively::Zip1(values.slice(1..1)),
         Double,
         (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
-    let sum = reduce(&exec, massively::Zip1(slice), (0.0_f32,), TupleSum).unwrap();
+    let sum = reduce(
+        &exec,
+        massively::Zip1(values.slice(1..1)),
+        (0.0_f32,),
+        TupleSum,
+    )
+    .unwrap();
 
-    assert!(slice.is_empty());
-    assert_eq!(exec.to_host(&slice).unwrap(), Vec::<f32>::new());
     assert_eq!(exec.to_host(&output).unwrap(), Vec::<f32>::new());
     assert_eq!(sum, (0.0,));
 }

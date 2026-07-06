@@ -91,17 +91,6 @@ pub struct DeviceSlice<'a, R: Runtime, T> {
     pub(crate) len: MIndex,
 }
 
-impl<'a, R, T> Copy for DeviceSlice<'a, R, T> where R: Runtime {}
-
-impl<'a, R, T> Clone for DeviceSlice<'a, R, T>
-where
-    R: Runtime,
-{
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
 impl<'a, R, T> DeviceSlice<'a, R, T>
 where
     R: Runtime,
