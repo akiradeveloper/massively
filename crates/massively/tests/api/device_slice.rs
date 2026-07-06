@@ -91,8 +91,7 @@ where
     R: Runtime,
     Input: massively::MIter<R>,
 {
-    let slice = input.slice(..);
-    let _slice = slice.slice(..);
+    let _slice = input.slice(..);
 }
 
 fn assert_miter_mut_can_be_sliced_twice<R, Output>(output: &Output)
@@ -112,13 +111,13 @@ where
 fn assert_alloc_storage_can_be_sliced_repeatedly<R, Storage>(storage: &Storage)
 where
     R: Runtime,
-    Storage: massively::MAllocStorage<R>,
-    for<'a> <Storage as massively::ToSlice>::Slice<'a>: massively::MIter<R, Item = Storage::Item>,
-    for<'a> <Storage as massively::ToSliceMut>::SliceMut<'a>:
+    Storage: massively::MStorage<R>,
+    for<'a> <Storage as massively::MStorage<R>>::Slice<'a>:
+        massively::MIter<R, Item = Storage::Item>,
+    for<'a> <Storage as massively::MStorage<R>>::SliceMut<'a>:
         massively::MIterMut<R, Item = Storage::Item>,
 {
     let slice = storage.slice(..);
-    let slice = slice.slice(..);
     let _slice = slice.slice(..);
 
     let slice_mut = storage.slice_mut(..);

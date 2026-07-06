@@ -207,6 +207,7 @@ where
     R: Runtime,
     S1: MIter<R>,
     S2: MIterMut<R>,
+    S2::Item: MAlloc<R>,
     Op: UnaryOp<R, S1::Item, Output = S2::Item, Env = ()>,
 {
     massively::transform(exec, source, op, (), out)
@@ -274,6 +275,7 @@ fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1, out: S2) -> Result<(), ma
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
     massively::reverse(exec, source, out)
@@ -288,6 +290,7 @@ fn sort2<R, S1, S2, Less>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Less: BinaryPredicateOp<R, S1::Item>,
 {
@@ -358,6 +361,7 @@ fn gather2<R, S1, S2>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
     massively::gather(exec, source, indices, out)
@@ -372,6 +376,7 @@ fn copy_where2<'a, R, S1, S2>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
     massively::copy_where(exec, source, stencil, out)
@@ -425,6 +430,7 @@ fn remove_where2<'a, R, S1, S2>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
     massively::remove_where(exec, source, stencil, out)
@@ -439,6 +445,7 @@ fn partition2<R, S1, S2, Pred>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Pred: PredicateOp<R, S1::Item, Env = ()>,
 {
@@ -467,6 +474,7 @@ fn unique2<R, S1, S2, Pred>(
 where
     R: Runtime,
     S1: MIter<R>,
+    S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
     Pred: BinaryPredicateOp<R, S1::Item>,
 {

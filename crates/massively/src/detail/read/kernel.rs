@@ -65,62 +65,6 @@ pub(crate) trait ScanByKeyValueItem<R: Runtime>: MAlloc<R> {
         Op: op::ReductionOp<R, Self>;
 }
 
-macro_rules! impl_scan_by_key_value_scalar {
-    ($( $ty:ty ),+ $(,)?) => {
-        $(
-            impl<R> ScanByKeyValueItem<R> for $ty
-            where
-                R: Runtime,
-            {
-                fn inclusive_scan_by_key_values_from_inner<Op, Output>(
-                    policy: &CubePolicy<R>,
-                    inner: <Self as MAlloc<R>>::Inner,
-                    control: &ScanByKeyControl<R>,
-                    op: Op,
-                    output: Output,
-                ) -> Result<(), Error>
-                where
-                    Output: MIterMut<R, Item = Self>,
-                    Op: op::ReductionOp<R, Self>,
-                {
-                    let _ = op;
-                    let apply = crate::detail::apply::SegmentedScanApply::new(control);
-                    let view = DeviceColumnView::from_column(&inner);
-                    let scanned = apply.inclusive_expr::<
-                        DeviceColumnView<R, $ty>,
-                        KernelScalarTuple1Op<R, Op>,
-                    >(policy, &view)?;
-                    output.write_from_inner(policy, scanned)
-                }
-
-                fn exclusive_scan_by_key_values_from_inner<Op, Output>(
-                    policy: &CubePolicy<R>,
-                    inner: <Self as MAlloc<R>>::Inner,
-                    control: &ScanByKeyControl<R>,
-                    init: Self,
-                    op: Op,
-                    output: Output,
-                ) -> Result<(), Error>
-                where
-                    Output: MIterMut<R, Item = Self>,
-                    Op: op::ReductionOp<R, Self>,
-                {
-                    let _ = op;
-                    let apply = crate::detail::apply::SegmentedScanApply::new(control);
-                    let view = DeviceColumnView::from_column(&inner);
-                    let scanned = apply.exclusive_expr::<
-                        DeviceColumnView<R, $ty>,
-                        KernelScalarTuple1Op<R, Op>,
-                    >(policy, &view, init)?;
-                    output.write_from_inner(policy, scanned)
-                }
-            }
-        )+
-    };
-}
-
-impl_scan_by_key_value_scalar!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
-
 impl<R, A> ScanByKeyValueItem<R> for (A,)
 where
     R: Runtime,

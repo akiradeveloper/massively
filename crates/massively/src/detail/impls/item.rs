@@ -1059,142 +1059,9 @@ macro_rules! alloc_inner {
     }};
 }
 
-macro_rules! impl_scalar_mitem {
+macro_rules! impl_scalar_mitem_dispatch {
     ($( $ty:ty ),+ $(,)?) => {
         $(
-            impl<R> MAlloc<R> for $ty
-            where
-                R: Runtime,
-                $ty: MStorageElement + 'static,
-            {
-                type Inner = crate::detail::DeviceVec<R, $ty>;
-                type View = crate::detail::device::DeviceColumnView<R, $ty>;
-                type Storage = DeviceVec<R, $ty>;
-
-                fn storage_from_inner(inner: Self::Inner) -> Self::Storage {
-                    DeviceVec::from_inner(inner)
-                }
-
-                fn alloc_storage(exec: &Executor<R>, len: MIndex) -> Result<Self::Storage, Error> {
-                    let policy = exec.policy();
-                    if len == 0 {
-                        Ok(Self::storage_from_inner(policy.empty_device_vec::<$ty>()))
-                    } else {
-                        let client = policy.client();
-                        let len_usize = usize_from_mindex(len);
-                        Ok(Self::storage_from_inner(crate::detail::DeviceVec::from_handle(
-                            policy.id(),
-                            client.empty(len_usize * std::mem::size_of::<$ty>()),
-                            len,
-                        )))
-                    }
-                }
-
-                fn inclusive_scan_by_key_values_from_inner<KeyEq, Op, Output>(
-                    policy: &crate::detail::CubePolicy<R>,
-                    values: Self::Inner,
-                    control: &crate::detail::control::ScanByKeyControl<R>,
-                    _op: Op,
-                    output: Output,
-                ) -> Result<(), Error>
-                where
-                    Op: op::ReductionOp<R, Self>,
-                    Output: MIterMut<R, Item = Self>,
-                {
-                    let apply = crate::detail::apply::SegmentedScanApply::new(control);
-                    let values = crate::detail::device::DeviceColumnView::from_column(&values);
-                    let scanned = apply.inclusive_expr::<
-                        crate::detail::device::DeviceColumnView<R, $ty>,
-                        crate::detail::op_adapter::KernelScalarTuple1Op<R, Op>,
-                    >(policy, &values)?;
-                    output.write_from_inner(policy, scanned)
-                }
-
-                fn exclusive_scan_by_key_values_from_inner<KeyEq, Op, Output>(
-                    policy: &crate::detail::CubePolicy<R>,
-                    values: Self::Inner,
-                    control: &crate::detail::control::ScanByKeyControl<R>,
-                    init: Self,
-                    _op: Op,
-                    output: Output,
-                ) -> Result<(), Error>
-                where
-                    Op: op::ReductionOp<R, Self>,
-                    Output: MIterMut<R, Item = Self>,
-                {
-                    let apply = crate::detail::apply::SegmentedScanApply::new(control);
-                    let values = crate::detail::device::DeviceColumnView::from_column(&values);
-                    let scanned = apply.exclusive_expr::<
-                        crate::detail::device::DeviceColumnView<R, $ty>,
-                        crate::detail::op_adapter::KernelScalarTuple1Op<R, Op>,
-                    >(policy, &values, init)?;
-                    output.write_from_inner(policy, scanned)
-                }
-
-                fn transform_from_view<Output, Op>(
-                    policy: &crate::detail::CubePolicy<R>,
-                    input: Self::View,
-                    op: Op,
-                    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-                    output: Output,
-                ) -> Result<(), Error>
-                where
-                    Output: MIterMut<R>,
-                    Output::Item: MAlloc<R> + sealed::MItemDispatch<R>,
-                    Op: op::UnaryOp<R, Self, Output = Output::Item>,
-                {
-                    let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_scalar_input(
-                        policy,
-                        input,
-                        op,
-                        env,
-                    )?;
-                    output.write_from_inner(policy, inner)
-                }
-
-                fn transform_where_from_view<Output, Op>(
-                    policy: &crate::detail::CubePolicy<R>,
-                    input: Self::View,
-                    op: Op,
-                    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-                    stencil: crate::detail::api::PrecomputedSelection<R>,
-                    output: Output,
-                ) -> Result<(), Error>
-                where
-                    Output: MIterMut<R>,
-                    Output::Item: MAlloc<R> + sealed::MItemDispatch<R>,
-                    Op: op::UnaryOp<R, Self, Output = Output::Item>,
-                {
-                    let inner = <Output::Item as sealed::MItemDispatch<R>>::transform_scalar_input(
-                        policy,
-                        input,
-                        op,
-                        env,
-                    )?;
-                    output.write_where_from_inner(policy, inner, stencil)
-                }
-            }
-
-            impl<R> StorageFromInner<R> for DeviceVec<R, $ty>
-            where
-                R: Runtime,
-                $ty: MStorageElement + 'static,
-            {
-                type Item = $ty;
-
-                fn from_inner(inner: <Self::Item as MAlloc<R>>::Inner) -> Self {
-                    <Self::Item as MAlloc<R>>::storage_from_inner(inner)
-                }
-
-                fn into_inner(self) -> <Self::Item as MAlloc<R>>::Inner {
-                    self.inner
-                }
-
-                fn len(&self) -> MIndex {
-                    self.len()
-                }
-            }
-
             impl<R> sealed::MItemDispatch<R> for $ty
             where
                 R: Runtime,
@@ -1205,7 +1072,7 @@ macro_rules! impl_scalar_mitem {
     };
 }
 
-impl_scalar_mitem!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+impl_scalar_mitem_dispatch!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
 
 macro_rules! impl_mitem_tuple {
     ($( $ty:ident : $var:ident ),+) => {
