@@ -19,12 +19,12 @@ fn merge_by_key_with_generic_right<
     out_v: ValueOutput,
 ) -> Result<(), massively::Error>
 where
-    LeftKeys: massively::MIter<WgpuRuntime>,
+    LeftKeys: massively::iter::MIter<WgpuRuntime>,
     LeftKeys::Item: massively::MAlloc<WgpuRuntime>,
-    LeftValues: massively::MIter<WgpuRuntime>,
+    LeftValues: massively::iter::MIter<WgpuRuntime>,
     LeftValues::Item: massively::MAlloc<WgpuRuntime>,
-    RightKeys: massively::MIter<WgpuRuntime, Item = LeftKeys::Item>,
-    RightValues: massively::MIter<WgpuRuntime, Item = LeftValues::Item>,
+    RightKeys: massively::iter::MIter<WgpuRuntime, Item = LeftKeys::Item>,
+    RightValues: massively::iter::MIter<WgpuRuntime, Item = LeftValues::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, LeftKeys::Item>,
     KeyOutput: massively::MIterMut<WgpuRuntime, Item = LeftKeys::Item>,
     ValueOutput: massively::MIterMut<WgpuRuntime, Item = LeftValues::Item>,

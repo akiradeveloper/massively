@@ -313,7 +313,8 @@ pub trait KernelRead<R: Runtime>: Sized {
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Item: MItem<R>,
+        Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+        Self: KernelReadBoundMany<R>,
         Op: op::ReductionOp<R, Self::Item>,
     {
         let _ = (policy, init, op);
@@ -332,6 +333,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -352,6 +354,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -369,6 +372,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred, env);
@@ -385,6 +389,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred, env);
@@ -401,6 +406,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred, env);
@@ -417,6 +423,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred, env);
@@ -433,6 +440,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred, env);
@@ -449,6 +457,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred, env);
@@ -581,6 +590,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = (policy, pred);
@@ -596,6 +606,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = (policy, less);
@@ -611,6 +622,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = (policy, less);
@@ -626,6 +638,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = (policy, less);
@@ -637,6 +650,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     fn is_sorted_read<Less>(self, policy: &CubePolicy<R>, less: Less) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = (policy, less);
@@ -652,6 +666,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = (policy, less);
@@ -764,6 +779,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<ScanByKeyControl<R>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         KeyEq: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = policy;
@@ -821,6 +837,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: KernelReadBoundMany<R>,
+        Self: KernelReadBoundMany<R>,
         Output: MIterMut<R, Item = Values::Item>,
         Self::Item: MItem<R>,
         Values::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
@@ -843,6 +860,7 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: KernelReadBoundMany<R>,
+        Self: KernelReadBoundMany<R>,
         Output: MIterMut<R, Item = Values::Item>,
         Self::Item: MItem<R>,
         Values::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
@@ -1024,6 +1042,87 @@ pub trait KernelReadAtEnv<R: Runtime, Env> {
     type NextEnv: EnvLeaf7;
 
     fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error>;
+}
+
+/// Logical subrange of a read expression.
+#[doc(hidden)]
+pub struct SliceRead<Read> {
+    read: Read,
+    start: usize,
+    len: usize,
+}
+
+impl<Read> SliceRead<Read> {
+    pub(crate) fn new(read: Read, start: usize, len: usize) -> Self {
+        Self { read, start, len }
+    }
+
+    fn adjust_offsets_from(&self, bindings: &mut KernelColumnBindings, first_slot: usize) {
+        for offset in &mut bindings.slot_offsets[first_slot..] {
+            *offset += self.start;
+        }
+    }
+}
+
+impl<R, Read> KernelRead<R> for SliceRead<Read>
+where
+    R: Runtime,
+    Read: KernelRead<R>,
+{
+    type Item = Read::Item;
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        self.read.validate()?;
+        let end = self
+            .start
+            .checked_add(self.len)
+            .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
+        if end > self.read.len() {
+            return Err(Error::LengthMismatch {
+                input: end,
+                output: self.read.len(),
+            });
+        }
+        Ok(())
+    }
+}
+
+impl<R, Read, Start> KernelReadAt<R, Start> for SliceRead<Read>
+where
+    R: Runtime,
+    Read: KernelReadAt<R, Start>,
+{
+    type LogicalItem = Read::LogicalItem;
+    type ExprAt = Read::ExprAt;
+    type Next = Read::Next;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        let first_slot = bindings.slot_offsets.len();
+        self.read.stage_at(bindings)?;
+        self.adjust_offsets_from(bindings, first_slot);
+        Ok(())
+    }
+}
+
+impl<R, Read, Env> KernelReadAtEnv<R, Env> for SliceRead<Read>
+where
+    R: Runtime,
+    Read: KernelReadAtEnv<R, Env>,
+{
+    type LogicalItem = Read::LogicalItem;
+    type ExprAt = Read::ExprAt;
+    type NextEnv = Read::NextEnv;
+
+    fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        let first_slot = bindings.slot_offsets.len();
+        self.read.stage_at_env(bindings)?;
+        self.adjust_offsets_from(bindings, first_slot);
+        Ok(())
+    }
 }
 
 #[doc(hidden)]
@@ -1397,18 +1496,7 @@ fn transform_logical7_read<R, Read, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Read: KernelRead<R> + KernelReadAtEnv<R, Env0, LogicalItem = <Read as KernelRead<R>>::Item>,
-    <Read as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-    <Read as KernelReadAtEnv<R, Env0>>::ExprAt: crate::expr::LogicalDeviceExpr7<
-            <Read as KernelRead<R>>::Item,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        >,
+    Read: KernelReadBoundMany<R>,
     <Read as KernelRead<R>>::Item: MItem<R> + Send + Sync,
     Output: MIterMut<R>,
     Output::Item: MAlloc<R> + MItemDispatch<R>,
@@ -1420,14 +1508,14 @@ where
     bindings.finish();
     let inner = <Output::Item as MItemDispatch<R>>::transform_logical7::<
         <Read as KernelRead<R>>::Item,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        <Read as KernelReadAtEnv<R, Env0>>::ExprAt,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
         Op,
     >(policy, bindings, len, op, env)?;
     output.write_from_inner(policy, inner)
@@ -1443,18 +1531,7 @@ fn transform_where_logical7_read<R, Read, Output, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Read: KernelRead<R> + KernelReadAtEnv<R, Env0, LogicalItem = <Read as KernelRead<R>>::Item>,
-    <Read as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-    <Read as KernelReadAtEnv<R, Env0>>::ExprAt: crate::expr::LogicalDeviceExpr7<
-            <Read as KernelRead<R>>::Item,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        >,
+    Read: KernelReadBoundMany<R>,
     <Read as KernelRead<R>>::Item: MItem<R> + Send + Sync,
     Output: MIterMut<R>,
     Output::Item: MAlloc<R> + MItemDispatch<R>,
@@ -1466,14 +1543,14 @@ where
     bindings.finish();
     let inner = <Output::Item as MItemDispatch<R>>::transform_logical7::<
         <Read as KernelRead<R>>::Item,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-        <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        <Read as KernelReadAtEnv<R, Env0>>::ExprAt,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
         Op,
     >(policy, bindings, len, op, env)?;
     output.write_where_from_inner(policy, inner, stencil)
@@ -1869,18 +1946,7 @@ fn logical7_predicate_flags_read<R, Read, Pred>(
 ) -> Result<Option<cubecl::server::Handle>, Error>
 where
     R: Runtime,
-    Read: KernelRead<R> + KernelReadAtEnv<R, Env0, LogicalItem = <Read as KernelRead<R>>::Item>,
-    <Read as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-    <Read as KernelReadAtEnv<R, Env0>>::ExprAt: crate::expr::LogicalDeviceExpr7<
-            <Read as KernelRead<R>>::Item,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        >,
+    Read: KernelReadBoundMany<R>,
     <Read as KernelRead<R>>::Item: MItem<R> + Send + Sync,
     Pred: op::PredicateOp<R, <Read as KernelRead<R>>::Item>,
 {
@@ -1914,14 +1980,14 @@ where
     unsafe {
         crate::kernels::logical7_predicate_flags_kernel::launch_unchecked::<
             <Read as KernelRead<R>>::Item,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-            <Read as KernelReadAtEnv<R, Env0>>::ExprAt,
+            <Read as KernelReadBoundMany<R>>::Leaf0,
+            <Read as KernelReadBoundMany<R>>::Leaf1,
+            <Read as KernelReadBoundMany<R>>::Leaf2,
+            <Read as KernelReadBoundMany<R>>::Leaf3,
+            <Read as KernelReadBoundMany<R>>::Leaf4,
+            <Read as KernelReadBoundMany<R>>::Leaf5,
+            <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Pred>,
             R,
         >(
@@ -3895,6 +3961,7 @@ where
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
@@ -3919,6 +3986,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
@@ -3937,6 +4005,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
@@ -3955,6 +4024,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
@@ -3991,6 +4061,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
@@ -4015,6 +4086,7 @@ where
     ) -> Result<ScanByKeyControl<R>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         KeyEq: op::BinaryPredicateOp<R, Self::Item>,
     {
         logical7_scan_by_key_control_read::<R, Self, KeyEq>(&self, policy)
@@ -4193,9 +4265,10 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::BinaryPredicateOp<R, Self::Item>,
     {
-        crate::detail::adjacent_find(policy, self.column, KernelOp::<R, Pred>::new())
+        logical7_adjacent_find_read::<R, Self, Pred>(&self, policy)
     }
 
     fn min_element_read<Less>(
@@ -4205,9 +4278,10 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        crate::detail::min_element(policy, self.column, KernelOp::<R, Less>::new())
+        Ok(logical7_minmax_read::<R, Self, Less>(&self, policy)?.map(|pair| pair.0))
     }
 
     fn max_element_read<Less>(
@@ -4217,9 +4291,10 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        crate::detail::max_element(policy, self.column, KernelOp::<R, Less>::new())
+        Ok(logical7_minmax_read::<R, Self, Less>(&self, policy)?.map(|pair| pair.1))
     }
 
     fn minmax_element_read<Less>(
@@ -4229,17 +4304,19 @@ where
     ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        crate::detail::minmax_element(policy, self.column, KernelOp::<R, Less>::new())
+        logical7_minmax_read::<R, Self, Less>(&self, policy)
     }
 
     fn is_sorted_read<Less>(self, policy: &CubePolicy<R>, _less: Less) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        crate::detail::is_sorted(policy, self.column, KernelOp::<R, Less>::new())
+        Ok(logical7_sorted_break_read::<R, Self, Less>(&self, policy)?.is_none())
     }
 
     fn is_sorted_until_read<Less>(
@@ -4249,9 +4326,13 @@ where
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        crate::detail::is_sorted_until(policy, self.column, KernelOp::<R, Less>::new())
+        match logical7_sorted_break_read::<R, Self, Less>(&self, policy)? {
+            Some(index) => Ok(index + 1),
+            None => mindex_from_usize(self.len()),
+        }
     }
 }
 
@@ -4505,45 +4586,9 @@ macro_rules! impl_kernel_read_zip {
         impl<R, $first> KernelRead<R> for $name<$first>
         where
             R: Runtime,
-            $first: KernelRead<R> + KernelReadAt<R, S0, LogicalItem = <$first as KernelRead<R>>::Item>,
-            <$first as KernelRead<R>>::Item: MStorageElement + Send + Sync,
+            $first: KernelRead<R>,
+            <$first as KernelRead<R>>::Item: Send + Sync,
             ($($item,)+): CubeType,
-            $name<$first>: KernelReadAtEnv<R, Env0, LogicalItem = ($($item,)+)>,
-            <$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-            <$name<$first> as KernelReadAtEnv<R, Env0>>::ExprAt:
-                crate::expr::LogicalDeviceExpr7<
-                    ($($item,)+),
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-                    <<$name<$first> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-                >,
-            (<$first as KernelReadAt<R, S0>>::ExprAt,):
-                crate::expr::LogicalDeviceExpr3Shape<($($item,)+)>
-                    + crate::expr::LogicalDeviceExpr3<
-                        ($($item,)+),
-                        <(<$first as KernelReadAt<R, S0>>::ExprAt,) as crate::expr::LogicalDeviceExpr3Shape<
-                            ($($item,)+),
-                        >>::LeafA,
-                        <(<$first as KernelReadAt<R, S0>>::ExprAt,) as crate::expr::LogicalDeviceExpr3Shape<
-                            ($($item,)+),
-                        >>::LeafB,
-                        <(<$first as KernelReadAt<R, S0>>::ExprAt,) as crate::expr::LogicalDeviceExpr3Shape<
-                            ($($item,)+),
-                        >>::LeafC,
-                    >,
-            <(<$first as KernelReadAt<R, S0>>::ExprAt,) as crate::expr::LogicalDeviceExpr3Shape<
-                ($($item,)+),
-            >>::LeafA: MStorageElement,
-            <(<$first as KernelReadAt<R, S0>>::ExprAt,) as crate::expr::LogicalDeviceExpr3Shape<
-                ($($item,)+),
-            >>::LeafB: MStorageElement,
-            <(<$first as KernelReadAt<R, S0>>::ExprAt,) as crate::expr::LogicalDeviceExpr3Shape<
-                ($($item,)+),
-            >>::LeafC: MStorageElement,
         {
             type Item = ($($item,)+);
 
@@ -4562,10 +4607,11 @@ macro_rules! impl_kernel_read_zip {
                 op: Op,
             ) -> Result<Self::Item, Error>
             where
-                Self::Item: MItem<R> + MAlloc<R>,
+                Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+                Self: KernelReadBoundMany<R>,
                 Op: op::ReductionOp<R, Self::Item>,
             {
-                let inner = materialize_logical3_read(self, policy)?;
+                let inner = materialize_logical7_read(self, policy)?;
                 let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(
                     policy, inner,
                 )?;
@@ -4580,6 +4626,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<crate::MIndex, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4605,6 +4652,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4624,6 +4672,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4643,6 +4692,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4662,6 +4712,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4681,6 +4732,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4707,6 +4759,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<ScanByKeyControl<R>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 KeyEq: op::BinaryPredicateOp<R, Self::Item>,
             {
                 logical7_scan_by_key_control_read::<R, Self, KeyEq>(&self, policy)
@@ -4719,6 +4772,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -4732,6 +4786,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -4745,6 +4800,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -4758,6 +4814,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -4771,6 +4828,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -4784,6 +4842,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<crate::MIndex, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -4803,6 +4862,7 @@ macro_rules! impl_kernel_read_zip {
             where
                 Output: MIterMut<R>,
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
@@ -4820,6 +4880,7 @@ macro_rules! impl_kernel_read_zip {
             where
                 Output: MIterMut<R>,
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
@@ -4855,115 +4916,6 @@ macro_rules! impl_kernel_read_zip {
                 <$ty as KernelRead<R>>::Item: Send + Sync,
             )*
             ($($item,)+): CubeType,
-            $name<$first, $( $ty ),*>:
-                KernelReadAt<R, S0, LogicalItem = ($($item,)+)>,
-            $name<$first, $( $ty ),*>:
-                KernelReadAtEnv<R, Env0, LogicalItem = ($($item,)+)>,
-            <$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-            <$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::ExprAt:
-                crate::expr::LogicalDeviceExpr7<
-                    ($($item,)+),
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-                    <<$name<$first, $( $ty ),*> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-                >,
-            <$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt:
-                crate::expr::LogicalDeviceExpr7Shape<($($item,)+)>
-                    + crate::expr::LogicalDeviceExpr7<
-                        ($($item,)+),
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf0,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf1,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf2,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf3,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf4,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf5,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf6,
-                    > + crate::expr::LogicalDevicePack7<
-                        ($($item,)+),
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf0,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf1,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf2,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf3,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf4,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf5,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf6,
-                    > + crate::expr::LogicalHostPack7<
-                        ($($item,)+),
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf0,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf1,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf2,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf3,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf4,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf5,
-                        <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                            ($($item,)+),
-                        >>::Leaf6,
-                    >,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf0: MStorageElement,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf1: MStorageElement,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf2: MStorageElement,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf3: MStorageElement,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf4: MStorageElement,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf5: MStorageElement,
-            <<$name<$first, $( $ty ),*> as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
-                ($($item,)+),
-            >>::Leaf6: MStorageElement,
         {
             type Item = ($($item,)+);
 
@@ -4987,11 +4939,15 @@ macro_rules! impl_kernel_read_zip {
                 op: Op,
             ) -> Result<Self::Item, Error>
             where
-                Self::Item: MItem<R>,
+                Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+                Self: KernelReadBoundMany<R>,
                 Op: op::ReductionOp<R, Self::Item>,
             {
-                let _ = op;
-                reduce_logical7_read::<R, Self, Op>(self, policy, init)
+                let inner = materialize_logical7_read(self, policy)?;
+                let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(
+                    policy, inner,
+                )?;
+                <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
             }
 
             fn count_if_read<Pred>(
@@ -5002,6 +4958,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<crate::MIndex, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5027,6 +4984,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5046,6 +5004,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5065,6 +5024,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5084,6 +5044,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5103,6 +5064,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::PredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5129,6 +5091,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<ScanByKeyControl<R>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 KeyEq: op::BinaryPredicateOp<R, Self::Item>,
             {
                 logical7_scan_by_key_control_read::<R, Self, KeyEq>(&self, policy)
@@ -5141,6 +5104,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Pred: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = pred;
@@ -5154,6 +5118,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -5167,6 +5132,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -5180,6 +5146,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -5193,6 +5160,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -5206,6 +5174,7 @@ macro_rules! impl_kernel_read_zip {
             ) -> Result<crate::MIndex, Error>
             where
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Less: op::BinaryPredicateOp<R, Self::Item>,
             {
                 let _ = less;
@@ -5225,6 +5194,7 @@ macro_rules! impl_kernel_read_zip {
             where
                 Output: MIterMut<R>,
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
@@ -5242,6 +5212,7 @@ macro_rules! impl_kernel_read_zip {
             where
                 Output: MIterMut<R>,
                 Self::Item: MItem<R>,
+                Self: KernelReadBoundMany<R>,
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
@@ -5273,121 +5244,6 @@ where
     <A as KernelRead<R>>::Item: Send + Sync,
     <B as KernelRead<R>>::Item: Send + Sync,
     (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item): CubeType,
-    ZipRead2<A, B>: KernelReadAtEnv<
-            R,
-            Env0,
-            LogicalItem = (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item),
-        >,
-    <ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-    <ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::ExprAt: crate::expr::LogicalDeviceExpr7<
-            (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item),
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-            <<ZipRead2<A, B> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        >,
-    A: KernelReadAt<R, S0, LogicalItem = <A as KernelRead<R>>::Item>,
-    B: KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next, LogicalItem = <B as KernelRead<R>>::Item>,
-    (
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-    ): crate::expr::LogicalDeviceExpr3Shape<(
-            <A as KernelRead<R>>::Item,
-            <B as KernelRead<R>>::Item,
-        )> + crate::expr::LogicalDeviceExpr3<
-            (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item),
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafA,
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafB,
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafC,
-        > + crate::expr::LogicalDevicePack3<
-            (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item),
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafA,
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafB,
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafC,
-        > + crate::expr::LogicalHostPack3<
-            (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item),
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafA,
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafB,
-            <(
-                <A as KernelReadAt<R, S0>>::ExprAt,
-                <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-            ) as crate::expr::LogicalDeviceExpr3Shape<(
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-            )>>::LeafC,
-        >,
-    <(
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-    ) as crate::expr::LogicalDeviceExpr3Shape<(
-        <A as KernelRead<R>>::Item,
-        <B as KernelRead<R>>::Item,
-    )>>::LeafA: MStorageElement,
-    <(
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-    ) as crate::expr::LogicalDeviceExpr3Shape<(
-        <A as KernelRead<R>>::Item,
-        <B as KernelRead<R>>::Item,
-    )>>::LeafB: MStorageElement,
-    <(
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-    ) as crate::expr::LogicalDeviceExpr3Shape<(
-        <A as KernelRead<R>>::Item,
-        <B as KernelRead<R>>::Item,
-    )>>::LeafC: MStorageElement,
 {
     type Item = (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item);
 
@@ -5409,11 +5265,13 @@ where
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Item: MItem<R>,
+        Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+        Self: KernelReadBoundMany<R>,
         Op: op::ReductionOp<R, Self::Item>,
     {
-        let _ = op;
-        reduce_logical3_read::<R, Self, Op>(self, policy, init)
+        let inner = materialize_logical7_read(self, policy)?;
+        let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(policy, inner)?;
+        <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
     }
 
     fn count_if_read<Pred>(
@@ -5424,6 +5282,7 @@ where
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5449,6 +5308,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5468,6 +5328,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5487,6 +5348,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5506,6 +5368,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5525,6 +5388,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5550,6 +5414,7 @@ where
     ) -> Result<ScanByKeyControl<R>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         KeyEq: op::BinaryPredicateOp<R, Self::Item>,
     {
         logical7_scan_by_key_control_read::<R, Self, KeyEq>(&self, policy)
@@ -5562,6 +5427,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5575,6 +5441,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -5588,6 +5455,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -5601,6 +5469,7 @@ where
     ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -5610,6 +5479,7 @@ where
     fn is_sorted_read<Less>(self, policy: &CubePolicy<R>, less: Less) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -5623,6 +5493,7 @@ where
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -5642,6 +5513,7 @@ where
     where
         Output: MIterMut<R>,
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -5659,6 +5531,7 @@ where
     where
         Output: MIterMut<R>,
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -5688,159 +5561,17 @@ where
     <A as KernelRead<R>>::Item: Send + Sync,
     <B as KernelRead<R>>::Item: Send + Sync,
     <C as KernelRead<R>>::Item: Send + Sync,
-    (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item): CubeType,
-    ZipRead3<A, B, C>: KernelReadAtEnv<
-            R,
-            Env0,
-            LogicalItem = (
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-                <C as KernelRead<R>>::Item,
-            ),
-        >,
-    <ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv: EnvLeaf7,
-    <ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::ExprAt:
-        crate::expr::LogicalDeviceExpr7<
-            (
-                <A as KernelRead<R>>::Item,
-                <B as KernelRead<R>>::Item,
-                <C as KernelRead<R>>::Item,
-            ),
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0,
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf1,
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf2,
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf3,
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
-            <<ZipRead3<A, B, C> as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
-        >,
-    A: KernelReadAt<R, S0, LogicalItem = <A as KernelRead<R>>::Item>,
-    B: KernelReadAt<
-        R,
-        <A as KernelReadAt<R, S0>>::Next,
-        LogicalItem = <B as KernelRead<R>>::Item,
-    >,
-    C: KernelReadAt<
-        R,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-        LogicalItem = <C as KernelRead<R>>::Item,
-    >,
     (
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-        <C as KernelReadAt<
-            R,
-            <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-        >>::ExprAt,
-    ): crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>
-            + crate::expr::LogicalDeviceExpr3<
-                (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item),
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafA,
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafB,
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafC,
-            > + crate::expr::LogicalDevicePack3<
-                (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item),
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafA,
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafB,
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafC,
-            > + crate::expr::LogicalHostPack3<
-                (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item),
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafA,
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafB,
-                <(
-                    <A as KernelReadAt<R, S0>>::ExprAt,
-                    <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-                    <C as KernelReadAt<
-                        R,
-                        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-                    >>::ExprAt,
-                ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafC,
-            >,
-    <(
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-        <C as KernelReadAt<
-            R,
-            <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-        >>::ExprAt,
-    ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafA:
-        MStorageElement,
-    <(
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-        <C as KernelReadAt<
-            R,
-            <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-        >>::ExprAt,
-    ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafB:
-        MStorageElement,
-    <(
-        <A as KernelReadAt<R, S0>>::ExprAt,
-        <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::ExprAt,
-        <C as KernelReadAt<
-            R,
-            <B as KernelReadAt<R, <A as KernelReadAt<R, S0>>::Next>>::Next,
-        >>::ExprAt,
-    ) as crate::expr::LogicalDeviceExpr3Shape<(<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item)>>::LeafC:
-        MStorageElement,
+        <A as KernelRead<R>>::Item,
+        <B as KernelRead<R>>::Item,
+        <C as KernelRead<R>>::Item,
+    ): CubeType,
 {
-    type Item = (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item, <C as KernelRead<R>>::Item);
+    type Item = (
+        <A as KernelRead<R>>::Item,
+        <B as KernelRead<R>>::Item,
+        <C as KernelRead<R>>::Item,
+    );
 
     fn len(&self) -> usize {
         self.a.len()
@@ -5862,11 +5593,13 @@ where
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Item: MItem<R>,
+        Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+        Self: KernelReadBoundMany<R>,
         Op: op::ReductionOp<R, Self::Item>,
     {
-        let _ = op;
-        reduce_logical3_read::<R, Self, Op>(self, policy, init)
+        let inner = materialize_logical7_read(self, policy)?;
+        let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(policy, inner)?;
+        <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
     }
 
     fn count_if_read<Pred>(
@@ -5877,6 +5610,7 @@ where
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5886,9 +5620,12 @@ where
             return Ok(0);
         };
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-        let selected =
-            crate::detail::primitives::select::selected_rank_from_flags(policy, len, len_u32, flags)?;
-        mindex_from_usize(crate::detail::primitives::select::selected_count(policy, &selected)?)
+        let selected = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
+        mindex_from_usize(crate::detail::primitives::select::selected_count(
+            policy, &selected,
+        )?)
     }
 
     fn all_of_read<Pred>(
@@ -5899,6 +5636,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5918,6 +5656,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5937,6 +5676,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5956,6 +5696,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5975,6 +5716,7 @@ where
     ) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -5987,8 +5729,9 @@ where
             crate::detail::primitives::search::first_unset_flag(policy, flags.clone(), len, len)?
                 .unwrap_or(mindex_from_usize(len)?);
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-        let selected =
-            crate::detail::primitives::select::selected_rank_from_flags(policy, len, len_u32, flags)?;
+        let selected = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
         let selected_count = crate::detail::primitives::select::selected_count(policy, &selected)?;
         Ok(mindex_from_usize(selected_count)? == first_rejected)
     }
@@ -5999,6 +5742,7 @@ where
     ) -> Result<ScanByKeyControl<R>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         KeyEq: op::BinaryPredicateOp<R, Self::Item>,
     {
         logical7_scan_by_key_control_read::<R, Self, KeyEq>(&self, policy)
@@ -6011,6 +5755,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Pred: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = pred;
@@ -6024,6 +5769,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -6037,6 +5783,7 @@ where
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -6050,6 +5797,7 @@ where
     ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -6059,6 +5807,7 @@ where
     fn is_sorted_read<Less>(self, policy: &CubePolicy<R>, less: Less) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -6072,6 +5821,7 @@ where
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
         let _ = less;
@@ -6091,6 +5841,7 @@ where
     where
         Output: MIterMut<R>,
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
@@ -6108,6 +5859,7 @@ where
     where
         Output: MIterMut<R>,
         Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {

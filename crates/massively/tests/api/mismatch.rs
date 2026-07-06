@@ -7,8 +7,8 @@ fn mismatch_with_generic_right<Left, Right, Eq>(
     eq: Eq,
 ) -> Option<massively::MIndex>
 where
-    Left: massively::MIter<WgpuRuntime>,
-    Right: massively::MIter<WgpuRuntime, Item = Left::Item>,
+    Left: massively::iter::MIter<WgpuRuntime>,
+    Right: massively::iter::MIter<WgpuRuntime, Item = Left::Item>,
     Eq: BinaryPredicateOp<WgpuRuntime, Left::Item>,
 {
     mismatch(exec, left, right, eq).unwrap()

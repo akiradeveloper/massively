@@ -9,77 +9,21 @@ macro_rules! impl_miter_zip {
             ($( <$ty as MIter<R>>::Item, )+): MItem<R>,
             $( <$ty as MIter<R>>::Item: Send + Sync, )+
             crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+>:
-                crate::detail::read::KernelRead<R, Item = ($( <$ty as MIter<R>>::Item, )+)>
-                    + crate::detail::read::KernelReadAt<
-                        R,
-                        crate::detail::device::S0,
-                        LogicalItem = ($( <$ty as MIter<R>>::Item, )+),
-                    >
-                    + crate::detail::read::KernelReadBoundMany<
-                        R,
-                        Item = ($( <$ty as MIter<R>>::Item, )+),
-                    >,
-            <crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                R,
-                crate::detail::device::S0,
-            >>::ExprAt: crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>
-                + crate::expr::LogicalDeviceExpr3<
-                    ($( <$ty as MIter<R>>::Item, )+),
-                    <<crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                        R,
-                        crate::detail::device::S0,
-                    >>::ExprAt as crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>>::LeafA,
-                    <<crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                        R,
-                        crate::detail::device::S0,
-                    >>::ExprAt as crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>>::LeafB,
-                    <<crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                        R,
-                        crate::detail::device::S0,
-                    >>::ExprAt as crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>>::LeafC,
-                >,
-            <<crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                R,
-                crate::detail::device::S0,
-            >>::ExprAt as crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>>::LeafA:
-                MStorageElement,
-            <<crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                R,
-                crate::detail::device::S0,
-            >>::ExprAt as crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>>::LeafB:
-                MStorageElement,
-            <<crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+> as crate::detail::read::KernelReadAt<
-                R,
-                crate::detail::device::S0,
-            >>::ExprAt as crate::expr::LogicalDeviceExpr3Shape<($( <$ty as MIter<R>>::Item, )+)>>::LeafC:
-                MStorageElement,
+                crate::detail::read::KernelReadBoundMany<R, Item = ($( <$ty as MIter<R>>::Item, )+)>,
         {
             type Item = ($( <$ty as MIter<R>>::Item, )+);
-            type Slice<'a>
-                = $name<$( <$ty as MIter<R>>::Slice<'a> ),+>
-            where
-                Self: 'a;
             type Inner = ($( <$ty as MIter<R>>::Inner, )+);
             type Read = crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+>;
-
             fn len(&self) -> MIndex {
                 self.0.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                let range = crate::iter::normalize_zip_range(self.len(), range);
-                $name($( self.$idx.slice(range.clone()) ),+)
             }
 
             fn into_inner(self) -> Self::Inner {
                 unreachable!("read-only MIter lowering requires a CubePolicy")
             }
 
-            fn lower_read(self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
-                Ok(crate::detail::read::$read::new($( self.$idx.lower_read(policy)? ),+))
+            fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+                Ok(crate::detail::read::$read::new($( self.$idx.lower_read_ref(policy)? ),+))
             }
 
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -119,103 +63,6 @@ macro_rules! impl_miter_zip {
                 Ok(view)
             }
 
-            fn copy_selected_with_policy<Output>(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                stencil: crate::detail::api::PrecomputedSelection<R>,
-                output: Output,
-            ) -> Result<MIndex, Error>
-            where
-                Self::Item: MAlloc<R>,
-                Output: MIterMut<R, Item = Self::Item>,
-            {
-                let read = self.lower_read(policy)?;
-                let inner = crate::detail::read::materialize_logical3_read(read, policy)?;
-                let source = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::copy_selected_from_view(
-                    policy, source, stencil, output,
-                )
-            }
-
-            fn gather_with_policy<Output>(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
-                output: Output,
-            ) -> Result<(), Error>
-            where
-                Self::Item: MAlloc<R>,
-                Output: MIterMut<R, Item = Self::Item>,
-            {
-                let read = self.lower_read(policy)?;
-                let inner = crate::detail::read::materialize_logical3_read(read, policy)?;
-                let source = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::gather_from_view(policy, source, indices, output)
-            }
-
-            fn gather_where_with_policy<Output>(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
-                stencil: crate::detail::api::PrecomputedSelection<R>,
-                output: Output,
-            ) -> Result<(), Error>
-            where
-                Self::Item: MAlloc<R>,
-                Output: MIterMut<R, Item = Self::Item>,
-            {
-                let read = self.lower_read(policy)?;
-                let inner = crate::detail::read::materialize_logical3_read(read, policy)?;
-                let source = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::gather_where_from_view(
-                    policy, source, indices, stencil, output,
-                )
-            }
-
-            fn scatter_with_policy<Output>(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
-                output: Output,
-            ) -> Result<(), Error>
-            where
-                Self::Item: MAlloc<R>,
-                Output: MIterMut<R, Item = Self::Item>,
-            {
-                let read = self.lower_read(policy)?;
-                let inner = crate::detail::read::materialize_logical3_read(read, policy)?;
-                let source = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::scatter_from_view(policy, source, indices, output)
-            }
-
-            fn scatter_where_with_policy<Output>(
-                self,
-                policy: &crate::detail::CubePolicy<R>,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
-                stencil: crate::detail::api::PrecomputedSelection<R>,
-                output: Output,
-            ) -> Result<(), Error>
-            where
-                Self::Item: MAlloc<R>,
-                Output: MIterMut<R, Item = Self::Item>,
-            {
-                let read = self.lower_read(policy)?;
-                let inner = crate::detail::read::materialize_logical3_read(read, policy)?;
-                let source = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::scatter_where_from_view(
-                    policy, source, indices, stencil, output,
-                )
-            }
         }
     };
 }
@@ -231,34 +78,10 @@ macro_rules! impl_miter_mut_zip {
             >,
         {
             type Item = ($( $ty, )+);
-            type Slice<'b>
-                = $name<$( crate::runtime::DeviceSlice<'b, R, $ty> ),+>
-            where
-                Self: 'b;
-            type SliceMut<'b>
-                = $name<$( DeviceSliceMut<'b, R, $ty> ),+>
-            where
-                Self: 'b;
             type Inner = ($( crate::detail::device::DeviceColumnMutView<R, $ty>, )+);
 
             fn len(&self) -> MIndex {
                 self.0.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                let range = crate::iter::normalize_zip_range(self.len(), range);
-                $name($( self.$idx.slice(range.clone()) ),+)
-            }
-
-            fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                let range = crate::iter::normalize_zip_range(self.len(), range);
-                $name($( self.$idx.slice_mut(range.clone()) ),+)
             }
 
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -298,7 +121,7 @@ macro_rules! impl_miter_mut_zip {
                 Ok(None)
             }
 
-            fn into_inner(self) -> Self::Inner {
+            fn inner(&self) -> Self::Inner {
                 ($(
                     crate::detail::device::DeviceColumnMutView::from_slice(
                         &self.$idx.source.inner,
@@ -449,43 +272,21 @@ macro_rules! impl_wide_miter_zip {
             $( $ty: MIter<R>, )+
             ($( <$ty as MIter<R>>::Item, )+): MItem<R>,
             crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+>:
-                crate::detail::read::KernelRead<R, Item = ($( <$ty as MIter<R>>::Item, )+)>
-                    + crate::detail::read::KernelReadAt<
-                        R,
-                        crate::detail::device::S0,
-                        LogicalItem = ($( <$ty as MIter<R>>::Item, )+),
-                    >
-                    + crate::detail::read::KernelReadBoundMany<
-                        R,
-                        Item = ($( <$ty as MIter<R>>::Item, )+),
-                    >,
+                crate::detail::read::KernelReadBoundMany<R, Item = ($( <$ty as MIter<R>>::Item, )+)>,
         {
             type Item = ($( <$ty as MIter<R>>::Item, )+);
-            type Slice<'a>
-                = $name<$( <$ty as MIter<R>>::Slice<'a> ),+>
-            where
-                Self: 'a;
             type Inner = ($( <$ty as MIter<R>>::Inner, )+);
             type Read = crate::detail::read::$read<$( <$ty as MIter<R>>::Read ),+>;
-
             fn len(&self) -> MIndex {
                 self.0.len()
-            }
-
-            fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-            where
-                Bounds: std::ops::RangeBounds<MIndex>,
-            {
-                let range = crate::iter::normalize_zip_range(self.len(), range);
-                $name($( self.$idx.slice(range.clone()) ),+)
             }
 
             fn into_inner(self) -> Self::Inner {
                 unreachable!("read-only MIter lowering requires a CubePolicy")
             }
 
-            fn lower_read(self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
-                Ok(crate::detail::read::$read::new($( self.$idx.lower_read(policy)? ),+))
+            fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+                Ok(crate::detail::read::$read::new($( self.$idx.lower_read_ref(policy)? ),+))
             }
 
             fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -541,3 +342,182 @@ impl_miter_mut_zip!(Zip4; A: 0, C: 1, D: 2, E: 3);
 impl_miter_mut_zip!(Zip5; A: 0, C: 1, D: 2, E: 3, F: 4);
 impl_miter_mut_zip!(Zip6; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5);
 impl_miter_mut_zip!(Zip7; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5, H: 6);
+
+macro_rules! impl_sliced_output_inner {
+    ($read:ident; $( $ty:ident : $idx:tt ),+) => {
+        impl<R, $( $ty ),+> SlicedOutputInner<R, ($( $ty, )+)>
+            for ($( crate::detail::device::DeviceColumnMutView<R, $ty>, )+)
+        where
+            R: Runtime,
+            $( $ty: MStorageElement + 'static, )+
+            ($( $ty, )+): MAlloc<R,
+                Inner = ($( crate::detail::DeviceVec<R, $ty>, )+),
+                View = ($( crate::detail::device::DeviceColumnView<R, $ty>, )+),
+            >,
+            crate::detail::read::$read<$( crate::detail::read::ColumnRead<R, $ty> ),+>:
+                crate::detail::read::KernelReadBoundMany<R, Item = ($( $ty, )+)>,
+        {
+            type Read = crate::detail::read::$read<$( crate::detail::read::ColumnRead<R, $ty> ),+>;
+
+            fn slice_inner(self, range: std::ops::Range<MIndex>) -> Self {
+                let start = usize_from_mindex(range.start);
+                let len = usize_from_mindex(range.end - range.start);
+                ($(
+                    crate::detail::device::DeviceColumnMutView::from_slice(
+                        &self.$idx.source,
+                        self.$idx.offset + start,
+                        len,
+                    ),
+                )+)
+            }
+
+            fn into_read(self) -> Self::Read {
+                crate::detail::read::$read::new($(
+                    crate::detail::read::ColumnRead::new(
+                        crate::detail::device::DeviceColumnView::from_slice(
+                            &self.$idx.source,
+                            self.$idx.offset,
+                            self.$idx.len,
+                        ),
+                    ),
+                )+)
+            }
+
+            fn into_alloc_view(self) -> <($( $ty, )+) as MAlloc<R>>::View {
+                ($(
+                    crate::detail::device::DeviceColumnView::from_slice(
+                        &self.$idx.source,
+                        self.$idx.offset,
+                        self.$idx.len,
+                    ),
+                )+)
+            }
+
+            fn write_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                inner: <($( $ty, )+) as MAlloc<R>>::Inner,
+            ) -> Result<(), Error> {
+                $(
+                    {
+                        let input = crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        crate::detail::apply::MaterializeWriteApply::new(&self.$idx)
+                            .collect_expr(policy, &input)?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn write_prefix_from_inner(
+                mut self,
+                policy: &crate::detail::CubePolicy<R>,
+                inner: <($( $ty, )+) as MAlloc<R>>::Inner,
+            ) -> Result<(), Error> {
+                $(
+                    {
+                        let input = crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        if input.len > self.$idx.len {
+                            return Err(Error::LengthMismatch {
+                                input: input.len,
+                                output: self.$idx.len,
+                            });
+                        }
+                        self.$idx.len = input.len;
+                        crate::detail::apply::MaterializeWriteApply::new(&self.$idx)
+                            .collect_expr(policy, &input)?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn write_split_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                selected: <($( $ty, )+) as MAlloc<R>>::Inner,
+                rejected: <($( $ty, )+) as MAlloc<R>>::Inner,
+            ) -> Result<(), Error> {
+                $(
+                    {
+                        let selected_input =
+                            crate::detail::device::DeviceColumnView::from_column(&selected.$idx);
+                        let rejected_input =
+                            crate::detail::device::DeviceColumnView::from_column(&rejected.$idx);
+                        let input_len = selected_input.len + rejected_input.len;
+                        if input_len > self.$idx.len {
+                            return Err(Error::LengthMismatch {
+                                input: input_len,
+                                output: self.$idx.len,
+                            });
+                        }
+                        let mut selected_output = self.$idx.clone();
+                        selected_output.len = selected_input.len;
+                        crate::detail::apply::MaterializeWriteApply::new(&selected_output)
+                            .collect_expr(policy, &selected_input)?;
+
+                        let mut rejected_output = self.$idx.clone();
+                        rejected_output.offset += selected_input.len;
+                        rejected_output.len = rejected_input.len;
+                        crate::detail::apply::MaterializeWriteApply::new(&rejected_output)
+                            .collect_expr(policy, &rejected_input)?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn write_where_from_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                inner: <($( $ty, )+) as MAlloc<R>>::Inner,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+            ) -> Result<(), Error> {
+                $(
+                    {
+                        let input = crate::detail::device::DeviceColumnView::from_column(&inner.$idx);
+                        crate::detail::apply::MaterializeWriteApply::new(&self.$idx)
+                            .copy_where_expr(
+                                policy,
+                                &input,
+                                &stencil,
+                                KernelOp::<R, StencilFlag>::new(),
+                            )?;
+                    }
+                )+
+                Ok(())
+            }
+
+            fn replace_where_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                replacement: ($( $ty, )+),
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+            ) -> Result<(), Error> {
+                let mask = stencil.mask();
+                $(
+                    crate::detail::apply::MaskWriteApply::new(&mask, &self.$idx)
+                        .replace_value(policy, replacement.$idx)?;
+                )+
+                Ok(())
+            }
+
+            fn fill_inner(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+                value: ($( $ty, )+),
+            ) -> Result<(), Error> {
+                $(
+                    crate::detail::apply::FillWriteApply::new(&self.$idx)
+                        .fill_value(policy, value.$idx)?;
+                )+
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_sliced_output_inner!(ZipRead1; A: 0);
+impl_sliced_output_inner!(ZipRead2; A: 0, B: 1);
+impl_sliced_output_inner!(ZipRead3; A: 0, B: 1, C: 2);
+impl_sliced_output_inner!(ZipRead4; A: 0, B: 1, C: 2, D: 3);
+impl_sliced_output_inner!(ZipRead5; A: 0, B: 1, C: 2, D: 3, E: 4);
+impl_sliced_output_inner!(ZipRead6; A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
+impl_sliced_output_inner!(ZipRead7; A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6);

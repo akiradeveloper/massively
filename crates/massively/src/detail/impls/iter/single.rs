@@ -6,32 +6,19 @@ where
     T: MStorageElement + 'static,
 {
     type Item = T;
-    type Slice<'b>
-        = crate::runtime::DeviceSlice<'b, R, T>
-    where
-        Self: 'b;
     type Inner = crate::detail::device::DeviceColumnView<R, T>;
     type Read = crate::detail::read::ColumnRead<R, T>;
-
     fn len(&self) -> MIndex {
         self.len()
-    }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: std::ops::RangeBounds<MIndex>,
-    {
-        crate::runtime::DeviceSlice::slice(self, range)
     }
 
     fn into_inner(self) -> Self::Inner {
         unreachable!("read-only MIter lowering requires a CubePolicy")
     }
 
-    fn lower_read(self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
-        Ok(crate::detail::read::ColumnRead::new(
-            self.into_inner_with_policy(policy)?,
-        ))
+    fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+        let _ = policy;
+        Ok(crate::detail::read::ColumnRead::new(self.column_view()))
     }
 
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -43,7 +30,7 @@ where
         policy: &crate::detail::CubePolicy<R>,
     ) -> Result<Self::Inner, Error> {
         let _ = policy;
-        Ok(self.slice(..).column_view())
+        Ok(crate::runtime::DeviceSlice::slice(&self, ..).column_view())
     }
 
     fn into_alloc_view_with_policy(
@@ -54,7 +41,7 @@ where
         Self::Item: MAlloc<R>,
     {
         let _ = policy;
-        let view = self.slice(..).column_view();
+        let view = crate::runtime::DeviceSlice::slice(&self, ..).column_view();
         if std::mem::size_of::<Self::Inner>()
             != std::mem::size_of::<<Self::Item as MAlloc<R>>::View>()
             || std::mem::align_of::<Self::Inner>()
@@ -112,74 +99,62 @@ macro_rules! impl_single_zip_miter {
             Source: MIter<R>,
             (Source::Item,): MItem<R>,
             crate::detail::read::ZipRead1<Source::Read>:
-                crate::detail::read::KernelRead<R, Item = (Source::Item,)>
-                    + crate::detail::read::KernelReadAt<
-                        R,
-                        crate::detail::device::S0,
-                        LogicalItem = (Source::Item,),
-                    >
-                    + crate::detail::read::KernelReadBoundMany<R, Item = (Source::Item,)>,
+                crate::detail::read::KernelReadBoundMany<R, Item = (Source::Item,)>,
         {
             type Item = (Source::Item,);
-            type Slice<'a>
-                = $name<Source::Slice<'a>>
-            where
-                Self: 'a;
             type Inner = (Source::Inner,);
             type Read = crate::detail::read::ZipRead1<Source::Read>;
+            fn len(&self) -> MIndex {
+                self.0.len()
+            }
 
-    fn len(&self) -> MIndex {
-        self.0.len()
-    }
+            fn into_inner(self) -> Self::Inner {
+                unreachable!("read-only MIter lowering requires a CubePolicy")
+            }
 
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: std::ops::RangeBounds<MIndex>,
-    {
-        $name(self.0.slice(range))
-    }
+            fn lower_read_ref(
+                &self,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<Self::Read, Error> {
+                Ok(crate::detail::read::ZipRead1::new(
+                    self.0.lower_read_ref(policy)?,
+                ))
+            }
 
-    fn into_inner(self) -> Self::Inner {
-        unreachable!("read-only MIter lowering requires a CubePolicy")
-    }
+            fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
+                self.0.validate_executor(exec)
+            }
 
-    fn lower_read(self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
-        Ok(crate::detail::read::ZipRead1::new(self.0.lower_read(policy)?))
-    }
+            fn into_inner_with_policy(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<Self::Inner, Error> {
+                Ok((self.0.into_inner_with_policy(policy)?,))
+            }
 
-    fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
-        self.0.validate_executor(exec)
-    }
-
-    fn into_inner_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-    ) -> Result<Self::Inner, Error> {
-        Ok((self.0.into_inner_with_policy(policy)?,))
-    }
-
-    fn into_alloc_view_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-    ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
-    where
-        Self::Item: MAlloc<R>,
-    {
-        let inner = self.into_inner_with_policy(policy)?;
-        if std::mem::size_of::<Self::Inner>()
-            != std::mem::size_of::<<Self::Item as MAlloc<R>>::View>()
-            || std::mem::align_of::<Self::Inner>()
-                != std::mem::align_of::<<Self::Item as MAlloc<R>>::View>()
-        {
-            return Err(Error::Launch {
-                message: "alloc view lowering is not supported for this iterator shape".to_string(),
-            });
+            fn into_alloc_view_with_policy(
+                self,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<<Self::Item as MAlloc<R>>::View, Error>
+            where
+                Self::Item: MAlloc<R>,
+            {
+                let inner = self.into_inner_with_policy(policy)?;
+                if std::mem::size_of::<Self::Inner>()
+                    != std::mem::size_of::<<Self::Item as MAlloc<R>>::View>()
+                    || std::mem::align_of::<Self::Inner>()
+                        != std::mem::align_of::<<Self::Item as MAlloc<R>>::View>()
+                {
+                    return Err(Error::Launch {
+                        message: "alloc view lowering is not supported for this iterator shape"
+                            .to_string(),
+                    });
+                }
+                let view = unsafe { std::mem::transmute_copy(&inner) };
+                std::mem::forget(inner);
+                Ok(view)
+            }
         }
-        let view = unsafe { std::mem::transmute_copy(&inner) };
-        std::mem::forget(inner);
-        Ok(view)
-    }
-}
     };
 }
 
@@ -189,35 +164,17 @@ impl<'a, R, T> MIterMut<R> for Zip1<DeviceSliceMut<'a, R, T>>
 where
     R: Runtime,
     T: MStorageElement + 'static,
-    (T,): MAlloc<R, Inner = (crate::detail::DeviceVec<R, T>,)>,
+    (T,): MAlloc<
+            R,
+            Inner = (crate::detail::DeviceVec<R, T>,),
+            View = (crate::detail::device::DeviceColumnView<R, T>,),
+        >,
 {
     type Item = (T,);
-    type Slice<'b>
-        = Zip1<crate::runtime::DeviceSlice<'b, R, T>>
-    where
-        Self: 'b;
-    type SliceMut<'b>
-        = Zip1<DeviceSliceMut<'b, R, T>>
-    where
-        Self: 'b;
     type Inner = (crate::detail::device::DeviceColumnMutView<R, T>,);
 
     fn len(&self) -> MIndex {
         self.0.len()
-    }
-
-    fn slice<Bounds>(&self, range: Bounds) -> Self::Slice<'_>
-    where
-        Bounds: std::ops::RangeBounds<MIndex>,
-    {
-        Zip1(self.0.slice(range))
-    }
-
-    fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut<'_>
-    where
-        Bounds: std::ops::RangeBounds<MIndex>,
-    {
-        Zip1(self.0.slice_mut(range))
     }
 
     fn validate_executor(&self, exec: &Executor<R>) -> Result<(), Error> {
@@ -244,7 +201,7 @@ where
         ))
     }
 
-    fn into_inner(self) -> Self::Inner {
+    fn inner(&self) -> Self::Inner {
         (crate::detail::device::DeviceColumnMutView::from_slice(
             &self.0.source.inner,
             usize_from_mindex(self.0.offset),

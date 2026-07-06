@@ -8,9 +8,9 @@ fn set_intersection_with_generic_right<Left, Right, Less, Output>(
     out: Output,
 ) -> Result<massively::MIndex, massively::Error>
 where
-    Left: massively::MIter<WgpuRuntime>,
+    Left: massively::iter::MIter<WgpuRuntime>,
     Left::Item: massively::MAlloc<WgpuRuntime>,
-    Right: massively::MIter<WgpuRuntime, Item = Left::Item>,
+    Right: massively::iter::MIter<WgpuRuntime, Item = Left::Item>,
     Less: BinaryPredicateOp<WgpuRuntime, Left::Item>,
     Output: massively::MIterMut<WgpuRuntime, Item = Left::Item>,
 {

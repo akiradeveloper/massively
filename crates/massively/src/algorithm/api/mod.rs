@@ -3,7 +3,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::index::MIndex;
-use crate::iter::{MIter, MIterMut};
+use crate::iter::{MIter, MIterMut, MIterReduce};
 use crate::op;
 use crate::runtime::Executor;
 

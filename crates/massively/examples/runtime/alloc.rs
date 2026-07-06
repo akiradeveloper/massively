@@ -12,7 +12,7 @@ fn scatter_to_new<R, Input>(
 ) -> Result<<Input::Item as MAlloc<R>>::Storage, massively::Error>
 where
     R: cubecl::prelude::Runtime,
-    Input: MIter<R>,
+    Input: massively::iter::MIter<R>,
     Input::Item: MAlloc<R>,
 {
     let out = exec.alloc::<Input::Item>(len)?;

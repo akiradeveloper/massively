@@ -7,7 +7,7 @@ use crate::detail::dispatch as sealed;
 use crate::detail::op_adapter::{KernelOp, KernelScalarInputOp, StencilFlag};
 use crate::error::ensure_same_len;
 use crate::index::{MIndex, mindex_from_usize, usize_from_mindex};
-use crate::iter::{MIter, MIterMut, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
+use crate::iter::{MIter, MIterMut, SlicedOutputInner, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
 use crate::op;
 use crate::runtime::{DeviceSliceMut, DeviceVec, Executor};
 use crate::value::{MAlloc, MItem, MStorageElement, StorageFromInner};
