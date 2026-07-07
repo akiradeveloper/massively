@@ -26,10 +26,9 @@ impl<B> UnaryOp<B, (f32, f32, f32)> for AdvanceParticle
 where
     B: cubecl::prelude::Runtime,
 {
-    type Env = ();
     type Output = (f32, f32, f32);
 
-    fn apply(_env: (), input: (f32, f32, f32)) -> (f32, f32, f32) {
+    fn apply(input: (f32, f32, f32)) -> (f32, f32, f32) {
         let x = input.0 + input.2;
         let y = input.1 + 0.5;
         (x, y, input.2)
@@ -43,10 +42,9 @@ impl<B> UnaryOp<B, (f32, f32, f32)> for OutsideParticleBox
 where
     B: cubecl::prelude::Runtime,
 {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (f32, f32, f32)) -> (u32,) {
+    fn apply(input: (f32, f32, f32)) -> (u32,) {
         if input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0 {
             (1_u32,)
         } else {
@@ -70,31 +68,29 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let next_x = exec.constant(x.len(), 0.0_f32)?;
-    let next_y = exec.constant(y.len(), 0.0_f32)?;
-    let next_vx = exec.constant(vx.len(), 0.0_f32)?;
+    let next_x = exec.full(x.len(), 0.0_f32)?;
+    let next_y = exec.full(y.len(), 0.0_f32)?;
+    let next_vx = exec.full(vx.len(), 0.0_f32)?;
     transform(
         exec,
         Zip3(x.slice(..), y.slice(..), vx.slice(..)),
         AdvanceParticle,
-        (),
         Zip3(
             next_x.slice_mut(..),
             next_y.slice_mut(..),
             next_vx.slice_mut(..),
         ),
     )?;
-    let stencil = exec.constant(next_x.len(), 0_u32)?;
+    let stencil = exec.full(next_x.len(), 0_u32)?;
     transform(
         exec,
         Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
         OutsideParticleBox,
-        (),
         Zip1(stencil.slice_mut(..)),
     )?;
-    let x = exec.constant(next_x.len(), 0.0_f32)?;
-    let y = exec.constant(next_y.len(), 0.0_f32)?;
-    let vx = exec.constant(next_vx.len(), 0.0_f32)?;
+    let x = exec.full(next_x.len(), 0.0_f32)?;
+    let y = exec.full(next_y.len(), 0.0_f32)?;
+    let vx = exec.full(next_vx.len(), 0.0_f32)?;
     let len = remove_where(
         exec,
         Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),

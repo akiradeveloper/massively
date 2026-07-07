@@ -5,14 +5,13 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         input: crate::detail::device::DeviceColumnView<R, Input>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
         Input: MStorageElement + crate::value::MItem<R>,
         Op: op::UnaryOp<R, Input, Output = Self>,
     {
-        let _ = (policy, input, op, env);
+        let _ = (policy, input, op);
         Err(Error::Launch {
             message: "transform is not supported for this input/output item shape".to_string(),
         })
@@ -22,14 +21,13 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         policy: &crate::detail::CubePolicy<R>,
         input: crate::detail::device::DeviceColumnView<R, Input>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
         Input: MStorageElement,
         Op: op::UnaryOp<R, (Input,), Output = Self>,
     {
-        let _ = (policy, input, op, env);
+        let _ = (policy, input, op);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -40,7 +38,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         left: crate::detail::device::DeviceColumnView<R, Left>,
         right: crate::detail::device::DeviceColumnView<R, Right>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -48,7 +45,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Right: MStorageElement,
         Op: op::UnaryOp<R, (Left, Right), Output = Self>,
     {
-        let _ = (policy, left, right, op, env);
+        let _ = (policy, left, right, op);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -60,7 +57,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         second: crate::detail::device::DeviceColumnView<R, Second>,
         third: crate::detail::device::DeviceColumnView<R, Third>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -69,7 +65,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Third: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third), Output = Self>,
     {
-        let _ = (policy, first, second, third, op, env);
+        let _ = (policy, first, second, third, op);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -80,7 +76,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         bindings: crate::detail::device::KernelColumnBindings,
         len: usize,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -91,7 +86,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Expr: crate::expr::LogicalDeviceExpr3<Input, LeafA, LeafB, LeafC>,
         Op: op::UnaryOp<R, Input, Output = Self>,
     {
-        let _ = (policy, bindings, len, op, env);
+        let _ = (policy, bindings, len, op);
         Err(Error::Launch {
             message: "transform is not supported for this logical input shape".to_string(),
         })
@@ -103,7 +98,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         bindings: crate::detail::device::KernelColumnBindings,
         len: usize,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -119,7 +113,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
             crate::expr::LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
         Op: op::UnaryOp<R, Input, Output = Self>,
     {
-        let _ = (policy, bindings, len, op, env);
+        let _ = (policy, bindings, len, op);
         Err(Error::Launch {
             message: "transform is not supported for this logical input shape".to_string(),
         })
@@ -132,7 +126,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         third: crate::detail::device::DeviceColumnView<R, Third>,
         fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -142,7 +135,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Fourth: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth), Output = Self>,
     {
-        let _ = (policy, first, second, third, fourth, op, env);
+        let _ = (policy, first, second, third, fourth, op);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -156,7 +149,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
         fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -167,7 +159,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Fifth: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth), Output = Self>,
     {
-        let _ = (policy, first, second, third, fourth, fifth, op, env);
+        let _ = (policy, first, second, third, fourth, fifth, op);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -183,7 +175,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
         sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -195,7 +186,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Sixth: MStorageElement,
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth), Output = Self>,
     {
-        let _ = (policy, first, second, third, fourth, fifth, sixth, op, env);
+        let _ = (policy, first, second, third, fourth, fifth, sixth, op);
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),
         })
@@ -212,7 +203,6 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
         seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MAlloc<R>>::Inner, Error>
     where
         Self: MAlloc<R>,
@@ -226,7 +216,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Op: op::UnaryOp<R, (First, Second, Third, Fourth, Fifth, Sixth, Seventh), Output = Self>,
     {
         let _ = (
-            policy, first, second, third, fourth, fifth, sixth, seventh, op, env,
+            policy, first, second, third, fourth, fifth, sixth, seventh, op,
         );
         Err(Error::Launch {
             message: "transform is not supported for this output item shape".to_string(),

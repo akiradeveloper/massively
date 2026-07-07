@@ -122,7 +122,6 @@ pub fn remove_if<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelSelectInput<Pred>>::Runtime>,
     source: Source,
     _pred: Pred,
-    env: <<Source as crate::detail::read::KernelSelectInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelSelectInput<Pred>>::Runtime>,
 ) -> Result<
     <<Source as crate::detail::read::KernelSelectInput<Pred>>::Output as MaterializeOutput>::Output,
     Error,
@@ -133,7 +132,7 @@ where
         Runtime = <Source as crate::detail::read::KernelSelectInput<Pred>>::Runtime,
     >,
 {
-    materialize(policy, source.select_read(policy, true, env)?)
+    materialize(policy, source.select_read(policy, true)?)
 }
 
 #[doc(hidden)]
@@ -158,12 +157,11 @@ pub fn count_if<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
     source: Source,
     _pred: Pred,
-    env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
 ) -> Result<MIndex, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
-    source.count_read(policy, false, env)
+    source.count_read(policy, false)
 }
 
 /// Returns whether all values satisfy `Pred`.
@@ -171,12 +169,11 @@ pub fn all_of<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
     source: Source,
     pred: Pred,
-    env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
 ) -> Result<bool, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
-    Ok(find_if_not(policy, source, pred, env)?.is_none())
+    Ok(find_if_not(policy, source, pred)?.is_none())
 }
 
 /// Returns whether any value satisfies `Pred`.
@@ -184,12 +181,11 @@ pub fn any_of<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
     source: Source,
     pred: Pred,
-    env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
 ) -> Result<bool, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
-    Ok(find_if(policy, source, pred, env)?.is_some())
+    Ok(find_if(policy, source, pred)?.is_some())
 }
 
 /// Returns whether no values satisfy `Pred`.
@@ -197,12 +193,11 @@ pub fn none_of<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
     source: Source,
     pred: Pred,
-    env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
 ) -> Result<bool, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
-    Ok(find_if(policy, source, pred, env)?.is_none())
+    Ok(find_if(policy, source, pred)?.is_none())
 }
 
 /// Finds the first value satisfying `Pred`.
@@ -210,24 +205,22 @@ pub fn find_if<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
     source: Source,
     _pred: Pred,
-    env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
 ) -> Result<Option<MIndex>, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
-    source.find_read(policy, false, env)
+    source.find_read(policy, false)
 }
 
 fn find_if_not<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
     source: Source,
     _pred: Pred,
-    env: <<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Source as crate::detail::read::KernelPredicateQueryInput<Pred>>::Runtime>,
 ) -> Result<Option<MIndex>, Error>
 where
     Source: crate::detail::read::KernelPredicateQueryInput<Pred>,
 {
-    source.find_read(policy, true, env)
+    source.find_read(policy, true)
 }
 
 /// Partitions elements by `Pred`, preserving relative order within each side.
@@ -235,7 +228,6 @@ pub fn partition<Input, Pred>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelPartitionInput<Pred>>::Runtime>,
     input: Input,
     _pred: Pred,
-    env: <<Input as crate::detail::read::KernelPartitionInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Input as crate::detail::read::KernelPartitionInput<Pred>>::Runtime>,
 ) -> Result<
     (
         <<<Input as crate::detail::read::KernelPartitionInput<Pred>>::SplitOutput as TuplePair>::Left as MaterializeOutput>::Output,
@@ -251,7 +243,7 @@ where
     <<Input as crate::detail::read::KernelPartitionInput<Pred>>::SplitOutput as TuplePair>::Right:
         MaterializeOutput<Runtime = <Input as crate::detail::read::KernelPartitionInput<Pred>>::Runtime>,
 {
-    let (matching, failing) = input.partition_copy_read(policy, env)?.into_pair();
+    let (matching, failing) = input.partition_copy_read(policy)?.into_pair();
     Ok((
         materialize(policy, matching)?,
         materialize(policy, failing)?,
@@ -263,10 +255,9 @@ pub fn is_partitioned<Input, Pred>(
     policy: &CubePolicy<<Input as crate::detail::read::KernelPartitionInput<Pred>>::Runtime>,
     input: Input,
     _pred: Pred,
-    env: <<Input as crate::detail::read::KernelPartitionInput<Pred>>::Env as cubecl::prelude::LaunchArg>::RuntimeArg<<Input as crate::detail::read::KernelPartitionInput<Pred>>::Runtime>,
 ) -> Result<bool, Error>
 where
     Input: crate::detail::read::KernelPartitionInput<Pred>,
 {
-    input.is_partitioned_read(policy, env)
+    input.is_partitioned_read(policy)
 }

@@ -10,7 +10,6 @@ fn count_if_accepts_heterogeneous_tuple_predicates() {
         &exec,
         massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedTagIsTwenty,
-        (),
     )
     .unwrap();
     assert_eq!(count, 2);
@@ -28,7 +27,7 @@ fn predicate_queries_preserve_nested_zip_input_shape() {
         bias.slice(..),
     );
     assert_eq!(
-        count_if(&exec, input, NestedTuple3MixedTagIsTwenty, ()).unwrap(),
+        count_if(&exec, input, NestedTuple3MixedTagIsTwenty).unwrap(),
         1
     );
 
@@ -36,26 +35,26 @@ fn predicate_queries_preserve_nested_zip_input_shape() {
         massively::Zip2(values.slice(..), tags.slice(..)),
         bias.slice(..),
     );
-    assert!(!massively::all_of(&exec, input, NestedTuple3MixedTagIsTwenty, ()).unwrap());
+    assert!(!massively::all_of(&exec, input, NestedTuple3MixedTagIsTwenty).unwrap());
 
     let input = massively::Zip2(
         massively::Zip2(values.slice(..), tags.slice(..)),
         bias.slice(..),
     );
-    assert!(massively::any_of(&exec, input, NestedTuple3MixedTagIsTwenty, ()).unwrap());
+    assert!(massively::any_of(&exec, input, NestedTuple3MixedTagIsTwenty).unwrap());
 
     let input = massively::Zip2(
         massively::Zip2(values.slice(..), tags.slice(..)),
         bias.slice(..),
     );
-    assert!(!massively::none_of(&exec, input, NestedTuple3MixedTagIsTwenty, ()).unwrap());
+    assert!(!massively::none_of(&exec, input, NestedTuple3MixedTagIsTwenty).unwrap());
 
     let input = massively::Zip2(
         massively::Zip2(values.slice(..), tags.slice(..)),
         bias.slice(..),
     );
     assert_eq!(
-        find_if(&exec, input, NestedTuple3MixedTagIsTwenty, ()).unwrap(),
+        find_if(&exec, input, NestedTuple3MixedTagIsTwenty).unwrap(),
         Some(1)
     );
 
@@ -66,7 +65,7 @@ fn predicate_queries_preserve_nested_zip_input_shape() {
         massively::Zip2(values.slice(..), tags.slice(..)),
         bias.slice(..),
     );
-    assert!(is_partitioned(&exec, input, NestedTuple3MixedTagIsTwenty, ()).unwrap());
+    assert!(is_partitioned(&exec, input, NestedTuple3MixedTagIsTwenty).unwrap());
 }
 
 #[test]
@@ -74,17 +73,74 @@ fn predicate_queries_accept_device_slice_scalar_items() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let partitioned = exec.to_device(&[4.0_f32, 3.0, 2.0, 1.0]).unwrap();
+    let threshold = 2.5_f32;
 
     assert_eq!(
-        count_if(&exec, values.slice(..), GreaterThanF32, 2.5_f32).unwrap(),
+        count_if(
+            &exec,
+            massively::Zip2(
+                values.slice(..),
+                massively::lazy::constant(threshold).take(values.len())
+            ),
+            GreaterThanF32
+        )
+        .unwrap(),
         2
     );
-    assert!(!massively::all_of(&exec, values.slice(..), GreaterThanF32, 2.5_f32).unwrap());
-    assert!(massively::any_of(&exec, values.slice(..), GreaterThanF32, 2.5_f32).unwrap());
-    assert!(!massively::none_of(&exec, values.slice(..), GreaterThanF32, 2.5_f32).unwrap());
+    assert!(
+        !massively::all_of(
+            &exec,
+            massively::Zip2(
+                values.slice(..),
+                massively::lazy::constant(threshold).take(values.len())
+            ),
+            GreaterThanF32
+        )
+        .unwrap()
+    );
+    assert!(
+        massively::any_of(
+            &exec,
+            massively::Zip2(
+                values.slice(..),
+                massively::lazy::constant(threshold).take(values.len())
+            ),
+            GreaterThanF32
+        )
+        .unwrap()
+    );
+    assert!(
+        !massively::none_of(
+            &exec,
+            massively::Zip2(
+                values.slice(..),
+                massively::lazy::constant(threshold).take(values.len())
+            ),
+            GreaterThanF32
+        )
+        .unwrap()
+    );
     assert_eq!(
-        find_if(&exec, values.slice(..), GreaterThanF32, 2.5_f32).unwrap(),
+        find_if(
+            &exec,
+            massively::Zip2(
+                values.slice(..),
+                massively::lazy::constant(threshold).take(values.len())
+            ),
+            GreaterThanF32
+        )
+        .unwrap(),
         Some(2)
     );
-    assert!(is_partitioned(&exec, partitioned.slice(..), GreaterThanF32, 2.5_f32).unwrap());
+    assert!(
+        is_partitioned(
+            &exec,
+            massively::Zip2(
+                partitioned.slice(..),
+                massively::lazy::constant(threshold).take(partitioned.len())
+            ),
+            GreaterThanF32
+        )
+        .unwrap()
+    );
 }

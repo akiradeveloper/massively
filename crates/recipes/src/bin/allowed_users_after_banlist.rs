@@ -23,7 +23,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let out = exec.constant(allowlist.len(), 0_u32)?;
+    let out = exec.full(allowlist.len(), 0_u32)?;
     let len = set_difference(
         exec,
         Zip1(allowlist.slice(..)),

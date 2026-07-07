@@ -184,65 +184,6 @@ fn sort_accepts_seven_tuple_columns() {
 }
 
 #[test]
-fn stable_sort_accepts_seven_tuple_columns_and_preserves_equal_order() {
-    let exec = exec();
-    let a = exec.to_device(&[1.0_f32, 1.0, 1.0, 0.0]).unwrap();
-    let b = exec.to_device(&[2_u32, 1, 1, 1]).unwrap();
-    let c = exec.to_device(&[100.0_f32, 200.0, 201.0, 300.0]).unwrap();
-    let d = exec.to_device(&[1000_u32, 2000, 2010, 3000]).unwrap();
-    let e = exec.to_device(&[10.0_f32, 20.0, 21.0, 30.0]).unwrap();
-    let f = exec.to_device(&[100_u32, 200, 201, 300]).unwrap();
-    let g = exec
-        .to_device(&[1000.0_f32, 2000.0, 2010.0, 3000.0])
-        .unwrap();
-    let out_a = exec.to_device(&[0.0_f32; 4]).unwrap();
-    let out_b = exec.to_device(&[0_u32; 4]).unwrap();
-    let out_c = exec.to_device(&[0.0_f32; 4]).unwrap();
-    let out_d = exec.to_device(&[0_u32; 4]).unwrap();
-    let out_e = exec.to_device(&[0.0_f32; 4]).unwrap();
-    let out_f = exec.to_device(&[0_u32; 4]).unwrap();
-    let out_g = exec.to_device(&[0.0_f32; 4]).unwrap();
-
-    massively::stable_sort(
-        &exec,
-        massively::Zip7(
-            a.slice(..),
-            b.slice(..),
-            c.slice(..),
-            d.slice(..),
-            e.slice(..),
-            f.slice(..),
-            g.slice(..),
-        ),
-        Tuple7MixedLess,
-        massively::Zip7(
-            out_a.slice_mut(..),
-            out_b.slice_mut(..),
-            out_c.slice_mut(..),
-            out_d.slice_mut(..),
-            out_e.slice_mut(..),
-            out_f.slice_mut(..),
-            out_g.slice_mut(..),
-        ),
-    )
-    .unwrap();
-
-    assert_eq!(exec.to_host(&out_a).unwrap(), vec![0.0, 1.0, 1.0, 1.0]);
-    assert_eq!(exec.to_host(&out_b).unwrap(), vec![1, 1, 1, 2]);
-    assert_eq!(
-        exec.to_host(&out_c).unwrap(),
-        vec![300.0, 200.0, 201.0, 100.0]
-    );
-    assert_eq!(exec.to_host(&out_d).unwrap(), vec![3000, 2000, 2010, 1000]);
-    assert_eq!(exec.to_host(&out_e).unwrap(), vec![30.0, 20.0, 21.0, 10.0]);
-    assert_eq!(exec.to_host(&out_f).unwrap(), vec![300, 200, 201, 100]);
-    assert_eq!(
-        exec.to_host(&out_g).unwrap(),
-        vec![3000.0, 2000.0, 2010.0, 1000.0]
-    );
-}
-
-#[test]
 fn tuple_sort_accepts_wide_borrowed_zips() {
     let exec = exec();
     let a = exec.to_device(&[3.0_f32, 1.0, 2.0]).unwrap();

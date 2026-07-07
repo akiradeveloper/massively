@@ -38,9 +38,9 @@ pub struct Taken<Expr> {
     len: MIndex,
 }
 
-/// Lazy indexed read-only iterator.
+/// Lazy permuted read-only iterator.
 #[derive(Debug)]
-pub struct Gather<Values, Indices> {
+pub struct Permute<Values, Indices> {
     values: Values,
     indices: Indices,
 }
@@ -62,9 +62,9 @@ pub fn counting(start: MIndex) -> Counting {
     Counting { start }
 }
 
-/// Creates a lazy gather expression that reads `values[indices[i]]`.
-pub fn gather<Values, Indices>(values: Values, indices: Indices) -> Gather<Values, Indices> {
-    Gather { values, indices }
+/// Creates a lazy permutation expression that reads `values[indices[i]]`.
+pub fn permute<Values, Indices>(values: Values, indices: Indices) -> Permute<Values, Indices> {
+    Permute { values, indices }
 }
 
 /// Creates a lazy transform expression that reads `op(input[i])`.
@@ -75,14 +75,94 @@ pub fn transform<Input, Op>(input: Input, _op: Op) -> Transform<Input, Op> {
     }
 }
 
-impl<R, T> MIter<R> for Taken<Constant<T>>
+#[doc(hidden)]
+pub trait ConstantItem<R: Runtime>: crate::MItem<R> {
+    type Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>;
+
+    fn lower_constant_read(
+        value: Self,
+        len: MIndex,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<Self::Read, Error>;
+}
+
+fn constant_leaf_read<R, T>(
+    value: T,
+    len: MIndex,
+    policy: &crate::detail::CubePolicy<R>,
+) -> crate::detail::read::ConstantRead<T>
 where
     R: Runtime,
     T: MStorageElement + 'static,
 {
+    let handle = policy.client().create_from_slice(T::as_bytes(&[value]));
+    crate::detail::read::ConstantRead::new(handle, len as usize)
+}
+
+macro_rules! impl_constant_item_scalar {
+    ($( $ty:ty ),+ $(,)?) => {
+        $(
+            impl<R> ConstantItem<R> for $ty
+            where
+                R: Runtime,
+            {
+                type Read = crate::detail::read::ConstantRead<$ty>;
+
+                fn lower_constant_read(
+                    value: Self,
+                    len: MIndex,
+                    policy: &crate::detail::CubePolicy<R>,
+                ) -> Result<Self::Read, Error> {
+                    Ok(constant_leaf_read::<R, $ty>(value, len, policy))
+                }
+            }
+        )+
+    };
+}
+
+impl_constant_item_scalar!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+macro_rules! impl_constant_item_tuple {
+    ($zip:ident; $( $ty:ident : $var:ident ),+) => {
+        impl<R, $( $ty ),+> ConstantItem<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: ConstantItem<R>, )+
+            crate::detail::read::$zip<$( <$ty as ConstantItem<R>>::Read ),+>:
+                crate::detail::read::KernelReadBoundMany<R, Item = ($( $ty, )+)>,
+        {
+            type Read = crate::detail::read::$zip<$( <$ty as ConstantItem<R>>::Read ),+>;
+
+            fn lower_constant_read(
+                value: Self,
+                len: MIndex,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<Self::Read, Error> {
+                let ($( $var, )+) = value;
+                Ok(crate::detail::read::$zip::new($(
+                    <$ty as ConstantItem<R>>::lower_constant_read($var, len, policy)?,
+                )+))
+            }
+        }
+    };
+}
+
+impl_constant_item_tuple!(ZipRead1; A: a);
+impl_constant_item_tuple!(ZipRead2; A: a, B: b);
+impl_constant_item_tuple!(ZipRead3; A: a, B: b, C: c);
+impl_constant_item_tuple!(ZipRead4; A: a, B: b, C: c, D: d);
+impl_constant_item_tuple!(ZipRead5; A: a, B: b, C: c, D: d, E: e);
+impl_constant_item_tuple!(ZipRead6; A: a, B: b, C: c, D: d, E: e, F: f);
+impl_constant_item_tuple!(ZipRead7; A: a, B: b, C: c, D: d, E: e, F: f, G: g);
+
+impl<R, T> MIter<R> for Taken<Constant<T>>
+where
+    R: Runtime,
+    T: ConstantItem<R>,
+{
     type Item = T;
     type Inner = ();
-    type Read = crate::detail::read::ConstantRead<T>;
+    type Read = T::Read;
 
     fn len(&self) -> MIndex {
         self.len
@@ -93,13 +173,7 @@ where
     }
 
     fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
-        let handle = policy
-            .client()
-            .create_from_slice(T::as_bytes(&[self.expr.value]));
-        Ok(crate::detail::read::ConstantRead::new(
-            handle,
-            self.len as usize,
-        ))
+        T::lower_constant_read(self.expr.value, self.len, policy)
     }
 
     fn validate_executor(&self, _exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
@@ -107,7 +181,7 @@ where
     }
 }
 
-impl<R, Values, Indices> MIter<R> for Gather<Values, Indices>
+impl<R, Values, Indices> MIter<R> for Permute<Values, Indices>
 where
     R: Runtime,
     Values: MIter<R>,
@@ -124,7 +198,7 @@ where
     }
 
     fn into_inner(self) -> Self::Inner {
-        unreachable!("lazy gather MIter has no storage inner")
+        unreachable!("lazy permute MIter has no storage inner")
     }
 
     fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
@@ -143,7 +217,7 @@ impl<R, Input, Op> MIter<R> for Transform<Input, Op>
 where
     R: Runtime,
     Input: MIter<R>,
-    Op: op::UnaryOp<R, Input::Item, Env = ()>,
+    Op: op::UnaryOp<R, Input::Item>,
     crate::detail::read::TransformRead<Input::Read, Op>:
         crate::detail::read::KernelReadBoundMany<R, Item = Op::Output>,
 {

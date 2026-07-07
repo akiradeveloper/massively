@@ -1,57 +1,69 @@
-# コーディングをする前に読め
+# Read This Before Coding
 
-## 議論
+## Discussion
 
-すべてのコーディングの前に、十分な議論を行い、やるべきことと目的を理解すること。
+Before writing any code, discuss the task thoroughly and make sure you
+understand what needs to be done and why.
 
-## 実装
+## Implementation
 
-### 単列、小データに特化した最適化禁止
+### Do Not Optimize Specifically for Single Columns or Small Inputs
 
-このライブラリは、多列＆大量データで使われることを前提とする。
+This library is intended for many columns and large datasets.
 
-そのため、
+Therefore:
 
-- 多列に対応した一般的なコードを書け（マクロは使ってもOK）。場当たり的な多列対応コードを書くな。
-- 単列に特化した最適化はするな。
-- 小データに特化した最適化はするな。
+- Write general code that supports multiple columns. Macros are fine. Do not
+  write ad hoc multi-column handling.
+- Do not add optimizations that are specific to a single column.
+- Do not add optimizations that are specific to small inputs.
 
-### シンプルさを優先する
+### Prefer Simplicity
 
-仕様を満たす中でもっともシンプルな実装を考えること。
-余計なことはするな。
+Among implementations that satisfy the requirements, choose the simplest one.
+Do not do unnecessary work.
 
-### プリミティブ組み合わせによるアルゴリズム実装
+### Implement Algorithms by Combining Primitives
 
-並列アルゴリズムは、プリミティブ的なアルゴリズム（scan, compactなど）の組み合わせによって実装することが出来る。
+Parallel algorithms can be implemented by composing primitive algorithms such
+as scan and compact.
 
-APIの実装には、それぞれに特化した実装をするか、あるいはプリミティブの組み合わせによって実現するかの２通りの考えがあるが、massivelyでは後者をとる。
+There are two ways to implement an API: write a specialized implementation for
+each algorithm, or express it as a composition of primitives. `massively` takes
+the latter approach.
 
-その方が実装がコンパクトになるし、各プリミティブの最適化が全体に波及しやすいからである。
+This keeps the implementation compact and makes improvements to each primitive
+benefit the whole library.
 
-小さな最適化よりは設計の美しさを優先すべき。
-アルゴリズムはもっともシンプルな形で書かれるべき。
+Prefer a clean design over small optimizations.
+Algorithms should be written in their simplest form.
 
-### アリティ爆発を避けること
+### Avoid Arity Explosion
 
-APIは複数のパラメータをとることがある（例えばキーとバリュー）。
-仮にParam1, Param2とする。
-この時、Param1はZip2、Param2はZip3であるとして、
-この組み合わせZip2xZip3を実装が知る必要があると、
-実装が掛け算的に増えていく。これを「アリティ爆発」と呼ぶことにする。
+Some APIs take multiple parameters, such as keys and values. Suppose these are
+`Param1` and `Param2`. If `Param1` is `Zip2` and `Param2` is `Zip3`, and the
+implementation has to know about the `Zip2 x Zip3` combination directly, the
+number of implementation cases grows multiplicatively. We call this "arity
+explosion."
 
-アリティ爆発が起こる実装では、キーやバリューの列数サポートを増やすことが出来なくなるしコンパイル時間も爆発的に増えていく。
+An implementation that suffers from arity explosion cannot scale to more key or
+value columns, and compile times will also grow explosively.
 
-従って、アリティ爆発が起こらないような実装をしろ。
+Therefore, implement APIs in a way that avoids arity explosion.
 
-例えば、by-key系のAPIであれば、キーについてまずコントロールを作り、
-そのコントロールをバリューに作用させるという2段階に分解することが考えられる。
+For example, a by-key API can be decomposed into two stages: first build the
+control structure from the keys, then apply that control structure to the
+values.
 
-## テスト
+## Tests
 
-テストはそれぞれ目的がある。
+Each test area has a specific role.
 
-- massively/benches: 単列での性能評価を行い、内部実装の改善の指標とする。単列に特化した最適化はしないため、単列で最適化されれば多列でも最適化されていることになる。
-- massively/tests: シンプルなデータでよいので、多列対応出来ていることを確認する。
-- oracle/tests: 多列AoS CPU referenceとの比較テスト（プロパティテスト）を行う。
-- oracle-simple/tests: 単列＆u32限定で、参照実装との比較テスト（プロパティテスト）を行う。
+- `massively/benches`: Measure single-column performance and use the results to
+  guide internal implementation improvements. Because we do not add
+  single-column-specific optimizations, improving the single-column foundation
+  should also improve multi-column cases.
+- `massively/tests`: Use simple data to verify that multi-column support works.
+- `oracle/tests`: Property tests against the multi-column AoS CPU reference.
+- `oracle-simple/tests`: Property tests against a reference implementation,
+  limited to single-column `u32`.

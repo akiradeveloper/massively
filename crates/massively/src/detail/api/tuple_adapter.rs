@@ -88,10 +88,8 @@ where
     T: CubePrimitive + CubeElement,
     Op: PredicateOp<(T,)>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: T) -> bool {
-        Op::apply(env, (input,))
+    fn apply(input: T) -> bool {
+        Op::apply((input,))
     }
 }
 
@@ -144,10 +142,8 @@ where
     D: CubePrimitive + CubeElement,
     Op: PredicateOp<(A, B, C, D)>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: (A, B, C, D, u32, u32, u32)) -> bool {
-        Op::apply(env, (input.0, input.1, input.2, input.3))
+    fn apply(input: (A, B, C, D, u32, u32, u32)) -> bool {
+        Op::apply((input.0, input.1, input.2, input.3))
     }
 }
 
@@ -231,10 +227,8 @@ where
     E: CubePrimitive + CubeElement,
     Op: PredicateOp<(A, B, C, D, E)>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: (A, B, C, D, E, u32, u32)) -> bool {
-        Op::apply(env, (input.0, input.1, input.2, input.3, input.4))
+    fn apply(input: (A, B, C, D, E, u32, u32)) -> bool {
+        Op::apply((input.0, input.1, input.2, input.3, input.4))
     }
 }
 
@@ -301,10 +295,8 @@ where
     F: CubePrimitive + CubeElement,
     Op: PredicateOp<(A, B, C, D, E, F)>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: (A, B, C, D, E, F, u32)) -> bool {
-        Op::apply(env, (input.0, input.1, input.2, input.3, input.4, input.5))
+    fn apply(input: (A, B, C, D, E, F, u32)) -> bool {
+        Op::apply((input.0, input.1, input.2, input.3, input.4, input.5))
     }
 }
 

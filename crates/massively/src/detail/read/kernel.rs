@@ -32,10 +32,9 @@ where
     R: Runtime,
     Input: MItem<R>,
 {
-    type Env = ();
     type Output = Input;
 
-    fn apply(_env: (), input: Input) -> Input {
+    fn apply(input: Input) -> Input {
         input
     }
 }
@@ -327,7 +326,6 @@ pub trait KernelRead<R: Runtime>: Sized {
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -337,7 +335,7 @@ pub trait KernelRead<R: Runtime>: Sized {
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        let _ = (policy, op, env, output);
+        let _ = (policy, op, output);
         Err(Error::Launch {
             message: "transform is not supported for this iterator shape".to_string(),
         })
@@ -347,7 +345,6 @@ pub trait KernelRead<R: Runtime>: Sized {
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -358,75 +355,55 @@ pub trait KernelRead<R: Runtime>: Sized {
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        let _ = (policy, op, env, stencil, output);
+        let _ = (policy, op, stencil, output);
         Err(Error::Launch {
             message: "transform_where is not supported for this iterator shape".to_string(),
         })
     }
 
-    fn count_if_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<crate::MIndex, Error>
+    fn count_if_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env);
+        let _ = (policy, pred);
         Err(Error::Launch {
             message: "count_if is not supported for this iterator shape".to_string(),
         })
     }
 
-    fn all_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn all_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env);
+        let _ = (policy, pred);
         Err(Error::Launch {
             message: "all_of is not supported for this iterator shape".to_string(),
         })
     }
 
-    fn any_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn any_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env);
+        let _ = (policy, pred);
         Err(Error::Launch {
             message: "any_of is not supported for this iterator shape".to_string(),
         })
     }
 
-    fn none_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn none_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env);
+        let _ = (policy, pred);
         Err(Error::Launch {
             message: "none_of is not supported for this iterator shape".to_string(),
         })
@@ -436,31 +413,25 @@ pub trait KernelRead<R: Runtime>: Sized {
         self,
         policy: &CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env);
+        let _ = (policy, pred);
         Err(Error::Launch {
             message: "find_if is not supported for this iterator shape".to_string(),
         })
     }
 
-    fn is_partitioned_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn is_partitioned_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env);
+        let _ = (policy, pred);
         Err(Error::Launch {
             message: "is_partitioned is not supported for this iterator shape".to_string(),
         })
@@ -503,7 +474,6 @@ pub trait KernelRead<R: Runtime>: Sized {
         self,
         policy: &CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<crate::MIndex, Error>
     where
@@ -511,7 +481,7 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, env, output);
+        let _ = (policy, pred, output);
         Err(Error::Launch {
             message: "partition is not supported for this iterator shape".to_string(),
         })
@@ -1166,7 +1136,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1176,14 +1145,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, Op>(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -1194,7 +1162,7 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 }
 
@@ -1233,7 +1201,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1243,14 +1210,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, Op>(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -1261,7 +1227,7 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 }
 
@@ -1299,7 +1265,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1309,14 +1274,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, Op>(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -1327,7 +1291,7 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 }
 
@@ -1352,7 +1316,7 @@ where
     R: Runtime,
     Read: KernelRead<R>,
     Read::Item: MItem<R>,
-    Op: op::UnaryOp<R, Read::Item, Env = ()>,
+    Op: op::UnaryOp<R, Read::Item>,
 {
     type Item = Op::Output;
 
@@ -1368,7 +1332,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: NextOp,
-        env: <NextOp::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1378,14 +1341,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         NextOp: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, NextOp>(
         self,
         policy: &CubePolicy<R>,
         op: NextOp,
-        env: <NextOp::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -1396,7 +1358,7 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         NextOp: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 }
 
@@ -1562,7 +1524,7 @@ where
     R: Runtime,
     Read: KernelReadAt<R, Start>,
     Read::LogicalItem: MItem<R>,
-    Op: op::UnaryOp<R, Read::LogicalItem, Env = ()>,
+    Op: op::UnaryOp<R, Read::LogicalItem>,
 {
     type LogicalItem = Op::Output;
     type ExprAt = crate::expr::TransformExpr<
@@ -1582,7 +1544,7 @@ where
     R: Runtime,
     Read: KernelReadAtEnv<R, Env>,
     Read::LogicalItem: MItem<R>,
-    Op: op::UnaryOp<R, Read::LogicalItem, Env = ()>,
+    Op: op::UnaryOp<R, Read::LogicalItem>,
 {
     type LogicalItem = Op::Output;
     type ExprAt = crate::expr::TransformExpr<
@@ -1846,7 +1808,6 @@ fn transform_logical3_read<R, Read, Output, Op>(
     read: Read,
     policy: &CubePolicy<R>,
     op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     output: Output,
 ) -> Result<(), Error>
 where
@@ -1896,7 +1857,7 @@ where
         >>::LeafC,
         <Read as KernelReadAt<R, S0>>::ExprAt,
         Op,
-    >(policy, bindings, len, op, env)?;
+    >(policy, bindings, len, op)?;
     output.write_from_inner(policy, inner)
 }
 
@@ -1904,7 +1865,6 @@ fn transform_where_logical3_read<R, Read, Output, Op>(
     read: Read,
     policy: &CubePolicy<R>,
     op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     stencil: PrecomputedSelection<R>,
     output: Output,
 ) -> Result<(), Error>
@@ -1955,7 +1915,7 @@ where
         >>::LeafC,
         <Read as KernelReadAt<R, S0>>::ExprAt,
         Op,
-    >(policy, bindings, len, op, env)?;
+    >(policy, bindings, len, op)?;
     output.write_where_from_inner(policy, inner, stencil)
 }
 
@@ -1963,7 +1923,6 @@ fn transform_logical7_read<R, Read, Output, Op>(
     read: Read,
     policy: &CubePolicy<R>,
     op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     output: Output,
 ) -> Result<(), Error>
 where
@@ -1989,7 +1948,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf6,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         Op,
-    >(policy, bindings, len, op, env)?;
+    >(policy, bindings, len, op)?;
     output.write_from_inner(policy, inner)
 }
 
@@ -1997,7 +1956,6 @@ fn transform_where_logical7_read<R, Read, Output, Op>(
     read: Read,
     policy: &CubePolicy<R>,
     op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     stencil: PrecomputedSelection<R>,
     output: Output,
 ) -> Result<(), Error>
@@ -2024,7 +1982,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf6,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         Op,
-    >(policy, bindings, len, op, env)?;
+    >(policy, bindings, len, op)?;
     output.write_where_from_inner(policy, inner, stencil)
 }
 
@@ -2076,7 +2034,7 @@ where
         >>::LeafC,
         <Read as KernelReadAt<R, S0>>::ExprAt,
         LogicalIdentity,
-    >(policy, bindings, len, LogicalIdentity, ())
+    >(policy, bindings, len, LogicalIdentity)
 }
 
 pub(crate) fn materialize_logical7_read<R, Read>(
@@ -2103,7 +2061,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf6,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         LogicalIdentity,
-    >(policy, bindings, len, LogicalIdentity, ())
+    >(policy, bindings, len, LogicalIdentity)
 }
 
 fn reduce_logical3_read<R, Read, Op>(
@@ -2324,7 +2282,6 @@ fn logical3_predicate_flags_read<R, Read, Pred>(
     read: &Read,
     policy: &CubePolicy<R>,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
 ) -> Result<Option<cubecl::server::Handle>, Error>
 where
     R: Runtime,
@@ -2396,7 +2353,6 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(block_size),
-            env,
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
@@ -2414,7 +2370,6 @@ fn logical7_predicate_flags_read<R, Read, Pred>(
     read: &Read,
     policy: &CubePolicy<R>,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
 ) -> Result<Option<cubecl::server::Handle>, Error>
 where
     R: Runtime,
@@ -2466,7 +2421,6 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(block_size),
-            env,
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
@@ -3937,19 +3891,12 @@ where
     Self::Item: MItem<R>,
     Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
 {
-    fn transform_into(
-        self,
-        policy: &CubePolicy<R>,
-        op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-        output: Output,
-    ) -> Result<(), Error>;
+    fn transform_into(self, policy: &CubePolicy<R>, op: Op, output: Output) -> Result<(), Error>;
 
     fn transform_where_into(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>;
@@ -4009,7 +3956,6 @@ where
         self,
         policy: &CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<crate::MIndex, Error>;
 }
@@ -4070,47 +4016,17 @@ where
     Self::Item: MItem<R>,
     Pred: op::PredicateOp<R, Self::Item>,
 {
-    fn count_if(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<crate::MIndex, Error>;
+    fn count_if(self, policy: &CubePolicy<R>, pred: Pred) -> Result<crate::MIndex, Error>;
 
-    fn all_of(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>;
+    fn all_of(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>;
 
-    fn any_of(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>;
+    fn any_of(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>;
 
-    fn none_of(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>;
+    fn none_of(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>;
 
-    fn find_if(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<Option<crate::MIndex>, Error>;
+    fn find_if(self, policy: &CubePolicy<R>, pred: Pred) -> Result<Option<crate::MIndex>, Error>;
 
-    fn is_partitioned(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>;
+    fn is_partitioned(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>;
 }
 
 /// Internal adjacent-difference lowering for read expressions.
@@ -4396,7 +4312,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -4405,14 +4320,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, Op>(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -4422,14 +4336,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 
     fn count_if_read<Pred>(
         self,
         policy: &CubePolicy<R>,
         _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
@@ -4437,8 +4350,7 @@ where
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(0);
         };
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
@@ -4450,58 +4362,40 @@ where
         )?)
     }
 
-    fn all_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn all_of_read<Pred>(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true)? else {
             return Ok(true);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
     }
 
-    fn any_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn any_of_read<Pred>(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(false);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_some())
     }
 
-    fn none_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn none_of_read<Pred>(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(true);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
@@ -4511,34 +4405,26 @@ where
         self,
         policy: &CubePolicy<R>,
         _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(None);
         };
         crate::detail::primitives::search::first_flag(policy, flags, len, len)
     }
 
-    fn is_partitioned_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn is_partitioned_read<Pred>(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(true);
         };
         let first_rejected =
@@ -4908,19 +4794,9 @@ where
     Output::Item: MAlloc<R> + MItemDispatch<R>,
     Op: op::UnaryOp<R, T, Output = Output::Item>,
 {
-    fn transform_into(
-        self,
-        policy: &CubePolicy<R>,
-        op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-        output: Output,
-    ) -> Result<(), Error> {
-        let inner = <Output::Item as MItemDispatch<R>>::transform_scalar_input(
-            policy,
-            self.column,
-            op,
-            env,
-        )?;
+    fn transform_into(self, policy: &CubePolicy<R>, op: Op, output: Output) -> Result<(), Error> {
+        let inner =
+            <Output::Item as MItemDispatch<R>>::transform_scalar_input(policy, self.column, op)?;
         output.write_from_inner(policy, inner)
     }
 
@@ -4928,16 +4804,11 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error> {
-        let inner = <Output::Item as MItemDispatch<R>>::transform_scalar_input(
-            policy,
-            self.column,
-            op,
-            env,
-        )?;
+        let inner =
+            <Output::Item as MItemDispatch<R>>::transform_scalar_input(policy, self.column, op)?;
         output.write_where_from_inner(policy, inner, stencil)
     }
 }
@@ -4972,58 +4843,28 @@ where
     T: MStorageElement + 'static,
     Pred: op::PredicateOp<R, T>,
 {
-    fn count_if(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<crate::MIndex, Error> {
-        crate::detail::count_if(policy, self.column, KernelOp::<R, Pred>::new(), env)
+    fn count_if(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<crate::MIndex, Error> {
+        crate::detail::count_if(policy, self.column, KernelOp::<R, Pred>::new())
     }
 
-    fn all_of(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::all_of(policy, self.column, KernelOp::<R, Pred>::new(), env)
+    fn all_of(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::all_of(policy, self.column, KernelOp::<R, Pred>::new())
     }
 
-    fn any_of(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::any_of(policy, self.column, KernelOp::<R, Pred>::new(), env)
+    fn any_of(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::any_of(policy, self.column, KernelOp::<R, Pred>::new())
     }
 
-    fn none_of(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::none_of(policy, self.column, KernelOp::<R, Pred>::new(), env)
+    fn none_of(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::none_of(policy, self.column, KernelOp::<R, Pred>::new())
     }
 
-    fn find_if(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<Option<crate::MIndex>, Error> {
-        crate::detail::find_if(policy, self.column, KernelOp::<R, Pred>::new(), env)
+    fn find_if(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<Option<crate::MIndex>, Error> {
+        crate::detail::find_if(policy, self.column, KernelOp::<R, Pred>::new())
     }
 
-    fn is_partitioned(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::is_partitioned(policy, self.column, KernelOp::<R, Pred>::new(), env)
+    fn is_partitioned(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::is_partitioned(policy, self.column, KernelOp::<R, Pred>::new())
     }
 }
 
@@ -5094,7 +4935,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<crate::MIndex, Error>
             where
                 Self::Item: MItem<R>,
@@ -5103,7 +4943,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(0);
                 };
@@ -5120,7 +4960,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5129,7 +4968,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true)?
                 else {
                     return Ok(true);
                 };
@@ -5140,7 +4979,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5149,7 +4987,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(false);
                 };
@@ -5160,7 +4998,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5169,7 +5006,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(true);
                 };
@@ -5180,7 +5017,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
@@ -5189,7 +5025,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(None);
                 };
@@ -5200,7 +5036,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5209,7 +5044,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(true);
                 };
@@ -5328,7 +5163,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
@@ -5338,14 +5172,13 @@ macro_rules! impl_kernel_read_zip {
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
-                transform_logical7_read(self, policy, op, env, output)
+                transform_logical7_read(self, policy, op, output)
             }
 
             fn transform_where_read<Output, Op>(
                 self,
                 policy: &CubePolicy<R>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
@@ -5356,7 +5189,7 @@ macro_rules! impl_kernel_read_zip {
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
-                transform_where_logical7_read(self, policy, op, env, stencil, output)
+                transform_where_logical7_read(self, policy, op, stencil, output)
             }
         }
     };
@@ -5426,7 +5259,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<crate::MIndex, Error>
             where
                 Self::Item: MItem<R>,
@@ -5435,7 +5267,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(0);
                 };
@@ -5452,7 +5284,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5461,7 +5292,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true)?
                 else {
                     return Ok(true);
                 };
@@ -5472,7 +5303,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5481,7 +5311,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(false);
                 };
@@ -5492,7 +5322,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5501,7 +5330,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(true);
                 };
@@ -5512,7 +5341,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<crate::MIndex>, Error>
             where
                 Self::Item: MItem<R>,
@@ -5521,7 +5349,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(None);
                 };
@@ -5532,7 +5360,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error>
             where
                 Self::Item: MItem<R>,
@@ -5541,7 +5368,7 @@ macro_rules! impl_kernel_read_zip {
             {
                 let _ = pred;
                 let len = self.len();
-                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
+                let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)?
                 else {
                     return Ok(true);
                 };
@@ -5660,7 +5487,6 @@ macro_rules! impl_kernel_read_zip {
                 self,
                 policy: &CubePolicy<R>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
@@ -5670,14 +5496,13 @@ macro_rules! impl_kernel_read_zip {
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
-                transform_logical7_read(self, policy, op, env, output)
+                transform_logical7_read(self, policy, op, output)
             }
 
             fn transform_where_read<Output, Op>(
                 self,
                 policy: &CubePolicy<R>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
@@ -5688,7 +5513,7 @@ macro_rules! impl_kernel_read_zip {
                 Output::Item: MAlloc<R> + MItemDispatch<R>,
                 Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
             {
-                transform_where_logical7_read(self, policy, op, env, stencil, output)
+                transform_where_logical7_read(self, policy, op, stencil, output)
             }
         }
     };
@@ -5746,12 +5571,7 @@ where
         <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
     }
 
-    fn count_if_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<crate::MIndex, Error>
+    fn count_if_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -5759,8 +5579,7 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(0);
         };
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
@@ -5772,12 +5591,7 @@ where
         )?)
     }
 
-    fn all_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn all_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -5785,19 +5599,13 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true)? else {
             return Ok(true);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
     }
 
-    fn any_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn any_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -5805,19 +5613,13 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(false);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_some())
     }
 
-    fn none_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn none_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -5825,8 +5627,7 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(true);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
@@ -5836,7 +5637,6 @@ where
         self,
         policy: &CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
@@ -5845,19 +5645,13 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(None);
         };
         crate::detail::primitives::search::first_flag(policy, flags, len, len)
     }
 
-    fn is_partitioned_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn is_partitioned_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -5865,8 +5659,7 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(true);
         };
         let first_rejected =
@@ -5979,7 +5772,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -5989,14 +5781,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, Op>(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -6007,7 +5798,7 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 }
 
@@ -6074,12 +5865,7 @@ where
         <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
     }
 
-    fn count_if_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<crate::MIndex, Error>
+    fn count_if_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<crate::MIndex, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -6087,8 +5873,7 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(0);
         };
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
@@ -6100,12 +5885,7 @@ where
         )?)
     }
 
-    fn all_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn all_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -6113,19 +5893,13 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true)? else {
             return Ok(true);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
     }
 
-    fn any_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn any_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -6133,19 +5907,13 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(false);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_some())
     }
 
-    fn none_of_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn none_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -6153,8 +5921,7 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(true);
         };
         Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
@@ -6164,7 +5931,6 @@ where
         self,
         policy: &CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
@@ -6173,19 +5939,13 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(None);
         };
         crate::detail::primitives::search::first_flag(policy, flags, len, len)
     }
 
-    fn is_partitioned_read<Pred>(
-        self,
-        policy: &CubePolicy<R>,
-        pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error>
+    fn is_partitioned_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
@@ -6193,8 +5953,7 @@ where
     {
         let _ = pred;
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false, env)?
-        else {
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
             return Ok(true);
         };
         let first_rejected =
@@ -6307,7 +6066,6 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -6317,14 +6075,13 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_logical7_read(self, policy, op, env, output)
+        transform_logical7_read(self, policy, op, output)
     }
 
     fn transform_where_read<Output, Op>(
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -6335,7 +6092,7 @@ where
         Output::Item: MAlloc<R> + MItemDispatch<R>,
         Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
     {
-        transform_where_logical7_read(self, policy, op, env, stencil, output)
+        transform_where_logical7_read(self, policy, op, stencil, output)
     }
 }
 
@@ -7811,15 +7568,8 @@ where
     Output::Item: MAlloc<R> + MItemDispatch<R>,
     Op: op::UnaryOp<R, (A,), Output = Output::Item>,
 {
-    fn transform_into(
-        self,
-        policy: &CubePolicy<R>,
-        op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-        output: Output,
-    ) -> Result<(), Error> {
-        let inner =
-            <Output::Item as MItemDispatch<R>>::transform_unary(policy, self.a.column, op, env)?;
+    fn transform_into(self, policy: &CubePolicy<R>, op: Op, output: Output) -> Result<(), Error> {
+        let inner = <Output::Item as MItemDispatch<R>>::transform_unary(policy, self.a.column, op)?;
         output.write_from_inner(policy, inner)
     }
 
@@ -7827,12 +7577,10 @@ where
         self,
         policy: &CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error> {
-        let inner =
-            <Output::Item as MItemDispatch<R>>::transform_unary(policy, self.a.column, op, env)?;
+        let inner = <Output::Item as MItemDispatch<R>>::transform_unary(policy, self.a.column, op)?;
         output.write_where_from_inner(policy, inner, stencil)
     }
 }
@@ -7852,14 +7600,12 @@ macro_rules! impl_flat_zip_transform {
                 self,
                 policy: &CubePolicy<R>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<(), Error> {
                 let inner = <Output::Item as MItemDispatch<R>>::$method(
                     policy,
                     $( self.$field.column, )+
                     op,
-                    env,
                 )?;
                 output.write_from_inner(policy, inner)
             }
@@ -7868,7 +7614,6 @@ macro_rules! impl_flat_zip_transform {
                 self,
                 policy: &CubePolicy<R>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error> {
@@ -7876,7 +7621,6 @@ macro_rules! impl_flat_zip_transform {
                     policy,
                     $( self.$field.column, )+
                     op,
-                    env,
                 )?;
                 output.write_where_from_inner(policy, inner, stencil)
             }
@@ -8931,7 +8675,7 @@ where
 }
 
 macro_rules! wide_predicate_rank {
-    ($policy:ident, $env:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty); $a:expr, $b:expr, $c:expr, $d:expr) => {{
+    ($policy:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty); $a:expr, $b:expr, $c:expr, $d:expr) => {{
         let dummy_e = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_f = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_g = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
@@ -8939,43 +8683,43 @@ macro_rules! wide_predicate_rank {
         let dummy_f = DeviceColumnView::from_column(&dummy_f);
         let dummy_g = DeviceColumnView::from_column(&dummy_g);
         wide_predicate_rank!(
-            @launch $policy, $env,
+            @launch $policy,
             crate::detail::api::Tuple4AsTuple7PredicateOp<KernelOp<R, $pred>>,
             ($a, $b, $c, $d, &dummy_e, &dummy_f, &dummy_g),
             ($ty0, $ty1, $ty2, $ty3, u32, u32, u32)
         )
     }};
-    ($policy:ident, $env:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty); $a:expr, $b:expr, $c:expr, $d:expr, $e:expr) => {{
+    ($policy:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty); $a:expr, $b:expr, $c:expr, $d:expr, $e:expr) => {{
         let dummy_f = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_g = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_f = DeviceColumnView::from_column(&dummy_f);
         let dummy_g = DeviceColumnView::from_column(&dummy_g);
         wide_predicate_rank!(
-            @launch $policy, $env,
+            @launch $policy,
             crate::detail::api::Tuple5AsTuple7PredicateOp<KernelOp<R, $pred>>,
             ($a, $b, $c, $d, $e, &dummy_f, &dummy_g),
             ($ty0, $ty1, $ty2, $ty3, $ty4, u32, u32)
         )
     }};
-    ($policy:ident, $env:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty); $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr) => {{
+    ($policy:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty); $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr) => {{
         let dummy_g = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_g = DeviceColumnView::from_column(&dummy_g);
         wide_predicate_rank!(
-            @launch $policy, $env,
+            @launch $policy,
             crate::detail::api::Tuple6AsTuple7PredicateOp<KernelOp<R, $pred>>,
             ($a, $b, $c, $d, $e, $f, &dummy_g),
             ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, u32)
         )
     }};
-    ($policy:ident, $env:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty); $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr) => {{
+    ($policy:ident; $pred:ty; ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty); $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr) => {{
         wide_predicate_rank!(
-            @launch $policy, $env,
+            @launch $policy,
             KernelOp<R, $pred>,
             ($a, $b, $c, $d, $e, $f, $g),
             ($ty0, $ty1, $ty2, $ty3, $ty4, $ty5, $ty6)
         )
     }};
-    (@launch $policy:ident, $env:ident, $pred:ty, ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty)) => {{
+    (@launch $policy:ident, $pred:ty, ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty)) => {{
         let len = $a.len;
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         if len == 0 {
@@ -9016,7 +8760,6 @@ macro_rules! wide_predicate_rank {
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    $env,
                     BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
                     BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
                     BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
@@ -9048,11 +8791,10 @@ macro_rules! impl_wide_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<crate::MIndex, Error> {
                 let _ = pred;
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 mindex_from_usize(crate::detail::primitives::select::selected_count(
                     policy,
@@ -9064,12 +8806,11 @@ macro_rules! impl_wide_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 let _ = pred;
                 let len = self.len();
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 Ok(mindex_from_usize(crate::detail::primitives::select::selected_count(
                     policy,
@@ -9081,11 +8822,10 @@ macro_rules! impl_wide_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 let _ = pred;
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 Ok(crate::detail::primitives::select::selected_count(policy, &selected_rank)? != 0)
             }
@@ -9094,11 +8834,10 @@ macro_rules! impl_wide_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 let _ = pred;
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 Ok(crate::detail::primitives::select::selected_count(policy, &selected_rank)? == 0)
             }
@@ -9107,11 +8846,10 @@ macro_rules! impl_wide_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<crate::MIndex>, Error> {
                 let _ = pred;
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 let search = crate::detail::control::SearchControl::from_flags(
                     selected_rank.flag.clone(),
@@ -9125,11 +8863,10 @@ macro_rules! impl_wide_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 let _ = pred;
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 let first_rejected = crate::detail::primitives::search::first_unset_flag(
                     policy,
@@ -9164,13 +8901,11 @@ macro_rules! impl_flat_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<crate::MIndex, Error> {
                 crate::detail::count_if(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )
             }
 
@@ -9178,13 +8913,11 @@ macro_rules! impl_flat_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 crate::detail::all_of(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )
             }
 
@@ -9192,13 +8925,11 @@ macro_rules! impl_flat_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 crate::detail::any_of(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )
             }
 
@@ -9206,13 +8937,11 @@ macro_rules! impl_flat_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 crate::detail::none_of(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )
             }
 
@@ -9220,13 +8949,11 @@ macro_rules! impl_flat_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<Option<crate::MIndex>, Error> {
                 crate::detail::find_if(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )
             }
 
@@ -9234,13 +8961,11 @@ macro_rules! impl_flat_zip_predicate_query {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<bool, Error> {
                 crate::detail::is_partitioned(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )
             }
         }
@@ -9261,11 +8986,10 @@ where
         self,
         policy: &CubePolicy<R>,
         _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<crate::MIndex, Error> {
         let (matching, failing) =
-            crate::detail::partition(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)?;
+            crate::detail::partition(policy, (self.a.column,), KernelOp::<R, Pred>::new())?;
         let split = mindex_from_usize(matching.0.len())?;
         output.write_split_from_inner(policy, matching, failing)?;
         Ok(split)
@@ -9286,14 +9010,12 @@ macro_rules! impl_flat_zip_partition_small {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<crate::MIndex, Error> {
                 let (matching, failing) = crate::detail::partition(
                     policy,
                     $view { $( $view_field: self.$field.column, )+ },
                     KernelOp::<R, Pred>::new(),
-                    env,
                 )?;
                 let split = mindex_from_usize(matching.0.len())?;
                 output.write_split_from_inner(policy, matching, failing)?;
@@ -9320,11 +9042,10 @@ macro_rules! impl_flat_zip_partition_wide {
                 self,
                 policy: &CubePolicy<R>,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<crate::MIndex, Error> {
                 let selected_rank = wide_predicate_rank!(
-                    policy, env; Pred; ($( $ty ),+); $( &self.$field.column ),+
+                    policy; Pred; ($( $ty ),+); $( &self.$field.column ),+
                 )?;
                 let (split_rank, matching_count, failing_count) =
                     crate::detail::primitives::select::split_rank_from_selected(
@@ -9353,57 +9074,27 @@ where
     A: MStorageElement + 'static,
     Pred: op::PredicateOp<R, (A,)>,
 {
-    fn count_if(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<crate::MIndex, Error> {
-        crate::detail::count_if(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)
+    fn count_if(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<crate::MIndex, Error> {
+        crate::detail::count_if(policy, (self.a.column,), KernelOp::<R, Pred>::new())
     }
 
-    fn all_of(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::all_of(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)
+    fn all_of(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::all_of(policy, (self.a.column,), KernelOp::<R, Pred>::new())
     }
 
-    fn any_of(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::any_of(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)
+    fn any_of(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::any_of(policy, (self.a.column,), KernelOp::<R, Pred>::new())
     }
 
-    fn none_of(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::none_of(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)
+    fn none_of(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::none_of(policy, (self.a.column,), KernelOp::<R, Pred>::new())
     }
 
-    fn find_if(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<Option<crate::MIndex>, Error> {
-        crate::detail::find_if(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)
+    fn find_if(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<Option<crate::MIndex>, Error> {
+        crate::detail::find_if(policy, (self.a.column,), KernelOp::<R, Pred>::new())
     }
 
-    fn is_partitioned(
-        self,
-        policy: &CubePolicy<R>,
-        _pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
-    ) -> Result<bool, Error> {
-        crate::detail::is_partitioned(policy, (self.a.column,), KernelOp::<R, Pred>::new(), env)
+    fn is_partitioned(self, policy: &CubePolicy<R>, _pred: Pred) -> Result<bool, Error> {
+        crate::detail::is_partitioned(policy, (self.a.column,), KernelOp::<R, Pred>::new())
     }
 }

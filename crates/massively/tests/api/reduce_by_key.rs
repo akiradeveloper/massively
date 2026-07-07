@@ -12,7 +12,7 @@ where
     Values: massively::iter::MIter<WgpuRuntime>,
     Values::Item: massively::MAlloc<WgpuRuntime>,
     Op: ReductionOp<WgpuRuntime, Values::Item>,
-    Pred: PredicateOp<WgpuRuntime, Values::Item, Env = ()>,
+    Pred: PredicateOp<WgpuRuntime, Values::Item>,
 {
     let len = keys.0.len();
     let out_keys = exec.alloc::<(u32,)>(len).unwrap();
@@ -28,7 +28,7 @@ where
         out_values.slice_mut(..),
     )
     .unwrap();
-    count_if(exec, out_values.slice(..len), pred, ()).unwrap()
+    count_if(exec, out_values.slice(..len), pred).unwrap()
 }
 
 #[test]

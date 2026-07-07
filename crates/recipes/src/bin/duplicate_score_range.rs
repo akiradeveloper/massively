@@ -24,7 +24,7 @@ where
     B: cubecl::prelude::Runtime,
 {
     let query = exec.to_device(&[target])?;
-    let lower = exec.constant(1, 0_u32)?;
+    let lower = exec.full(1, 0_u32)?;
     lower_bound(
         exec,
         Zip1(score.slice(..)),
@@ -32,7 +32,7 @@ where
         common::LessU32,
         lower.slice_mut(..),
     )?;
-    let upper = exec.constant(1, 0_u32)?;
+    let upper = exec.full(1, 0_u32)?;
     upper_bound(
         exec,
         Zip1(score.slice(..)),

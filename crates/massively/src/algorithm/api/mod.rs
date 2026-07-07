@@ -37,9 +37,7 @@ mod transform;
 mod unique;
 
 pub use indexed::{gather, gather_where, scatter, scatter_where};
-pub use ordering::{
-    merge, merge_by_key, reverse, sort, sort_by_key, stable_sort, stable_sort_by_key,
-};
+pub use ordering::{merge, merge_by_key, reverse, sort, sort_by_key};
 pub use predicate::{all_of, any_of, count_if, find_if, is_partitioned, none_of, partition};
 pub use reduce::{reduce, reduce_by_key};
 pub use scan::{

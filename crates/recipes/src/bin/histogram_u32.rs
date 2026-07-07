@@ -34,7 +34,7 @@ where
         common::LessU32,
         Zip1(sorted.slice_mut(..)),
     )?;
-    let ones = exec.constant(sorted.len(), 1_u32)?;
+    let ones = exec.full(sorted.len(), 1_u32)?;
     let category_id = exec.to_device(&vec![0_u32; len])?;
     let count = exec.to_device(&vec![0_u32; len])?;
     let len = reduce_by_key(

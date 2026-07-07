@@ -5,7 +5,6 @@ pub fn transform<R, Input, Output, Op>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     out: Output,
 ) -> Result<(), Error>
 where
@@ -16,7 +15,7 @@ where
 {
     validate_input(exec, &source)?;
     validate_output(exec, &out)?;
-    source.transform_with_policy(exec.policy(), op, env, out)
+    source.transform_with_policy(exec.policy(), op, out)
 }
 
 /// Applies a unary transform where the `u32` stencil flag is non-zero.
@@ -24,7 +23,6 @@ pub fn transform_where<R, Input, Stencil, Output, Op>(
     exec: &Executor<R>,
     source: Input,
     op: Op,
-    env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     stencil: Stencil,
     out: Output,
 ) -> Result<(), Error>
@@ -39,5 +37,5 @@ where
     validate_input(exec, &stencil)?;
     validate_output(exec, &out)?;
     let stencil = stencil.stencil_selection_with_policy(exec.policy(), false, false)?;
-    source.transform_where_with_policy(exec.policy(), op, env, stencil, out)
+    source.transform_where_with_policy(exec.policy(), op, stencil, out)
 }

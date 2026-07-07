@@ -31,16 +31,16 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let delayed_route = exec.constant(route_id.len(), 0_u32)?;
-    let delayed_weight = exec.constant(weight.len(), 0.0_f32)?;
+    let delayed_route = exec.full(route_id.len(), 0_u32)?;
+    let delayed_weight = exec.full(weight.len(), 0.0_f32)?;
     let delayed_len = copy_where(
         exec,
         Zip2(route_id.slice(..), weight.slice(..)),
         delayed.slice(..),
         Zip2(delayed_route.slice_mut(..), delayed_weight.slice_mut(..)),
     )?;
-    let sorted_route = exec.constant(delayed_len, 0_u32)?;
-    let sorted_weight = exec.constant(delayed_len, 0.0_f32)?;
+    let sorted_route = exec.full(delayed_len, 0_u32)?;
+    let sorted_weight = exec.full(delayed_len, 0.0_f32)?;
     sort_by_key(
         exec,
         Zip1(delayed_route.slice(..delayed_len)),
@@ -49,8 +49,8 @@ where
         Zip1(sorted_route.slice_mut(..)),
         Zip1(sorted_weight.slice_mut(..)),
     )?;
-    let route_id = exec.constant(delayed_len, 0_u32)?;
-    let delayed_weight = exec.constant(delayed_len, 0.0_f32)?;
+    let route_id = exec.full(delayed_len, 0_u32)?;
+    let delayed_weight = exec.full(delayed_len, 0.0_f32)?;
     let len = reduce_by_key(
         exec,
         Zip1(sorted_route.slice(..)),

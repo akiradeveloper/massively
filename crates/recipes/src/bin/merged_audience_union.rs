@@ -22,7 +22,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let out = exec.constant(left.len() + right.len(), 0_u32)?;
+    let out = exec.full(left.len() + right.len(), 0_u32)?;
     let len = set_union(
         exec,
         Zip1(left.slice(..)),

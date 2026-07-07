@@ -4,10 +4,9 @@ struct AddOneU32;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (u32,)> for AddOneU32 {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32,)) -> (u32,) {
+    fn apply(input: (u32,)) -> (u32,) {
         (input.0 + 1,)
     }
 }
@@ -16,10 +15,9 @@ struct PairToU32;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (u32, u32)> for PairToU32 {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32, u32)) -> (u32,) {
+    fn apply(input: (u32, u32)) -> (u32,) {
         (input.0 + input.1 * 10,)
     }
 }
@@ -27,12 +25,11 @@ impl UnaryOp<WgpuRuntime, (u32, u32)> for PairToU32 {
 struct AddOffset;
 
 #[cubecl::cube]
-impl UnaryOp<WgpuRuntime, (u32,)> for AddOffset {
-    type Env = u32;
+impl UnaryOp<WgpuRuntime, (u32, u32)> for AddOffset {
     type Output = (u32,);
 
-    fn apply(offset: u32, input: (u32,)) -> (u32,) {
-        (input.0 + offset,)
+    fn apply(input: (u32, u32)) -> (u32,) {
+        (input.0 + input.1,)
     }
 }
 
@@ -40,10 +37,9 @@ struct Square;
 
 #[cubecl::cube]
 impl UnaryOp<WgpuRuntime, (u32,)> for Square {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32,)) -> (u32,) {
+    fn apply(input: (u32,)) -> (u32,) {
         (input.0 * input.0,)
     }
 }
@@ -51,11 +47,31 @@ impl UnaryOp<WgpuRuntime, (u32,)> for Square {
 struct LessThan;
 
 #[cubecl::cube]
-impl PredicateOp<WgpuRuntime, (u32,)> for LessThan {
-    type Env = u32;
+impl PredicateOp<WgpuRuntime, (u32, u32)> for LessThan {
+    fn apply(input: (u32, u32)) -> bool {
+        input.0 < input.1
+    }
+}
 
-    fn apply(limit: u32, input: (u32,)) -> bool {
-        input.0 < limit
+struct IdentityU32Tuple;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32,)> for IdentityU32Tuple {
+    type Output = (u32,);
+
+    fn apply(input: (u32,)) -> (u32,) {
+        input
+    }
+}
+
+struct IdentityF32U32Tuple;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (f32, u32)> for IdentityF32U32Tuple {
+    type Output = (f32, u32);
+
+    fn apply(input: (f32, u32)) -> (f32, u32) {
+        input
     }
 }
 
@@ -69,7 +85,6 @@ fn map_returns_owned_single_column_output() {
         &exec,
         massively::Zip1(input.slice(..)),
         AddOneU32,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -85,9 +100,11 @@ fn stateful_unary_op_carries_value() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::Zip1(input.slice(..)),
+        massively::Zip2(
+            input.slice(..),
+            massively::lazy::constant(10_u32).take(input.len()),
+        ),
         AddOffset,
-        10_u32,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -96,7 +113,7 @@ fn stateful_unary_op_carries_value() {
 }
 
 #[test]
-fn stateless_unary_op_uses_unit_env() {
+fn stateless_unary_op_runs_without_env() {
     let exec = exec();
     let input = exec.to_device(&[2_u32, 3, 4]).unwrap();
 
@@ -105,7 +122,6 @@ fn stateless_unary_op_uses_unit_env() {
         &exec,
         massively::Zip1(input.slice(..)),
         Square,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -114,7 +130,7 @@ fn stateless_unary_op_uses_unit_env() {
 }
 
 #[test]
-fn composed_unary_op_uses_paired_env() {
+fn composed_unary_op_reads_external_value_from_input() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
     let op = massively::op::compose(AddOffset, Square);
@@ -122,9 +138,11 @@ fn composed_unary_op_uses_paired_env() {
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::Zip1(input.slice(..)),
+        massively::Zip2(
+            input.slice(..),
+            massively::lazy::constant(2_u32).take(input.len()),
+        ),
         op,
-        (2_u32, ()),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -133,16 +151,14 @@ fn composed_unary_op_uses_paired_env() {
 }
 
 #[test]
-fn constant_unary_op_returns_env_for_single_column() {
+fn lazy_constant_materializes_single_column() {
     let exec = exec();
-    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::Zip1(input.slice(..)),
-        massively::op::constant::<(u32,)>(),
-        (42_u32,),
+        massively::lazy::constant((42_u32,)).take(3),
+        IdentityU32Tuple,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -151,17 +167,15 @@ fn constant_unary_op_returns_env_for_single_column() {
 }
 
 #[test]
-fn constant_unary_op_returns_env_for_multi_column() {
+fn lazy_constant_materializes_multi_column() {
     let exec = exec();
-    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
 
     let values = exec.to_device(&[0.0_f32; 3]).unwrap();
     let tags = exec.to_device(&[0_u32; 3]).unwrap();
     transform(
         &exec,
-        massively::Zip1(input.slice(..)),
-        massively::op::Constant::<(f32, u32)>::new(),
-        (1.5_f32, 9_u32),
+        massively::lazy::constant((1.5_f32, 9_u32)).take(3),
+        IdentityF32U32Tuple,
         massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
@@ -171,17 +185,43 @@ fn constant_unary_op_returns_env_for_multi_column() {
 }
 
 #[test]
-fn stateful_predicate_op_carries_value() {
+fn predicate_reads_external_value_from_input() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 3, 5, 7]).unwrap();
 
-    assert!(!massively::all_of(&exec, massively::Zip1(input.slice(..)), LessThan, 5_u32,).unwrap());
+    assert!(
+        !massively::all_of(
+            &exec,
+            massively::Zip2(
+                input.slice(..),
+                massively::lazy::constant(5_u32).take(input.len()),
+            ),
+            LessThan,
+        )
+        .unwrap()
+    );
     assert_eq!(
-        count_if(&exec, massively::Zip1(input.slice(..)), LessThan, 5_u32).unwrap(),
+        count_if(
+            &exec,
+            massively::Zip2(
+                input.slice(..),
+                massively::lazy::constant(5_u32).take(input.len()),
+            ),
+            LessThan,
+        )
+        .unwrap(),
         2
     );
     assert_eq!(
-        find_if(&exec, massively::Zip1(input.slice(..)), LessThan, 4_u32).unwrap(),
+        find_if(
+            &exec,
+            massively::Zip2(
+                input.slice(..),
+                massively::lazy::constant(4_u32).take(input.len()),
+            ),
+            LessThan,
+        )
+        .unwrap(),
         Some(0)
     );
 }
@@ -197,7 +237,6 @@ fn map_returns_owned_output_from_multi_column_input() {
         &exec,
         massively::Zip2(left.slice(..), right.slice(..)),
         PairToU32,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -291,12 +330,11 @@ fn where_algorithms_accept_device_slice_stencil() {
         vec![20, 40]
     );
 
-    let transformed = exec.constant(4, 0_u32).unwrap();
+    let transformed = exec.full(4, 0_u32).unwrap();
     transform_where(
         &exec,
         massively::Zip1(input.slice(..)),
         AddOneU32,
-        (),
         stencil.slice(..),
         massively::Zip1(transformed.slice_mut(..)),
     )
@@ -322,7 +360,6 @@ fn owned_zip_result_can_feed_next_algorithm() {
         &exec,
         massively::Zip1(sorted.slice(..)),
         AddOneU32,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -348,7 +385,6 @@ fn owned_zip_result_can_be_sliced_before_next_algorithm() {
         &exec,
         massively::Zip1(sorted.slice(1..3)),
         AddOneU32,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -392,13 +428,12 @@ fn permuted_owned_zip_can_feed_selection_algorithm() {
 fn owned_zip_slice_mut_can_be_used_as_output() {
     let exec = exec();
     let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
-    let output = massively::Zip1(exec.constant(5, 0_u32).unwrap());
+    let output = massively::Zip1(exec.full(5, 0_u32).unwrap());
 
     transform(
         &exec,
         massively::Zip1(input.slice(..)),
         AddOneU32,
-        (),
         output.slice_mut(1..4),
     )
     .unwrap();

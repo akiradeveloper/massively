@@ -12,10 +12,9 @@ impl<R> UnaryOp<R, (f32,)> for AddOne
 where
     R: cubecl::prelude::Runtime,
 {
-    type Env = ();
     type Output = (f32,);
 
-    fn apply(_env: (), input: (f32,)) -> (f32,) {
+    fn apply(input: (f32,)) -> (f32,) {
         (input.0 + 1.0,)
     }
 }
@@ -27,10 +26,9 @@ impl<R> UnaryOp<R, (f32,)> for Square
 where
     R: cubecl::prelude::Runtime,
 {
-    type Env = ();
     type Output = (f32,);
 
-    fn apply(_env: (), input: (f32,)) -> (f32,) {
+    fn apply(input: (f32,)) -> (f32,) {
         (input.0 * input.0,)
     }
 }
@@ -152,9 +150,7 @@ impl<R> PredicateOp<R, (f32,)> for Positive
 where
     R: cubecl::prelude::Runtime,
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (f32,)) -> bool {
+    fn apply(input: (f32,)) -> bool {
         input.0 > 0.0
     }
 }
@@ -166,9 +162,7 @@ impl<R> PredicateOp<R, (f32,)> for GreaterThanTwo
 where
     R: cubecl::prelude::Runtime,
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (f32,)) -> bool {
+    fn apply(input: (f32,)) -> bool {
         input.0 > 2.0
     }
 }
@@ -180,9 +174,7 @@ impl<R> PredicateOp<R, (u32,)> for EvenU32
 where
     R: cubecl::prelude::Runtime,
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (u32,)) -> bool {
+    fn apply(input: (u32,)) -> bool {
         input.0 % 2 == 0
     }
 }

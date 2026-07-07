@@ -29,7 +29,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let offset = exec.constant(slot_count.len(), 0_u32)?;
+    let offset = exec.full(slot_count.len(), 0_u32)?;
     exclusive_scan(
         exec,
         Zip1(slot_count.slice(..)),

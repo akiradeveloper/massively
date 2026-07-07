@@ -116,39 +116,3 @@ where
     validate_output(exec, &out_v)?;
     keys.sort_by_key_with_policy(exec.policy(), values, less, out_k, out_v)
 }
-
-/// Stable sort. The current lower implementation is stable.
-pub fn stable_sort<R, Input, Less, Output>(
-    exec: &Executor<R>,
-    source: Input,
-    less: Less,
-    out: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Output: MIterMut<R>,
-    Input: MIter<R, Item = Output::Item>,
-    Less: op::BinaryPredicateOp<R, Input::Item>,
-{
-    sort(exec, source, less, out)
-}
-
-/// Stable key-value sort. The current lower implementation is stable.
-pub fn stable_sort_by_key<R, Keys, Values, Less, KeyOutput, ValueOutput>(
-    exec: &Executor<R>,
-    keys: Keys,
-    values: Values,
-    less: Less,
-    out_k: KeyOutput,
-    out_v: ValueOutput,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    KeyOutput: MIterMut<R>,
-    ValueOutput: MIterMut<R>,
-    Keys: MIter<R, Item = KeyOutput::Item>,
-    Values: MIter<R, Item = ValueOutput::Item>,
-    Less: op::BinaryPredicateOp<R, Keys::Item>,
-{
-    sort_by_key(exec, keys, values, less, out_k, out_v)
-}

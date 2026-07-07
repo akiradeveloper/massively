@@ -102,7 +102,7 @@ where
     Stencil::Runtime: Runtime,
     Stencil::Item: CubePrimitive + CubeElement,
     Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<Stencil::Item, Env = ()>,
+    Pred: PredicateOp<Stencil::Item>,
 {
     type Runtime = Stencil::Runtime;
 
@@ -115,7 +115,7 @@ where
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
     ) -> Result<select::SelectedRankControl, Error> {
-        device_expr_selected_rank_with_policy::<Stencil, Pred>(policy, self, invert, ())
+        device_expr_selected_rank_with_policy::<Stencil, Pred>(policy, self, invert)
     }
 
     fn selection_flags_with_policy(
@@ -123,7 +123,7 @@ where
         policy: &crate::policy::CubePolicy<Self::Runtime>,
         invert: bool,
     ) -> Result<select::MaskControl, Error> {
-        device_expr_selection_flags_with_policy::<Stencil, Pred>(policy, self, invert, ())
+        device_expr_selection_flags_with_policy::<Stencil, Pred>(policy, self, invert)
     }
 }
 
@@ -133,7 +133,7 @@ where
     Stencil::Runtime: Runtime,
     Stencil::Item: CubePrimitive + CubeElement,
     Stencil::Expr: GpuExpr<Stencil::Item>,
-    Pred: PredicateOp<(Stencil::Item,), Env = ()>,
+    Pred: PredicateOp<(Stencil::Item,)>,
 {
     type Runtime = Stencil::Runtime;
 
@@ -147,10 +147,7 @@ where
         invert: bool,
     ) -> Result<select::SelectedRankControl, Error> {
         device_expr_selected_rank_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
-            policy,
-            &self.0,
-            invert,
-            (),
+            policy, &self.0, invert,
         )
     }
 
@@ -160,10 +157,7 @@ where
         invert: bool,
     ) -> Result<select::MaskControl, Error> {
         device_expr_selection_flags_with_policy::<Stencil, Tuple1PredicateOp<Pred>>(
-            policy,
-            &self.0,
-            invert,
-            (),
+            policy, &self.0, invert,
         )
     }
 }
@@ -177,7 +171,7 @@ where
     B::Item: CubePrimitive + CubeElement,
     A::Expr: DeviceGpuExpr<A::Item>,
     B::Expr: DeviceGpuExpr<B::Item>,
-    Pred: PredicateOp<(A::Item, B::Item), Env = ()>,
+    Pred: PredicateOp<(A::Item, B::Item)>,
 {
     type Runtime = A::Runtime;
 
@@ -228,7 +222,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-                    (),
                     unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
                     unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
                     unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
@@ -261,7 +254,7 @@ where
     A::Expr: DeviceGpuExpr<A::Item>,
     B::Expr: DeviceGpuExpr<B::Item>,
     C::Expr: DeviceGpuExpr<C::Item>,
-    Pred: PredicateOp<(A::Item, B::Item, C::Item), Env = ()>,
+    Pred: PredicateOp<(A::Item, B::Item, C::Item)>,
 {
     type Runtime = A::Runtime;
 
@@ -322,7 +315,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-                    (),
                     unsafe { BufferArg::from_raw_parts(first_slot0.0.clone(), first_slot0.1) },
                     unsafe { BufferArg::from_raw_parts(first_slot1.0.clone(), first_slot1.1) },
                     unsafe { BufferArg::from_raw_parts(first_slot2.0.clone(), first_slot2.1) },

@@ -31,8 +31,8 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let ranked_item_id = exec.constant(len, 0_u32)?;
-    let ranked_score = exec.constant(len, 0.0_f32)?;
+    let ranked_item_id = exec.full(len, 0_u32)?;
+    let ranked_score = exec.full(len, 0.0_f32)?;
     scatter(
         exec,
         Zip2(item_id.slice(..), score.slice(..)),

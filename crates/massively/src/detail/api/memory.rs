@@ -79,7 +79,6 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
@@ -93,7 +92,6 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = input.len();
         let client = policy.client();
@@ -113,7 +111,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
                     },
@@ -140,7 +137,6 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = input.len();
         let client = policy.client();
@@ -161,7 +157,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
                     },
@@ -191,7 +186,6 @@ where
     fn run(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, T>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = input.len();
         let client = policy.client();
@@ -213,7 +207,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
                     },
@@ -248,7 +241,6 @@ macro_rules! impl_wide_transform_unary_output {
             fn run(
                 policy: &CubePolicy<R>,
                 input: DeviceColumnView<R, T>,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let len = input.len();
                 let client = policy.client();
@@ -268,7 +260,6 @@ macro_rules! impl_wide_transform_unary_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            env,
                             BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len()),
                             BufferArg::from_raw_parts(offset_handle.clone(), 1),
                             BufferArg::from_raw_parts(len_handle.clone(), 1),
@@ -317,7 +308,6 @@ where
         policy: &CubePolicy<R>,
         bindings: KernelColumnBindings,
         len: usize,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
@@ -337,7 +327,6 @@ where
         policy: &CubePolicy<R>,
         bindings: KernelColumnBindings,
         len: usize,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -366,7 +355,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
                     BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
@@ -399,7 +387,6 @@ where
         policy: &CubePolicy<R>,
         bindings: KernelColumnBindings,
         len: usize,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -430,7 +417,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
                     BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
@@ -466,7 +452,6 @@ where
         policy: &CubePolicy<R>,
         bindings: KernelColumnBindings,
         len: usize,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let client = policy.client();
         let output_a = client.empty(len * std::mem::size_of::<OutA>());
@@ -499,7 +484,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
                     BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
@@ -541,7 +525,6 @@ macro_rules! impl_transform_logical3_wide_output {
                 policy: &CubePolicy<R>,
                 bindings: KernelColumnBindings,
                 len: usize,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let client = policy.client();
                 $(
@@ -572,7 +555,6 @@ macro_rules! impl_transform_logical3_wide_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            env,
                             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
                             BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
@@ -641,7 +623,6 @@ pub trait TransformLogical7Output<
         policy: &CubePolicy<R>,
         bindings: KernelColumnBindings,
         len: usize,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
@@ -683,7 +664,6 @@ macro_rules! impl_transform_logical7_output {
                 policy: &CubePolicy<R>,
                 bindings: KernelColumnBindings,
                 len: usize,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let client = policy.client();
                 $(
@@ -722,7 +702,6 @@ macro_rules! impl_transform_logical7_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            env,
                             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
                             BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
@@ -868,7 +847,6 @@ macro_rules! impl_transform_tuple_output {
                 policy: &crate::policy::CubePolicy<R>,
                 $first_arg: DeviceColumnView<R, $first_in>,
                 $( $arg: DeviceColumnView<R, $in_ty>, )+
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let len = $first_arg.len();
                 let client = policy.client();
@@ -890,7 +868,6 @@ macro_rules! impl_transform_tuple_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            env,
                             unsafe { BufferArg::from_raw_parts($first_arg.source.handle.clone(), $first_arg.source.len()) },
                             $(
                                 unsafe { BufferArg::from_raw_parts($arg.source.handle.clone(), $arg.source.len()) },
@@ -988,7 +965,6 @@ where
         policy: &crate::policy::CubePolicy<R>,
         left: DeviceColumnView<R, InA>,
         right: DeviceColumnView<R, InB>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
@@ -1004,7 +980,6 @@ where
         policy: &crate::policy::CubePolicy<R>,
         left: DeviceColumnView<R, InA>,
         right: DeviceColumnView<R, InB>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
@@ -1023,7 +998,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(left.source.handle.clone(), left.source.len())
                     },
@@ -1056,7 +1030,6 @@ where
         policy: &crate::policy::CubePolicy<R>,
         left: DeviceColumnView<R, InA>,
         right: DeviceColumnView<R, InB>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = left.len();
         let client = policy.client();
@@ -1076,7 +1049,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(left.source.handle.clone(), left.source.len())
                     },
@@ -1112,7 +1084,6 @@ where
         first: DeviceColumnView<R, InA>,
         second: DeviceColumnView<R, InB>,
         third: DeviceColumnView<R, InC>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
 }
 
@@ -1130,7 +1101,6 @@ where
         first: DeviceColumnView<R, InA>,
         second: DeviceColumnView<R, InB>,
         third: DeviceColumnView<R, InC>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
@@ -1150,7 +1120,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(first.source.handle.clone(), first.source.len())
                     },
@@ -1191,7 +1160,6 @@ where
         first: DeviceColumnView<R, InA>,
         second: DeviceColumnView<R, InB>,
         third: DeviceColumnView<R, InC>,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
         let len = first.len();
         let client = policy.client();
@@ -1222,7 +1190,6 @@ where
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    env,
                     unsafe {
                         BufferArg::from_raw_parts(first.source.handle.clone(), first.source.len())
                     },
@@ -1267,7 +1234,6 @@ macro_rules! define_transform_zip_output_trait {
             fn run(
                 policy: &crate::policy::CubePolicy<R>,
                 $( $arg: DeviceColumnView<R, $in_ty>, )+
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
         }
     };
@@ -1326,7 +1292,6 @@ macro_rules! impl_wide_transform_zip_output {
                 policy: &CubePolicy<R>,
                 $first_arg: DeviceColumnView<R, $first_in>,
                 $( $arg: DeviceColumnView<R, $in_ty>, )+
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let len = $first_arg.len();
                 let client = policy.client();
@@ -1349,7 +1314,6 @@ macro_rules! impl_wide_transform_zip_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            env,
                             BufferArg::from_raw_parts($first_arg.1.source.handle.clone(), $first_arg.1.source.len()),
                             $(
                                 BufferArg::from_raw_parts($arg.1.source.handle.clone(), $arg.1.source.len()),
@@ -1510,7 +1474,6 @@ macro_rules! impl_transform_zip7_output {
                 e: DeviceColumnView<R, InE>,
                 f: DeviceColumnView<R, InF>,
                 g: DeviceColumnView<R, InG>,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
                 let len = a.len();
                 let client = policy.client();
@@ -1547,7 +1510,6 @@ macro_rules! impl_transform_zip7_output {
                             client,
                             CubeCount::Static(block_count_u32, 1, 1),
                             CubeDim::new_1d(block_size),
-                            env,
                             BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
                             BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
                             BufferArg::from_raw_parts(c.source.handle.clone(), c.source.len()),

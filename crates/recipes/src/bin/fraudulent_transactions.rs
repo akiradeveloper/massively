@@ -27,10 +27,9 @@ impl<B> UnaryOp<B, (u32, f32, u32)> for SuspiciousTransaction
 where
     B: cubecl::prelude::Runtime,
 {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32, f32, u32)) -> (u32,) {
+    fn apply(input: (u32, f32, u32)) -> (u32,) {
         if input.1 >= 100.0 || input.2 >= 80_u32 {
             (1_u32,)
         } else {
@@ -46,9 +45,7 @@ impl<B> PredicateOp<B, (u32, f32, u32)> for HighRiskTransaction
 where
     B: cubecl::prelude::Runtime,
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (u32, f32, u32)) -> bool {
+    fn apply(input: (u32, f32, u32)) -> bool {
         input.1 >= 200.0 || input.2 >= 90_u32
     }
 }
@@ -73,17 +70,16 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let flag = exec.constant(account_id.len(), 0_u32)?;
+    let flag = exec.full(account_id.len(), 0_u32)?;
     transform(
         exec,
         Zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
         SuspiciousTransaction,
-        (),
         Zip1(flag.slice_mut(..)),
     )?;
-    let suspicious_account_id = exec.constant(account_id.len(), 0_u32)?;
-    let suspicious_amount = exec.constant(amount.len(), 0.0_f32)?;
-    let suspicious_risk_score = exec.constant(risk_score.len(), 0_u32)?;
+    let suspicious_account_id = exec.full(account_id.len(), 0_u32)?;
+    let suspicious_amount = exec.full(amount.len(), 0.0_f32)?;
+    let suspicious_risk_score = exec.full(risk_score.len(), 0_u32)?;
     let suspicious_len = copy_where(
         exec,
         Zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
@@ -94,9 +90,9 @@ where
             suspicious_risk_score.slice_mut(..),
         ),
     )?;
-    let account_id = exec.constant(suspicious_len, 0_u32)?;
-    let amount = exec.constant(suspicious_len, 0.0_f32)?;
-    let risk_score = exec.constant(suspicious_len, 0_u32)?;
+    let account_id = exec.full(suspicious_len, 0_u32)?;
+    let amount = exec.full(suspicious_len, 0.0_f32)?;
+    let risk_score = exec.full(suspicious_len, 0_u32)?;
     let split = partition(
         exec,
         Zip3(
@@ -105,7 +101,6 @@ where
             suspicious_risk_score.slice(..suspicious_len),
         ),
         HighRiskTransaction,
-        (),
         Zip3(
             account_id.slice_mut(..),
             amount.slice_mut(..),

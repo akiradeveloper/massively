@@ -77,10 +77,9 @@ impl<R> UnaryOp<R, (u32,)> for AddOne
 where
     R: Runtime,
 {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32,)) -> (u32,) {
+    fn apply(input: (u32,)) -> (u32,) {
         (input.0 + 1,)
     }
 }
@@ -92,10 +91,9 @@ impl<R> UnaryOp<R, (u32,)> for Split
 where
     R: Runtime,
 {
-    type Env = ();
     type Output = (u32, u32);
 
-    fn apply(_env: (), input: (u32,)) -> (u32, u32) {
+    fn apply(input: (u32,)) -> (u32, u32) {
         (input.0, input.0 + 10)
     }
 }
@@ -107,10 +105,9 @@ impl<R> UnaryOp<R, (u32, u32)> for PairShift
 where
     R: Runtime,
 {
-    type Env = ();
     type Output = (u32, u32);
 
-    fn apply(_env: (), input: (u32, u32)) -> (u32, u32) {
+    fn apply(input: (u32, u32)) -> (u32, u32) {
         (input.0 + input.1, input.1 + 100)
     }
 }
@@ -122,10 +119,9 @@ impl<R> UnaryOp<R, (u32, u32, u32)> for TripleShift
 where
     R: Runtime,
 {
-    type Env = ();
     type Output = (u32, u32, u32);
 
-    fn apply(_env: (), input: (u32, u32, u32)) -> (u32, u32, u32) {
+    fn apply(input: (u32, u32, u32)) -> (u32, u32, u32) {
         (input.0 + input.1, input.1 + input.2, input.2 + 1000)
     }
 }
@@ -197,9 +193,7 @@ impl<R> PredicateOp<R, (u32, u32)> for PairFirstOdd
 where
     R: Runtime,
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (u32, u32)) -> bool {
+    fn apply(input: (u32, u32)) -> bool {
         input.0 % 2 == 1
     }
 }
@@ -215,9 +209,9 @@ where
     S1: massively::iter::MIter<R>,
     S2: MIterMut<R>,
     S2::Item: MAlloc<R>,
-    Op: UnaryOp<R, S1::Item, Output = S2::Item, Env = ()>,
+    Op: UnaryOp<R, S1::Item, Output = S2::Item>,
 {
-    massively::transform(exec, source, op, (), out)
+    massively::transform(exec, source, op, out)
 }
 
 fn transform3<R, S1, S2, Op>(
@@ -230,9 +224,9 @@ where
     R: Runtime,
     S1: massively::iter::MIter<R, Item = (u32,)>,
     S2: MIterMut<R, Item = (u32,)>,
-    Op: UnaryOp<R, (u32,), Output = (u32,), Env = ()>,
+    Op: UnaryOp<R, (u32,), Output = (u32,)>,
 {
-    massively::transform(exec, source, op, (), out)
+    massively::transform(exec, source, op, out)
 }
 
 fn transform4<R, S1, S2, Op>(
@@ -245,9 +239,9 @@ where
     R: Runtime,
     S1: massively::iter::MIter<R, Item = (u32, u32)>,
     S2: MIterMut<R, Item = (u32, u32)>,
-    Op: UnaryOp<R, (u32, u32), Output = (u32, u32), Env = ()>,
+    Op: UnaryOp<R, (u32, u32), Output = (u32, u32)>,
 {
-    massively::transform(exec, source, op, (), out)
+    massively::transform(exec, source, op, out)
 }
 
 fn transform5<R, S1, S2, Op>(
@@ -260,9 +254,9 @@ where
     R: Runtime,
     S1: massively::iter::MIter<R, Item = (u32, u32, u32)>,
     S2: MIterMut<R, Item = (u32, u32, u32)>,
-    Op: UnaryOp<R, (u32, u32, u32), Output = (u32, u32, u32), Env = ()>,
+    Op: UnaryOp<R, (u32, u32, u32), Output = (u32, u32, u32)>,
 {
-    massively::transform(exec, source, op, (), out)
+    massively::transform(exec, source, op, out)
 }
 
 fn transform_without_op<R, S1, S2>(
@@ -275,7 +269,7 @@ where
     S1: massively::iter::MIter<R, Item = (u32,)>,
     S2: MIterMut<R, Item = (u32,)>,
 {
-    massively::transform(exec, source, AddOne, (), out)
+    massively::transform(exec, source, AddOne, out)
 }
 
 #[test]
@@ -292,6 +286,24 @@ fn lazy_constant_transform_reads_broadcast_value() {
     .unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![8, 8, 8, 8]);
+}
+
+#[test]
+fn lazy_constant_tuple_transform_reads_broadcast_item() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let left = exec.to_device(&[0_u32; 3]).unwrap();
+    let right = exec.to_device(&[0_u32; 3]).unwrap();
+
+    transform4(
+        &exec,
+        massively::lazy::constant((2_u32, 5_u32)).take(3),
+        PairShift,
+        massively::Zip2(left.slice_mut(..), right.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&left).unwrap(), vec![7, 7, 7]);
+    assert_eq!(exec.to_host(&right).unwrap(), vec![105, 105, 105]);
 }
 
 #[test]
@@ -371,7 +383,7 @@ fn lazy_transform_can_change_logical_item_shape() {
 }
 
 #[test]
-fn lazy_gather_transform_reads_indexed_values() {
+fn lazy_permute_transform_reads_indexed_values() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let indices = exec.to_device(&[2_u32, 0, 3]).unwrap();
@@ -379,7 +391,10 @@ fn lazy_gather_transform_reads_indexed_values() {
 
     transform3(
         &exec,
-        massively::Zip1(massively::lazy::gather(values.slice(..), indices.slice(..))),
+        massively::Zip1(massively::lazy::permute(
+            values.slice(..),
+            indices.slice(..),
+        )),
         AddOne,
         massively::Zip1(output.slice_mut(..)),
     )
@@ -389,7 +404,7 @@ fn lazy_gather_transform_reads_indexed_values() {
 }
 
 #[test]
-fn lazy_gather_transform_reads_tuple_values() {
+fn lazy_permute_transform_reads_tuple_values() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left_values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
     let right_values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
@@ -399,7 +414,7 @@ fn lazy_gather_transform_reads_tuple_values() {
 
     transform4(
         &exec,
-        massively::lazy::gather(
+        massively::lazy::permute(
             massively::Zip2(left_values.slice(..), right_values.slice(..)),
             indices.slice(..),
         ),
@@ -544,9 +559,9 @@ fn count_if2<R, S1, Pred>(
 where
     R: Runtime,
     S1: massively::iter::MIter<R>,
-    Pred: PredicateOp<R, S1::Item, Env = ()>,
+    Pred: PredicateOp<R, S1::Item>,
 {
-    massively::count_if(exec, source, pred, ())
+    massively::count_if(exec, source, pred)
 }
 
 fn find_if2<R, S1, Pred>(
@@ -557,9 +572,9 @@ fn find_if2<R, S1, Pred>(
 where
     R: Runtime,
     S1: massively::iter::MIter<R>,
-    Pred: PredicateOp<R, S1::Item, Env = ()>,
+    Pred: PredicateOp<R, S1::Item>,
 {
-    massively::find_if(exec, source, pred, ())
+    massively::find_if(exec, source, pred)
 }
 
 fn remove_where2<'a, R, S1, S2>(
@@ -588,9 +603,9 @@ where
     S1: massively::iter::MIter<R>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
-    Pred: PredicateOp<R, S1::Item, Env = ()>,
+    Pred: PredicateOp<R, S1::Item>,
 {
-    massively::partition(exec, source, pred, (), out)
+    massively::partition(exec, source, pred, out)
 }
 
 fn is_partitioned2<R, S1, Pred>(
@@ -601,9 +616,9 @@ fn is_partitioned2<R, S1, Pred>(
 where
     R: Runtime,
     S1: massively::iter::MIter<R>,
-    Pred: PredicateOp<R, S1::Item, Env = ()>,
+    Pred: PredicateOp<R, S1::Item>,
 {
-    massively::is_partitioned(exec, source, pred, ())
+    massively::is_partitioned(exec, source, pred)
 }
 
 fn unique2<R, S1, S2, Pred>(

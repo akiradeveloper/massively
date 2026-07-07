@@ -20,7 +20,6 @@ fn main() -> common::Result {
         &exec,
         Zip1(sorted.slice(..)),
         common::AddOne,
-        (),
         Zip1(output.slice_mut(..)),
     )?;
 
