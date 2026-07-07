@@ -168,3 +168,42 @@ fn copy_where_keeps_all_values_when_all_flags_are_selected() {
         vec![10, 20, 30]
     );
 }
+
+#[test]
+fn copy_where_accepts_lazy_constant_stencil() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let selected = exec.to_device(&[0_u32; 3]).unwrap();
+
+    let len = copy_where(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::constant(1_u32).take(3),
+        massively::Zip1(selected.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(len, 3);
+    assert_eq!(exec.to_host(&selected).unwrap(), vec![10, 20, 30]);
+}
+
+#[test]
+fn copy_where_accepts_lazy_counting_stencil() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let selected = exec.to_device(&[0_u32; 4]).unwrap();
+
+    let len = copy_where(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::counting(0).take(4),
+        massively::Zip1(selected.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(len, 3);
+    assert_eq!(
+        exec.to_host(&selected.slice(..len)).unwrap(),
+        vec![20, 30, 40]
+    );
+}

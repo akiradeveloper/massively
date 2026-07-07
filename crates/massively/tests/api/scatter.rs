@@ -20,3 +20,20 @@ fn scatter_accepts_heterogeneous_columns() {
     assert_eq!(exec.to_host(&out_values).unwrap(), vec![2.0, 0.0, 1.0, 3.0]);
     assert_eq!(exec.to_host(&out_ids).unwrap(), vec![20, 0, 10, 30]);
 }
+
+#[test]
+fn scatter_accepts_lazy_counting_indices() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let output = exec.to_device(&[0_u32; 5]).unwrap();
+
+    scatter(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::counting(1).take(3),
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 10, 20, 30, 0]);
+}

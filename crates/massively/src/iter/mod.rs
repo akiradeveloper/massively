@@ -428,29 +428,33 @@ pub trait MIter<R: Runtime>: Sized {
     #[doc(hidden)]
     fn stencil_selection_with_policy(
         self,
-        _policy: &crate::detail::CubePolicy<R>,
-        _invert: bool,
-        _flags_only: bool,
+        policy: &crate::detail::CubePolicy<R>,
+        invert: bool,
+        flags_only: bool,
     ) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
     where
         Self: MIter<R, Item = u32>,
+        Self::Read: crate::detail::read::KernelStencilSelection<R>,
     {
-        Err(Error::Launch {
-            message: "stencil selection is not supported for this iterator shape".to_string(),
-        })
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelStencilSelection::stencil_selection(
+            read, policy, invert, flags_only,
+        )
     }
 
     #[doc(hidden)]
     fn index_column_with_policy(
         self,
-        _policy: &crate::detail::CubePolicy<R>,
+        policy: &crate::detail::CubePolicy<R>,
     ) -> Result<crate::detail::device::DeviceColumnView<R, MIndex>, Error>
     where
         Self: MIter<R, Item = MIndex>,
+        Self::Read: crate::detail::read::KernelReadIndexColumn<R>,
     {
-        Err(Error::Launch {
-            message: "index iterator is not supported for this iterator shape".to_string(),
-        })
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelReadIndexColumn::into_index_column(read, policy)
     }
 
     #[doc(hidden)]

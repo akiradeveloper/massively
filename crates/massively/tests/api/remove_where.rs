@@ -115,3 +115,21 @@ fn remove_where_returns_empty_when_all_flags_are_selected() {
         Vec::<u32>::new()
     );
 }
+
+#[test]
+fn remove_where_accepts_lazy_counting_stencil() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let remaining = exec.to_device(&[0_u32; 4]).unwrap();
+
+    let len = remove_where(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::counting(0).take(4),
+        massively::Zip1(remaining.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(len, 1);
+    assert_eq!(exec.to_host(&remaining.slice(..len)).unwrap(), vec![10]);
+}

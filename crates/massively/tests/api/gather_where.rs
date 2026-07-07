@@ -81,3 +81,21 @@ fn gather_where_accepts_sliced_input_and_output() {
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![7, 30, 7, 10, 7]);
 }
+
+#[test]
+fn gather_where_accepts_lazy_indices_and_stencil() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let output = exec.to_device(&[99_u32; 4]).unwrap();
+
+    gather_where(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::counting(0).take(4),
+        massively::lazy::counting(0).take(4),
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![99, 20, 30, 40]);
+}

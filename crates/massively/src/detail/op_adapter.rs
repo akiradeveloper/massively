@@ -202,3 +202,16 @@ where
         input.0 > 0
     }
 }
+
+#[doc(hidden)]
+pub struct ScalarStencilFlag;
+
+#[cubecl::cube]
+impl<R> op::PredicateOp<R, u32> for ScalarStencilFlag
+where
+    R: Runtime,
+{
+    fn apply(input: u32) -> bool {
+        input > 0
+    }
+}
