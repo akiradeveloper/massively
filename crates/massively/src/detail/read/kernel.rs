@@ -1265,6 +1265,141 @@ where
     }
 }
 
+/// Lazy read expression for `values[indices[index]]`.
+#[doc(hidden)]
+pub struct GatherRead<Values, Indices> {
+    values: Values,
+    indices: Indices,
+}
+
+impl<Values, Indices> GatherRead<Values, Indices> {
+    pub(crate) fn new(values: Values, indices: Indices) -> Self {
+        Self { values, indices }
+    }
+}
+
+impl<R, Values, Indices> KernelRead<R> for GatherRead<Values, Indices>
+where
+    R: Runtime,
+    Values: KernelRead<R>,
+    Indices: KernelRead<R, Item = crate::MIndex>,
+{
+    type Item = Values::Item;
+
+    fn len(&self) -> usize {
+        self.indices.len()
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        self.values.validate()?;
+        self.indices.validate()
+    }
+
+    fn transform_read<Output, Op>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_logical7_read(self, policy, op, env, output)
+    }
+
+    fn transform_where_read<Output, Op>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        stencil: PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_where_logical7_read(self, policy, op, env, stencil, output)
+    }
+}
+
+/// Lazy read expression for `op(input[index])`.
+#[doc(hidden)]
+pub struct TransformRead<Read, Op> {
+    read: Read,
+    _op: std::marker::PhantomData<fn() -> Op>,
+}
+
+impl<Read, Op> TransformRead<Read, Op> {
+    pub(crate) fn new(read: Read) -> Self {
+        Self {
+            read,
+            _op: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<R, Read, Op> KernelRead<R> for TransformRead<Read, Op>
+where
+    R: Runtime,
+    Read: KernelRead<R>,
+    Read::Item: MItem<R>,
+    Op: op::UnaryOp<R, Read::Item, Env = ()>,
+{
+    type Item = Op::Output;
+
+    fn len(&self) -> usize {
+        self.read.len()
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        self.read.validate()
+    }
+
+    fn transform_read<Output, NextOp>(
+        self,
+        policy: &CubePolicy<R>,
+        op: NextOp,
+        env: <NextOp::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        NextOp: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_logical7_read(self, policy, op, env, output)
+    }
+
+    fn transform_where_read<Output, NextOp>(
+        self,
+        policy: &CubePolicy<R>,
+        op: NextOp,
+        env: <NextOp::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        stencil: PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        NextOp: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_where_logical7_read(self, policy, op, env, stencil, output)
+    }
+}
+
 macro_rules! impl_lazy_read_at {
     ($slot:ty, $next:ty, $constant_expr:ty, $counting_expr:ty) => {
         impl<R, T> KernelReadAt<R, $slot> for ConstantRead<T>
@@ -1385,6 +1520,82 @@ impl_lazy_read_at_env!(impl <A, B, C> Env3<A, B, C> => Env4<A, B, C, T>, Env4<A,
 impl_lazy_read_at_env!(impl <A, B, C, D> Env4<A, B, C, D> => Env5<A, B, C, D, T>, Env5<A, B, C, D, crate::MIndex>, crate::expr::ConstantSlot4<T>, crate::expr::CountingSlot4);
 impl_lazy_read_at_env!(impl <A, B, C, D, E> Env5<A, B, C, D, E> => Env6<A, B, C, D, E, T>, Env6<A, B, C, D, E, crate::MIndex>, crate::expr::ConstantSlot5<T>, crate::expr::CountingSlot5);
 impl_lazy_read_at_env!(impl <A, B, C, D, E, F> Env6<A, B, C, D, E, F> => Env7<A, B, C, D, E, F, T>, Env7<A, B, C, D, E, F, crate::MIndex>, crate::expr::ConstantSlot6<T>, crate::expr::CountingSlot6);
+
+impl<R, Values, Indices, Start> KernelReadAt<R, Start> for GatherRead<Values, Indices>
+where
+    R: Runtime,
+    Values: KernelReadAt<R, Start>,
+    Indices: KernelReadAt<R, <Values as KernelReadAt<R, Start>>::Next, LogicalItem = crate::MIndex>,
+{
+    type LogicalItem = Values::LogicalItem;
+    type ExprAt = crate::expr::GatherExpr<Values::ExprAt, Indices::ExprAt>;
+    type Next = Indices::Next;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        self.values.stage_at(bindings)?;
+        self.indices.stage_at(bindings)
+    }
+}
+
+impl<R, Values, Indices, Env> KernelReadAtEnv<R, Env> for GatherRead<Values, Indices>
+where
+    R: Runtime,
+    Values: KernelReadAtEnv<R, Env>,
+    Indices: KernelReadAtEnv<
+            R,
+            <Values as KernelReadAtEnv<R, Env>>::NextEnv,
+            LogicalItem = crate::MIndex,
+        >,
+{
+    type LogicalItem = Values::LogicalItem;
+    type ExprAt = crate::expr::GatherExpr<Values::ExprAt, Indices::ExprAt>;
+    type NextEnv = Indices::NextEnv;
+
+    fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        self.values.stage_at_env(bindings)?;
+        self.indices.stage_at_env(bindings)
+    }
+}
+
+impl<R, Read, Op, Start> KernelReadAt<R, Start> for TransformRead<Read, Op>
+where
+    R: Runtime,
+    Read: KernelReadAt<R, Start>,
+    Read::LogicalItem: MItem<R>,
+    Op: op::UnaryOp<R, Read::LogicalItem, Env = ()>,
+{
+    type LogicalItem = Op::Output;
+    type ExprAt = crate::expr::TransformExpr<
+        Read::ExprAt,
+        Read::LogicalItem,
+        crate::detail::op_adapter::KernelOp<R, Op>,
+    >;
+    type Next = Read::Next;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        self.read.stage_at(bindings)
+    }
+}
+
+impl<R, Read, Op, Env> KernelReadAtEnv<R, Env> for TransformRead<Read, Op>
+where
+    R: Runtime,
+    Read: KernelReadAtEnv<R, Env>,
+    Read::LogicalItem: MItem<R>,
+    Op: op::UnaryOp<R, Read::LogicalItem, Env = ()>,
+{
+    type LogicalItem = Op::Output;
+    type ExprAt = crate::expr::TransformExpr<
+        Read::ExprAt,
+        Read::LogicalItem,
+        crate::detail::op_adapter::KernelOp<R, Op>,
+    >;
+    type NextEnv = Read::NextEnv;
+
+    fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        self.read.stage_at_env(bindings)
+    }
+}
 
 #[doc(hidden)]
 pub trait KernelReadExpr7At<R: Runtime, Env, FinalEnv>: KernelReadAtEnv<R, Env>

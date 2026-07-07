@@ -334,6 +334,84 @@ fn lazy_iterators_zip_with_each_other() {
     assert_eq!(exec.to_host(&right).unwrap(), vec![105, 105, 105]);
 }
 
+#[test]
+fn lazy_transform_fuses_with_transform_read() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+
+    transform_without_op(
+        &exec,
+        massively::lazy::transform(
+            massively::Zip1(massively::lazy::counting(1).take(3)),
+            AddOne,
+        ),
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![3, 4, 5]);
+}
+
+#[test]
+fn lazy_transform_can_change_logical_item_shape() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let left = exec.to_device(&[0_u32; 2]).unwrap();
+    let right = exec.to_device(&[0_u32; 2]).unwrap();
+
+    transform4(
+        &exec,
+        massively::lazy::transform(massively::Zip1(massively::lazy::counting(2).take(2)), Split),
+        PairShift,
+        massively::Zip2(left.slice_mut(..), right.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&left).unwrap(), vec![14, 16]);
+    assert_eq!(exec.to_host(&right).unwrap(), vec![112, 113]);
+}
+
+#[test]
+fn lazy_gather_transform_reads_indexed_values() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let indices = exec.to_device(&[2_u32, 0, 3]).unwrap();
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+
+    transform3(
+        &exec,
+        massively::Zip1(massively::lazy::gather(values.slice(..), indices.slice(..))),
+        AddOne,
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![31, 11, 41]);
+}
+
+#[test]
+fn lazy_gather_transform_reads_tuple_values() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let left_values = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
+    let right_values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let indices = exec.to_device(&[3_u32, 1]).unwrap();
+    let left_output = exec.to_device(&[0_u32; 2]).unwrap();
+    let right_output = exec.to_device(&[0_u32; 2]).unwrap();
+
+    transform4(
+        &exec,
+        massively::lazy::gather(
+            massively::Zip2(left_values.slice(..), right_values.slice(..)),
+            indices.slice(..),
+        ),
+        PairShift,
+        massively::Zip2(left_output.slice_mut(..), right_output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&left_output).unwrap(), vec![44, 22]);
+    assert_eq!(exec.to_host(&right_output).unwrap(), vec![140, 120]);
+}
+
 fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1, out: S2) -> Result<(), massively::Error>
 where
     R: Runtime,

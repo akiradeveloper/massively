@@ -92,6 +92,16 @@ pub struct CountingSlot5;
 /// Counting expression leaf bound to slot 6.
 pub struct CountingSlot6;
 
+/// Logical expression that evaluates `values[indices[index]]`.
+pub struct GatherExpr<ValueExpr, IndexExpr> {
+    _expr: PhantomData<fn() -> (ValueExpr, IndexExpr)>,
+}
+
+/// Logical expression that applies a unary operation to another expression.
+pub struct TransformExpr<InputExpr, InputItem, Op> {
+    _expr: PhantomData<fn() -> (InputExpr, InputItem, Op)>,
+}
+
 /// CubeCL expression tree that can evaluate one output element.
 #[cube]
 pub trait GpuExpr<T: CubePrimitive>: 'static + Send + Sync {
@@ -142,6 +152,24 @@ impl LogicalDeviceExpr<u32> for CountingSlot3 {}
 impl LogicalDeviceExpr<u32> for CountingSlot4 {}
 impl LogicalDeviceExpr<u32> for CountingSlot5 {}
 impl LogicalDeviceExpr<u32> for CountingSlot6 {}
+
+impl<Item, ValueExpr, IndexExpr> LogicalDeviceExpr<Item> for GatherExpr<ValueExpr, IndexExpr>
+where
+    Item: CubeType + 'static,
+    ValueExpr: LogicalDeviceExpr<Item>,
+    IndexExpr: LogicalDeviceExpr<u32>,
+{
+}
+
+impl<InputItem, OutputItem, InputExpr, Op> LogicalDeviceExpr<OutputItem>
+    for TransformExpr<InputExpr, InputItem, Op>
+where
+    InputItem: CubeType + 'static,
+    OutputItem: CubeType + 'static,
+    InputExpr: LogicalDeviceExpr<InputItem>,
+    Op: crate::detail::op::kernel::UnaryOp<InputItem, Env = (), Output = OutputItem>,
+{
+}
 
 macro_rules! impl_logical_device_expr_tuple {
     ($( $expr:ident : $item:ident ),+) => {
@@ -566,6 +594,101 @@ impl_counting_logical_device_expr7!(CountingSlot3; <A, B, C, E, F, G>; A, B, C, 
 impl_counting_logical_device_expr7!(CountingSlot4; <A, B, C, D, F, G>; A, B, C, D, u32, F, G; 4; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot4[0]);
 impl_counting_logical_device_expr7!(CountingSlot5; <A, B, C, D, E, G>; A, B, C, D, E, u32, G; 5; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot5[0]);
 impl_counting_logical_device_expr7!(CountingSlot6; <A, B, C, D, E, F>; A, B, C, D, E, F, u32; 6; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot6[0]);
+
+#[cube]
+impl<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, ValueExpr, IndexExpr>
+    LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+    for GatherExpr<ValueExpr, IndexExpr>
+where
+    Item: CubeType + 'static,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    ValueExpr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    IndexExpr: LogicalDeviceExpr7<u32, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+{
+    fn eval7(
+        slot0: &[Leaf0],
+        slot1: &[Leaf1],
+        slot2: &[Leaf2],
+        slot3: &[Leaf3],
+        slot4: &[Leaf4],
+        slot5: &[Leaf5],
+        slot6: &[Leaf6],
+        slot_offsets: &[u32],
+        index: usize,
+    ) -> Item {
+        let gathered = IndexExpr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            index,
+        );
+        ValueExpr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            gathered as usize,
+        )
+    }
+}
+
+#[cube]
+impl<InputItem, OutputItem, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, InputExpr, Op>
+    LogicalDeviceExpr7<OutputItem, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+    for TransformExpr<InputExpr, InputItem, Op>
+where
+    InputItem: CubeType + 'static,
+    OutputItem: CubeType + 'static,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    InputExpr: LogicalDeviceExpr7<InputItem, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Op: crate::detail::op::kernel::UnaryOp<InputItem, Env = (), Output = OutputItem>,
+{
+    fn eval7(
+        slot0: &[Leaf0],
+        slot1: &[Leaf1],
+        slot2: &[Leaf2],
+        slot3: &[Leaf3],
+        slot4: &[Leaf4],
+        slot5: &[Leaf5],
+        slot6: &[Leaf6],
+        slot_offsets: &[u32],
+        index: usize,
+    ) -> OutputItem {
+        let input = InputExpr::eval7(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot4,
+            slot5,
+            slot6,
+            slot_offsets,
+            index,
+        );
+        Op::apply((), input)
+    }
+}
 
 /// Type-level leaf set needed to execute a logical expression through the
 /// current three-slot logical transform kernel.
