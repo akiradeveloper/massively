@@ -9,11 +9,11 @@ pub fn reduce<R, Input, Op>(
 ) -> Result<Input::Item, Error>
 where
     R: Runtime,
-    Input: MIterReduce<R, Op>,
+    Input: MIter<R>,
     Op: op::ReductionOp<R, Input::Item>,
 {
     validate_input(exec, &source)?;
-    MIterReduce::reduce_value_with_policy(source, exec.policy(), init, op)
+    source.reduce_value_with_policy(exec.policy(), init, op)
 }
 
 /// Reduces consecutive values with equal keys.

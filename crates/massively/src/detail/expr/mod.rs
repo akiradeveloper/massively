@@ -758,6 +758,27 @@ impl<A: CubePrimitive> LogicalDeviceExpr3Shape<A> for Slot0<A> {
 }
 
 #[cube]
+impl<A: CubePrimitive> LogicalDevicePack7<A, A, A, A, A, A, A, A> for Slot0<A> {
+    fn pack(a: A, _b: A, _c: A, _d: A, _e: A, _f: A, _g: A) -> A {
+        a
+    }
+
+    fn unpack(item: A) -> (A, A, A, A, A, A, A) {
+        (item, item, item, item, item, item, item)
+    }
+}
+
+impl<A: CubePrimitive> LogicalHostPack7<A, A, A, A, A, A, A, A> for Slot0<A> {
+    fn pack_host(a: A, _b: A, _c: A, _d: A, _e: A, _f: A, _g: A) -> A {
+        a
+    }
+
+    fn leaves_host(item: A) -> (A, A, A, A, A, A, A) {
+        (item, item, item, item, item, item, item)
+    }
+}
+
+#[cube]
 impl<A: CubePrimitive> LogicalDevicePack3<(A,), A, A, A> for (Slot0<A>,) {
     fn pack(a: A, _b: A, _c: A) -> (A,) {
         (a,)
@@ -782,6 +803,27 @@ impl<A: CubePrimitive> LogicalDeviceExpr3Shape<(A,)> for (Slot0<A>,) {
     type LeafA = A;
     type LeafB = A;
     type LeafC = A;
+}
+
+#[cube]
+impl<A: CubePrimitive> LogicalDevicePack7<(A,), A, A, A, A, A, A, A> for (Slot0<A>,) {
+    fn pack(a: A, _b: A, _c: A, _d: A, _e: A, _f: A, _g: A) -> (A,) {
+        (a,)
+    }
+
+    fn unpack(item: (A,)) -> (A, A, A, A, A, A, A) {
+        (item.0, item.0, item.0, item.0, item.0, item.0, item.0)
+    }
+}
+
+impl<A: CubePrimitive> LogicalHostPack7<(A,), A, A, A, A, A, A, A> for (Slot0<A>,) {
+    fn pack_host(a: A, _b: A, _c: A, _d: A, _e: A, _f: A, _g: A) -> (A,) {
+        (a,)
+    }
+
+    fn leaves_host(item: (A,)) -> (A, A, A, A, A, A, A) {
+        (item.0, item.0, item.0, item.0, item.0, item.0, item.0)
+    }
 }
 
 #[cube]
@@ -813,6 +855,31 @@ impl<A: CubePrimitive, B: CubePrimitive> LogicalDeviceExpr3Shape<(A, B)> for (Sl
     type LeafA = A;
     type LeafB = B;
     type LeafC = A;
+}
+
+#[cube]
+impl<A: CubePrimitive, B: CubePrimitive> LogicalDevicePack7<(A, B), A, B, A, A, A, A, A>
+    for (Slot0<A>, Slot1<B>)
+{
+    fn pack(a: A, b: B, _c: A, _d: A, _e: A, _f: A, _g: A) -> (A, B) {
+        (a, b)
+    }
+
+    fn unpack(item: (A, B)) -> (A, B, A, A, A, A, A) {
+        (item.0, item.1, item.0, item.0, item.0, item.0, item.0)
+    }
+}
+
+impl<A: CubePrimitive, B: CubePrimitive> LogicalHostPack7<(A, B), A, B, A, A, A, A, A>
+    for (Slot0<A>, Slot1<B>)
+{
+    fn pack_host(a: A, b: B, _c: A, _d: A, _e: A, _f: A, _g: A) -> (A, B) {
+        (a, b)
+    }
+
+    fn leaves_host(item: (A, B)) -> (A, B, A, A, A, A, A) {
+        (item.0, item.1, item.0, item.0, item.0, item.0, item.0)
+    }
 }
 
 #[cube]
@@ -849,6 +916,31 @@ impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive> LogicalDeviceExpr3Sha
 }
 
 #[cube]
+impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive>
+    LogicalDevicePack7<(A, B, C), A, B, C, A, A, A, A> for (Slot0<A>, Slot1<B>, Slot2<C>)
+{
+    fn pack(a: A, b: B, c: C, _d: A, _e: A, _f: A, _g: A) -> (A, B, C) {
+        (a, b, c)
+    }
+
+    fn unpack(item: (A, B, C)) -> (A, B, C, A, A, A, A) {
+        (item.0, item.1, item.2, item.0, item.0, item.0, item.0)
+    }
+}
+
+impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive>
+    LogicalHostPack7<(A, B, C), A, B, C, A, A, A, A> for (Slot0<A>, Slot1<B>, Slot2<C>)
+{
+    fn pack_host(a: A, b: B, c: C, _d: A, _e: A, _f: A, _g: A) -> (A, B, C) {
+        (a, b, c)
+    }
+
+    fn leaves_host(item: (A, B, C)) -> (A, B, C, A, A, A, A) {
+        (item.0, item.1, item.2, item.0, item.0, item.0, item.0)
+    }
+}
+
+#[cube]
 impl<A: CubePrimitive, B: CubePrimitive> LogicalDevicePack3<((A,), B), A, B, A>
     for ((Slot0<A>,), Slot1<B>)
 {
@@ -879,6 +971,35 @@ impl<A: CubePrimitive, B: CubePrimitive> LogicalDeviceExpr3Shape<((A,), B)>
     type LeafA = A;
     type LeafB = B;
     type LeafC = A;
+}
+
+#[cube]
+impl<A: CubePrimitive, B: CubePrimitive> LogicalDevicePack7<((A,), B), A, B, A, A, A, A, A>
+    for ((Slot0<A>,), Slot1<B>)
+{
+    fn pack(a: A, b: B, _c: A, _d: A, _e: A, _f: A, _g: A) -> ((A,), B) {
+        ((a,), b)
+    }
+
+    fn unpack(item: ((A,), B)) -> (A, B, A, A, A, A, A) {
+        (
+            item.0.0, item.1, item.0.0, item.0.0, item.0.0, item.0.0, item.0.0,
+        )
+    }
+}
+
+impl<A: CubePrimitive, B: CubePrimitive> LogicalHostPack7<((A,), B), A, B, A, A, A, A, A>
+    for ((Slot0<A>,), Slot1<B>)
+{
+    fn pack_host(a: A, b: B, _c: A, _d: A, _e: A, _f: A, _g: A) -> ((A,), B) {
+        ((a,), b)
+    }
+
+    fn leaves_host(item: ((A,), B)) -> (A, B, A, A, A, A, A) {
+        (
+            item.0.0, item.1, item.0.0, item.0.0, item.0.0, item.0.0, item.0.0,
+        )
+    }
 }
 
 #[cube]
@@ -915,6 +1036,35 @@ impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive> LogicalDeviceExpr3Sha
 }
 
 #[cube]
+impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive>
+    LogicalDevicePack7<((A, B), C), A, B, C, A, A, A, A> for ((Slot0<A>, Slot1<B>), Slot2<C>)
+{
+    fn pack(a: A, b: B, c: C, _d: A, _e: A, _f: A, _g: A) -> ((A, B), C) {
+        ((a, b), c)
+    }
+
+    fn unpack(item: ((A, B), C)) -> (A, B, C, A, A, A, A) {
+        (
+            item.0.0, item.0.1, item.1, item.0.0, item.0.0, item.0.0, item.0.0,
+        )
+    }
+}
+
+impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive>
+    LogicalHostPack7<((A, B), C), A, B, C, A, A, A, A> for ((Slot0<A>, Slot1<B>), Slot2<C>)
+{
+    fn pack_host(a: A, b: B, c: C, _d: A, _e: A, _f: A, _g: A) -> ((A, B), C) {
+        ((a, b), c)
+    }
+
+    fn leaves_host(item: ((A, B), C)) -> (A, B, C, A, A, A, A) {
+        (
+            item.0.0, item.0.1, item.1, item.0.0, item.0.0, item.0.0, item.0.0,
+        )
+    }
+}
+
+#[cube]
 impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive> LogicalDevicePack3<(A, (B, C)), A, B, C>
     for (Slot0<A>, (Slot1<B>, Slot2<C>))
 {
@@ -945,6 +1095,31 @@ impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive> LogicalDeviceExpr3Sha
     type LeafA = A;
     type LeafB = B;
     type LeafC = C;
+}
+
+#[cube]
+impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive>
+    LogicalDevicePack7<(A, (B, C)), A, B, C, A, A, A, A> for (Slot0<A>, (Slot1<B>, Slot2<C>))
+{
+    fn pack(a: A, b: B, c: C, _d: A, _e: A, _f: A, _g: A) -> (A, (B, C)) {
+        (a, (b, c))
+    }
+
+    fn unpack(item: (A, (B, C))) -> (A, B, C, A, A, A, A) {
+        (item.0, item.1.0, item.1.1, item.0, item.0, item.0, item.0)
+    }
+}
+
+impl<A: CubePrimitive, B: CubePrimitive, C: CubePrimitive>
+    LogicalHostPack7<(A, (B, C)), A, B, C, A, A, A, A> for (Slot0<A>, (Slot1<B>, Slot2<C>))
+{
+    fn pack_host(a: A, b: B, c: C, _d: A, _e: A, _f: A, _g: A) -> (A, (B, C)) {
+        (a, (b, c))
+    }
+
+    fn leaves_host(item: (A, (B, C))) -> (A, B, C, A, A, A, A) {
+        (item.0, item.1.0, item.1.1, item.0, item.0, item.0, item.0)
+    }
 }
 
 /// Type-level leaf set for executing a logical expression through seven slots.
@@ -1234,6 +1409,266 @@ impl<
     }
 }
 
+pub trait LogicalItemPack7: CubeType + Copy + Send + Sync + 'static {
+    type Leaf0: CubePrimitive + CubeElement;
+    type Leaf1: CubePrimitive + CubeElement;
+    type Leaf2: CubePrimitive + CubeElement;
+    type Leaf3: CubePrimitive + CubeElement;
+    type Leaf4: CubePrimitive + CubeElement;
+    type Leaf5: CubePrimitive + CubeElement;
+    type Leaf6: CubePrimitive + CubeElement;
+    type Pack: LogicalDevicePack7<
+            Self,
+            Self::Leaf0,
+            Self::Leaf1,
+            Self::Leaf2,
+            Self::Leaf3,
+            Self::Leaf4,
+            Self::Leaf5,
+            Self::Leaf6,
+        >
+        + LogicalHostPack7<
+            Self,
+            Self::Leaf0,
+            Self::Leaf1,
+            Self::Leaf2,
+            Self::Leaf3,
+            Self::Leaf4,
+            Self::Leaf5,
+            Self::Leaf6,
+        >
+        + 'static
+        + Send
+        + Sync;
+}
+
+macro_rules! impl_scalar_logical_item_pack7 {
+    ($( $ty:ty ),+ $(,)?) => {
+        $(
+            impl LogicalItemPack7 for $ty {
+                type Leaf0 = $ty;
+                type Leaf1 = $ty;
+                type Leaf2 = $ty;
+                type Leaf3 = $ty;
+                type Leaf4 = $ty;
+                type Leaf5 = $ty;
+                type Leaf6 = $ty;
+                type Pack = Slot0<$ty>;
+            }
+        )+
+    };
+}
+
+impl_scalar_logical_item_pack7!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+#[doc(hidden)]
+pub trait LogicalPackLeaf:
+    CubePrimitive + CubeElement + LogicalItemPack7 + Send + Sync + 'static
+{
+}
+
+macro_rules! impl_logical_pack_leaf {
+    ($( $ty:ty ),+ $(,)?) => {
+        $(
+            impl LogicalPackLeaf for $ty {}
+        )+
+    };
+}
+
+impl_logical_pack_leaf!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+#[cube]
+impl LogicalDevicePack7<bool, u32, u32, u32, u32, u32, u32, u32> for Slot0<u32> {
+    fn pack(a: u32, _b: u32, _c: u32, _d: u32, _e: u32, _f: u32, _g: u32) -> bool {
+        a != 0
+    }
+
+    fn unpack(item: bool) -> (u32, u32, u32, u32, u32, u32, u32) {
+        let value = if item { 1u32 } else { 0u32 };
+        (value, value, value, value, value, value, value)
+    }
+}
+
+impl LogicalHostPack7<bool, u32, u32, u32, u32, u32, u32, u32> for Slot0<u32> {
+    fn pack_host(a: u32, _b: u32, _c: u32, _d: u32, _e: u32, _f: u32, _g: u32) -> bool {
+        a != 0
+    }
+
+    fn leaves_host(item: bool) -> (u32, u32, u32, u32, u32, u32, u32) {
+        let value = u32::from(item);
+        (value, value, value, value, value, value, value)
+    }
+}
+
+impl LogicalItemPack7 for bool {
+    type Leaf0 = u32;
+    type Leaf1 = u32;
+    type Leaf2 = u32;
+    type Leaf3 = u32;
+    type Leaf4 = u32;
+    type Leaf5 = u32;
+    type Leaf6 = u32;
+    type Pack = Slot0<u32>;
+}
+
+macro_rules! impl_logical_item_pack7 {
+    (
+        impl < $( $gen:ident ),+ >;
+        $item:ty;
+        $pack:ty;
+        $leaf0:ty,
+        $leaf1:ty,
+        $leaf2:ty,
+        $leaf3:ty,
+        $leaf4:ty,
+        $leaf5:ty,
+        $leaf6:ty
+    ) => {
+        impl<$( $gen ),+> LogicalItemPack7 for $item
+        where
+            $( $gen: LogicalPackLeaf, )+
+            $item: CubeType + Copy + Send + Sync + 'static,
+        {
+            type Leaf0 = $leaf0;
+            type Leaf1 = $leaf1;
+            type Leaf2 = $leaf2;
+            type Leaf3 = $leaf3;
+            type Leaf4 = $leaf4;
+            type Leaf5 = $leaf5;
+            type Leaf6 = $leaf6;
+            type Pack = $pack;
+        }
+    };
+}
+
+impl_logical_item_pack7!(
+    impl<A>;
+    (A,);
+    (Slot0<A>,);
+    A,
+    A,
+    A,
+    A,
+    A,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B>;
+    (A, B);
+    (Slot0<A>, Slot1<B>);
+    A,
+    B,
+    A,
+    A,
+    A,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C>;
+    (A, B, C);
+    (Slot0<A>, Slot1<B>, Slot2<C>);
+    A,
+    B,
+    C,
+    A,
+    A,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C, D>;
+    (A, B, C, D);
+    (Slot0<A>, Slot1<B>, Slot2<C>, Slot3<D>);
+    A,
+    B,
+    C,
+    D,
+    A,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C, D, E>;
+    (A, B, C, D, E);
+    (Slot0<A>, Slot1<B>, Slot2<C>, Slot3<D>, Slot4<E>);
+    A,
+    B,
+    C,
+    D,
+    E,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C, D, E, F>;
+    (A, B, C, D, E, F);
+    (Slot0<A>, Slot1<B>, Slot2<C>, Slot3<D>, Slot4<E>, Slot5<F>);
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C, D, E, F, G>;
+    (A, B, C, D, E, F, G);
+    (
+        Slot0<A>,
+        Slot1<B>,
+        Slot2<C>,
+        Slot3<D>,
+        Slot4<E>,
+        Slot5<F>,
+        Slot6<G>
+    );
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G
+);
+impl_logical_item_pack7!(
+    impl<A, B>;
+    ((A,), B);
+    ((Slot0<A>,), Slot1<B>);
+    A,
+    B,
+    A,
+    A,
+    A,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C>;
+    ((A, B), C);
+    ((Slot0<A>, Slot1<B>), Slot2<C>);
+    A,
+    B,
+    C,
+    A,
+    A,
+    A,
+    A
+);
+impl_logical_item_pack7!(
+    impl<A, B, C>;
+    (A, (B, C));
+    (Slot0<A>, (Slot1<B>, Slot2<C>));
+    A,
+    B,
+    C,
+    A,
+    A,
+    A,
+    A
+);
 impl<A: CubePrimitive, B: CubePrimitive> LogicalDeviceExpr7Shape<((A,), B)>
     for ((Slot0<A>,), Slot1<B>)
 {

@@ -578,13 +578,12 @@ pub trait MIter<R: Runtime>: Sized {
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Read: crate::detail::read::KernelReadReduce<R, Op, Item = Self::Item>,
         Op: crate::op::ReductionOp<R, Self::Item>,
     {
         let read = self.lower_read(policy)?;
         use crate::detail::read::KernelRead as _;
         read.validate()?;
-        crate::detail::read::KernelReadReduce::reduce_value(read, policy, init, op)
+        read.reduce_value_read(policy, init, op)
     }
 
     #[doc(hidden)]
@@ -1294,37 +1293,6 @@ where
 
     fn validate_executor(&self, exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
         self.inner.validate_executor(exec)
-    }
-}
-
-#[doc(hidden)]
-pub trait MIterReduce<R: Runtime, Op>: MIter<R> {
-    #[doc(hidden)]
-    fn reduce_value_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-        init: Self::Item,
-        op: Op,
-    ) -> Result<Self::Item, Error>;
-}
-
-impl<R, Iter, Op> MIterReduce<R, Op> for Iter
-where
-    R: Runtime,
-    Iter: MIter<R>,
-    Iter::Read: crate::detail::read::KernelReadReduce<R, Op, Item = Iter::Item>,
-    Op: crate::op::ReductionOp<R, Iter::Item>,
-{
-    fn reduce_value_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-        init: Self::Item,
-        op: Op,
-    ) -> Result<Self::Item, Error> {
-        let read = self.lower_read(policy)?;
-        use crate::detail::read::KernelRead as _;
-        read.validate()?;
-        crate::detail::read::KernelReadReduce::reduce_value(read, policy, init, op)
     }
 }
 

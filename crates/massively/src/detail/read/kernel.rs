@@ -317,7 +317,7 @@ impl_scan_by_key_value_tuple_wide!(inclusive_views7, exclusive_views7; A: 0, B: 
 /// kernels see a read tree whose leaves are storage-backed columns.
 #[doc(hidden)]
 pub trait KernelRead<R: Runtime>: Sized {
-    type Item: CubeType + 'static;
+    type Item: CubeType + crate::expr::LogicalItemPack7 + 'static;
 
     fn len(&self) -> usize;
     fn validate(&self) -> Result<(), Error>;
@@ -329,14 +329,12 @@ pub trait KernelRead<R: Runtime>: Sized {
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+        Self::Item: MItem<R> + Send + Sync,
         Self: KernelReadBoundMany<R>,
         Op: op::ReductionOp<R, Self::Item>,
     {
-        let _ = (policy, init, op);
-        Err(Error::Launch {
-            message: "reduce is not supported for this iterator shape".to_string(),
-        })
+        let _ = op;
+        reduce_logical7_bound_read::<R, Self, Op>(self, policy, init)
     }
 
     fn transform_read<Output, Op>(
@@ -1071,7 +1069,7 @@ impl<T> ConstantRead<T> {
 impl<R, T> KernelRead<R> for ConstantRead<T>
 where
     R: Runtime,
-    T: MStorageElement + 'static,
+    T: MStorageElement + crate::expr::LogicalItemPack7 + 'static,
 {
     type Item = T;
 
@@ -1268,6 +1266,7 @@ where
     Read: KernelRead<R>,
     Read::Item: MItem<R>,
     Op: op::UnaryOp<R, Read::Item>,
+    Op::Output: crate::expr::LogicalItemPack7,
 {
     type Item = Op::Output;
 
@@ -2223,8 +2222,53 @@ where
         <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
             <Read as KernelRead<R>>::Item,
         >>::Leaf6,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf0,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf1,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf2,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf3,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf4,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf5,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf6,
         <Read as KernelReadAt<R, S0>>::ExprAt,
-        <Read as KernelReadAt<R, S0>>::ExprAt,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Pack,
+        KernelOp<R, Op>,
+    >(policy, &bindings, len, init)
+}
+
+fn reduce_logical7_bound_read<R, Read, Op>(
+    read: Read,
+    policy: &CubePolicy<R>,
+    init: Read::Item,
+) -> Result<Read::Item, Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    <Read as KernelRead<R>>::Item: MItem<R> + Send + Sync,
+    Op: op::ReductionOp<R, <Read as KernelRead<R>>::Item>,
+{
+    let len = read.len();
+    let mut bindings = KernelColumnBindings::empty(policy.client());
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(&read, &mut bindings)?;
+    bindings.finish();
+    crate::detail::primitives::reduce::reduce_logical7_device_expr::<
+        R,
+        <Read as KernelRead<R>>::Item,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf0,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf1,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf2,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf3,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf4,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf5,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Pack,
         KernelOp<R, Op>,
     >(policy, &bindings, len, init)
 }
@@ -4224,7 +4268,7 @@ where
 impl<R, T> KernelRead<R> for ColumnRead<R, T>
 where
     R: Runtime,
-    T: cubecl::prelude::CubePrimitive + cubecl::prelude::CubeElement,
+    T: MStorageElement + 'static,
 {
     type Item = T;
 
@@ -4756,7 +4800,7 @@ macro_rules! impl_kernel_read_zip {
             R: Runtime,
             $first: KernelRead<R>,
             <$first as KernelRead<R>>::Item: Send + Sync,
-            ($($item,)+): CubeType,
+            ($($item,)+): CubeType + crate::expr::LogicalItemPack7,
         {
             type Item = ($($item,)+);
 
@@ -4775,15 +4819,12 @@ macro_rules! impl_kernel_read_zip {
                 op: Op,
             ) -> Result<Self::Item, Error>
             where
-                Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+                Self::Item: MItem<R> + Send + Sync,
                 Self: KernelReadBoundMany<R>,
                 Op: op::ReductionOp<R, Self::Item>,
             {
-                let inner = materialize_logical7_read(self, policy)?;
-                let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
+                let _ = op;
+                reduce_logical7_bound_read::<R, Self, Op>(self, policy, init)
             }
 
             fn count_if_read<Pred>(
@@ -5075,7 +5116,7 @@ macro_rules! impl_kernel_read_zip {
             $(
                 <$ty as KernelRead<R>>::Item: Send + Sync,
             )*
-            ($($item,)+): CubeType,
+            ($($item,)+): CubeType + crate::expr::LogicalItemPack7,
         {
             type Item = ($($item,)+);
 
@@ -5099,15 +5140,12 @@ macro_rules! impl_kernel_read_zip {
                 op: Op,
             ) -> Result<Self::Item, Error>
             where
-                Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+                Self::Item: MItem<R> + Send + Sync,
                 Self: KernelReadBoundMany<R>,
                 Op: op::ReductionOp<R, Self::Item>,
             {
-                let inner = materialize_logical7_read(self, policy)?;
-                let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(
-                    policy, inner,
-                )?;
-                <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
+                let _ = op;
+                reduce_logical7_bound_read::<R, Self, Op>(self, policy, init)
             }
 
             fn count_if_read<Pred>(
@@ -5395,7 +5433,8 @@ where
     B: KernelRead<R>,
     <A as KernelRead<R>>::Item: Send + Sync,
     <B as KernelRead<R>>::Item: Send + Sync,
-    (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item): CubeType,
+    (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item):
+        CubeType + crate::expr::LogicalItemPack7,
 {
     type Item = (<A as KernelRead<R>>::Item, <B as KernelRead<R>>::Item);
 
@@ -5417,13 +5456,12 @@ where
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+        Self::Item: MItem<R> + Send + Sync,
         Self: KernelReadBoundMany<R>,
         Op: op::ReductionOp<R, Self::Item>,
     {
-        let inner = materialize_logical7_read(self, policy)?;
-        let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(policy, inner)?;
-        <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
+        let _ = op;
+        reduce_logical7_bound_read::<R, Self, Op>(self, policy, init)
     }
 
     fn count_if_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<crate::MIndex, Error>
@@ -5683,7 +5721,7 @@ where
         <A as KernelRead<R>>::Item,
         <B as KernelRead<R>>::Item,
         <C as KernelRead<R>>::Item,
-    ): CubeType,
+    ): CubeType + crate::expr::LogicalItemPack7,
 {
     type Item = (
         <A as KernelRead<R>>::Item,
@@ -5711,13 +5749,12 @@ where
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Self::Item: MItem<R> + MAlloc<R> + MItemDispatch<R> + Send + Sync,
+        Self::Item: MItem<R> + Send + Sync,
         Self: KernelReadBoundMany<R>,
         Op: op::ReductionOp<R, Self::Item>,
     {
-        let inner = materialize_logical7_read(self, policy)?;
-        let view = crate::iter::materialized_view_with_policy::<R, Self::Item>(policy, inner)?;
-        <Self::Item as MAlloc<R>>::reduce_from_view(policy, view, init, op)
+        let _ = op;
+        reduce_logical7_bound_read::<R, Self, Op>(self, policy, init)
     }
 
     fn count_if_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<crate::MIndex, Error>
