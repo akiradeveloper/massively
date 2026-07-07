@@ -53,7 +53,7 @@ pub(crate) use kernel::{
     TransformRead, ZipRead1, ZipRead2, ZipRead3, ZipRead4, ZipRead5, ZipRead6, ZipRead7,
 };
 pub(crate) use kernel::{Env0, KernelReadAtEnv, KernelStencilSelection};
-pub use kernel::{KernelRead, KernelReadBoundMany, KernelReadReduce};
+pub use kernel::{KernelRead, KernelReadBoundMany};
 
 #[allow(unused_imports)]
 pub(crate) use by_key::*;

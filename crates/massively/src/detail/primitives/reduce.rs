@@ -167,6 +167,13 @@ where
 pub(crate) fn reduce_logical7_device_expr<
     R,
     Item,
+    ExprLeaf0,
+    ExprLeaf1,
+    ExprLeaf2,
+    ExprLeaf3,
+    ExprLeaf4,
+    ExprLeaf5,
+    ExprLeaf6,
     Leaf0,
     Leaf1,
     Leaf2,
@@ -186,6 +193,13 @@ pub(crate) fn reduce_logical7_device_expr<
 where
     R: Runtime,
     Item: CubeType + 'static + Send + Sync,
+    ExprLeaf0: CubePrimitive + CubeElement,
+    ExprLeaf1: CubePrimitive + CubeElement,
+    ExprLeaf2: CubePrimitive + CubeElement,
+    ExprLeaf3: CubePrimitive + CubeElement,
+    ExprLeaf4: CubePrimitive + CubeElement,
+    ExprLeaf5: CubePrimitive + CubeElement,
+    ExprLeaf6: CubePrimitive + CubeElement,
     Leaf0: CubePrimitive + CubeElement,
     Leaf1: CubePrimitive + CubeElement,
     Leaf2: CubePrimitive + CubeElement,
@@ -193,7 +207,16 @@ where
     Leaf4: CubePrimitive + CubeElement,
     Leaf5: CubePrimitive + CubeElement,
     Leaf6: CubePrimitive + CubeElement,
-    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Expr: LogicalDeviceExpr7<
+            Item,
+            ExprLeaf0,
+            ExprLeaf1,
+            ExprLeaf2,
+            ExprLeaf3,
+            ExprLeaf4,
+            ExprLeaf5,
+            ExprLeaf6,
+        >,
     Pack: crate::expr::LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
         + LogicalHostPack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
         + 'static
@@ -231,6 +254,13 @@ where
     unsafe {
         logical7_reduce_expr_partials_kernel::launch_unchecked::<
             Item,
+            ExprLeaf0,
+            ExprLeaf1,
+            ExprLeaf2,
+            ExprLeaf3,
+            ExprLeaf4,
+            ExprLeaf5,
+            ExprLeaf6,
             Leaf0,
             Leaf1,
             Leaf2,

@@ -23,8 +23,14 @@ where
 }
 
 /// Physical element that can be stored in a device column.
-pub trait MStorageElement: CubePrimitive + CubeElement {}
-impl<T> MStorageElement for T where T: CubePrimitive + CubeElement {}
+pub trait MStorageElement:
+    CubePrimitive + CubeElement + crate::expr::LogicalItemPack7 + crate::expr::LogicalPackLeaf
+{
+}
+impl<T> MStorageElement for T where
+    T: CubePrimitive + CubeElement + crate::expr::LogicalItemPack7 + crate::expr::LogicalPackLeaf
+{
+}
 
 /// Logical item that has an owned/writable Zip device storage shape.
 pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
