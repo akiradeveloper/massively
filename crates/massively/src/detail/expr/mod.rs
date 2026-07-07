@@ -36,6 +36,62 @@ pub struct Slot6<T> {
     _item: PhantomData<fn() -> T>,
 }
 
+/// Constant expression leaf bound to slot 0.
+pub struct ConstantSlot0<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Constant expression leaf bound to slot 1.
+pub struct ConstantSlot1<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Constant expression leaf bound to slot 2.
+pub struct ConstantSlot2<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Constant expression leaf bound to slot 3.
+pub struct ConstantSlot3<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Constant expression leaf bound to slot 4.
+pub struct ConstantSlot4<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Constant expression leaf bound to slot 5.
+pub struct ConstantSlot5<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Constant expression leaf bound to slot 6.
+pub struct ConstantSlot6<T> {
+    _item: PhantomData<fn() -> T>,
+}
+
+/// Counting expression leaf bound to slot 0.
+pub struct CountingSlot0;
+
+/// Counting expression leaf bound to slot 1.
+pub struct CountingSlot1;
+
+/// Counting expression leaf bound to slot 2.
+pub struct CountingSlot2;
+
+/// Counting expression leaf bound to slot 3.
+pub struct CountingSlot3;
+
+/// Counting expression leaf bound to slot 4.
+pub struct CountingSlot4;
+
+/// Counting expression leaf bound to slot 5.
+pub struct CountingSlot5;
+
+/// Counting expression leaf bound to slot 6.
+pub struct CountingSlot6;
+
 /// CubeCL expression tree that can evaluate one output element.
 #[cube]
 pub trait GpuExpr<T: CubePrimitive>: 'static + Send + Sync {
@@ -72,6 +128,20 @@ impl<T> LogicalDeviceExpr<T> for Slot3<T> where T: CubePrimitive + 'static {}
 impl<T> LogicalDeviceExpr<T> for Slot4<T> where T: CubePrimitive + 'static {}
 impl<T> LogicalDeviceExpr<T> for Slot5<T> where T: CubePrimitive + 'static {}
 impl<T> LogicalDeviceExpr<T> for Slot6<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot0<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot1<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot2<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot3<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot4<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot5<T> where T: CubePrimitive + 'static {}
+impl<T> LogicalDeviceExpr<T> for ConstantSlot6<T> where T: CubePrimitive + 'static {}
+impl LogicalDeviceExpr<u32> for CountingSlot0 {}
+impl LogicalDeviceExpr<u32> for CountingSlot1 {}
+impl LogicalDeviceExpr<u32> for CountingSlot2 {}
+impl LogicalDeviceExpr<u32> for CountingSlot3 {}
+impl LogicalDeviceExpr<u32> for CountingSlot4 {}
+impl LogicalDeviceExpr<u32> for CountingSlot5 {}
+impl LogicalDeviceExpr<u32> for CountingSlot6 {}
 
 macro_rules! impl_logical_device_expr_tuple {
     ($( $expr:ident : $item:ident ),+) => {
@@ -428,6 +498,74 @@ impl_logical_device_expr7_tuple!(
     FExpr: F,
     GExpr: G
 );
+
+macro_rules! impl_constant_logical_device_expr7 {
+    ($expr:ident, $item:ident; <$( $gen:ident ),+>; $a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty; $s0:ident, $s1:ident, $s2:ident, $s3:ident, $s4:ident, $s5:ident, $s6:ident; $value:expr) => {
+        #[cube]
+        impl<$( $gen ),+> LogicalDeviceExpr7<$item, $a, $b, $c, $d, $e, $f, $g>
+            for $expr<$item>
+        where
+            $item: CubePrimitive,
+            $( $gen: CubePrimitive, )+
+        {
+            fn eval7(
+                $s0: &[$a],
+                $s1: &[$b],
+                $s2: &[$c],
+                $s3: &[$d],
+                $s4: &[$e],
+                $s5: &[$f],
+                $s6: &[$g],
+                _slot_offsets: &[u32],
+                _index: usize,
+            ) -> $item {
+                let _ = ($s0, $s1, $s2, $s3, $s4, $s5, $s6);
+                $value
+            }
+        }
+    };
+}
+
+impl_constant_logical_device_expr7!(ConstantSlot0, A; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot0[0]);
+impl_constant_logical_device_expr7!(ConstantSlot1, B; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot1[0]);
+impl_constant_logical_device_expr7!(ConstantSlot2, C; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot2[0]);
+impl_constant_logical_device_expr7!(ConstantSlot3, D; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot3[0]);
+impl_constant_logical_device_expr7!(ConstantSlot4, E; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot4[0]);
+impl_constant_logical_device_expr7!(ConstantSlot5, F; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot5[0]);
+impl_constant_logical_device_expr7!(ConstantSlot6, G; <A, B, C, D, E, F, G>; A, B, C, D, E, F, G; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot6[0]);
+
+macro_rules! impl_counting_logical_device_expr7 {
+    ($expr:ident; <$( $gen:ident ),*>; $a:ty, $b:ty, $c:ty, $d:ty, $e:ty, $f:ty, $g:ty; $index:literal; $s0:ident, $s1:ident, $s2:ident, $s3:ident, $s4:ident, $s5:ident, $s6:ident; $start:expr) => {
+        #[cube]
+        impl<$( $gen ),*> LogicalDeviceExpr7<u32, $a, $b, $c, $d, $e, $f, $g> for $expr
+        where
+            $( $gen: CubePrimitive, )*
+        {
+            fn eval7(
+                $s0: &[$a],
+                $s1: &[$b],
+                $s2: &[$c],
+                $s3: &[$d],
+                $s4: &[$e],
+                $s5: &[$f],
+                $s6: &[$g],
+                slot_offsets: &[u32],
+                index: usize,
+            ) -> u32 {
+                let _ = ($s0, $s1, $s2, $s3, $s4, $s5, $s6);
+                $start + slot_offsets[$index] + index as u32
+            }
+        }
+    };
+}
+
+impl_counting_logical_device_expr7!(CountingSlot0; <B, C, D, E, F, G>; u32, B, C, D, E, F, G; 0; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot0[0]);
+impl_counting_logical_device_expr7!(CountingSlot1; <A, C, D, E, F, G>; A, u32, C, D, E, F, G; 1; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot1[0]);
+impl_counting_logical_device_expr7!(CountingSlot2; <A, B, D, E, F, G>; A, B, u32, D, E, F, G; 2; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot2[0]);
+impl_counting_logical_device_expr7!(CountingSlot3; <A, B, C, E, F, G>; A, B, C, u32, E, F, G; 3; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot3[0]);
+impl_counting_logical_device_expr7!(CountingSlot4; <A, B, C, D, F, G>; A, B, C, D, u32, F, G; 4; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot4[0]);
+impl_counting_logical_device_expr7!(CountingSlot5; <A, B, C, D, E, G>; A, B, C, D, E, u32, G; 5; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot5[0]);
+impl_counting_logical_device_expr7!(CountingSlot6; <A, B, C, D, E, F>; A, B, C, D, E, F, u32; 6; slot0, slot1, slot2, slot3, slot4, slot5, slot6; slot6[0]);
 
 /// Type-level leaf set needed to execute a logical expression through the
 /// current three-slot logical transform kernel.
