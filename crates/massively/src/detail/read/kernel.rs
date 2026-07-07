@@ -16,6 +16,7 @@ use crate::{
         dispatch::MItemDispatch,
         op,
         op_adapter::{KernelOp, KernelScalarTuple1Op},
+        primitives::select,
     },
     error::ensure_same_len,
     index::mindex_from_usize,
@@ -36,6 +37,22 @@ where
 
     fn apply(input: Input) -> Input {
         input
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ScalarToTuple1Identity;
+
+#[cubecl::cube]
+impl<R, Input> op::UnaryOp<R, Input> for ScalarToTuple1Identity
+where
+    R: Runtime,
+    Input: MStorageElement + 'static,
+{
+    type Output = (Input,);
+
+    fn apply(input: Input) -> (Input,) {
+        (input,)
     }
 }
 
@@ -2062,6 +2079,34 @@ where
         <Read as KernelReadBoundMany<R>>::ExprAt,
         LogicalIdentity,
     >(policy, bindings, len, LogicalIdentity)
+}
+
+fn materialize_scalar_logical7_read<R, Read>(
+    read: Read,
+    policy: &CubePolicy<R>,
+) -> Result<DeviceVec<R, <Read as KernelRead<R>>::Item>, Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    <Read as KernelRead<R>>::Item: MStorageElement + Send + Sync,
+{
+    let len = read.len();
+    let mut bindings = KernelColumnBindings::empty(policy.client());
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(&read, &mut bindings)?;
+    bindings.finish();
+    let inner = <(<Read as KernelRead<R>>::Item,) as MItemDispatch<R>>::transform_logical7::<
+        <Read as KernelRead<R>>::Item,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
+        ScalarToTuple1Identity,
+    >(policy, bindings, len, ScalarToTuple1Identity)?;
+    Ok(inner.0)
 }
 
 fn reduce_logical3_read<R, Read, Op>(
@@ -4249,8 +4294,9 @@ trait KernelReadScanByKeyValuesView<R: Runtime>: KernelReadScanByKeyView<R> {
     fn into_exclusive_scan_by_key_init(init: Self::Item) -> Self::ExclusiveInit;
 }
 
-trait KernelReadIndexColumn<R: Runtime>: KernelRead<R, Item = crate::MIndex> {
-    fn into_index_column(self) -> DeviceColumnView<R, crate::MIndex>;
+pub trait KernelReadIndexColumn<R: Runtime>: KernelRead<R, Item = crate::MIndex> {
+    fn into_index_column(self, policy: &CubePolicy<R>)
+    -> Result<DeviceColumnView<R, crate::MIndex>, Error>;
 }
 
 trait KernelReadSearchView<R: Runtime>: KernelRead<R> {
@@ -4765,12 +4811,17 @@ where
     }
 }
 
-impl<R> KernelReadIndexColumn<R> for ColumnRead<R, crate::MIndex>
+impl<R, Read> KernelReadIndexColumn<R> for Read
 where
     R: Runtime,
+    Read: KernelReadBoundMany<R, Item = crate::MIndex>,
 {
-    fn into_index_column(self) -> DeviceColumnView<R, crate::MIndex> {
-        self.column
+    fn into_index_column(
+        self,
+        policy: &CubePolicy<R>,
+    ) -> Result<DeviceColumnView<R, crate::MIndex>, Error> {
+        let column = materialize_scalar_logical7_read(self, policy)?;
+        Ok(DeviceColumnView::from_column(&column))
     }
 }
 
@@ -4813,9 +4864,10 @@ where
     }
 }
 
-impl<R> KernelStencilSelection<R> for ColumnRead<R, u32>
+impl<R, Read> KernelStencilSelection<R> for Read
 where
     R: Runtime,
+    Read: KernelReadBoundMany<R, Item = u32>,
 {
     fn stencil_selection(
         self,
@@ -4823,16 +4875,27 @@ where
         invert: bool,
         flags_only: bool,
     ) -> Result<PrecomputedSelection<R>, Error> {
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<
+            R,
+            _,
+            crate::detail::op_adapter::ScalarStencilFlag,
+        >(&self, policy, invert)?
+        else {
+            return Ok(PrecomputedSelection::from_selected_rank(
+                select::SelectedRankControl::empty(policy.client()),
+            ));
+        };
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         if flags_only {
-            PrecomputedSelection::from_stencil_flags_with_policy::<
-                _,
-                crate::detail::op_adapter::KernelOp<R, crate::detail::op_adapter::StencilFlag>,
-            >(policy, &(self.column,), invert)
+            Ok(PrecomputedSelection::from_mask(
+                policy.client(),
+                select::MaskControl::from_flags(flags, len, len_u32),
+            ))
         } else {
-            PrecomputedSelection::from_stencil_with_policy::<
-                _,
-                crate::detail::op_adapter::KernelOp<R, crate::detail::op_adapter::StencilFlag>,
-            >(policy, &(self.column,), invert)
+            Ok(PrecomputedSelection::from_selected_rank(
+                select::selected_rank_from_flags(policy, len, len_u32, flags)?,
+            ))
         }
     }
 }
@@ -7891,7 +7954,7 @@ where
         indices: Indices,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column();
+        let indices = indices.into_index_column(policy)?;
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "gather output must match input shape".to_string(),
@@ -7911,7 +7974,7 @@ where
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column();
+        let indices = indices.into_index_column(policy)?;
         let mask = stencil.mask();
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
@@ -7932,7 +7995,7 @@ where
         indices: Indices,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column();
+        let indices = indices.into_index_column(policy)?;
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "scatter output must match input shape".to_string(),
@@ -7952,7 +8015,7 @@ where
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column();
+        let indices = indices.into_index_column(policy)?;
         let mask = stencil.mask();
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
@@ -7984,7 +8047,7 @@ macro_rules! impl_flat_zip_indexed {
                 indices: Indices,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column();
+                let indices = indices.into_index_column(policy)?;
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?
                     .ok_or_else(|| Error::Launch {
@@ -8007,7 +8070,7 @@ macro_rules! impl_flat_zip_indexed {
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column();
+                let indices = indices.into_index_column(policy)?;
                 let mask = stencil.mask();
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?
@@ -8031,7 +8094,7 @@ macro_rules! impl_flat_zip_indexed {
                 indices: Indices,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column();
+                let indices = indices.into_index_column(policy)?;
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?
                     .ok_or_else(|| Error::Launch {
@@ -8054,7 +8117,7 @@ macro_rules! impl_flat_zip_indexed {
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column();
+                let indices = indices.into_index_column(policy)?;
                 let mask = stencil.mask();
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?

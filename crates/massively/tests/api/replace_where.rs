@@ -129,3 +129,19 @@ fn replace_where_accepts_sliced_output() {
 
     assert_eq!(exec.to_host(&values).unwrap(), vec![1, 10, 99, 99, 5]);
 }
+
+#[test]
+fn replace_where_accepts_lazy_counting_stencil() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+
+    replace_where(
+        &exec,
+        (99_u32,),
+        massively::lazy::counting(0).take(4),
+        massively::Zip1(values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&values).unwrap(), vec![10, 99, 99, 99]);
+}

@@ -28,6 +28,26 @@ pub struct PrecomputedSelection<R: Runtime> {
 }
 
 impl<R: Runtime> PrecomputedSelection<R> {
+    pub(crate) fn from_selected_rank(selected_rank: select::SelectedRankControl) -> Self {
+        Self {
+            len: mindex_from_usize(selected_rank.len).expect("stencil length exceeds MIndex"),
+            selected_rank,
+            _runtime: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn from_mask(
+        client: &cubecl::prelude::ComputeClient<R>,
+        mask: select::MaskControl,
+    ) -> Self {
+        let len = mindex_from_usize(mask.len).expect("stencil length exceeds MIndex");
+        Self {
+            len,
+            selected_rank: select::SelectedRankControl::from_mask_only(client, mask),
+            _runtime: std::marker::PhantomData,
+        }
+    }
+
     pub(crate) fn from_stencil_with_policy<Stencil, Pred>(
         policy: &crate::policy::CubePolicy<R>,
         stencil: &Stencil,
