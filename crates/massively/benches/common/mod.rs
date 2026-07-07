@@ -2,13 +2,26 @@
 use std::time::Duration;
 
 use criterion::{Bencher, Criterion};
+use cubecl::frontend::PartialEqExpand;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
 use massively::Executor;
+use massively::op::UnaryOp;
 
 pub const SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024, 1024 * 1024];
 pub const SORT_SIZES: &[usize] = &[1024, 16 * 1024, 256 * 1024];
 pub const SAMPLE_COUNT: usize = 10;
+
+pub struct U32Flag;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for U32Flag {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 0
+    }
+}
 
 #[derive(Clone, Copy)]
 pub enum Runtime {

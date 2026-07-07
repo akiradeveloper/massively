@@ -1,6 +1,5 @@
 use std::marker::PhantomData;
 
-use cubecl::frontend::PartialOrdExpand;
 use cubecl::prelude::Runtime;
 
 use crate::op;
@@ -194,12 +193,12 @@ where
 pub struct StencilFlag;
 
 #[cubecl::cube]
-impl<R> op::PredicateOp<R, (u32,)> for StencilFlag
+impl<R> op::PredicateOp<R, (bool,)> for StencilFlag
 where
     R: Runtime,
 {
-    fn apply(input: (u32,)) -> bool {
-        input.0 > 0
+    fn apply(input: (bool,)) -> bool {
+        input.0
     }
 }
 
@@ -207,11 +206,11 @@ where
 pub struct ScalarStencilFlag;
 
 #[cubecl::cube]
-impl<R> op::PredicateOp<R, u32> for ScalarStencilFlag
+impl<R> op::PredicateOp<R, bool> for ScalarStencilFlag
 where
     R: Runtime,
 {
-    fn apply(input: u32) -> bool {
-        input > 0
+    fn apply(input: bool) -> bool {
+        input
     }
 }

@@ -2,8 +2,8 @@ use cubecl::wgpu::WgpuRuntime;
 mod common;
 
 use common::{
-    Runtime, SIZES, ascending_u32, dense_f32, half_select_flags, iter_gpu, reverse_indices,
-    select_flags, sync,
+    Runtime, SIZES, U32Flag, ascending_u32, dense_f32, half_select_flags, iter_gpu,
+    reverse_indices, select_flags, sync,
 };
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use massively::{Executor, gather_where, replace_where, scatter_where};
@@ -18,7 +18,7 @@ fn check_where_indexed(exec: &Executor<WgpuRuntime>) {
         exec,
         massively::Zip1(values.slice(..)),
         indices.slice(..),
-        stencil.slice(..),
+        massively::lazy::transform(stencil.slice(..), U32Flag),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -30,7 +30,7 @@ fn check_where_indexed(exec: &Executor<WgpuRuntime>) {
         exec,
         massively::Zip1(values.slice(..)),
         indices.slice(..),
-        scatter_stencil.slice(..),
+        massively::lazy::transform(scatter_stencil.slice(..), U32Flag),
         massively::Zip1(scattered.slice_mut(..)),
     )
     .unwrap();
@@ -39,7 +39,7 @@ fn check_where_indexed(exec: &Executor<WgpuRuntime>) {
     replace_where(
         exec,
         (0.0,),
-        scatter_stencil.slice(..),
+        massively::lazy::transform(scatter_stencil.slice(..), U32Flag),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -63,7 +63,7 @@ fn bench_where_indexed(c: &mut Criterion) {
                         &exec,
                         massively::Zip1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
-                        black_box(stencil.slice(..)),
+                        massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                         massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
@@ -92,7 +92,7 @@ fn bench_where_indexed(c: &mut Criterion) {
                         &exec,
                         massively::Zip1(black_box(values.slice(..))),
                         black_box(indices.slice(..)),
-                        black_box(stencil.slice(..)),
+                        massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                         massively::Zip1(output.slice_mut(..)),
                     )
                     .unwrap();
@@ -118,7 +118,7 @@ fn bench_where_indexed(c: &mut Criterion) {
                     replace_where(
                         &exec,
                         (0.0,),
-                        black_box(stencil.slice(..)),
+                        massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                         massively::Zip1(values.slice_mut(..)),
                     )
                     .unwrap();
@@ -164,7 +164,10 @@ fn bench_where_indexed(c: &mut Criterion) {
                                     &exec,
                                     massively::Zip1(black_box(values.slice(..))),
                                     black_box(indices.slice(..)),
-                                    black_box(stencil.slice(..)),
+                                    massively::lazy::transform(
+                                        black_box(stencil.slice(..)),
+                                        U32Flag,
+                                    ),
                                     massively::Zip1(output.slice_mut(..)),
                                 )
                                 .unwrap();
@@ -205,7 +208,10 @@ fn bench_where_indexed(c: &mut Criterion) {
                                     &exec,
                                     massively::Zip1(black_box(values.slice(..))),
                                     black_box(indices.slice(..)),
-                                    black_box(stencil.slice(..)),
+                                    massively::lazy::transform(
+                                        black_box(stencil.slice(..)),
+                                        U32Flag,
+                                    ),
                                     massively::Zip1(output.slice_mut(..)),
                                 )
                                 .unwrap();
@@ -239,7 +245,7 @@ fn bench_where_indexed(c: &mut Criterion) {
                             replace_where(
                                 &exec,
                                 (0.0,),
-                                black_box(stencil.slice(..)),
+                                massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                                 massively::Zip1(values.slice_mut(..)),
                             )
                             .unwrap();

@@ -1,6 +1,9 @@
 //! Lazy read-only massively iterator constructors.
 
-use cubecl::prelude::{CubeElement, Runtime};
+use cubecl::{
+    frontend::PartialEqExpand,
+    prelude::{CubeElement, Runtime},
+};
 use std::marker::PhantomData;
 
 use crate::{Error, MIndex, iter::MIter, op, value::MStorageElement};
@@ -121,6 +124,40 @@ macro_rules! impl_constant_item_scalar {
 }
 
 impl_constant_item_scalar!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+#[doc(hidden)]
+pub struct ConstantBool;
+
+#[cubecl::cube]
+impl<R> op::UnaryOp<R, u32> for ConstantBool
+where
+    R: Runtime,
+{
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 0
+    }
+}
+
+impl<R> ConstantItem<R> for bool
+where
+    R: Runtime,
+{
+    type Read =
+        crate::detail::read::TransformRead<crate::detail::read::ConstantRead<u32>, ConstantBool>;
+
+    fn lower_constant_read(
+        value: Self,
+        len: MIndex,
+        policy: &crate::detail::CubePolicy<R>,
+    ) -> Result<Self::Read, Error> {
+        let value = if value { 1_u32 } else { 0_u32 };
+        Ok(crate::detail::read::TransformRead::new(
+            constant_leaf_read::<R, u32>(value, len, policy),
+        ))
+    }
+}
 
 macro_rules! impl_constant_item_tuple {
     ($zip:ident; $( $ty:ident : $var:ident ),+) => {

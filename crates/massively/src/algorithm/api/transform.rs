@@ -18,7 +18,7 @@ where
     source.transform_with_policy(exec.policy(), op, out)
 }
 
-/// Applies a unary transform where the `u32` stencil flag is non-zero.
+/// Applies a unary transform where the stencil flag is true.
 pub fn transform_where<R, Input, Stencil, Output, Op>(
     exec: &Executor<R>,
     source: Input,
@@ -29,7 +29,7 @@ pub fn transform_where<R, Input, Stencil, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Stencil: MIter<R, Item = u32>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
     Op: op::UnaryOp<R, Input::Item, Output = Output::Item>,
 {

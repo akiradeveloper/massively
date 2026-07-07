@@ -1,3 +1,4 @@
+use cubecl::frontend::PartialEqExpand;
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op as gpu_op;
@@ -39,6 +40,16 @@ struct ArityTupleToTuple4;
 struct ArityTupleToTuple5;
 struct ArityTupleToTuple6;
 struct ArityTupleToTuple7;
+struct U32Flag;
+
+#[cubecl::cube]
+impl gpu_op::UnaryOp<ApiRuntime, u32> for U32Flag {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 0
+    }
+}
 
 macro_rules! impl_arity_tuple_to_tuple {
     (($($ty:ty),+), $input:ident => $seed:expr) => {
@@ -644,7 +655,7 @@ macro_rules! transform_where_arity_case {
             &exec,
             gpu_input.slice(..),
             $op,
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -873,7 +884,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let len = massively::copy_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..), gpu_output.slice_mut(..)).unwrap();
+        let len = massively::copy_where(&exec, gpu_input.slice(..), massively::lazy::transform(gpu_stencil.slice(..), U32Flag), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip);
         let host = oracle::copy_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
@@ -886,7 +897,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let len = massively::remove_where(&exec, gpu_input.slice(..), gpu_stencil.slice(..), gpu_output.slice_mut(..)).unwrap();
+        let len = massively::remove_where(&exec, gpu_input.slice(..), massively::lazy::transform(gpu_stencil.slice(..), U32Flag), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip);
         let host = oracle::remove_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
@@ -1035,7 +1046,7 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             gpu_indices.slice(..),
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1054,7 +1065,7 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             gpu_indices.slice(..),
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1102,7 +1113,7 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             gpu_indices.slice(..),
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1137,7 +1148,7 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             gpu_indices.slice(..),
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1235,7 +1246,7 @@ macro_rules! value_case {
         massively::replace_where(
             &exec,
             replacement,
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1248,7 +1259,7 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             Identity,
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1276,7 +1287,7 @@ macro_rules! value_case {
         massively::replace_where(
             &exec,
             $init,
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1296,7 +1307,7 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             Identity,
-            gpu_stencil.slice(..),
+            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
             gpu_output.slice_mut(..),
         )
         .unwrap();

@@ -30,7 +30,7 @@ where
         exec,
         Zip1(item_id.slice(..)),
         slot.slice(..),
-        approved.slice(..),
+        massively::lazy::transform(approved.slice(..), common::U32Flag),
         Zip1(out.slice_mut(..)),
     )?;
     Ok(out)

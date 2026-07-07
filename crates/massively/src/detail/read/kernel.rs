@@ -3855,7 +3855,7 @@ where
 
 /// Internal lowering for `u32` stencil iterators.
 #[doc(hidden)]
-pub trait KernelStencilSelection<R: Runtime>: KernelRead<R, Item = u32> {
+pub trait KernelStencilSelection<R: Runtime>: KernelRead<R, Item = bool> {
     fn stencil_selection(
         self,
         policy: &CubePolicy<R>,
@@ -4660,7 +4660,7 @@ where
 impl<R, Read> KernelStencilSelection<R> for Read
 where
     R: Runtime,
-    Read: KernelReadBoundMany<R, Item = u32>,
+    Read: KernelReadBoundMany<R, Item = bool>,
 {
     fn stencil_selection(
         self,

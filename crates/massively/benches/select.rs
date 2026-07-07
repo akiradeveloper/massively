@@ -1,7 +1,7 @@
 use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SIZES, iter_gpu, select_flags, sync};
+use common::{Runtime, SIZES, U32Flag, iter_gpu, select_flags, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
@@ -46,7 +46,7 @@ fn check_copy_where(exec: &Executor<WgpuRuntime>) {
     let len = copy_where(
         &exec,
         massively::Zip1(values.slice(..)),
-        stencil.slice(..),
+        massively::lazy::transform(stencil.slice(..), U32Flag),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -61,7 +61,7 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
     let len = remove_where(
         &exec,
         massively::Zip1(values.slice(..)),
-        stencil.slice(..),
+        massively::lazy::transform(stencil.slice(..), U32Flag),
         massively::Zip1(removed.slice_mut(..)),
     )
     .unwrap();
@@ -75,7 +75,6 @@ fn check_selection_family(exec: &Executor<WgpuRuntime>) {
         &exec,
         massively::Zip1(values.slice(..)),
         Positive,
-        (),
         massively::Zip1(partitioned.slice_mut(..)),
     )
     .unwrap();
@@ -131,7 +130,7 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
             f.slice(..),
             g.slice(..),
         ),
-        stencil.slice(..),
+        massively::lazy::transform(stencil.slice(..), U32Flag),
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -156,7 +155,7 @@ fn check_wide_copy_remove_where(exec: &Executor<WgpuRuntime>) {
             f.slice(..),
             g.slice(..),
         ),
-        stencil.slice(..),
+        massively::lazy::transform(stencil.slice(..), U32Flag),
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -199,7 +198,6 @@ fn check_wide_partition(exec: &Executor<WgpuRuntime>) {
             g.slice(..),
         ),
         FirstColumnEven,
-        (),
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -219,9 +217,7 @@ struct Positive;
 
 #[cubecl::cube]
 impl massively::op::PredicateOp<WgpuRuntime, (f32,)> for Positive {
-    type Env = ();
-
-    fn apply(_env: (), input: (f32,)) -> bool {
+    fn apply(input: (f32,)) -> bool {
         input.0 > 0.0
     }
 }
@@ -232,9 +228,7 @@ struct FirstColumnEven;
 impl massively::op::PredicateOp<WgpuRuntime, (u32, u32, u32, u32, u32, u32, u32)>
     for FirstColumnEven
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (u32, u32, u32, u32, u32, u32, u32)) -> bool {
+    fn apply(input: (u32, u32, u32, u32, u32, u32, u32)) -> bool {
         input.0 % 2u32 == 0u32
     }
 }
@@ -260,7 +254,7 @@ fn bench_select(c: &mut Criterion) {
                             let output_len = copy_where(
                                 &exec,
                                 massively::Zip1(black_box(values.slice(..))),
-                                black_box(stencil.slice(..)),
+                                massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                                 massively::Zip1(black_box(output.slice_mut(..))),
                             )
                             .unwrap();
@@ -289,7 +283,7 @@ fn bench_select(c: &mut Criterion) {
                     let output_len = remove_where(
                         &exec,
                         massively::Zip1(black_box(values.slice(..))),
-                        black_box(stencil.slice(..)),
+                        massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                         massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
@@ -338,7 +332,7 @@ fn bench_select(c: &mut Criterion) {
                                 black_box(col_f.slice(..)),
                                 black_box(col_g.slice(..)),
                             ),
-                            black_box(stencil.slice(..)),
+                            massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                             massively::Zip7(
                                 black_box(out_a.slice_mut(..)),
                                 black_box(out_b.slice_mut(..)),
@@ -372,7 +366,7 @@ fn bench_select(c: &mut Criterion) {
                                 black_box(col_f.slice(..)),
                                 black_box(col_g.slice(..)),
                             ),
-                            black_box(stencil.slice(..)),
+                            massively::lazy::transform(black_box(stencil.slice(..)), U32Flag),
                             massively::Zip7(
                                 black_box(out_a.slice_mut(..)),
                                 black_box(out_b.slice_mut(..)),
@@ -410,7 +404,6 @@ fn bench_select(c: &mut Criterion) {
                         &exec,
                         massively::Zip1(black_box(values.slice(..))),
                         Positive,
-                        (),
                         massively::Zip1(black_box(output.slice_mut(..))),
                     )
                     .unwrap();
@@ -457,7 +450,6 @@ fn bench_select(c: &mut Criterion) {
                             black_box(col_g.slice(..)),
                         ),
                         FirstColumnEven,
-                        (),
                         massively::Zip7(
                             black_box(out_a.slice_mut(..)),
                             black_box(out_b.slice_mut(..)),

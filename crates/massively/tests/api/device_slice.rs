@@ -431,14 +431,14 @@ fn gather_where_accepts_offset_device_slices() {
     let exec = exec();
     let values = exec.to_device(&[99_u32, 10, 20, 30, 40, 88]).unwrap();
     let indices = exec.to_device(&[77_u32, 3, 1, 0, 2, 66]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0, 0]).unwrap();
+    let stencil = bool_stencil_from(1, 4, IndexOdd);
 
     let output = exec.to_device(&[0_u32; 4]).unwrap();
     gather_where(
         &exec,
         massively::Zip1(values.slice(1..5)),
         indices.slice(1..5),
-        stencil.slice(1..5),
+        stencil,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -801,13 +801,13 @@ fn reduce_by_key_accepts_multi_column_device_slice_values() {
 fn copy_where_accepts_device_slice_stencil() {
     let exec = exec();
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
+    let stencil = bool_stencil_from(1, 3, IndexOdd);
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     let len = copy_where(
         &exec,
         massively::Zip1(values.slice(1..4)),
-        stencil.slice(1..4),
+        stencil,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -819,13 +819,13 @@ fn copy_where_accepts_device_slice_stencil() {
 fn remove_where_accepts_device_slice_input_and_stencil() {
     let exec = exec();
     let values = exec.to_device(&[0_u32, 10, 20, 30, 99]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 0, 1, 0, 0]).unwrap();
+    let stencil = bool_stencil_from(1, 3, IndexEq2);
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     let len = remove_where(
         &exec,
         massively::Zip1(values.slice(1..4)),
-        stencil.slice(1..4),
+        stencil,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -837,12 +837,12 @@ fn remove_where_accepts_device_slice_input_and_stencil() {
 fn replace_where_accepts_device_slice_stencil() {
     let exec = exec();
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
+    let stencil = bool_stencil_from(1, 3, IndexOdd);
 
     replace_where(
         &exec,
         (99_u32,),
-        stencil.slice(1..4),
+        stencil,
         massively::Zip1(values.slice_mut(1..4)),
     )
     .unwrap();
@@ -855,14 +855,14 @@ fn scatter_where_accepts_device_slice_indices_and_stencil() {
     let exec = exec();
     let values = exec.to_device(&[99_u32, 10, 20, 30, 88]).unwrap();
     let indices = exec.to_device(&[99_u32, 2, 1, 0, 88]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
+    let stencil = bool_stencil_from(1, 3, IndexOdd);
 
     let output = exec.to_device(&[0_u32; 3]).unwrap();
     scatter_where(
         &exec,
         massively::Zip1(values.slice(1..4)),
         indices.slice(1..4),
-        stencil.slice(1..4),
+        stencil,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();

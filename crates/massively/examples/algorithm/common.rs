@@ -5,6 +5,56 @@ use massively::op::{BinaryOp, BinaryPredicateOp, PredicateOp, ReductionOp, Unary
 
 pub type Result = std::result::Result<(), massively::Error>;
 
+pub fn bool_stencil<R, Op>(len: massively::MIndex, op: Op) -> impl massively::MIter<R, Item = bool>
+where
+    R: cubecl::prelude::Runtime,
+    Op: UnaryOp<R, u32, Output = bool>,
+{
+    massively::lazy::transform(massively::lazy::counting(0).take(len), op)
+}
+
+pub struct IndexOdd;
+
+#[cubecl::cube]
+impl<R> UnaryOp<R, u32> for IndexOdd
+where
+    R: cubecl::prelude::Runtime,
+{
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input % 2 == 1
+    }
+}
+
+pub struct IndexNot1;
+
+#[cubecl::cube]
+impl<R> UnaryOp<R, u32> for IndexNot1
+where
+    R: cubecl::prelude::Runtime,
+{
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 1
+    }
+}
+
+pub struct IndexLt2;
+
+#[cubecl::cube]
+impl<R> UnaryOp<R, u32> for IndexLt2
+where
+    R: cubecl::prelude::Runtime,
+{
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input < 2
+    }
+}
+
 pub struct AddOne;
 
 #[cubecl::cube]

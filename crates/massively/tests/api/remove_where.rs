@@ -5,14 +5,14 @@ fn remove_where_accepts_heterogeneous_tuple_stencil() {
     let exec = exec();
     let values = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let tags = exec.to_device(&[10_u32, 20, 20, 30]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 1, 0]).unwrap();
+    let stencil = bool_stencil(4, IndexBetween1And2);
     let out_values = exec.to_device(&[0.0_f32; 4]).unwrap();
     let out_tags = exec.to_device(&[0_u32; 4]).unwrap();
 
     let len = remove_where(
         &exec,
         massively::Zip2(values.slice(..), tags.slice(..)),
-        stencil.slice(..),
+        stencil,
         massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
@@ -33,7 +33,7 @@ fn remove_where_accepts_seven_tuple_columns() {
     let e = exec.to_device(&[41_u32, 42, 43, 44, 45]).unwrap();
     let f = exec.to_device(&[51_u32, 52, 53, 54, 55]).unwrap();
     let g = exec.to_device(&[61_u32, 62, 63, 64, 65]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1, 0]).unwrap();
+    let stencil = bool_stencil(5, IndexOdd);
     let out_a = exec.to_device(&[0_u32; 5]).unwrap();
     let out_b = exec.to_device(&[0_u32; 5]).unwrap();
     let out_c = exec.to_device(&[0_u32; 5]).unwrap();
@@ -53,7 +53,7 @@ fn remove_where_accepts_seven_tuple_columns() {
             f.slice(..),
             g.slice(..),
         ),
-        stencil.slice(..),
+        stencil,
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -78,13 +78,13 @@ fn remove_where_accepts_seven_tuple_columns() {
 fn remove_where_keeps_all_values_when_no_flags_are_selected() {
     let exec = exec();
     let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 0, 0]).unwrap();
+    let stencil = massively::lazy::constant(false).take(3);
     let remaining = exec.to_device(&[0_u32; 3]).unwrap();
 
     let len = remove_where(
         &exec,
         massively::Zip1(values.slice(..)),
-        stencil.slice(..),
+        stencil,
         massively::Zip1(remaining.slice_mut(..)),
     )
     .unwrap();
@@ -99,13 +99,13 @@ fn remove_where_keeps_all_values_when_no_flags_are_selected() {
 fn remove_where_returns_empty_when_all_flags_are_selected() {
     let exec = exec();
     let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 1, 1]).unwrap();
+    let stencil = massively::lazy::constant(true).take(3);
     let remaining = exec.to_device(&[0_u32; 3]).unwrap();
 
     let len = remove_where(
         &exec,
         massively::Zip1(values.slice(..)),
-        stencil.slice(..),
+        stencil,
         massively::Zip1(remaining.slice_mut(..)),
     )
     .unwrap();
@@ -125,7 +125,7 @@ fn remove_where_accepts_lazy_counting_stencil() {
     let len = remove_where(
         &exec,
         massively::Zip1(values.slice(..)),
-        massively::lazy::counting(0).take(4),
+        bool_stencil(4, IndexNonZero),
         massively::Zip1(remaining.slice_mut(..)),
     )
     .unwrap();

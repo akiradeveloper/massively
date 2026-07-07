@@ -9,14 +9,12 @@
 //! # GPU Algorithm
 //!
 //! 1. Transform each row to the next position.
-//! 2. Build a stencil for rows outside the box.
-//! 3. Remove rows with a non-zero stencil.
+//! 2. Remove rows whose lazy outside-box stencil is true.
 
 mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::prelude::*;
 use massively::{DeviceVec, Executor, Zip3, remove_where, transform};
 
 struct AdvanceParticle;
@@ -42,14 +40,10 @@ impl<B> UnaryOp<B, (f32, f32, f32)> for OutsideParticleBox
 where
     B: cubecl::prelude::Runtime,
 {
-    type Output = (u32,);
+    type Output = bool;
 
-    fn apply(input: (f32, f32, f32)) -> (u32,) {
-        if input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0 {
-            (1_u32,)
-        } else {
-            (0_u32,)
-        }
+    fn apply(input: (f32, f32, f32)) -> bool {
+        input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0
     }
 }
 
@@ -81,20 +75,16 @@ where
             next_vx.slice_mut(..),
         ),
     )?;
-    let stencil = exec.full(next_x.len(), 0_u32)?;
-    transform(
-        exec,
-        Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
-        OutsideParticleBox,
-        Zip1(stencil.slice_mut(..)),
-    )?;
     let x = exec.full(next_x.len(), 0.0_f32)?;
     let y = exec.full(next_y.len(), 0.0_f32)?;
     let vx = exec.full(next_vx.len(), 0.0_f32)?;
     let len = remove_where(
         exec,
         Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
-        stencil.slice(..),
+        massively::lazy::transform(
+            Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
+            OutsideParticleBox,
+        ),
         Zip3(x.slice_mut(..), y.slice_mut(..), vx.slice_mut(..)),
     )?;
     Ok(Output {

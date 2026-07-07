@@ -3,7 +3,7 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
-use massively::{DeviceVec, Executor};
+use massively::{DeviceVec, Executor, MIter};
 
 type F32Vec = DeviceVec<WgpuRuntime, f32>;
 type U32Vec = DeviceVec<WgpuRuntime, u32>;
@@ -32,8 +32,19 @@ fn indices(exec: &Executor<WgpuRuntime>) -> U32Vec {
     exec.to_device(&[3_u32, 2, 1, 0]).unwrap()
 }
 
-fn stencil(exec: &Executor<WgpuRuntime>) -> U32Vec {
-    exec.to_device(&[1_u32, 0, 1, 0]).unwrap()
+fn stencil(_exec: &Executor<WgpuRuntime>) -> impl MIter<WgpuRuntime, Item = bool> {
+    massively::lazy::transform(massively::lazy::counting(0).take(4), ArityStencil)
+}
+
+struct ArityStencil;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for ArityStencil {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input % 2 == 0
+    }
 }
 
 macro_rules! zip_fn {
@@ -508,13 +519,7 @@ macro_rules! copy_where_case {
         let values = $values(&exec);
         let out = $output(&exec);
         let stencil = stencil(&exec);
-        massively::copy_where(
-            &exec,
-            values.slice(..),
-            stencil.slice(..),
-            out.slice_mut(..),
-        )
-        .unwrap();
+        massively::copy_where(&exec, values.slice(..), stencil, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(copy_where_arity, copy_where_case);
@@ -657,7 +662,7 @@ macro_rules! gather_where_case {
             &exec,
             values.slice(..),
             indices.slice(..),
-            stencil.slice(..),
+            stencil,
             out.slice_mut(..),
         )
         .unwrap();
@@ -1000,13 +1005,7 @@ macro_rules! remove_where_case {
         let values = $values(&exec);
         let out = $output(&exec);
         let stencil = stencil(&exec);
-        massively::remove_where(
-            &exec,
-            values.slice(..),
-            stencil.slice(..),
-            out.slice_mut(..),
-        )
-        .unwrap();
+        massively::remove_where(&exec, values.slice(..), stencil, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(remove_where_arity, remove_where_case);
@@ -1016,7 +1015,7 @@ macro_rules! replace_where_case {
         let exec = exec();
         let out = $output(&exec);
         let stencil = stencil(&exec);
-        massively::replace_where(&exec, $init, stencil.slice(..), out.slice_mut(..)).unwrap();
+        massively::replace_where(&exec, $init, stencil, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(replace_where_arity, replace_where_case);
@@ -1059,7 +1058,7 @@ macro_rules! scatter_where_case {
             &exec,
             values.slice(..),
             indices.slice(..),
-            stencil.slice(..),
+            stencil,
             out.slice_mut(..),
         )
         .unwrap();
@@ -1208,7 +1207,7 @@ macro_rules! transform_where_input_case {
             &exec,
             values.slice(..),
             ArityTupleToScalar,
-            stencil.slice(..),
+            stencil,
             out.slice_mut(..),
         )
         .unwrap();
@@ -1223,14 +1222,8 @@ macro_rules! transform_where_output_case {
         let values = values1(&exec);
         let out = $output(&exec);
         let stencil = stencil(&exec);
-        massively::transform_where(
-            &exec,
-            values.slice(..),
-            $op,
-            stencil.slice(..),
-            out.slice_mut(..),
-        )
-        .unwrap();
+        massively::transform_where(&exec, values.slice(..), $op, stencil, out.slice_mut(..))
+            .unwrap();
     }};
 }
 define_output_arity_tests!(transform_where_output_arity, transform_where_output_case);

@@ -1,9 +1,24 @@
 #![allow(dead_code)]
 
+use cubecl::frontend::PartialEqExpand;
 use cubecl::prelude::*;
 use massively::op::{BinaryPredicateOp, ReductionOp};
 
 pub type Result<T = ()> = std::result::Result<T, massively::Error>;
+
+pub struct U32Flag;
+
+#[cubecl::cube]
+impl<R> massively::op::UnaryOp<R, u32> for U32Flag
+where
+    R: cubecl::prelude::Runtime,
+{
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 0
+    }
+}
 
 pub fn assert_f32_near(actual: f32, expected: f32, tolerance: f32) {
     assert!(

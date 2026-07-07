@@ -36,7 +36,7 @@ where
     let delayed_len = copy_where(
         exec,
         Zip2(route_id.slice(..), weight.slice(..)),
-        delayed.slice(..),
+        massively::lazy::transform(delayed.slice(..), common::U32Flag),
         Zip2(delayed_route.slice_mut(..), delayed_weight.slice_mut(..)),
     )?;
     let sorted_route = exec.full(delayed_len, 0_u32)?;

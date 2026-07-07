@@ -66,7 +66,7 @@ where
     let len = copy_where(
         exec,
         Zip2(sku.slice(..), urgency.slice(..)),
-        urgency.slice(..),
+        massively::lazy::transform(urgency.slice(..), common::U32Flag),
         Zip2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
     )?;
     let sorted_urgency = exec.full(len, 0_u32)?;
