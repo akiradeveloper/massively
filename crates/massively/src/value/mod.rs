@@ -33,7 +33,9 @@ impl<T> MStorageElement for T where
 }
 
 /// Logical item that has an owned/writable Zip device storage shape.
-pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
+pub trait MAlloc<R: Runtime>:
+    MItem<R> + dispatch::MItemDispatch<R> + crate::detail::write::MItemWriteDispatch<R>
+{
     #[doc(hidden)]
     type Inner;
 

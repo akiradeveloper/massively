@@ -391,6 +391,1107 @@ macro_rules! indexed_apply_arity {
     };
 }
 
+macro_rules! adjacent_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $input:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident => $index:expr ),+
+    ) => {{
+        let input = $input;
+        let len = crate::detail::read::KernelRead::len(&input);
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "adjacent_difference output must match input shape".to_string(),
+            })?;
+        )+
+        if len != 0 {
+            let client = $policy.client();
+            let mut bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Read as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &input,
+                &mut bindings,
+            )?;
+            bindings.finish();
+            let offsets = bindings.slot_offsets7_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let slot3 = bindings.slot_or_first(3);
+            let slot4 = bindings.slot_or_first(4);
+            let slot5 = bindings.slot_or_first(5);
+            let slot6 = bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    KernelOp<R, Op>,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                    BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                    BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                    BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! adjacent_logical7_arity {
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0)
+    };
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0, B: $b => 1)
+    };
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($kernel:ident, $policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        adjacent_logical7_into_output!($kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! adjacent_logical7_auto_arity {
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple1_kernel, $policy, $input, $output; A: $a)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple2_kernel, $policy, $input, $output; A: $a, B: $b)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple3_kernel, $policy, $input, $output; A: $a, B: $b, C: $c)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple4_kernel, $policy, $input, $output; A: $a, B: $b, C: $c, D: $d)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple5_kernel, $policy, $input, $output; A: $a, B: $b, C: $c, D: $d, E: $e)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple6_kernel, $policy, $input, $output; A: $a, B: $b, C: $c, D: $d, E: $e, F: $f)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        adjacent_logical7_arity!(adjacent_logical7_to_tuple7_kernel, $policy, $input, $output; A: $a, B: $b, C: $c, D: $d, E: $e, F: $f, G: $g)
+    };
+}
+
+macro_rules! inclusive_scan_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $input:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident => $index:expr ),+
+    ) => {{
+        let input = $input;
+        let len = crate::detail::read::KernelRead::len(&input);
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "inclusive_scan output must match input shape".to_string(),
+            })?;
+        )+
+        if len != 0 {
+            let client = $policy.client();
+            let mut bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Read as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &input,
+                &mut bindings,
+            )?;
+            bindings.finish();
+            let offsets = bindings.slot_offsets7_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let slot3 = bindings.slot_or_first(3);
+            let slot4 = bindings.slot_or_first(4);
+            let slot5 = bindings.slot_or_first(5);
+            let slot6 = bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    KernelOp<R, Op>,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                    BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                    BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                    BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! exclusive_scan_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $input:expr,
+        $init:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident : $init_var:ident => $index:expr ),+
+    ) => {{
+        let input = $input;
+        let ($( $init_var, )+) = $init;
+        let len = crate::detail::read::KernelRead::len(&input);
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "exclusive_scan output must match input shape".to_string(),
+            })?;
+        )+
+        if len != 0 {
+            let client = $policy.client();
+            let mut bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Read as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &input,
+                &mut bindings,
+            )?;
+            bindings.finish();
+            let offsets = bindings.slot_offsets7_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let slot3 = bindings.slot_or_first(3);
+            let slot4 = bindings.slot_or_first(4);
+            let slot5 = bindings.slot_or_first(5);
+            let slot6 = bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            $(
+                let $init_var = client.create_from_slice(<$ty as CubeElement>::as_bytes(&[$init_var]));
+            )+
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    KernelOp<R, Op>,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                    BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                    BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                    BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($init_var.clone(), 1),
+                    )+
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! inclusive_scan_logical7_auto_arity {
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple1_kernel, $policy, $input, $output; A: $a => 0)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple2_kernel, $policy, $input, $output; A: $a => 0, B: $b => 1)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple3_kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple4_kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple5_kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple6_kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($policy:expr, $input:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple7_kernel, $policy, $input, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! exclusive_scan_logical7_auto_arity {
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple1_kernel, $policy, $input, $init, $output; A: $a: init_a => 0)
+    };
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple2_kernel, $policy, $input, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1)
+    };
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple3_kernel, $policy, $input, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2)
+    };
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple4_kernel, $policy, $input, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3)
+    };
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple5_kernel, $policy, $input, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3, E: $e: init_e => 4)
+    };
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple6_kernel, $policy, $input, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3, E: $e: init_e => 4, F: $f: init_f => 5)
+    };
+    ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple7_kernel, $policy, $input, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3, E: $e: init_e => 4, F: $f: init_f => 5, G: $g: init_g => 6)
+    };
+}
+
+macro_rules! reduce_by_key_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $input:expr,
+        $selection:expr,
+        $output_count:expr,
+        $init:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident : $init_var:ident => $index:expr ),+
+    ) => {{
+        let input = $input;
+        let selection = $selection;
+        let ($( $init_var, )+) = $init;
+        let len = crate::detail::read::KernelRead::len(&input);
+        ensure_same_len(len, selection.len)?;
+        let _ = $output_count;
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "reduce_by_key output must match input shape".to_string(),
+            })?;
+        )+
+        if len != 0 {
+            let client = $policy.client();
+            let mut bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Read as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &input,
+                &mut bindings,
+            )?;
+            bindings.finish();
+            let offsets = bindings.slot_offsets7_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let slot3 = bindings.slot_or_first(3);
+            let slot4 = bindings.slot_or_first(4);
+            let slot5 = bindings.slot_or_first(5);
+            let slot6 = bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            $(
+                let $init_var = client.create_from_slice(<$ty as CubeElement>::as_bytes(&[$init_var]));
+            )+
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    KernelOp<R, Op>,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(selection.flag.clone(), selection.len),
+                    BufferArg::from_raw_parts(selection.position.clone(), selection.len),
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                    BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                    BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                    BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($init_var.clone(), 1),
+                    )+
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! reduce_by_key_logical7_auto_arity {
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple1_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0)
+    };
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple2_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1)
+    };
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple3_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2)
+    };
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple4_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3)
+    };
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple5_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3, E: $e: init_e => 4)
+    };
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple6_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3, E: $e: init_e => 4, F: $f: init_f => 5)
+    };
+    ($policy:expr, $input:expr, $selection:expr, $output_count:expr, $init:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        reduce_by_key_logical7_into_output!(reduce_by_key_logical7_to_tuple7_kernel, $policy, $input, $selection, $output_count, $init, $output; A: $a: init_a => 0, B: $b: init_b => 1, C: $c: init_c => 2, D: $d: init_d => 3, E: $e: init_e => 4, F: $f: init_f => 5, G: $g: init_g => 6)
+    };
+}
+
+macro_rules! merge_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $left:expr,
+        $right:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident => $index:expr ),+
+    ) => {{
+        let left = $left;
+        let right = $right;
+        let left_len = crate::detail::read::KernelRead::len(&left);
+        let right_len = crate::detail::read::KernelRead::len(&right);
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "merge output must match input shape".to_string(),
+            })?;
+        )+
+        if left_len + right_len != 0 {
+            let client = $policy.client();
+            let mut left_bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Left as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &left,
+                &mut left_bindings,
+            )?;
+            left_bindings.finish();
+            let mut right_bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Right as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &right,
+                &mut right_bindings,
+            )?;
+            right_bindings.finish();
+            let left_offsets = left_bindings.slot_offsets7_handle(client)?;
+            let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+            let left_slot0 = left_bindings.slot_or_first(0);
+            let left_slot1 = left_bindings.slot_or_first(1);
+            let left_slot2 = left_bindings.slot_or_first(2);
+            let left_slot3 = left_bindings.slot_or_first(3);
+            let left_slot4 = left_bindings.slot_or_first(4);
+            let left_slot5 = left_bindings.slot_or_first(5);
+            let left_slot6 = left_bindings.slot_or_first(6);
+            let right_slot0 = right_bindings.slot_or_first(0);
+            let right_slot1 = right_bindings.slot_or_first(1);
+            let right_slot2 = right_bindings.slot_or_first(2);
+            let right_slot3 = right_bindings.slot_or_first(3);
+            let right_slot4 = right_bindings.slot_or_first(4);
+            let right_slot5 = right_bindings.slot_or_first(5);
+            let right_slot6 = right_bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?,
+                u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            let len = left_len + right_len;
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    KernelOp<R, Less>,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1),
+                    BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1),
+                    BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1),
+                    BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1),
+                    BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1),
+                    BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1),
+                    BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1),
+                    BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1),
+                    BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1),
+                    BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1),
+                    BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1),
+                    BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1),
+                    BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! merge_logical7_auto_arity {
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple1_kernel, $policy, $left, $right, $output; A: $a => 0)
+    };
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple2_kernel, $policy, $left, $right, $output; A: $a => 0, B: $b => 1)
+    };
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple3_kernel, $policy, $left, $right, $output; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple4_kernel, $policy, $left, $right, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple5_kernel, $policy, $left, $right, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple6_kernel, $policy, $left, $right, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        merge_logical7_into_output!(merge_logical7_to_tuple7_kernel, $policy, $left, $right, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! set_union_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $left:expr,
+        $right:expr,
+        $right_only:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident => $index:expr ),+
+    ) => {{
+        let left = $left;
+        let right = $right;
+        let right_only = $right_only;
+        let left_len = crate::detail::read::KernelRead::len(&left);
+        let right_len = crate::detail::read::KernelRead::len(&right);
+        ensure_same_len(right_len, right_only.len)?;
+        let count = crate::detail::primitives::select::selected_count($policy, right_only)?;
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "set_union output must match input shape".to_string(),
+            })?;
+        )+
+        if left_len + right_len != 0 {
+            let client = $policy.client();
+            let mut left_bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Left as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &left,
+                &mut left_bindings,
+            )?;
+            left_bindings.finish();
+            let mut right_bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Right as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &right,
+                &mut right_bindings,
+            )?;
+            right_bindings.finish();
+            let left_offsets = left_bindings.slot_offsets7_handle(client)?;
+            let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+            let left_slot0 = left_bindings.slot_or_first(0);
+            let left_slot1 = left_bindings.slot_or_first(1);
+            let left_slot2 = left_bindings.slot_or_first(2);
+            let left_slot3 = left_bindings.slot_or_first(3);
+            let left_slot4 = left_bindings.slot_or_first(4);
+            let left_slot5 = left_bindings.slot_or_first(5);
+            let left_slot6 = left_bindings.slot_or_first(6);
+            let right_slot0 = right_bindings.slot_or_first(0);
+            let right_slot1 = right_bindings.slot_or_first(1);
+            let right_slot2 = right_bindings.slot_or_first(2);
+            let right_slot3 = right_bindings.slot_or_first(3);
+            let right_slot4 = right_bindings.slot_or_first(4);
+            let right_slot5 = right_bindings.slot_or_first(5);
+            let right_slot6 = right_bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?,
+                u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            let len = left_len + right_len;
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    KernelOp<R, Less>,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(right_only.flag.clone(), right_only.len),
+                    BufferArg::from_raw_parts(right_only.position.clone(), right_only.len),
+                    BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1),
+                    BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1),
+                    BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1),
+                    BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1),
+                    BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1),
+                    BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1),
+                    BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1),
+                    BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1),
+                    BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1),
+                    BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1),
+                    BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1),
+                    BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1),
+                    BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        mindex_from_usize(left_len + count)
+    }};
+}
+
+macro_rules! set_union_logical7_auto_arity {
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple1_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0)
+    };
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple2_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0, B: $b => 1)
+    };
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple3_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple4_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple5_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple6_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($policy:expr, $left:expr, $right:expr, $right_only:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        set_union_logical7_into_output!(set_union_logical7_to_tuple7_kernel, $policy, $left, $right, $right_only, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! partition_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $input:expr,
+        $split_rank:expr,
+        $matching_count:expr,
+        $output:expr;
+        $( $ty:ident : $var:ident => $index:expr ),+
+    ) => {{
+        let input = $input;
+        let split_rank = $split_rank;
+        let len = crate::detail::read::KernelRead::len(&input);
+        ensure_same_len(len, split_rank.len)?;
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "partition output must match input shape".to_string(),
+            })?;
+        )+
+        if len != 0 {
+            let client = $policy.client();
+            let mut bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Read as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &input,
+                &mut bindings,
+            )?;
+            bindings.finish();
+            let offsets = bindings.slot_offsets7_handle(client)?;
+            let slot0 = bindings.slot_or_first(0);
+            let slot1 = bindings.slot_or_first(1);
+            let slot2 = bindings.slot_or_first(2);
+            let slot3 = bindings.slot_or_first(3);
+            let slot4 = bindings.slot_or_first(4);
+            let slot5 = bindings.slot_or_first(5);
+            let slot6 = bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+                u32::try_from($matching_count)
+                    .map_err(|_| Error::LengthTooLarge { len: $matching_count })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(split_rank.flag.clone(), split_rank.len),
+                    BufferArg::from_raw_parts(split_rank.position.clone(), split_rank.len),
+                    BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                    BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                    BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                    BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                    BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                    BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                    BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! partition_logical7_auto_arity {
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple1_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0)
+    };
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple2_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0, B: $b => 1)
+    };
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple3_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple4_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple5_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple6_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($policy:expr, $input:expr, $split_rank:expr, $matching_count:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        partition_logical7_into_output!(partition_logical7_to_tuple7_kernel, $policy, $input, $split_rank, $matching_count, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! scatter_logical7_into_output {
+    (
+        $kernel:ident,
+        $policy:expr,
+        $values:expr,
+        $indices:expr,
+        $output:expr
+        $(, $mask:expr)?;
+        $( $ty:ident : $var:ident => $index:expr ),+
+    ) => {{
+        let values = $values;
+        let indices = $indices;
+        let len = crate::detail::read::KernelRead::len(&values);
+        ensure_same_len(len, crate::detail::read::KernelRead::len(&indices))?;
+        $(
+            let mask = $mask;
+            ensure_same_len(len, mask.len)?;
+        )?
+        $(
+            let $var = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(
+                &$output,
+                $index,
+            )?
+            .ok_or_else(|| Error::Launch {
+                message: "scatter output must match input shape".to_string(),
+            })?;
+        )+
+        if len != 0 {
+            let client = $policy.client();
+            let mut value_bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <Read as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &values,
+                &mut value_bindings,
+            )?;
+            value_bindings.finish();
+            let mut index_bindings = crate::detail::device::KernelColumnBindings::empty(client);
+            <IndexSource as crate::detail::read::KernelReadAtEnv<R, crate::detail::read::Env0>>::stage_at_env(
+                &indices,
+                &mut index_bindings,
+            )?;
+            index_bindings.finish();
+            let value_offsets = value_bindings.slot_offsets7_handle(client)?;
+            let index_offsets = index_bindings.slot_offsets7_handle(client)?;
+            let value_slot0 = value_bindings.slot_or_first(0);
+            let value_slot1 = value_bindings.slot_or_first(1);
+            let value_slot2 = value_bindings.slot_or_first(2);
+            let value_slot3 = value_bindings.slot_or_first(3);
+            let value_slot4 = value_bindings.slot_or_first(4);
+            let value_slot5 = value_bindings.slot_or_first(5);
+            let value_slot6 = value_bindings.slot_or_first(6);
+            let index_slot0 = index_bindings.slot_or_first(0);
+            let index_slot1 = index_bindings.slot_or_first(1);
+            let index_slot2 = index_bindings.slot_or_first(2);
+            let index_slot3 = index_bindings.slot_or_first(3);
+            let index_slot4 = index_bindings.slot_or_first(4);
+            let index_slot5 = index_bindings.slot_or_first(5);
+            let index_slot6 = index_bindings.slot_or_first(6);
+            let metadata = [
+                u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
+                $(
+                    u32::try_from($var.offset)
+                        .map_err(|_| Error::LengthTooLarge { len: $var.offset })?,
+                )+
+            ];
+            let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+            let block_size = 256_u32;
+            let block_count = len.div_ceil(block_size as usize);
+            let block_count_u32 =
+                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            unsafe {
+                crate::kernels::$kernel::launch_unchecked::<
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf3,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
+                    $( $ty, )+
+                    R,
+                >(
+                    client,
+                    CubeCount::Static(block_count_u32, 1, 1),
+                    CubeDim::new_1d(block_size),
+                    BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1),
+                    BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1),
+                    BufferArg::from_raw_parts(value_slot2.0.clone(), value_slot2.1),
+                    BufferArg::from_raw_parts(value_slot3.0.clone(), value_slot3.1),
+                    BufferArg::from_raw_parts(value_slot4.0.clone(), value_slot4.1),
+                    BufferArg::from_raw_parts(value_slot5.0.clone(), value_slot5.1),
+                    BufferArg::from_raw_parts(value_slot6.0.clone(), value_slot6.1),
+                    BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1),
+                    BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1),
+                    BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1),
+                    BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1),
+                    BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1),
+                    BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1),
+                    BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1),
+                    BufferArg::from_raw_parts(index_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
+                    $(
+                        BufferArg::from_raw_parts(mask.flag.clone(), {
+                            let _ = stringify!($mask);
+                            mask.len
+                        }),
+                    )?
+                    $(
+                        BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
+                    )+
+                );
+            }
+        }
+        Ok(())
+    }};
+}
+
+macro_rules! scatter_where_logical7_arity {
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0, B: $b => 1)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output, $mask; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! scatter_where_logical7_auto_arity {
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple1_kernel, $policy, $values, $indices, $mask, $output; A: $a)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple2_kernel, $policy, $values, $indices, $mask, $output; A: $a, B: $b)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple3_kernel, $policy, $values, $indices, $mask, $output; A: $a, B: $b, C: $c)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple4_kernel, $policy, $values, $indices, $mask, $output; A: $a, B: $b, C: $c, D: $d)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple5_kernel, $policy, $values, $indices, $mask, $output; A: $a, B: $b, C: $c, D: $d, E: $e)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple6_kernel, $policy, $values, $indices, $mask, $output; A: $a, B: $b, C: $c, D: $d, E: $e, F: $f)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $mask:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        scatter_where_logical7_arity!(scatter_where_logical7_to_tuple7_kernel, $policy, $values, $indices, $mask, $output; A: $a, B: $b, C: $c, D: $d, E: $e, F: $f, G: $g)
+    };
+}
+
+macro_rules! scatter_logical7_arity {
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0, B: $b => 1)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0, B: $b => 1, C: $c => 2)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5)
+    };
+    ($kernel:ident, $policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        scatter_logical7_into_output!($kernel, $policy, $values, $indices, $output; A: $a => 0, B: $b => 1, C: $c => 2, D: $d => 3, E: $e => 4, F: $f => 5, G: $g => 6)
+    };
+}
+
+macro_rules! scatter_logical7_auto_arity {
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple1_kernel, $policy, $values, $indices, $output; A: $a)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple2_kernel, $policy, $values, $indices, $output; A: $a, B: $b)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple3_kernel, $policy, $values, $indices, $output; A: $a, B: $b, C: $c)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple4_kernel, $policy, $values, $indices, $output; A: $a, B: $b, C: $c, D: $d)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple5_kernel, $policy, $values, $indices, $output; A: $a, B: $b, C: $c, D: $d, E: $e)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple6_kernel, $policy, $values, $indices, $output; A: $a, B: $b, C: $c, D: $d, E: $e, F: $f)
+    };
+    ($policy:expr, $values:expr, $indices:expr, $output:expr; A: $a:ident, B: $b:ident, C: $c:ident, D: $d:ident, E: $e:ident, F: $f:ident, G: $g:ident) => {
+        scatter_logical7_arity!(scatter_logical7_to_tuple7_kernel, $policy, $values, $indices, $output; A: $a, B: $b, C: $c, D: $d, E: $e, F: $f, G: $g)
+    };
+}
+
 macro_rules! tuple_set_less {
     ($less:ident; $a:ident) => {
         crate::detail::api::Tuple1Less::<KernelOp<R, $less>>::default()
@@ -2073,6 +3174,280 @@ macro_rules! impl_mitem_tuple {
                 crate::detail::reduce(policy, input, init, KernelOp::<R, Op>::new())
             }
 
+
+        }
+
+        impl<R, $( $ty ),+> crate::detail::write::MItemWriteDispatch<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: MStorageElement, )+
+        {
+
+            fn reduce_by_key_values_from_read<KeyEq, Op, Read, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                selection: &crate::detail::control::SelectedRankControl,
+                output_count: usize,
+                init: Self,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let _ = std::marker::PhantomData::<KeyEq>;
+                reduce_by_key_logical7_auto_arity!(
+                    policy, values, selection, output_count, init, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn copy_selected_from_read<Read, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                crate::detail::read::copy_selected_logical7_read(
+                    values,
+                    policy,
+                    stencil,
+                    output,
+                )
+            }
+
+            fn gather_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                crate::detail::read::gather_logical7_read(values, policy, indices, output)
+            }
+
+            fn gather_where_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                crate::detail::read::gather_where_logical7_read(
+                    values,
+                    policy,
+                    indices,
+                    stencil,
+                    output,
+                )
+            }
+
+            fn scatter_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                scatter_logical7_auto_arity!(
+                    policy, values, indices, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn scatter_where_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let mask = stencil.mask();
+                scatter_where_logical7_auto_arity!(
+                    policy, values, indices, &mask, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn unique_from_read<Read, Pred, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _pred: Pred,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Pred: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let len = crate::detail::read::KernelRead::len(&input);
+                let Some(flags) =
+                    crate::detail::read::unique_logical7_flags_read::<R, _, Pred>(
+                        &input, policy,
+                    )?
+                else {
+                    return Ok(0);
+                };
+                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let selected_rank =
+                    crate::detail::primitives::select::selected_rank_from_flags(
+                        policy, len, len_u32, flags,
+                    )?;
+                let selection =
+                    crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank);
+                crate::detail::read::copy_selected_logical7_read(input, policy, selection, output)
+            }
+
+            fn partition_from_read<Read, Pred, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _pred: Pred,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Pred: op::PredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let len = crate::detail::read::KernelRead::len(&input);
+                let Some(flags) =
+                    crate::detail::read::logical7_predicate_flags_read::<R, _, Pred>(
+                        &input, policy, false,
+                    )?
+                else {
+                    return Ok(0);
+                };
+                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let selected_rank =
+                    crate::detail::primitives::select::selected_rank_from_flags(
+                        policy, len, len_u32, flags,
+                    )?;
+                let (split_rank, matching_count, _failing_count) =
+                    crate::detail::primitives::select::split_rank_from_selected(
+                        policy,
+                        selected_rank,
+                    )?;
+                partition_logical7_auto_arity!(
+                    policy, input, &split_rank, matching_count, output;
+                    $( $ty: $var ),+
+                )?;
+                mindex_from_usize(matching_count)
+            }
+
+            fn adjacent_difference_from_read<Read, Op, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                adjacent_logical7_auto_arity!(
+                    policy, input, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn inclusive_scan_from_read<Read, Op, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                inclusive_scan_logical7_auto_arity!(
+                    policy, input, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn exclusive_scan_from_read<Read, Op, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                init: Self,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                exclusive_scan_logical7_auto_arity!(
+                    policy, input, init, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn merge_from_read<Left, Right, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                _less: Less,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                merge_logical7_auto_arity!(
+                    policy, left, right, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn set_union_from_read<Left, Right, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                right_only: &crate::detail::control::SelectedRankControl,
+                _less: Less,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                set_union_logical7_auto_arity!(
+                    policy, left, right, right_only, output;
+                    $( $ty: $var ),+
+                )
+            }
         }
     };
 }
@@ -2976,6 +4351,280 @@ macro_rules! impl_wide_mitem_tuple {
                 let _ = op;
                 let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
+            }
+
+        }
+
+        impl<R, $( $ty ),+> crate::detail::write::MItemWriteDispatch<R> for ($( $ty, )+)
+        where
+            R: Runtime,
+            $( $ty: MStorageElement, )+
+        {
+
+            fn reduce_by_key_values_from_read<KeyEq, Op, Read, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                selection: &crate::detail::control::SelectedRankControl,
+                output_count: usize,
+                init: Self,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let _ = std::marker::PhantomData::<KeyEq>;
+                reduce_by_key_logical7_auto_arity!(
+                    policy, values, selection, output_count, init, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn copy_selected_from_read<Read, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                crate::detail::read::copy_selected_logical7_read(
+                    values,
+                    policy,
+                    stencil,
+                    output,
+                )
+            }
+
+            fn gather_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                crate::detail::read::gather_logical7_read(values, policy, indices, output)
+            }
+
+            fn gather_where_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                crate::detail::read::gather_where_logical7_read(
+                    values,
+                    policy,
+                    indices,
+                    stencil,
+                    output,
+                )
+            }
+
+            fn scatter_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                scatter_logical7_auto_arity!(
+                    policy, values, indices, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn scatter_where_from_read<Read, IndexSource, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                values: Read,
+                indices: IndexSource,
+                stencil: crate::detail::api::PrecomputedSelection<R>,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let mask = stencil.mask();
+                scatter_where_logical7_auto_arity!(
+                    policy, values, indices, &mask, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn unique_from_read<Read, Pred, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _pred: Pred,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Pred: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let len = crate::detail::read::KernelRead::len(&input);
+                let Some(flags) =
+                    crate::detail::read::unique_logical7_flags_read::<R, _, Pred>(
+                        &input, policy,
+                    )?
+                else {
+                    return Ok(0);
+                };
+                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let selected_rank =
+                    crate::detail::primitives::select::selected_rank_from_flags(
+                        policy, len, len_u32, flags,
+                    )?;
+                let selection =
+                    crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank);
+                crate::detail::read::copy_selected_logical7_read(input, policy, selection, output)
+            }
+
+            fn partition_from_read<Read, Pred, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _pred: Pred,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Pred: op::PredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let len = crate::detail::read::KernelRead::len(&input);
+                let Some(flags) =
+                    crate::detail::read::logical7_predicate_flags_read::<R, _, Pred>(
+                        &input, policy, false,
+                    )?
+                else {
+                    return Ok(0);
+                };
+                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let selected_rank =
+                    crate::detail::primitives::select::selected_rank_from_flags(
+                        policy, len, len_u32, flags,
+                    )?;
+                let (split_rank, matching_count, _failing_count) =
+                    crate::detail::primitives::select::split_rank_from_selected(
+                        policy,
+                        selected_rank,
+                    )?;
+                partition_logical7_auto_arity!(
+                    policy, input, &split_rank, matching_count, output;
+                    $( $ty: $var ),+
+                )?;
+                mindex_from_usize(matching_count)
+            }
+
+            fn adjacent_difference_from_read<Read, Op, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                adjacent_logical7_auto_arity!(
+                    policy, input, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn inclusive_scan_from_read<Read, Op, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                inclusive_scan_logical7_auto_arity!(
+                    policy, input, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn exclusive_scan_from_read<Read, Op, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                init: Self,
+                _op: Op,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Op: op::ReductionOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                exclusive_scan_logical7_auto_arity!(
+                    policy, input, init, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn merge_from_read<Left, Right, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                _less: Less,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                merge_logical7_auto_arity!(
+                    policy, left, right, output;
+                    $( $ty: $var ),+
+                )
+            }
+
+            fn set_union_from_read<Left, Right, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                right_only: &crate::detail::control::SelectedRankControl,
+                _less: Less,
+                output: Output,
+            ) -> Result<MIndex, Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                set_union_logical7_auto_arity!(
+                    policy, left, right, right_only, output;
+                    $( $ty: $var ),+
+                )
             }
         }
     };

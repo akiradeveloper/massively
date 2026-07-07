@@ -314,8 +314,10 @@ fn public_indexed_apis_keep_indices_as_read_iterators() {
             && !iter.contains("trait MIndexIter")
             && !iter.contains("IndexReadSource")
             && !iter.contains("fn index_read_column_with_policy")
-            && iter.contains("gather_from_view(policy, source, read, output)")
-            && iter.contains("scatter_from_view(policy, source, read, output)")
+            && iter.contains("let source = self.lower_read(policy)?;")
+            && iter.contains("let indices = indices.lower_read(policy)?;")
+            && iter.contains("KernelRead::gather_read(source, policy, indices, output)")
+            && iter.contains("KernelRead::scatter_read(source, policy, indices, output)")
             && iter.contains("Indices: MIter<R, Item = MIndex>")
             && indexed.contains("Indices: MIter<R, Item = crate::MIndex>"),
         "indexed dispatch should expose MIter indices and pass lowered reads directly as index operands"

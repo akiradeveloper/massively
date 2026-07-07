@@ -51,6 +51,7 @@ where
 }
 
 /// Sorts read-only key-value pairs by key and returns owned Zip outputs.
+#[allow(dead_code)]
 pub fn sort_by_key<R, Keys, Values, Less>(
     policy: &CubePolicy<R>,
     keys: Keys,
@@ -69,6 +70,7 @@ where
 }
 
 /// Merges two sorted key-value ranges by key.
+#[allow(dead_code)]
 pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less>(
     policy: &CubePolicy<R>,
     left_keys: LeftKeys,

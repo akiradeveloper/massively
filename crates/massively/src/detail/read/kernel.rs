@@ -17,6 +17,7 @@ use crate::{
         op,
         op_adapter::{KernelOp, KernelScalarTuple1Op},
         primitives::select,
+        write::MItemWriteDispatch,
     },
     error::ensure_same_len,
     index::mindex_from_usize,
@@ -460,12 +461,78 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<crate::MIndex, Error>
     where
         Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
         Self::Item: MAlloc<R>,
     {
-        let _ = (policy, stencil, output);
-        Err(Error::Launch {
-            message: "copy_where is not supported for this iterator shape".to_string(),
-        })
+        <Self::Item as MItemWriteDispatch<R>>::copy_selected_from_read(
+            policy, self, stencil, output,
+        )
+    }
+
+    fn gather_read<Indices, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        indices: Indices,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::gather_from_read(policy, self, indices, output)
+    }
+
+    fn gather_where_read<Indices, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        indices: Indices,
+        stencil: PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::gather_where_from_read(
+            policy, self, indices, stencil, output,
+        )
+    }
+
+    fn scatter_read<Indices, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        indices: Indices,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::scatter_from_read(policy, self, indices, output)
+    }
+
+    fn scatter_where_read<Indices, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        indices: Indices,
+        stencil: PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::scatter_where_from_read(
+            policy, self, indices, stencil, output,
+        )
     }
 
     fn unique_read<Pred, Output>(
@@ -476,13 +543,61 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<crate::MIndex, Error>
     where
         Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
         Self::Item: MAlloc<R>,
         Pred: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, output);
-        Err(Error::Launch {
-            message: "unique is not supported for this iterator shape".to_string(),
-        })
+        <Self::Item as MItemWriteDispatch<R>>::unique_from_read(policy, self, pred, output)
+    }
+
+    fn adjacent_difference_read<Op, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+        Op: op::ReductionOp<R, Self::Item>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::adjacent_difference_from_read(
+            policy, self, op, output,
+        )
+    }
+
+    fn inclusive_scan_read<Op, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+        Op: op::ReductionOp<R, Self::Item>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::inclusive_scan_from_read(policy, self, op, output)
+    }
+
+    fn exclusive_scan_read<Op, Output>(
+        self,
+        policy: &CubePolicy<R>,
+        init: Self::Item,
+        op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
+        Self::Item: MAlloc<R>,
+        Op: op::ReductionOp<R, Self::Item>,
+    {
+        <Self::Item as MItemWriteDispatch<R>>::exclusive_scan_from_read(
+            policy, self, init, op, output,
+        )
     }
 
     fn partition_read<Pred, Output>(
@@ -493,13 +608,11 @@ pub trait KernelRead<R: Runtime>: Sized {
     ) -> Result<crate::MIndex, Error>
     where
         Output: MIterMut<R, Item = Self::Item>,
+        Self: KernelReadBoundMany<R>,
         Self::Item: MAlloc<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred, output);
-        Err(Error::Launch {
-            message: "partition is not supported for this iterator shape".to_string(),
-        })
+        <Self::Item as MItemWriteDispatch<R>>::partition_from_read(policy, self, pred, output)
     }
 
     fn adjacent_find_read<Pred>(
@@ -1936,6 +2049,198 @@ where
     output.write_where_from_inner(policy, inner, stencil)
 }
 
+pub(crate) fn copy_selected_logical7_read<R, Read, Output>(
+    read: Read,
+    policy: &CubePolicy<R>,
+    stencil: PrecomputedSelection<R>,
+    output: Output,
+) -> Result<crate::MIndex, Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    <Read as KernelRead<R>>::Item: MAlloc<R>
+        + crate::detail::MItemStorage<R>
+        + crate::detail::SelectedLogical7Output<
+            R,
+            <Read as KernelReadBoundMany<R>>::Leaf0,
+            <Read as KernelReadBoundMany<R>>::Leaf1,
+            <Read as KernelReadBoundMany<R>>::Leaf2,
+            <Read as KernelReadBoundMany<R>>::Leaf3,
+            <Read as KernelReadBoundMany<R>>::Leaf4,
+            <Read as KernelReadBoundMany<R>>::Leaf5,
+            <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::ExprAt,
+        > + Send
+        + Sync,
+    <<Read as KernelRead<R>>::Item as crate::detail::MItemStorage<R>>::Storage:
+        crate::detail::MaterializeOutput<
+                Runtime = R,
+                Output = <<Read as KernelRead<R>>::Item as MAlloc<R>>::Inner,
+            >,
+    Output: MIterMut<R, Item = <Read as KernelRead<R>>::Item>,
+{
+    let selected_rank = stencil.selected_rank();
+    ensure_same_len(read.len(), selected_rank.len)?;
+    let count = select::selected_count(policy, selected_rank)?;
+    let mut bindings = KernelColumnBindings::empty(policy.client());
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(&read, &mut bindings)?;
+    bindings.finish();
+    let storage = <<Read as KernelRead<R>>::Item as crate::detail::SelectedLogical7Output<
+        R,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
+    >>::run_selected_logical7(policy, bindings, selected_rank, count)?;
+    let inner = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
+    output.write_prefix_from_inner(policy, inner)?;
+    mindex_from_usize(count)
+}
+
+pub(crate) fn gather_logical7_read<R, Read, Indices, Output>(
+    read: Read,
+    policy: &CubePolicy<R>,
+    indices: Indices,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
+    <Read as KernelRead<R>>::Item: MAlloc<R>
+        + crate::detail::MItemStorage<R>
+        + crate::detail::GatherLogical7Output<
+            R,
+            <Read as KernelReadBoundMany<R>>::Leaf0,
+            <Read as KernelReadBoundMany<R>>::Leaf1,
+            <Read as KernelReadBoundMany<R>>::Leaf2,
+            <Read as KernelReadBoundMany<R>>::Leaf3,
+            <Read as KernelReadBoundMany<R>>::Leaf4,
+            <Read as KernelReadBoundMany<R>>::Leaf5,
+            <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::ExprAt,
+            <Indices as KernelReadBoundMany<R>>::Leaf0,
+            <Indices as KernelReadBoundMany<R>>::Leaf1,
+            <Indices as KernelReadBoundMany<R>>::Leaf2,
+            <Indices as KernelReadBoundMany<R>>::Leaf3,
+            <Indices as KernelReadBoundMany<R>>::Leaf4,
+            <Indices as KernelReadBoundMany<R>>::Leaf5,
+            <Indices as KernelReadBoundMany<R>>::Leaf6,
+            <Indices as KernelReadBoundMany<R>>::ExprAt,
+        > + Send
+        + Sync,
+    <<Read as KernelRead<R>>::Item as crate::detail::MItemStorage<R>>::Storage:
+        crate::detail::MaterializeOutput<
+                Runtime = R,
+                Output = <<Read as KernelRead<R>>::Item as MAlloc<R>>::Inner,
+            >,
+    Output: MIterMut<R, Item = <Read as KernelRead<R>>::Item>,
+{
+    let len = indices.len();
+    let mut value_bindings = KernelColumnBindings::empty(policy.client());
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(&read, &mut value_bindings)?;
+    value_bindings.finish();
+    let mut index_bindings = KernelColumnBindings::empty(policy.client());
+    <Indices as KernelReadAtEnv<R, Env0>>::stage_at_env(&indices, &mut index_bindings)?;
+    index_bindings.finish();
+    let storage = <<Read as KernelRead<R>>::Item as crate::detail::GatherLogical7Output<
+        R,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
+        <Indices as KernelReadBoundMany<R>>::Leaf0,
+        <Indices as KernelReadBoundMany<R>>::Leaf1,
+        <Indices as KernelReadBoundMany<R>>::Leaf2,
+        <Indices as KernelReadBoundMany<R>>::Leaf3,
+        <Indices as KernelReadBoundMany<R>>::Leaf4,
+        <Indices as KernelReadBoundMany<R>>::Leaf5,
+        <Indices as KernelReadBoundMany<R>>::Leaf6,
+        <Indices as KernelReadBoundMany<R>>::ExprAt,
+    >>::run_gather_logical7(policy, value_bindings, index_bindings, len)?;
+    let inner = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
+    output.write_from_inner(policy, inner)
+}
+
+pub(crate) fn gather_where_logical7_read<R, Read, Indices, Output>(
+    read: Read,
+    policy: &CubePolicy<R>,
+    indices: Indices,
+    stencil: PrecomputedSelection<R>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
+    <Read as KernelRead<R>>::Item: MAlloc<R>
+        + crate::detail::MItemStorage<R>
+        + crate::detail::GatherLogical7Output<
+            R,
+            <Read as KernelReadBoundMany<R>>::Leaf0,
+            <Read as KernelReadBoundMany<R>>::Leaf1,
+            <Read as KernelReadBoundMany<R>>::Leaf2,
+            <Read as KernelReadBoundMany<R>>::Leaf3,
+            <Read as KernelReadBoundMany<R>>::Leaf4,
+            <Read as KernelReadBoundMany<R>>::Leaf5,
+            <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::ExprAt,
+            <Indices as KernelReadBoundMany<R>>::Leaf0,
+            <Indices as KernelReadBoundMany<R>>::Leaf1,
+            <Indices as KernelReadBoundMany<R>>::Leaf2,
+            <Indices as KernelReadBoundMany<R>>::Leaf3,
+            <Indices as KernelReadBoundMany<R>>::Leaf4,
+            <Indices as KernelReadBoundMany<R>>::Leaf5,
+            <Indices as KernelReadBoundMany<R>>::Leaf6,
+            <Indices as KernelReadBoundMany<R>>::ExprAt,
+        > + Send
+        + Sync,
+    <<Read as KernelRead<R>>::Item as crate::detail::MItemStorage<R>>::Storage:
+        crate::detail::MaterializeOutput<
+                Runtime = R,
+                Output = <<Read as KernelRead<R>>::Item as MAlloc<R>>::Inner,
+            >,
+    Output: MIterMut<R, Item = <Read as KernelRead<R>>::Item>,
+{
+    ensure_same_len(indices.len(), stencil.selected_rank().len)?;
+    let len = indices.len();
+    let mut value_bindings = KernelColumnBindings::empty(policy.client());
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(&read, &mut value_bindings)?;
+    value_bindings.finish();
+    let mut index_bindings = KernelColumnBindings::empty(policy.client());
+    <Indices as KernelReadAtEnv<R, Env0>>::stage_at_env(&indices, &mut index_bindings)?;
+    index_bindings.finish();
+    let storage = <<Read as KernelRead<R>>::Item as crate::detail::GatherLogical7Output<
+        R,
+        <Read as KernelReadBoundMany<R>>::Leaf0,
+        <Read as KernelReadBoundMany<R>>::Leaf1,
+        <Read as KernelReadBoundMany<R>>::Leaf2,
+        <Read as KernelReadBoundMany<R>>::Leaf3,
+        <Read as KernelReadBoundMany<R>>::Leaf4,
+        <Read as KernelReadBoundMany<R>>::Leaf5,
+        <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::ExprAt,
+        <Indices as KernelReadBoundMany<R>>::Leaf0,
+        <Indices as KernelReadBoundMany<R>>::Leaf1,
+        <Indices as KernelReadBoundMany<R>>::Leaf2,
+        <Indices as KernelReadBoundMany<R>>::Leaf3,
+        <Indices as KernelReadBoundMany<R>>::Leaf4,
+        <Indices as KernelReadBoundMany<R>>::Leaf5,
+        <Indices as KernelReadBoundMany<R>>::Leaf6,
+        <Indices as KernelReadBoundMany<R>>::ExprAt,
+    >>::run_gather_logical7(policy, value_bindings, index_bindings, len)?;
+    let inner = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
+    output.write_where_from_inner(policy, inner, stencil)
+}
+
 pub(crate) fn materialize_logical3_read<R, Read>(
     read: Read,
     policy: &CubePolicy<R>,
@@ -2361,7 +2666,7 @@ where
     Ok(Some(flag_handle))
 }
 
-fn logical7_predicate_flags_read<R, Read, Pred>(
+pub(crate) fn logical7_predicate_flags_read<R, Read, Pred>(
     read: &Read,
     policy: &CubePolicy<R>,
     invert: bool,
@@ -2427,6 +2732,368 @@ where
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(Some(flag_handle))
+}
+
+pub(crate) fn unique_logical7_flags_read<R, Read, Pred>(
+    read: &Read,
+    policy: &CubePolicy<R>,
+) -> Result<Option<cubecl::server::Handle>, Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    <Read as KernelRead<R>>::Item: MItem<R> + Send + Sync,
+    Pred: op::BinaryPredicateOp<R, <Read as KernelRead<R>>::Item>,
+{
+    let len = read.len();
+    if len == 0 {
+        return Ok(None);
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let client = policy.client();
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let flag_handle = client.empty(len * std::mem::size_of::<u32>());
+
+    let mut bindings = KernelColumnBindings::empty(client);
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
+    bindings.finish();
+    let offsets = bindings.slot_offsets7_handle(client)?;
+    let slot0 = bindings.slot_or_first(0);
+    let slot1 = bindings.slot_or_first(1);
+    let slot2 = bindings.slot_or_first(2);
+    let slot3 = bindings.slot_or_first(3);
+    let slot4 = bindings.slot_or_first(4);
+    let slot5 = bindings.slot_or_first(5);
+    let slot6 = bindings.slot_or_first(6);
+    let block_size = 256_u32;
+    let block_count = len.div_ceil(block_size as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+
+    unsafe {
+        crate::kernels::unique_logical7_flags_kernel::launch_unchecked::<
+            <Read as KernelRead<R>>::Item,
+            <Read as KernelReadBoundMany<R>>::Leaf0,
+            <Read as KernelReadBoundMany<R>>::Leaf1,
+            <Read as KernelReadBoundMany<R>>::Leaf2,
+            <Read as KernelReadBoundMany<R>>::Leaf3,
+            <Read as KernelReadBoundMany<R>>::Leaf4,
+            <Read as KernelReadBoundMany<R>>::Leaf5,
+            <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::ExprAt,
+            KernelOp<R, Pred>,
+            R,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(block_size),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
+            unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
+            unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
+        );
+    }
+
+    Ok(Some(flag_handle))
+}
+
+pub(crate) fn sort_logical7_indices_read<R, Read, Less>(
+    read: &Read,
+    policy: &CubePolicy<R>,
+) -> Result<DeviceVec<R, crate::MIndex>, Error>
+where
+    R: Runtime,
+    Read: KernelReadBoundMany<R>,
+    <Read as KernelRead<R>>::Item: MItem<R> + Send + Sync,
+    Less: op::BinaryPredicateOp<R, <Read as KernelRead<R>>::Item>,
+{
+    let len = read.len();
+    if len == 0 {
+        return Ok(policy.empty_device_vec());
+    }
+
+    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+    let client = policy.client();
+    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+    let indices_handle = client.empty(len * std::mem::size_of::<u32>());
+
+    let mut bindings = KernelColumnBindings::empty(client);
+    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
+    bindings.finish();
+    let offsets = bindings.slot_offsets7_handle(client)?;
+    let slot0 = bindings.slot_or_first(0);
+    let slot1 = bindings.slot_or_first(1);
+    let slot2 = bindings.slot_or_first(2);
+    let slot3 = bindings.slot_or_first(3);
+    let slot4 = bindings.slot_or_first(4);
+    let slot5 = bindings.slot_or_first(5);
+    let slot6 = bindings.slot_or_first(6);
+    let block_size = 256_u32;
+    let block_count = len.div_ceil(block_size as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+
+    unsafe {
+        crate::kernels::sort_logical7_indices_kernel::launch_unchecked::<
+            <Read as KernelRead<R>>::Item,
+            <Read as KernelReadBoundMany<R>>::Leaf0,
+            <Read as KernelReadBoundMany<R>>::Leaf1,
+            <Read as KernelReadBoundMany<R>>::Leaf2,
+            <Read as KernelReadBoundMany<R>>::Leaf3,
+            <Read as KernelReadBoundMany<R>>::Leaf4,
+            <Read as KernelReadBoundMany<R>>::Leaf5,
+            <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::ExprAt,
+            KernelOp<R, Less>,
+            R,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(block_size),
+            unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+            unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+            unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+            unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+            unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
+            unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
+            unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(indices_handle.clone(), len) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(policy.id(), indices_handle, len))
+}
+
+pub(crate) fn merge_by_key_logical7_indices_read<R, Left, Right, Less>(
+    left: &Left,
+    right: &Right,
+    policy: &CubePolicy<R>,
+) -> Result<(DeviceVec<R, crate::MIndex>, DeviceVec<R, crate::MIndex>), Error>
+where
+    R: Runtime,
+    Left: KernelReadBoundMany<R>,
+    Right: KernelReadBoundMany<R, Item = <Left as KernelRead<R>>::Item>,
+    <Left as KernelRead<R>>::Item: MItem<R> + Send + Sync,
+    Less: op::BinaryPredicateOp<R, <Left as KernelRead<R>>::Item>,
+{
+    let left_len = left.len();
+    let right_len = right.len();
+    if left_len == 0 {
+        return Ok((
+            policy.empty_device_vec(),
+            crate::detail::primitives::range::indices_mindex(policy, right_len)?,
+        ));
+    }
+    if right_len == 0 {
+        return Ok((
+            crate::detail::primitives::range::indices_mindex(policy, left_len)?,
+            policy.empty_device_vec(),
+        ));
+    }
+
+    let client = policy.client();
+    let left_indices_handle = client.empty(left_len * std::mem::size_of::<u32>());
+    let right_indices_handle = client.empty(right_len * std::mem::size_of::<u32>());
+
+    let mut left_bindings = KernelColumnBindings::empty(client);
+    <Left as KernelReadAtEnv<R, Env0>>::stage_at_env(left, &mut left_bindings)?;
+    left_bindings.finish();
+    let mut right_bindings = KernelColumnBindings::empty(client);
+    <Right as KernelReadAtEnv<R, Env0>>::stage_at_env(right, &mut right_bindings)?;
+    right_bindings.finish();
+
+    let left_offsets = left_bindings.slot_offsets7_handle(client)?;
+    let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+    let left_slot0 = left_bindings.slot_or_first(0);
+    let left_slot1 = left_bindings.slot_or_first(1);
+    let left_slot2 = left_bindings.slot_or_first(2);
+    let left_slot3 = left_bindings.slot_or_first(3);
+    let left_slot4 = left_bindings.slot_or_first(4);
+    let left_slot5 = left_bindings.slot_or_first(5);
+    let left_slot6 = left_bindings.slot_or_first(6);
+    let right_slot0 = right_bindings.slot_or_first(0);
+    let right_slot1 = right_bindings.slot_or_first(1);
+    let right_slot2 = right_bindings.slot_or_first(2);
+    let right_slot3 = right_bindings.slot_or_first(3);
+    let right_slot4 = right_bindings.slot_or_first(4);
+    let right_slot5 = right_bindings.slot_or_first(5);
+    let right_slot6 = right_bindings.slot_or_first(6);
+
+    let metadata = [
+        u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?,
+        u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?,
+    ];
+    let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+    let total_len = left_len + right_len;
+    let block_size = 256_u32;
+    let block_count = total_len.div_ceil(block_size as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+
+    unsafe {
+        crate::kernels::merge_by_key_logical7_indices_kernel::launch_unchecked::<
+            <Left as KernelRead<R>>::Item,
+            <Left as KernelReadBoundMany<R>>::Leaf0,
+            <Left as KernelReadBoundMany<R>>::Leaf1,
+            <Left as KernelReadBoundMany<R>>::Leaf2,
+            <Left as KernelReadBoundMany<R>>::Leaf3,
+            <Left as KernelReadBoundMany<R>>::Leaf4,
+            <Left as KernelReadBoundMany<R>>::Leaf5,
+            <Left as KernelReadBoundMany<R>>::Leaf6,
+            <Right as KernelReadBoundMany<R>>::Leaf0,
+            <Right as KernelReadBoundMany<R>>::Leaf1,
+            <Right as KernelReadBoundMany<R>>::Leaf2,
+            <Right as KernelReadBoundMany<R>>::Leaf3,
+            <Right as KernelReadBoundMany<R>>::Leaf4,
+            <Right as KernelReadBoundMany<R>>::Leaf5,
+            <Right as KernelReadBoundMany<R>>::Leaf6,
+            <Left as KernelReadBoundMany<R>>::ExprAt,
+            <Right as KernelReadBoundMany<R>>::ExprAt,
+            KernelOp<R, Less>,
+            R,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(block_size),
+            unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot3.0.clone(), left_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1) },
+            unsafe { BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1) },
+            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot3.0.clone(), right_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1) },
+            unsafe { BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1) },
+            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()) },
+            unsafe { BufferArg::from_raw_parts(left_indices_handle.clone(), left_len) },
+            unsafe { BufferArg::from_raw_parts(right_indices_handle.clone(), right_len) },
+        );
+    }
+
+    Ok((
+        DeviceVec::from_handle(policy.id(), left_indices_handle, left_len),
+        DeviceVec::from_handle(policy.id(), right_indices_handle, right_len),
+    ))
+}
+
+pub(crate) fn set_membership_logical7_flags_read<R, Candidate, Sorted, Less>(
+    candidate: &Candidate,
+    sorted: &Sorted,
+    policy: &CubePolicy<R>,
+    keep_members: bool,
+) -> Result<Option<cubecl::server::Handle>, Error>
+where
+    R: Runtime,
+    Candidate: KernelReadBoundMany<R>,
+    Sorted: KernelReadBoundMany<R, Item = <Candidate as KernelRead<R>>::Item>,
+    <Candidate as KernelRead<R>>::Item: MItem<R> + Send + Sync,
+    Less: op::BinaryPredicateOp<R, <Candidate as KernelRead<R>>::Item>,
+{
+    let candidate_len = candidate.len();
+    if candidate_len == 0 {
+        return Ok(None);
+    }
+
+    let sorted_len = sorted.len();
+    let client = policy.client();
+    let flag_handle = client.empty(candidate_len * std::mem::size_of::<u32>());
+
+    let mut candidate_bindings = KernelColumnBindings::empty(client);
+    <Candidate as KernelReadAtEnv<R, Env0>>::stage_at_env(candidate, &mut candidate_bindings)?;
+    candidate_bindings.finish();
+    let mut sorted_bindings = KernelColumnBindings::empty(client);
+    <Sorted as KernelReadAtEnv<R, Env0>>::stage_at_env(sorted, &mut sorted_bindings)?;
+    sorted_bindings.finish();
+
+    let candidate_offsets = candidate_bindings.slot_offsets7_handle(client)?;
+    let sorted_offsets = sorted_bindings.slot_offsets7_handle(client)?;
+    let candidate_slot0 = candidate_bindings.slot_or_first(0);
+    let candidate_slot1 = candidate_bindings.slot_or_first(1);
+    let candidate_slot2 = candidate_bindings.slot_or_first(2);
+    let candidate_slot3 = candidate_bindings.slot_or_first(3);
+    let candidate_slot4 = candidate_bindings.slot_or_first(4);
+    let candidate_slot5 = candidate_bindings.slot_or_first(5);
+    let candidate_slot6 = candidate_bindings.slot_or_first(6);
+    let sorted_slot0 = sorted_bindings.slot_or_first(0);
+    let sorted_slot1 = sorted_bindings.slot_or_first(1);
+    let sorted_slot2 = sorted_bindings.slot_or_first(2);
+    let sorted_slot3 = sorted_bindings.slot_or_first(3);
+    let sorted_slot4 = sorted_bindings.slot_or_first(4);
+    let sorted_slot5 = sorted_bindings.slot_or_first(5);
+    let sorted_slot6 = sorted_bindings.slot_or_first(6);
+    let metadata = [
+        u32::try_from(candidate_len).map_err(|_| Error::LengthTooLarge { len: candidate_len })?,
+        u32::try_from(sorted_len).map_err(|_| Error::LengthTooLarge { len: sorted_len })?,
+        u32::from(keep_members),
+    ];
+    let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
+    let block_size = 256_u32;
+    let block_count = candidate_len.div_ceil(block_size as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+
+    unsafe {
+        crate::kernels::set_membership_logical7_flags_kernel::launch_unchecked::<
+            <Candidate as KernelRead<R>>::Item,
+            <Candidate as KernelReadBoundMany<R>>::Leaf0,
+            <Candidate as KernelReadBoundMany<R>>::Leaf1,
+            <Candidate as KernelReadBoundMany<R>>::Leaf2,
+            <Candidate as KernelReadBoundMany<R>>::Leaf3,
+            <Candidate as KernelReadBoundMany<R>>::Leaf4,
+            <Candidate as KernelReadBoundMany<R>>::Leaf5,
+            <Candidate as KernelReadBoundMany<R>>::Leaf6,
+            <Sorted as KernelReadBoundMany<R>>::Leaf0,
+            <Sorted as KernelReadBoundMany<R>>::Leaf1,
+            <Sorted as KernelReadBoundMany<R>>::Leaf2,
+            <Sorted as KernelReadBoundMany<R>>::Leaf3,
+            <Sorted as KernelReadBoundMany<R>>::Leaf4,
+            <Sorted as KernelReadBoundMany<R>>::Leaf5,
+            <Sorted as KernelReadBoundMany<R>>::Leaf6,
+            <Candidate as KernelReadBoundMany<R>>::ExprAt,
+            <Sorted as KernelReadBoundMany<R>>::ExprAt,
+            KernelOp<R, Less>,
+            R,
+        >(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(block_size),
+            unsafe { BufferArg::from_raw_parts(candidate_slot0.0.clone(), candidate_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot1.0.clone(), candidate_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot2.0.clone(), candidate_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot3.0.clone(), candidate_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot4.0.clone(), candidate_slot4.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot5.0.clone(), candidate_slot5.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot6.0.clone(), candidate_slot6.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot0.0.clone(), sorted_slot0.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot1.0.clone(), sorted_slot1.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot2.0.clone(), sorted_slot2.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot3.0.clone(), sorted_slot3.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot4.0.clone(), sorted_slot4.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot5.0.clone(), sorted_slot5.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot6.0.clone(), sorted_slot6.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()) },
+            unsafe { BufferArg::from_raw_parts(flag_handle.clone(), candidate_len) },
         );
     }
 

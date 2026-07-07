@@ -11,6 +11,7 @@ use crate::{
 use cubecl::prelude::*;
 
 #[doc(hidden)]
+#[allow(dead_code)]
 pub(crate) trait OwnedSelectionInput {}
 
 impl<Source> OwnedSelectionInput for Zip1<Source>
@@ -118,6 +119,7 @@ where
 ///
 /// This is a borrowing algorithm. It reads the input and returns newly owned Zip
 /// storage for the remaining values.
+#[allow(dead_code)]
 pub fn remove_if<Source, Pred>(
     policy: &CubePolicy<<Source as crate::detail::read::KernelSelectInput<Pred>>::Runtime>,
     source: Source,

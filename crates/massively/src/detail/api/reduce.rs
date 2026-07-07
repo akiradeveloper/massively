@@ -61,6 +61,7 @@ where
 /// This is a borrowing algorithm: values may be a borrowed column or a read-only
 /// Zip from [`zip`](crate::zip). The returned keys and values are owned Zip
 /// storage.
+#[allow(dead_code)]
 pub fn reduce_by_key<R, Keys, Values, KeyEq, Op>(
     policy: &CubePolicy<R>,
     keys: Keys,

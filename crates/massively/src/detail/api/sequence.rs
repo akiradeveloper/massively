@@ -26,6 +26,7 @@ where
 }
 
 /// Replaces elements whose staged stencil flag satisfies `Pred`.
+#[allow(dead_code)]
 pub fn replace_where<R, Input, Stencil, Pred>(
     policy: &CubePolicy<R>,
     input: Input,
@@ -66,6 +67,7 @@ where
 }
 
 /// Removes consecutive duplicate keys and carries the first value for each key.
+#[allow(dead_code)]
 pub fn unique_by_key<R, Keys, Values, Eq>(
     policy: &CubePolicy<R>,
     keys: Keys,

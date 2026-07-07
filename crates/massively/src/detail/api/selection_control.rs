@@ -48,6 +48,7 @@ impl<R: Runtime> PrecomputedSelection<R> {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_stencil_with_policy<Stencil, Pred>(
         policy: &crate::policy::CubePolicy<R>,
         stencil: &Stencil,
@@ -63,6 +64,7 @@ impl<R: Runtime> PrecomputedSelection<R> {
         })
     }
 
+    #[allow(dead_code)]
     pub(crate) fn from_stencil_flags_with_policy<Stencil, Pred>(
         policy: &crate::policy::CubePolicy<R>,
         stencil: &Stencil,

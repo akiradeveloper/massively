@@ -1254,6 +1254,7 @@ where
     Ok(DeviceVec::from_handle(policy.id(), out_value_handle, len))
 }
 
+#[allow(dead_code)]
 pub(crate) fn device_expr_merge_by_key_values_into_with_control_with_policy<LeftValue, RightValue>(
     policy: &CubePolicy<LeftValue::Runtime>,
     left_values: &LeftValue,
