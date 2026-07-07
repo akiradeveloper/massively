@@ -827,6 +827,404 @@ impl_transform_logical7_output!(
     logical7_tuple7_storage
 );
 
+#[doc(hidden)]
+pub trait SelectedLogical7Output<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr>:
+    MItemStorage<R> + Sized
+where
+    R: Runtime,
+    Self: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive + CubeElement,
+    Leaf1: CubePrimitive + CubeElement,
+    Leaf2: CubePrimitive + CubeElement,
+    Leaf3: CubePrimitive + CubeElement,
+    Leaf4: CubePrimitive + CubeElement,
+    Leaf5: CubePrimitive + CubeElement,
+    Leaf6: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr7<Self, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+{
+    fn run_selected_logical7(
+        policy: &CubePolicy<R>,
+        bindings: KernelColumnBindings,
+        selected_rank: &crate::detail::control::SelectedRankControl,
+        count: usize,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
+}
+
+macro_rules! impl_selected_logical7_output {
+    (
+        $kernel:ident,
+        ($( $out_ty:ident : $out_handle:ident ),+),
+        $storage:expr
+    ) => {
+        impl<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr, $( $out_ty, )+>
+            SelectedLogical7Output<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr>
+            for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            Leaf0: CubePrimitive + CubeElement,
+            Leaf1: CubePrimitive + CubeElement,
+            Leaf2: CubePrimitive + CubeElement,
+            Leaf3: CubePrimitive + CubeElement,
+            Leaf4: CubePrimitive + CubeElement,
+            Leaf5: CubePrimitive + CubeElement,
+            Leaf6: CubePrimitive + CubeElement,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            $( $out_ty: CubePrimitive + CubeElement, )+
+        {
+            fn run_selected_logical7(
+                policy: &CubePolicy<R>,
+                bindings: KernelColumnBindings,
+                selected_rank: &crate::detail::control::SelectedRankControl,
+                count: usize,
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let client = policy.client();
+                $(
+                    let $out_handle = if count == 0 {
+                        policy.empty_handle()
+                    } else {
+                        client.empty(count * std::mem::size_of::<$out_ty>())
+                    };
+                )+
+                if selected_rank.len != 0 && count != 0 {
+                    let offsets = bindings.slot_offsets7_handle(client)?;
+                    let slot0 = bindings.slot_or_first(0);
+                    let slot1 = bindings.slot_or_first(1);
+                    let slot2 = bindings.slot_or_first(2);
+                    let slot3 = bindings.slot_or_first(3);
+                    let slot4 = bindings.slot_or_first(4);
+                    let slot5 = bindings.slot_or_first(5);
+                    let slot6 = bindings.slot_or_first(6);
+                    let block_size = 256_u32;
+                    let block_count = selected_rank.len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<
+                            Leaf0,
+                            Leaf1,
+                            Leaf2,
+                            Leaf3,
+                            Leaf4,
+                            Leaf5,
+                            Leaf6,
+                            Expr,
+                            $( $out_ty, )+
+                            R,
+                        >(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len),
+                            BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len),
+                            BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
+                            BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
+                            BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
+                            BufferArg::from_raw_parts(slot3.0.clone(), slot3.1),
+                            BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
+                            BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
+                            BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
+                            BufferArg::from_raw_parts(offsets.clone(), 7),
+                            $(
+                                BufferArg::from_raw_parts($out_handle.clone(), count),
+                            )+
+                        );
+                    }
+                }
+                Ok($storage(policy, count, $( $out_handle ),+))
+            }
+        }
+    };
+}
+
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple1_kernel,
+    (OutA: output_a),
+    logical7_zip1_storage
+);
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple2_kernel,
+    (OutA: output_a, OutB: output_b),
+    logical7_zip2_storage
+);
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple3_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c),
+    logical7_zip3_storage
+);
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple4_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d),
+    logical7_tuple4_storage
+);
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple5_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e),
+    logical7_tuple5_storage
+);
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple6_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f),
+    logical7_tuple6_storage
+);
+impl_selected_logical7_output!(
+    selected_logical7_to_tuple7_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f, OutG: output_g),
+    logical7_tuple7_storage
+);
+
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub trait GatherLogical7Output<
+    R,
+    Leaf0,
+    Leaf1,
+    Leaf2,
+    Leaf3,
+    Leaf4,
+    Leaf5,
+    Leaf6,
+    ValueExpr,
+    IndexLeaf0,
+    IndexLeaf1,
+    IndexLeaf2,
+    IndexLeaf3,
+    IndexLeaf4,
+    IndexLeaf5,
+    IndexLeaf6,
+    IndexExpr,
+>: MItemStorage<R> + Sized where
+    R: Runtime,
+    Self: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive + CubeElement,
+    Leaf1: CubePrimitive + CubeElement,
+    Leaf2: CubePrimitive + CubeElement,
+    Leaf3: CubePrimitive + CubeElement,
+    Leaf4: CubePrimitive + CubeElement,
+    Leaf5: CubePrimitive + CubeElement,
+    Leaf6: CubePrimitive + CubeElement,
+    IndexLeaf0: CubePrimitive + CubeElement,
+    IndexLeaf1: CubePrimitive + CubeElement,
+    IndexLeaf2: CubePrimitive + CubeElement,
+    IndexLeaf3: CubePrimitive + CubeElement,
+    IndexLeaf4: CubePrimitive + CubeElement,
+    IndexLeaf5: CubePrimitive + CubeElement,
+    IndexLeaf6: CubePrimitive + CubeElement,
+    ValueExpr: LogicalDeviceExpr7<Self, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    IndexExpr: LogicalDeviceExpr7<
+            crate::index::MIndex,
+            IndexLeaf0,
+            IndexLeaf1,
+            IndexLeaf2,
+            IndexLeaf3,
+            IndexLeaf4,
+            IndexLeaf5,
+            IndexLeaf6,
+        >,
+{
+    fn run_gather_logical7(
+        policy: &CubePolicy<R>,
+        value_bindings: KernelColumnBindings,
+        index_bindings: KernelColumnBindings,
+        len: usize,
+    ) -> Result<<Self as MItemStorage<R>>::Storage, Error>;
+}
+
+macro_rules! impl_gather_logical7_output {
+    (
+        $kernel:ident,
+        ($( $out_ty:ident : $out_handle:ident ),+),
+        $storage:expr
+    ) => {
+        impl<
+                R,
+                Leaf0,
+                Leaf1,
+                Leaf2,
+                Leaf3,
+                Leaf4,
+                Leaf5,
+                Leaf6,
+                ValueExpr,
+                IndexLeaf0,
+                IndexLeaf1,
+                IndexLeaf2,
+                IndexLeaf3,
+                IndexLeaf4,
+                IndexLeaf5,
+                IndexLeaf6,
+                IndexExpr,
+                $( $out_ty, )+
+            >
+            GatherLogical7Output<
+                R,
+                Leaf0,
+                Leaf1,
+                Leaf2,
+                Leaf3,
+                Leaf4,
+                Leaf5,
+                Leaf6,
+                ValueExpr,
+                IndexLeaf0,
+                IndexLeaf1,
+                IndexLeaf2,
+                IndexLeaf3,
+                IndexLeaf4,
+                IndexLeaf5,
+                IndexLeaf6,
+                IndexExpr,
+            > for ($( $out_ty, )+)
+        where
+            R: Runtime,
+            Leaf0: CubePrimitive + CubeElement,
+            Leaf1: CubePrimitive + CubeElement,
+            Leaf2: CubePrimitive + CubeElement,
+            Leaf3: CubePrimitive + CubeElement,
+            Leaf4: CubePrimitive + CubeElement,
+            Leaf5: CubePrimitive + CubeElement,
+            Leaf6: CubePrimitive + CubeElement,
+            IndexLeaf0: CubePrimitive + CubeElement,
+            IndexLeaf1: CubePrimitive + CubeElement,
+            IndexLeaf2: CubePrimitive + CubeElement,
+            IndexLeaf3: CubePrimitive + CubeElement,
+            IndexLeaf4: CubePrimitive + CubeElement,
+            IndexLeaf5: CubePrimitive + CubeElement,
+            IndexLeaf6: CubePrimitive + CubeElement,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            IndexExpr: LogicalDeviceExpr7<
+                crate::index::MIndex,
+                IndexLeaf0,
+                IndexLeaf1,
+                IndexLeaf2,
+                IndexLeaf3,
+                IndexLeaf4,
+                IndexLeaf5,
+                IndexLeaf6,
+            >,
+            $( $out_ty: CubePrimitive + CubeElement, )+
+        {
+            fn run_gather_logical7(
+                policy: &CubePolicy<R>,
+                value_bindings: KernelColumnBindings,
+                index_bindings: KernelColumnBindings,
+                len: usize,
+            ) -> Result<<Self as MItemStorage<R>>::Storage, Error> {
+                let client = policy.client();
+                $(
+                    let $out_handle = client.empty(len * std::mem::size_of::<$out_ty>());
+                )+
+                if len != 0 {
+                    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                    let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                    let value_offsets = value_bindings.slot_offsets7_handle(client)?;
+                    let index_offsets = index_bindings.slot_offsets7_handle(client)?;
+                    let value_slot0 = value_bindings.slot_or_first(0);
+                    let value_slot1 = value_bindings.slot_or_first(1);
+                    let value_slot2 = value_bindings.slot_or_first(2);
+                    let value_slot3 = value_bindings.slot_or_first(3);
+                    let value_slot4 = value_bindings.slot_or_first(4);
+                    let value_slot5 = value_bindings.slot_or_first(5);
+                    let value_slot6 = value_bindings.slot_or_first(6);
+                    let index_slot0 = index_bindings.slot_or_first(0);
+                    let index_slot1 = index_bindings.slot_or_first(1);
+                    let index_slot2 = index_bindings.slot_or_first(2);
+                    let index_slot3 = index_bindings.slot_or_first(3);
+                    let index_slot4 = index_bindings.slot_or_first(4);
+                    let index_slot5 = index_bindings.slot_or_first(5);
+                    let index_slot6 = index_bindings.slot_or_first(6);
+                    let block_size = 256_u32;
+                    let block_count = len.div_ceil(block_size as usize);
+                    let block_count_u32 = u32::try_from(block_count)
+                        .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                    unsafe {
+                        $kernel::launch_unchecked::<
+                            Leaf0,
+                            Leaf1,
+                            Leaf2,
+                            Leaf3,
+                            Leaf4,
+                            Leaf5,
+                            Leaf6,
+                            IndexLeaf0,
+                            IndexLeaf1,
+                            IndexLeaf2,
+                            IndexLeaf3,
+                            IndexLeaf4,
+                            IndexLeaf5,
+                            IndexLeaf6,
+                            ValueExpr,
+                            IndexExpr,
+                            $( $out_ty, )+
+                            R,
+                        >(
+                            client,
+                            CubeCount::Static(block_count_u32, 1, 1),
+                            CubeDim::new_1d(block_size),
+                            BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1),
+                            BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1),
+                            BufferArg::from_raw_parts(value_slot2.0.clone(), value_slot2.1),
+                            BufferArg::from_raw_parts(value_slot3.0.clone(), value_slot3.1),
+                            BufferArg::from_raw_parts(value_slot4.0.clone(), value_slot4.1),
+                            BufferArg::from_raw_parts(value_slot5.0.clone(), value_slot5.1),
+                            BufferArg::from_raw_parts(value_slot6.0.clone(), value_slot6.1),
+                            BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                            BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1),
+                            BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1),
+                            BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1),
+                            BufferArg::from_raw_parts(index_slot3.0.clone(), index_slot3.1),
+                            BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1),
+                            BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1),
+                            BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1),
+                            BufferArg::from_raw_parts(index_offsets.clone(), 7),
+                            BufferArg::from_raw_parts(len_handle.clone(), 1),
+                            $(
+                                BufferArg::from_raw_parts($out_handle.clone(), len),
+                            )+
+                        );
+                    }
+                }
+                Ok($storage(policy, len, $( $out_handle ),+))
+            }
+        }
+    };
+}
+
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple1_kernel,
+    (OutA: output_a),
+    logical7_zip1_storage
+);
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple2_kernel,
+    (OutA: output_a, OutB: output_b),
+    logical7_zip2_storage
+);
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple3_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c),
+    logical7_zip3_storage
+);
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple4_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d),
+    logical7_tuple4_storage
+);
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple5_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e),
+    logical7_tuple5_storage
+);
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple6_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f),
+    logical7_tuple6_storage
+);
+impl_gather_logical7_output!(
+    gather_logical7_to_tuple7_kernel,
+    (OutA: output_a, OutB: output_b, OutC: output_c, OutD: output_d, OutE: output_e, OutF: output_f, OutG: output_g),
+    logical7_tuple7_storage
+);
+
 macro_rules! impl_transform_tuple_output {
     (
         ($trait_name:ident < $first_in:ident : $first_arg:ident, $( $in_ty:ident : $arg:ident ),+ >),

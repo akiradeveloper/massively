@@ -16,9 +16,11 @@ impl<R, Op> KernelOp<R, Op> {
 }
 
 #[doc(hidden)]
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct KernelTuple1Op<R, Op>(PhantomData<fn() -> (R, Op)>);
 
+#[allow(dead_code)]
 impl<R, Op> KernelTuple1Op<R, Op> {
     pub(super) fn new() -> Self {
         Self(PhantomData)

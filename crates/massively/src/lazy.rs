@@ -55,6 +55,12 @@ pub struct Transform<Input, Op> {
     _op: PhantomData<fn() -> Op>,
 }
 
+/// Lazy identity read-only iterator.
+#[derive(Debug)]
+pub struct Identity<Input> {
+    input: Input,
+}
+
 /// Creates a lazy constant stream.
 pub fn constant<T>(value: T) -> Constant<T> {
     Constant { value }
@@ -76,6 +82,11 @@ pub fn transform<Input, Op>(input: Input, _op: Op) -> Transform<Input, Op> {
         input,
         _op: PhantomData,
     }
+}
+
+/// Wraps an iterator as a lazy read-only identity expression.
+pub fn identity<Input>(input: Input) -> Identity<Input> {
+    Identity { input }
 }
 
 #[doc(hidden)]
@@ -308,5 +319,31 @@ where
 
     fn validate_executor(&self, _exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
         Ok(())
+    }
+}
+
+impl<R, Input> MIter<R> for Identity<Input>
+where
+    R: Runtime,
+    Input: MIter<R>,
+{
+    type Item = Input::Item;
+    type Inner = ();
+    type Read = Input::Read;
+
+    fn len(&self) -> MIndex {
+        self.input.len()
+    }
+
+    fn into_inner(self) -> Self::Inner {
+        unreachable!("lazy identity MIter has no storage inner")
+    }
+
+    fn lower_read_ref(&self, policy: &crate::detail::CubePolicy<R>) -> Result<Self::Read, Error> {
+        self.input.lower_read_ref(policy)
+    }
+
+    fn validate_executor(&self, exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
+        self.input.validate_executor(exec)
     }
 }

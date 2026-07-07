@@ -8058,6 +8058,1676 @@ define_selected_apply_tuple_device_expr_kernel!(
      G: ExprG: g_slot0, g_slot1, g_slot2, g_slot3, g_slot_offsets => output_g)
 );
 
+macro_rules! define_selected_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            flags: &[u32],
+            positions: &[u32],
+            slot0: &[Leaf0],
+            slot1: &[Leaf1],
+            slot2: &[Leaf2],
+            slot3: &[Leaf3],
+            slot4: &[Leaf4],
+            slot5: &[Leaf5],
+            slot6: &[Leaf6],
+            slot_offsets: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < flags.len() && flags[global] != 0u32 {
+                let position = (positions[global] - 1u32) as usize;
+                let output = Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    global,
+                );
+                $( $output[position] = output.$field; )+
+            }
+        }
+    };
+}
+
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_selected_logical7_to_tuple_kernel!(
+    selected_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+macro_rules! define_gather_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            IndexLeaf0: CubePrimitive,
+            IndexLeaf1: CubePrimitive,
+            IndexLeaf2: CubePrimitive,
+            IndexLeaf3: CubePrimitive,
+            IndexLeaf4: CubePrimitive,
+            IndexLeaf5: CubePrimitive,
+            IndexLeaf6: CubePrimitive,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            value_slot0: &[Leaf0],
+            value_slot1: &[Leaf1],
+            value_slot2: &[Leaf2],
+            value_slot3: &[Leaf3],
+            value_slot4: &[Leaf4],
+            value_slot5: &[Leaf5],
+            value_slot6: &[Leaf6],
+            value_slot_offsets: &[u32],
+            index_slot0: &[IndexLeaf0],
+            index_slot1: &[IndexLeaf1],
+            index_slot2: &[IndexLeaf2],
+            index_slot3: &[IndexLeaf3],
+            index_slot4: &[IndexLeaf4],
+            index_slot5: &[IndexLeaf5],
+            index_slot6: &[IndexLeaf6],
+            index_slot_offsets: &[u32],
+            len: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (len[0] as usize) {
+                let index = IndexExpr::eval7(
+                    index_slot0,
+                    index_slot1,
+                    index_slot2,
+                    index_slot3,
+                    index_slot4,
+                    index_slot5,
+                    index_slot6,
+                    index_slot_offsets,
+                    global,
+                );
+                let output = ValueExpr::eval7(
+                    value_slot0,
+                    value_slot1,
+                    value_slot2,
+                    value_slot3,
+                    value_slot4,
+                    value_slot5,
+                    value_slot6,
+                    value_slot_offsets,
+                    index as usize,
+                );
+                $( $output[global] = output.$field; )+
+            }
+        }
+    };
+}
+
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_gather_logical7_to_tuple_kernel!(
+    gather_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+macro_rules! define_scatter_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            IndexLeaf0: CubePrimitive,
+            IndexLeaf1: CubePrimitive,
+            IndexLeaf2: CubePrimitive,
+            IndexLeaf3: CubePrimitive,
+            IndexLeaf4: CubePrimitive,
+            IndexLeaf5: CubePrimitive,
+            IndexLeaf6: CubePrimitive,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            value_slot0: &[Leaf0],
+            value_slot1: &[Leaf1],
+            value_slot2: &[Leaf2],
+            value_slot3: &[Leaf3],
+            value_slot4: &[Leaf4],
+            value_slot5: &[Leaf5],
+            value_slot6: &[Leaf6],
+            value_slot_offsets: &[u32],
+            index_slot0: &[IndexLeaf0],
+            index_slot1: &[IndexLeaf1],
+            index_slot2: &[IndexLeaf2],
+            index_slot3: &[IndexLeaf3],
+            index_slot4: &[IndexLeaf4],
+            index_slot5: &[IndexLeaf5],
+            index_slot6: &[IndexLeaf6],
+            index_slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) {
+                let index = IndexExpr::eval7(
+                    index_slot0,
+                    index_slot1,
+                    index_slot2,
+                    index_slot3,
+                    index_slot4,
+                    index_slot5,
+                    index_slot6,
+                    index_slot_offsets,
+                    global,
+                ) as usize;
+                let output = ValueExpr::eval7(
+                    value_slot0,
+                    value_slot1,
+                    value_slot2,
+                    value_slot3,
+                    value_slot4,
+                    value_slot5,
+                    value_slot6,
+                    value_slot_offsets,
+                    global,
+                );
+                $(
+                    $output[metadata[1usize + $field] as usize + index] = output.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_scatter_logical7_to_tuple_kernel!(
+    scatter_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+macro_rules! define_scatter_where_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            IndexLeaf0: CubePrimitive,
+            IndexLeaf1: CubePrimitive,
+            IndexLeaf2: CubePrimitive,
+            IndexLeaf3: CubePrimitive,
+            IndexLeaf4: CubePrimitive,
+            IndexLeaf5: CubePrimitive,
+            IndexLeaf6: CubePrimitive,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            value_slot0: &[Leaf0],
+            value_slot1: &[Leaf1],
+            value_slot2: &[Leaf2],
+            value_slot3: &[Leaf3],
+            value_slot4: &[Leaf4],
+            value_slot5: &[Leaf5],
+            value_slot6: &[Leaf6],
+            value_slot_offsets: &[u32],
+            index_slot0: &[IndexLeaf0],
+            index_slot1: &[IndexLeaf1],
+            index_slot2: &[IndexLeaf2],
+            index_slot3: &[IndexLeaf3],
+            index_slot4: &[IndexLeaf4],
+            index_slot5: &[IndexLeaf5],
+            index_slot6: &[IndexLeaf6],
+            index_slot_offsets: &[u32],
+            metadata: &[u32],
+            flags: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) && flags[global] != 0u32 {
+                let index = IndexExpr::eval7(
+                    index_slot0,
+                    index_slot1,
+                    index_slot2,
+                    index_slot3,
+                    index_slot4,
+                    index_slot5,
+                    index_slot6,
+                    index_slot_offsets,
+                    global,
+                ) as usize;
+                let output = ValueExpr::eval7(
+                    value_slot0,
+                    value_slot1,
+                    value_slot2,
+                    value_slot3,
+                    value_slot4,
+                    value_slot5,
+                    value_slot6,
+                    value_slot_offsets,
+                    global,
+                );
+                $(
+                    $output[metadata[1usize + $field] as usize + index] = output.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_scatter_where_logical7_to_tuple_kernel!(
+    scatter_where_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+macro_rules! define_adjacent_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Op: BinaryOp<($( $out_ty, )+)>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            slot0: &[Leaf0],
+            slot1: &[Leaf1],
+            slot2: &[Leaf2],
+            slot3: &[Leaf3],
+            slot4: &[Leaf4],
+            slot5: &[Leaf5],
+            slot6: &[Leaf6],
+            slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) {
+                let output = if global == 0usize {
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        global,
+                    )
+                } else {
+                    Op::apply(
+                        Expr::eval7(
+                            slot0,
+                            slot1,
+                            slot2,
+                            slot3,
+                            slot4,
+                            slot5,
+                            slot6,
+                            slot_offsets,
+                            global,
+                        ),
+                        Expr::eval7(
+                            slot0,
+                            slot1,
+                            slot2,
+                            slot3,
+                            slot4,
+                            slot5,
+                            slot6,
+                            slot_offsets,
+                            global - 1usize,
+                        ),
+                    )
+                };
+                $(
+                    $output[metadata[1usize + $field] as usize + global] = output.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_adjacent_logical7_to_tuple_kernel!(
+    adjacent_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+macro_rules! define_inclusive_scan_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Op: BinaryOp<($( $out_ty, )+)>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            slot0: &[Leaf0],
+            slot1: &[Leaf1],
+            slot2: &[Leaf2],
+            slot3: &[Leaf3],
+            slot4: &[Leaf4],
+            slot5: &[Leaf5],
+            slot6: &[Leaf6],
+            slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) {
+                let mut accum = Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    0usize,
+                );
+                let cursor = RuntimeCell::<usize>::new(1usize);
+                while cursor.read() <= global {
+                    accum = Op::apply(
+                        accum,
+                        Expr::eval7(
+                            slot0,
+                            slot1,
+                            slot2,
+                            slot3,
+                            slot4,
+                            slot5,
+                            slot6,
+                            slot_offsets,
+                            cursor.read(),
+                        ),
+                    );
+                    cursor.store(cursor.read() + 1usize);
+                }
+                $(
+                    $output[metadata[1usize + $field] as usize + global] = accum.$field;
+                )+
+            }
+        }
+    };
+}
+
+macro_rules! define_exclusive_scan_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident, $init:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Op: BinaryOp<($( $out_ty, )+)>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            slot0: &[Leaf0],
+            slot1: &[Leaf1],
+            slot2: &[Leaf2],
+            slot3: &[Leaf3],
+            slot4: &[Leaf4],
+            slot5: &[Leaf5],
+            slot6: &[Leaf6],
+            slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $init: &[$out_ty], )+
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) {
+                let mut accum = ($( $init[0], )+);
+                let cursor = RuntimeCell::<usize>::new(0usize);
+                while cursor.read() < global {
+                    accum = Op::apply(
+                        accum,
+                        Expr::eval7(
+                            slot0,
+                            slot1,
+                            slot2,
+                            slot3,
+                            slot4,
+                            slot5,
+                            slot6,
+                            slot_offsets,
+                            cursor.read(),
+                        ),
+                    );
+                    cursor.store(cursor.read() + 1usize);
+                }
+                $(
+                    $output[metadata[1usize + $field] as usize + global] = accum.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_inclusive_scan_logical7_to_tuple_kernel!(
+    inclusive_scan_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a, init_a)
+);
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b)
+);
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c)
+);
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d)
+);
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d, OutE: 4 => output_e, init_e)
+);
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d, OutE: 4 => output_e, init_e, OutF: 5 => output_f, init_f)
+);
+define_exclusive_scan_logical7_to_tuple_kernel!(
+    exclusive_scan_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d, OutE: 4 => output_e, init_e, OutF: 5 => output_f, init_f, OutG: 6 => output_g, init_g)
+);
+
+macro_rules! define_partition_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            flags: &[u32],
+            positions: &[u32],
+            slot0: &[Leaf0],
+            slot1: &[Leaf1],
+            slot2: &[Leaf2],
+            slot3: &[Leaf3],
+            slot4: &[Leaf4],
+            slot5: &[Leaf5],
+            slot6: &[Leaf6],
+            slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) {
+                let selected_before_or_at = positions[global];
+                let position = if flags[global] != 0u32 {
+                    selected_before_or_at - 1u32
+                } else {
+                    metadata[1] + (global as u32) - selected_before_or_at
+                } as usize;
+                let output = Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    global,
+                );
+                $(
+                    $output[metadata[2usize + $field] as usize + position] = output.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_partition_logical7_to_tuple_kernel!(
+    partition_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+macro_rules! define_reduce_by_key_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident, $init:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            Leaf0: CubePrimitive,
+            Leaf1: CubePrimitive,
+            Leaf2: CubePrimitive,
+            Leaf3: CubePrimitive,
+            Leaf4: CubePrimitive,
+            Leaf5: CubePrimitive,
+            Leaf6: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Op: BinaryOp<($( $out_ty, )+)>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            flags: &[u32],
+            positions: &[u32],
+            slot0: &[Leaf0],
+            slot1: &[Leaf1],
+            slot2: &[Leaf2],
+            slot3: &[Leaf3],
+            slot4: &[Leaf4],
+            slot5: &[Leaf5],
+            slot6: &[Leaf6],
+            slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $init: &[$out_ty], )+
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            if global < (metadata[0] as usize) && flags[global] != 0u32 {
+                let mut start = global;
+                while start > 0usize && flags[start - 1usize] == 0u32 {
+                    start -= 1usize;
+                }
+
+                let mut accum = ($( $init[0], )+);
+                let cursor = RuntimeCell::<usize>::new(start);
+                while cursor.read() <= global {
+                    accum = Op::apply(
+                        accum,
+                        Expr::eval7(
+                            slot0,
+                            slot1,
+                            slot2,
+                            slot3,
+                            slot4,
+                            slot5,
+                            slot6,
+                            slot_offsets,
+                            cursor.read(),
+                        ),
+                    );
+                    cursor.store(cursor.read() + 1usize);
+                }
+
+                let position = (positions[global] - 1u32) as usize;
+                $(
+                    $output[metadata[1usize + $field] as usize + position] = accum.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a, init_a)
+);
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b)
+);
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c)
+);
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d)
+);
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d, OutE: 4 => output_e, init_e)
+);
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d, OutE: 4 => output_e, init_e, OutF: 5 => output_f, init_f)
+);
+define_reduce_by_key_logical7_to_tuple_kernel!(
+    reduce_by_key_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, init_a, OutB: 1 => output_b, init_b, OutC: 2 => output_c, init_c, OutD: 3 => output_d, init_d, OutE: 4 => output_e, init_e, OutF: 5 => output_f, init_f, OutG: 6 => output_g, init_g)
+);
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn sort_logical7_indices_kernel<
+    Item: CubeType + Send + Sync + 'static,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Less: BinaryPredicateOp<Item>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    output_indices: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let logical_len = len[0] as usize;
+    if global < logical_len {
+        let rank = RuntimeCell::<u32>::new(0u32);
+        let cursor = RuntimeCell::<usize>::new(0usize);
+        while cursor.read() < logical_len {
+            let other_before_value = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    cursor.read(),
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    global,
+                ),
+            );
+            let value_before_other = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    global,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    cursor.read(),
+                ),
+            );
+            if other_before_value
+                || (!value_before_other && !other_before_value && cursor.read() < global)
+            {
+                rank.store(rank.read() + 1u32);
+            }
+            cursor.store(cursor.read() + 1usize);
+        }
+        output_indices[rank.read() as usize] = global as u32;
+    }
+}
+
+macro_rules! define_merge_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            LeftLeaf0: CubePrimitive,
+            LeftLeaf1: CubePrimitive,
+            LeftLeaf2: CubePrimitive,
+            LeftLeaf3: CubePrimitive,
+            LeftLeaf4: CubePrimitive,
+            LeftLeaf5: CubePrimitive,
+            LeftLeaf6: CubePrimitive,
+            RightLeaf0: CubePrimitive,
+            RightLeaf1: CubePrimitive,
+            RightLeaf2: CubePrimitive,
+            RightLeaf3: CubePrimitive,
+            RightLeaf4: CubePrimitive,
+            RightLeaf5: CubePrimitive,
+            RightLeaf6: CubePrimitive,
+            LeftExpr: LogicalDeviceExpr7<($( $out_ty, )+), LeftLeaf0, LeftLeaf1, LeftLeaf2, LeftLeaf3, LeftLeaf4, LeftLeaf5, LeftLeaf6>,
+            RightExpr: LogicalDeviceExpr7<($( $out_ty, )+), RightLeaf0, RightLeaf1, RightLeaf2, RightLeaf3, RightLeaf4, RightLeaf5, RightLeaf6>,
+            Less: BinaryPredicateOp<($( $out_ty, )+)>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            left_slot0: &[LeftLeaf0],
+            left_slot1: &[LeftLeaf1],
+            left_slot2: &[LeftLeaf2],
+            left_slot3: &[LeftLeaf3],
+            left_slot4: &[LeftLeaf4],
+            left_slot5: &[LeftLeaf5],
+            left_slot6: &[LeftLeaf6],
+            left_slot_offsets: &[u32],
+            right_slot0: &[RightLeaf0],
+            right_slot1: &[RightLeaf1],
+            right_slot2: &[RightLeaf2],
+            right_slot3: &[RightLeaf3],
+            right_slot4: &[RightLeaf4],
+            right_slot5: &[RightLeaf5],
+            right_slot6: &[RightLeaf6],
+            right_slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            let left_len = metadata[0] as usize;
+            let right_len = metadata[1] as usize;
+            let total_len = left_len + right_len;
+            if global < total_len {
+                let from_left = global < left_len;
+                let local = if from_left { global } else { global - left_len };
+                let rank = RuntimeCell::<usize>::new(local);
+                let cursor = RuntimeCell::<usize>::new(0usize);
+
+                if from_left {
+                    while cursor.read() < right_len {
+                        if Less::apply(
+                            RightExpr::eval7(
+                                right_slot0,
+                                right_slot1,
+                                right_slot2,
+                                right_slot3,
+                                right_slot4,
+                                right_slot5,
+                                right_slot6,
+                                right_slot_offsets,
+                                cursor.read(),
+                            ),
+                            LeftExpr::eval7(
+                                left_slot0,
+                                left_slot1,
+                                left_slot2,
+                                left_slot3,
+                                left_slot4,
+                                left_slot5,
+                                left_slot6,
+                                left_slot_offsets,
+                                local,
+                            ),
+                        ) {
+                            rank.store(rank.read() + 1usize);
+                        }
+                        cursor.store(cursor.read() + 1usize);
+                    }
+                } else {
+                    while cursor.read() < left_len {
+                        if !Less::apply(
+                            RightExpr::eval7(
+                                right_slot0,
+                                right_slot1,
+                                right_slot2,
+                                right_slot3,
+                                right_slot4,
+                                right_slot5,
+                                right_slot6,
+                                right_slot_offsets,
+                                local,
+                            ),
+                            LeftExpr::eval7(
+                                left_slot0,
+                                left_slot1,
+                                left_slot2,
+                                left_slot3,
+                                left_slot4,
+                                left_slot5,
+                                left_slot6,
+                                left_slot_offsets,
+                                cursor.read(),
+                            ),
+                        ) {
+                            rank.store(rank.read() + 1usize);
+                        }
+                        cursor.store(cursor.read() + 1usize);
+                    }
+                }
+
+                let output = if from_left {
+                    LeftExpr::eval7(
+                        left_slot0,
+                        left_slot1,
+                        left_slot2,
+                        left_slot3,
+                        left_slot4,
+                        left_slot5,
+                        left_slot6,
+                        left_slot_offsets,
+                        local,
+                    )
+                } else {
+                    RightExpr::eval7(
+                        right_slot0,
+                        right_slot1,
+                        right_slot2,
+                        right_slot3,
+                        right_slot4,
+                        right_slot5,
+                        right_slot6,
+                        right_slot_offsets,
+                        local,
+                    )
+                };
+                $(
+                    $output[metadata[2usize + $field] as usize + rank.read()] = output.$field;
+                )+
+            }
+        }
+    };
+}
+
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_merge_logical7_to_tuple_kernel!(
+    merge_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn merge_by_key_logical7_indices_kernel<
+    Item: CubeType + Send + Sync + 'static,
+    LeftLeaf0: CubePrimitive,
+    LeftLeaf1: CubePrimitive,
+    LeftLeaf2: CubePrimitive,
+    LeftLeaf3: CubePrimitive,
+    LeftLeaf4: CubePrimitive,
+    LeftLeaf5: CubePrimitive,
+    LeftLeaf6: CubePrimitive,
+    RightLeaf0: CubePrimitive,
+    RightLeaf1: CubePrimitive,
+    RightLeaf2: CubePrimitive,
+    RightLeaf3: CubePrimitive,
+    RightLeaf4: CubePrimitive,
+    RightLeaf5: CubePrimitive,
+    RightLeaf6: CubePrimitive,
+    LeftExpr: LogicalDeviceExpr7<
+            Item,
+            LeftLeaf0,
+            LeftLeaf1,
+            LeftLeaf2,
+            LeftLeaf3,
+            LeftLeaf4,
+            LeftLeaf5,
+            LeftLeaf6,
+        >,
+    RightExpr: LogicalDeviceExpr7<
+            Item,
+            RightLeaf0,
+            RightLeaf1,
+            RightLeaf2,
+            RightLeaf3,
+            RightLeaf4,
+            RightLeaf5,
+            RightLeaf6,
+        >,
+    Less: BinaryPredicateOp<Item>,
+>(
+    left_slot0: &[LeftLeaf0],
+    left_slot1: &[LeftLeaf1],
+    left_slot2: &[LeftLeaf2],
+    left_slot3: &[LeftLeaf3],
+    left_slot4: &[LeftLeaf4],
+    left_slot5: &[LeftLeaf5],
+    left_slot6: &[LeftLeaf6],
+    left_slot_offsets: &[u32],
+    right_slot0: &[RightLeaf0],
+    right_slot1: &[RightLeaf1],
+    right_slot2: &[RightLeaf2],
+    right_slot3: &[RightLeaf3],
+    right_slot4: &[RightLeaf4],
+    right_slot5: &[RightLeaf5],
+    right_slot6: &[RightLeaf6],
+    right_slot_offsets: &[u32],
+    metadata: &[u32],
+    left_indices: &mut [u32],
+    right_indices: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let left_len = metadata[0] as usize;
+    let right_len = metadata[1] as usize;
+    let total_len = left_len + right_len;
+    if global < total_len {
+        let from_left = global < left_len;
+        let local = if from_left { global } else { global - left_len };
+        let rank = RuntimeCell::<usize>::new(local);
+        let cursor = RuntimeCell::<usize>::new(0usize);
+
+        if from_left {
+            while cursor.read() < right_len {
+                if Less::apply(
+                    RightExpr::eval7(
+                        right_slot0,
+                        right_slot1,
+                        right_slot2,
+                        right_slot3,
+                        right_slot4,
+                        right_slot5,
+                        right_slot6,
+                        right_slot_offsets,
+                        cursor.read(),
+                    ),
+                    LeftExpr::eval7(
+                        left_slot0,
+                        left_slot1,
+                        left_slot2,
+                        left_slot3,
+                        left_slot4,
+                        left_slot5,
+                        left_slot6,
+                        left_slot_offsets,
+                        local,
+                    ),
+                ) {
+                    rank.store(rank.read() + 1usize);
+                }
+                cursor.store(cursor.read() + 1usize);
+            }
+            left_indices[local] = rank.read() as u32;
+        } else {
+            while cursor.read() < left_len {
+                if !Less::apply(
+                    RightExpr::eval7(
+                        right_slot0,
+                        right_slot1,
+                        right_slot2,
+                        right_slot3,
+                        right_slot4,
+                        right_slot5,
+                        right_slot6,
+                        right_slot_offsets,
+                        local,
+                    ),
+                    LeftExpr::eval7(
+                        left_slot0,
+                        left_slot1,
+                        left_slot2,
+                        left_slot3,
+                        left_slot4,
+                        left_slot5,
+                        left_slot6,
+                        left_slot_offsets,
+                        cursor.read(),
+                    ),
+                ) {
+                    rank.store(rank.read() + 1usize);
+                }
+                cursor.store(cursor.read() + 1usize);
+            }
+            right_indices[local] = rank.read() as u32;
+        }
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn set_membership_logical7_flags_kernel<
+    Item: CubeType + Send + Sync + 'static,
+    CandidateLeaf0: CubePrimitive,
+    CandidateLeaf1: CubePrimitive,
+    CandidateLeaf2: CubePrimitive,
+    CandidateLeaf3: CubePrimitive,
+    CandidateLeaf4: CubePrimitive,
+    CandidateLeaf5: CubePrimitive,
+    CandidateLeaf6: CubePrimitive,
+    SortedLeaf0: CubePrimitive,
+    SortedLeaf1: CubePrimitive,
+    SortedLeaf2: CubePrimitive,
+    SortedLeaf3: CubePrimitive,
+    SortedLeaf4: CubePrimitive,
+    SortedLeaf5: CubePrimitive,
+    SortedLeaf6: CubePrimitive,
+    CandidateExpr: LogicalDeviceExpr7<
+            Item,
+            CandidateLeaf0,
+            CandidateLeaf1,
+            CandidateLeaf2,
+            CandidateLeaf3,
+            CandidateLeaf4,
+            CandidateLeaf5,
+            CandidateLeaf6,
+        >,
+    SortedExpr: LogicalDeviceExpr7<
+            Item,
+            SortedLeaf0,
+            SortedLeaf1,
+            SortedLeaf2,
+            SortedLeaf3,
+            SortedLeaf4,
+            SortedLeaf5,
+            SortedLeaf6,
+        >,
+    Less: BinaryPredicateOp<Item>,
+>(
+    candidate_slot0: &[CandidateLeaf0],
+    candidate_slot1: &[CandidateLeaf1],
+    candidate_slot2: &[CandidateLeaf2],
+    candidate_slot3: &[CandidateLeaf3],
+    candidate_slot4: &[CandidateLeaf4],
+    candidate_slot5: &[CandidateLeaf5],
+    candidate_slot6: &[CandidateLeaf6],
+    candidate_slot_offsets: &[u32],
+    sorted_slot0: &[SortedLeaf0],
+    sorted_slot1: &[SortedLeaf1],
+    sorted_slot2: &[SortedLeaf2],
+    sorted_slot3: &[SortedLeaf3],
+    sorted_slot4: &[SortedLeaf4],
+    sorted_slot5: &[SortedLeaf5],
+    sorted_slot6: &[SortedLeaf6],
+    sorted_slot_offsets: &[u32],
+    metadata: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let candidate_len = metadata[0] as usize;
+    let sorted_len = metadata[1] as usize;
+    let keep_members = metadata[2] != 0u32;
+    if global < candidate_len {
+        let member = RuntimeCell::<bool>::new(false);
+        let cursor = RuntimeCell::<usize>::new(0usize);
+        while cursor.read() < sorted_len {
+            let candidate_before_sorted = Less::apply(
+                CandidateExpr::eval7(
+                    candidate_slot0,
+                    candidate_slot1,
+                    candidate_slot2,
+                    candidate_slot3,
+                    candidate_slot4,
+                    candidate_slot5,
+                    candidate_slot6,
+                    candidate_slot_offsets,
+                    global,
+                ),
+                SortedExpr::eval7(
+                    sorted_slot0,
+                    sorted_slot1,
+                    sorted_slot2,
+                    sorted_slot3,
+                    sorted_slot4,
+                    sorted_slot5,
+                    sorted_slot6,
+                    sorted_slot_offsets,
+                    cursor.read(),
+                ),
+            );
+            let sorted_before_candidate = Less::apply(
+                SortedExpr::eval7(
+                    sorted_slot0,
+                    sorted_slot1,
+                    sorted_slot2,
+                    sorted_slot3,
+                    sorted_slot4,
+                    sorted_slot5,
+                    sorted_slot6,
+                    sorted_slot_offsets,
+                    cursor.read(),
+                ),
+                CandidateExpr::eval7(
+                    candidate_slot0,
+                    candidate_slot1,
+                    candidate_slot2,
+                    candidate_slot3,
+                    candidate_slot4,
+                    candidate_slot5,
+                    candidate_slot6,
+                    candidate_slot_offsets,
+                    global,
+                ),
+            );
+            if !candidate_before_sorted && !sorted_before_candidate {
+                member.store(true);
+            }
+            cursor.store(cursor.read() + 1usize);
+        }
+        flags[global] = if member.read() == keep_members {
+            1u32
+        } else {
+            0u32
+        };
+    }
+}
+
+macro_rules! define_set_union_logical7_to_tuple_kernel {
+    (
+        $name:ident,
+        ($( $out_ty:ident : $field:tt => $output:ident ),+)
+    ) => {
+        #[cube(launch_unchecked, explicit_define)]
+        pub(crate) fn $name<
+            LeftLeaf0: CubePrimitive,
+            LeftLeaf1: CubePrimitive,
+            LeftLeaf2: CubePrimitive,
+            LeftLeaf3: CubePrimitive,
+            LeftLeaf4: CubePrimitive,
+            LeftLeaf5: CubePrimitive,
+            LeftLeaf6: CubePrimitive,
+            RightLeaf0: CubePrimitive,
+            RightLeaf1: CubePrimitive,
+            RightLeaf2: CubePrimitive,
+            RightLeaf3: CubePrimitive,
+            RightLeaf4: CubePrimitive,
+            RightLeaf5: CubePrimitive,
+            RightLeaf6: CubePrimitive,
+            LeftExpr: LogicalDeviceExpr7<($( $out_ty, )+), LeftLeaf0, LeftLeaf1, LeftLeaf2, LeftLeaf3, LeftLeaf4, LeftLeaf5, LeftLeaf6>,
+            RightExpr: LogicalDeviceExpr7<($( $out_ty, )+), RightLeaf0, RightLeaf1, RightLeaf2, RightLeaf3, RightLeaf4, RightLeaf5, RightLeaf6>,
+            Less: BinaryPredicateOp<($( $out_ty, )+)>,
+            $( $out_ty: CubePrimitive, )+
+        >(
+            right_flags: &[u32],
+            right_positions: &[u32],
+            left_slot0: &[LeftLeaf0],
+            left_slot1: &[LeftLeaf1],
+            left_slot2: &[LeftLeaf2],
+            left_slot3: &[LeftLeaf3],
+            left_slot4: &[LeftLeaf4],
+            left_slot5: &[LeftLeaf5],
+            left_slot6: &[LeftLeaf6],
+            left_slot_offsets: &[u32],
+            right_slot0: &[RightLeaf0],
+            right_slot1: &[RightLeaf1],
+            right_slot2: &[RightLeaf2],
+            right_slot3: &[RightLeaf3],
+            right_slot4: &[RightLeaf4],
+            right_slot5: &[RightLeaf5],
+            right_slot6: &[RightLeaf6],
+            right_slot_offsets: &[u32],
+            metadata: &[u32],
+            $( $output: &mut [$out_ty], )+
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = 256usize;
+            let global = (CUBE_POS as usize) * cube_dim + unit;
+            let left_len = metadata[0] as usize;
+            let right_len = metadata[1] as usize;
+            let total_len = left_len + right_len;
+            if global < total_len {
+                let from_left = global < left_len;
+                let local = if from_left { global } else { global - left_len };
+                if from_left {
+                    let extra = RuntimeCell::<usize>::new(0usize);
+                    let cursor = RuntimeCell::<usize>::new(0usize);
+                    while cursor.read() < right_len {
+                        if right_flags[cursor.read()] != 0u32
+                            && Less::apply(
+                                RightExpr::eval7(
+                                    right_slot0,
+                                    right_slot1,
+                                    right_slot2,
+                                    right_slot3,
+                                    right_slot4,
+                                    right_slot5,
+                                    right_slot6,
+                                    right_slot_offsets,
+                                    cursor.read(),
+                                ),
+                                LeftExpr::eval7(
+                                    left_slot0,
+                                    left_slot1,
+                                    left_slot2,
+                                    left_slot3,
+                                    left_slot4,
+                                    left_slot5,
+                                    left_slot6,
+                                    left_slot_offsets,
+                                    local,
+                                ),
+                            )
+                        {
+                            extra.store(extra.read() + 1usize);
+                        }
+                        cursor.store(cursor.read() + 1usize);
+                    }
+                    let output = LeftExpr::eval7(
+                        left_slot0,
+                        left_slot1,
+                        left_slot2,
+                        left_slot3,
+                        left_slot4,
+                        left_slot5,
+                        left_slot6,
+                        left_slot_offsets,
+                        local,
+                    );
+                    let rank = local + extra.read();
+                    $(
+                        $output[metadata[2usize + $field] as usize + rank] = output.$field;
+                    )+
+                } else if right_flags[local] != 0u32 {
+                    let left_before_or_equal = RuntimeCell::<usize>::new(0usize);
+                    let cursor = RuntimeCell::<usize>::new(0usize);
+                    while cursor.read() < left_len {
+                        if !Less::apply(
+                            RightExpr::eval7(
+                                right_slot0,
+                                right_slot1,
+                                right_slot2,
+                                right_slot3,
+                                right_slot4,
+                                right_slot5,
+                                right_slot6,
+                                right_slot_offsets,
+                                local,
+                            ),
+                            LeftExpr::eval7(
+                                left_slot0,
+                                left_slot1,
+                                left_slot2,
+                                left_slot3,
+                                left_slot4,
+                                left_slot5,
+                                left_slot6,
+                                left_slot_offsets,
+                                cursor.read(),
+                            ),
+                        ) {
+                            left_before_or_equal.store(left_before_or_equal.read() + 1usize);
+                        }
+                        cursor.store(cursor.read() + 1usize);
+                    }
+                    let output = RightExpr::eval7(
+                        right_slot0,
+                        right_slot1,
+                        right_slot2,
+                        right_slot3,
+                        right_slot4,
+                        right_slot5,
+                        right_slot6,
+                        right_slot_offsets,
+                        local,
+                    );
+                    let rank = left_before_or_equal.read() + (right_positions[local] - 1u32) as usize;
+                    $(
+                        $output[metadata[2usize + $field] as usize + rank] = output.$field;
+                    )+
+                }
+            }
+        }
+    };
+}
+
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple1_kernel,
+    (OutA: 0 => output_a)
+);
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple2_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b)
+);
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple3_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c)
+);
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple4_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d)
+);
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple5_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e)
+);
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple6_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f)
+);
+define_set_union_logical7_to_tuple_kernel!(
+    set_union_logical7_to_tuple7_kernel,
+    (OutA: 0 => output_a, OutB: 1 => output_b, OutC: 2 => output_c, OutD: 3 => output_d, OutE: 4 => output_e, OutF: 5 => output_f, OutG: 6 => output_g)
+);
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn unique_logical7_flags_kernel<
+    Item: CubeType + Send + Sync + 'static,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Pred: BinaryPredicateOp<Item>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    flags: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        if global == 0usize {
+            flags[global] = 1u32;
+        } else if Pred::apply(
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global - 1usize,
+            ),
+            Expr::eval7(
+                slot0,
+                slot1,
+                slot2,
+                slot3,
+                slot4,
+                slot5,
+                slot6,
+                slot_offsets,
+                global,
+            ),
+        ) {
+            flags[global] = 0u32;
+        } else {
+            flags[global] = 1u32;
+        }
+    }
+}
+
 #[cube(launch_unchecked, explicit_define)]
 pub(crate) fn unique_by_key_device_expr_flags_kernel<
     K: CubePrimitive,

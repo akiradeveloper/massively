@@ -2,7 +2,7 @@ use cubecl::frontend::PartialEqExpand;
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op as gpu_op;
-use massively::{Executor, MIndex};
+use massively::{Executor, MIndex, MIter};
 use oracle::op as host_op;
 use proptest::prelude::*;
 use std::sync::{Mutex, MutexGuard};
@@ -393,6 +393,13 @@ fn gpu_lock() -> MutexGuard<'static, ()> {
     GPU_LOCK.lock().unwrap_or_else(|err| err.into_inner())
 }
 
+fn lazify<Input>(input: Input) -> massively::lazy::Identity<Input>
+where
+    Input: MIter<ApiRuntime>,
+{
+    massively::lazy::identity(input)
+}
+
 fn unique_by<T, K, F>(input: &[T], first: F) -> bool
 where
     K: PartialEq,
@@ -613,7 +620,7 @@ macro_rules! map_arity_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $input_zip, ($($input_ty),+));
         let gpu_output = make_zip!(&exec, &vec![$init; input.len()], $output_zip, ($($output_ty),+));
-        massively::transform(&exec, gpu_input.slice(..), $op, gpu_output.slice_mut(..)).unwrap();
+        massively::transform(&exec, lazify(gpu_input.slice(..)), $op, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
         let host = oracle::map(&input, $op);
         prop_assert_eq!(gpu, host);
@@ -630,7 +637,7 @@ macro_rules! transform_arity_case {
         let gpu_output = make_zip!(&exec, &host, $output_zip, ($($output_ty),+));
         massively::transform(
             &exec,
-            gpu_input.slice(..),
+            lazify(gpu_input.slice(..)),
             $op,
             gpu_output.slice_mut(..),
         )
@@ -653,9 +660,9 @@ macro_rules! transform_where_arity_case {
         let gpu_output = make_zip!(&exec, &host, $output_zip, ($($output_ty),+));
         massively::transform_where(
             &exec,
-            gpu_input.slice(..),
+            lazify(gpu_input.slice(..)),
             $op,
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -675,7 +682,7 @@ macro_rules! sort_by_key_only_case {
         let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         let out_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
         let out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
-        massively::sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
+        massively::sort_by_key(&exec, lazify(gpu_keys.slice(..)), lazify(gpu_values.slice(..)), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
         let (host_keys, host_values) = oracle::sort_by_key(&keys, &values, $less);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_zip), host_keys);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_zip), host_values);
@@ -693,8 +700,8 @@ macro_rules! scan_by_key_case {
         let gpu_output = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::inclusive_scan_by_key(
             &exec,
-            gpu_keys.slice(..),
-            gpu_values.slice(..),
+            lazify(gpu_keys.slice(..)),
+            lazify(gpu_values.slice(..)),
             EqTuple,
             MaxTuple,
             gpu_output.slice_mut(..),
@@ -715,8 +722,8 @@ macro_rules! scan_by_key_case {
         let gpu_output = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::exclusive_scan_by_key(
             &exec,
-            gpu_keys.slice(..),
-            gpu_values.slice(..),
+            lazify(gpu_keys.slice(..)),
+            lazify(gpu_values.slice(..)),
             EqTuple,
             $init,
             MaxTuple,
@@ -739,8 +746,8 @@ macro_rules! scan_by_key_case {
         let gpu_out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         let len = massively::reduce_by_key(
             &exec,
-            gpu_keys.slice(..),
-            gpu_values.slice(..),
+            lazify(gpu_keys.slice(..)),
+            lazify(gpu_values.slice(..)),
             EqTuple,
             $init,
             MaxTuple,
@@ -764,8 +771,8 @@ macro_rules! scan_by_key_case {
         let gpu_out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         let len = massively::unique_by_key(
             &exec,
-            gpu_keys.slice(..),
-            gpu_values.slice(..),
+            lazify(gpu_keys.slice(..)),
+            lazify(gpu_values.slice(..)),
             EqTuple,
             gpu_out_keys.slice_mut(..),
             gpu_out_values.slice_mut(..),
@@ -800,10 +807,10 @@ macro_rules! merge_by_key_case {
         let gpu_values = make_zip!(&exec, &pairs.iter().map(|pair| pair.1).collect::<Vec<_>>(), $value_zip, ($($value_ty),+));
         massively::merge_by_key(
             &exec,
-            gpu_left_keys.slice(..),
-            gpu_left_values.slice(..),
-            gpu_right_keys.slice(..),
-            gpu_right_values.slice(..),
+            lazify(gpu_left_keys.slice(..)),
+            lazify(gpu_left_values.slice(..)),
+            lazify(gpu_right_keys.slice(..)),
+            lazify(gpu_right_values.slice(..)),
             $less,
             gpu_keys.slice_mut(..),
             gpu_values.slice_mut(..),
@@ -839,7 +846,7 @@ macro_rules! value_case {
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let gpu = massively::reduce(&exec, gpu_input.slice(..), $init, MaxTuple).unwrap();
+        let gpu = massively::reduce(&exec, lazify(gpu_input.slice(..)), $init, MaxTuple).unwrap();
         let host = oracle::reduce(&input, $init, MaxTuple);
         prop_assert_eq!(gpu, host);
     }};
@@ -849,7 +856,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::inclusive_scan(&exec, gpu_input.slice(..), MaxTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::inclusive_scan(&exec, lazify(gpu_input.slice(..)), MaxTuple, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::inclusive_scan(&input, MaxTuple);
         prop_assert_eq!(gpu, host);
@@ -860,7 +867,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::exclusive_scan(&exec, gpu_input.slice(..), $init, MaxTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::exclusive_scan(&exec, lazify(gpu_input.slice(..)), $init, MaxTuple, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::exclusive_scan(&input, $init, MaxTuple);
         prop_assert_eq!(gpu, host);
@@ -871,7 +878,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::adjacent_difference(&exec, gpu_input.slice(..), MaxTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::adjacent_difference(&exec, lazify(gpu_input.slice(..)), MaxTuple, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::adjacent_difference(&input, MaxTuple);
         prop_assert_eq!(gpu, host);
@@ -884,7 +891,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let len = massively::copy_where(&exec, gpu_input.slice(..), massively::lazy::transform(gpu_stencil.slice(..), U32Flag), gpu_output.slice_mut(..)).unwrap();
+        let len = massively::copy_where(&exec, lazify(gpu_input.slice(..)), lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip);
         let host = oracle::copy_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
@@ -897,7 +904,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_stencil = exec.to_device(&stencil).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let len = massively::remove_where(&exec, gpu_input.slice(..), massively::lazy::transform(gpu_stencil.slice(..), U32Flag), gpu_output.slice_mut(..)).unwrap();
+        let len = massively::remove_where(&exec, lazify(gpu_input.slice(..)), lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip);
         let host = oracle::remove_where(&input, &stencil);
         prop_assert_eq!(gpu, host);
@@ -908,7 +915,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::reverse(&exec, gpu_input.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::reverse(&exec, lazify(gpu_input.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip);
         let host = oracle::reverse(&input);
         prop_assert_eq!(gpu, host);
@@ -919,7 +926,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::count_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::count_if(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             mindex(oracle::count_if(&input, KeepTuple))
         );
     }};
@@ -929,7 +936,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::all_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::all_of(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::all_of(&input, KeepTuple)
         );
     }};
@@ -939,7 +946,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::any_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::any_of(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::any_of(&input, KeepTuple)
         );
     }};
@@ -949,7 +956,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::none_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::none_of(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::none_of(&input, KeepTuple)
         );
     }};
@@ -959,7 +966,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::find_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::find_if(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             opt_mindex(oracle::find_if(&input, KeepTuple))
         );
     }};
@@ -969,7 +976,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::is_partitioned(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::is_partitioned(&input, KeepTuple)
         );
     }};
@@ -979,7 +986,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, gpu_output.slice_mut(..)).unwrap();
+        let split = massively::partition(&exec, lazify(gpu_input.slice(..)), KeepTuple, gpu_output.slice_mut(..)).unwrap();
         let (host_yes, host_no) = oracle::partition(&input, KeepTuple);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $zip), host_yes);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
@@ -990,31 +997,31 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::count_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::count_if(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             mindex(oracle::count_if(&input, KeepTuple))
         );
         prop_assert_eq!(
-            massively::all_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::all_of(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::all_of(&input, KeepTuple)
         );
         prop_assert_eq!(
-            massively::any_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::any_of(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::any_of(&input, KeepTuple)
         );
         prop_assert_eq!(
-            massively::none_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::none_of(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::none_of(&input, KeepTuple)
         );
         prop_assert_eq!(
-            massively::find_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::find_if(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             opt_mindex(oracle::find_if(&input, KeepTuple))
         );
         prop_assert_eq!(
-            massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            massively::is_partitioned(&exec, lazify(gpu_input.slice(..)), KeepTuple).unwrap(),
             oracle::is_partitioned(&input, KeepTuple)
         );
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, gpu_output.slice_mut(..)).unwrap();
+        let split = massively::partition(&exec, lazify(gpu_input.slice(..)), KeepTuple, gpu_output.slice_mut(..)).unwrap();
         let (host_yes, host_no) = oracle::partition(&input, KeepTuple);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $zip), host_yes);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
@@ -1030,13 +1037,13 @@ macro_rules! value_case {
         let gpu_stencil = exec.to_device(&stencil).unwrap();
 
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::gather(&exec, lazify(gpu_input.slice(..)), lazify(gpu_indices.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::gather(&exec, lazify(gpu_input.slice(..)), lazify(gpu_indices.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
@@ -1044,9 +1051,9 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather_where(
             &exec,
-            gpu_input.slice(..),
-            gpu_indices.slice(..),
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(gpu_input.slice(..)),
+            lazify(gpu_indices.slice(..)),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1055,7 +1062,7 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
 
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::scatter(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::scatter(&exec, lazify(gpu_input.slice(..)), lazify(gpu_indices.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::scatter(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
@@ -1063,9 +1070,9 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::scatter_where(
             &exec,
-            gpu_input.slice(..),
-            gpu_indices.slice(..),
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(gpu_input.slice(..)),
+            lazify(gpu_indices.slice(..)),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1081,7 +1088,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::gather(&exec, lazify(gpu_input.slice(..)), lazify(gpu_indices.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
@@ -1094,7 +1101,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::gather(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::gather(&exec, lazify(gpu_input.slice(..)), lazify(gpu_indices.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::gather(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
@@ -1111,9 +1118,9 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::gather_where(
             &exec,
-            gpu_input.slice(..),
-            gpu_indices.slice(..),
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(gpu_input.slice(..)),
+            lazify(gpu_indices.slice(..)),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1129,7 +1136,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_indices = exec.to_device(&indices).unwrap();
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::scatter(&exec, gpu_input.slice(..), gpu_indices.slice(..), gpu_output.slice_mut(..)).unwrap();
+        massively::scatter(&exec, lazify(gpu_input.slice(..)), lazify(gpu_indices.slice(..)), gpu_output.slice_mut(..)).unwrap();
         let mut host = input.clone();
         oracle::scatter(&input, &indices, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
@@ -1146,9 +1153,9 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::scatter_where(
             &exec,
-            gpu_input.slice(..),
-            gpu_indices.slice(..),
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(gpu_input.slice(..)),
+            lazify(gpu_indices.slice(..)),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1165,19 +1172,19 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_other = make_zip!(&exec, &other, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::equal(&exec, gpu_input.slice(..), gpu_input.slice(..), EqTuple).unwrap(),
+            massively::equal(&exec, lazify(gpu_input.slice(..)), lazify(gpu_input.slice(..)), EqTuple).unwrap(),
             oracle::equal(&input, &input, EqTuple)
         );
         prop_assert_eq!(
-            massively::mismatch(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
+            massively::mismatch(&exec, lazify(gpu_input.slice(..)), lazify(gpu_other.slice(..)), EqTuple).unwrap(),
             opt_mindex(oracle::mismatch(&input, &other, EqTuple))
         );
         prop_assert_eq!(
-            massively::adjacent_find(&exec, gpu_input.slice(..), EqTuple).unwrap(),
+            massively::adjacent_find(&exec, lazify(gpu_input.slice(..)), EqTuple).unwrap(),
             opt_mindex(oracle::adjacent_find(&input, EqTuple))
         );
         prop_assert_eq!(
-            massively::find_first_of(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
+            massively::find_first_of(&exec, lazify(gpu_input.slice(..)), lazify(gpu_other.slice(..)), EqTuple).unwrap(),
             opt_mindex(oracle::find_first_of(&input, &other, EqTuple))
         );
     }};
@@ -1187,7 +1194,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::equal(&exec, gpu_input.slice(..), gpu_input.slice(..), EqTuple).unwrap(),
+            massively::equal(&exec, lazify(gpu_input.slice(..)), lazify(gpu_input.slice(..)), EqTuple).unwrap(),
             oracle::equal(&input, &input, EqTuple)
         );
     }};
@@ -1200,7 +1207,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_other = make_zip!(&exec, &other, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::mismatch(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
+            massively::mismatch(&exec, lazify(gpu_input.slice(..)), lazify(gpu_other.slice(..)), EqTuple).unwrap(),
             opt_mindex(oracle::mismatch(&input, &other, EqTuple))
         );
     }};
@@ -1210,7 +1217,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::adjacent_find(&exec, gpu_input.slice(..), EqTuple).unwrap(),
+            massively::adjacent_find(&exec, lazify(gpu_input.slice(..)), EqTuple).unwrap(),
             opt_mindex(oracle::adjacent_find(&input, EqTuple))
         );
     }};
@@ -1223,7 +1230,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_other = make_zip!(&exec, &other, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::find_first_of(&exec, gpu_input.slice(..), gpu_other.slice(..), EqTuple).unwrap(),
+            massively::find_first_of(&exec, lazify(gpu_input.slice(..)), lazify(gpu_other.slice(..)), EqTuple).unwrap(),
             opt_mindex(oracle::find_first_of(&input, &other, EqTuple))
         );
     }};
@@ -1246,7 +1253,7 @@ macro_rules! value_case {
         massively::replace_where(
             &exec,
             replacement,
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1257,9 +1264,9 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::transform_where(
             &exec,
-            gpu_input.slice(..),
+            lazify(gpu_input.slice(..)),
             Identity,
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1287,7 +1294,7 @@ macro_rules! value_case {
         massively::replace_where(
             &exec,
             $init,
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1305,9 +1312,9 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::transform_where(
             &exec,
-            gpu_input.slice(..),
+            lazify(gpu_input.slice(..)),
             Identity,
-            massively::lazy::transform(gpu_stencil.slice(..), U32Flag),
+            lazify(massively::lazy::transform(gpu_stencil.slice(..), U32Flag)),
             gpu_output.slice_mut(..),
         )
         .unwrap();
@@ -1328,69 +1335,69 @@ macro_rules! value_case {
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
 
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::sort(&exec, lazify(gpu_input.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), sorted.clone());
         let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
         let gpu_output = make_zip!(&exec, &merge_init, $zip, ($($ty),+));
-        massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::merge(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::merge(&sorted, &right, LessTuple)
         );
 
         prop_assert_eq!(
-            massively::is_sorted(&exec, gpu_sorted.slice(..), LessTuple).unwrap(),
+            massively::is_sorted(&exec, lazify(gpu_sorted.slice(..)), LessTuple).unwrap(),
             oracle::is_sorted(&sorted, LessTuple)
         );
         prop_assert_eq!(
-            massively::is_sorted_until(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::is_sorted_until(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             mindex(oracle::is_sorted_until(&input, LessTuple))
         );
         prop_assert_eq!(
-            massively::lexicographical_compare(&exec, gpu_input.slice(..), gpu_right.slice(..), LessTuple).unwrap(),
+            massively::lexicographical_compare(&exec, lazify(gpu_input.slice(..)), lazify(gpu_right.slice(..)), LessTuple).unwrap(),
             oracle::lexicographical_compare(&input, &right, LessTuple)
         );
         prop_assert_eq!(
-            massively::min_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::min_element(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             opt_mindex(oracle::min_element(&input, LessTuple))
         );
         prop_assert_eq!(
-            massively::max_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::max_element(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             opt_mindex(oracle::max_element(&input, LessTuple))
         );
         prop_assert_eq!(
-            massively::minmax_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::minmax_element(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             opt_pair_mindex(oracle::minmax_element(&input, LessTuple))
         );
 
         let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
-        massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
+        massively::lower_bound(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::lower_bound(&sorted, &right, LessTuple));
         let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
-        massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
+        massively::upper_bound(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
 
         let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
-        let len = massively::unique(&exec, gpu_sorted.slice(..), EqTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::unique(&exec, lazify(gpu_sorted.slice(..)), EqTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::unique(&sorted, EqTuple)
         );
         let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
         let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
-        let len = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::set_union(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_union(&sorted, &right, LessTuple)
         );
         let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
-        let len = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::set_intersection(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_intersection(&sorted, &right, LessTuple)
         );
         let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
-        let len = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::set_difference(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_difference(&sorted, &right, LessTuple)
@@ -1402,7 +1409,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::sort(&exec, lazify(gpu_input.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::sort(&input, LessTuple)
@@ -1423,7 +1430,7 @@ macro_rules! value_case {
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
         let gpu_output = make_zip!(&exec, &merge_init, $zip, ($($ty),+));
-        massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        massively::merge(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::merge(&sorted, &right, LessTuple)
@@ -1436,7 +1443,7 @@ macro_rules! value_case {
         let sorted = oracle::sort(&input, LessTuple);
         let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::is_sorted(&exec, gpu_sorted.slice(..), LessTuple).unwrap(),
+            massively::is_sorted(&exec, lazify(gpu_sorted.slice(..)), LessTuple).unwrap(),
             oracle::is_sorted(&sorted, LessTuple)
         );
     }};
@@ -1446,7 +1453,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::is_sorted_until(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::is_sorted_until(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             mindex(oracle::is_sorted_until(&input, LessTuple))
         );
     }};
@@ -1461,7 +1468,7 @@ macro_rules! value_case {
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::lexicographical_compare(&exec, gpu_input.slice(..), gpu_right.slice(..), LessTuple).unwrap(),
+            massively::lexicographical_compare(&exec, lazify(gpu_input.slice(..)), lazify(gpu_right.slice(..)), LessTuple).unwrap(),
             oracle::lexicographical_compare(&input, &right, LessTuple)
         );
     }};
@@ -1471,7 +1478,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::min_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::min_element(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             opt_mindex(oracle::min_element(&input, LessTuple))
         );
     }};
@@ -1481,7 +1488,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::max_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::max_element(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             opt_mindex(oracle::max_element(&input, LessTuple))
         );
     }};
@@ -1491,7 +1498,7 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::minmax_element(&exec, gpu_input.slice(..), LessTuple).unwrap(),
+            massively::minmax_element(&exec, lazify(gpu_input.slice(..)), LessTuple).unwrap(),
             opt_pair_mindex(oracle::minmax_element(&input, LessTuple))
         );
     }};
@@ -1506,7 +1513,7 @@ macro_rules! value_case {
         let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
-        massively::lower_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
+        massively::lower_bound(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::lower_bound(&sorted, &right, LessTuple));
     }};
     (upper_bound, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1520,7 +1527,7 @@ macro_rules! value_case {
         let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let gpu_bounds = exec.to_device(&vec![0_u32; right.len()]).unwrap();
-        massively::upper_bound(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
+        massively::upper_bound(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_bounds.slice_mut(..)).unwrap();
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
     }};
     (unique, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1530,7 +1537,7 @@ macro_rules! value_case {
         let sorted = oracle::sort(&input, LessTuple);
         let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
-        let len = massively::unique(&exec, gpu_sorted.slice(..), EqTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::unique(&exec, lazify(gpu_sorted.slice(..)), EqTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::unique(&sorted, EqTuple)
@@ -1548,7 +1555,7 @@ macro_rules! value_case {
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
         let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
-        let len = massively::set_union(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::set_union(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_union(&sorted, &right, LessTuple)
@@ -1566,7 +1573,7 @@ macro_rules! value_case {
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let set_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
         let gpu_output = make_zip!(&exec, &set_init, $zip, ($($ty),+));
-        let len = massively::set_intersection(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::set_intersection(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_intersection(&sorted, &right, LessTuple)
@@ -1583,7 +1590,7 @@ macro_rules! value_case {
         let gpu_sorted = make_zip!(&exec, &sorted, $zip, ($($ty),+));
         let gpu_right = make_zip!(&exec, &right, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &sorted, $zip, ($($ty),+));
-        let len = massively::set_difference(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
+        let len = massively::set_difference(&exec, lazify(gpu_sorted.slice(..)), lazify(gpu_right.slice(..)), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output.slice(..len)).unwrap(), $zip),
             oracle::set_difference(&sorted, &right, LessTuple)

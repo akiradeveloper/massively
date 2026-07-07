@@ -60,6 +60,14 @@ pub(crate) fn indices_u32_kernel(output: &mut [u32]) {
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn reverse_indices_u32_kernel(output: &mut [u32]) {
+    let unit = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    if unit < output.len() {
+        output[unit] = (output.len() - 1usize - unit) as u32;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn device_map_kernel<T: CubePrimitive, Op: UnaryOp<T, Output = T>>(
     input: &[T],
     output: &mut [T],

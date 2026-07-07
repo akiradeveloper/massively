@@ -124,6 +124,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn policy_id(&self) -> crate::detail::policy::CubePolicyId {
         self.source.inner.policy_id()
     }

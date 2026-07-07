@@ -354,6 +354,7 @@ where
     ) -> Result<<Self::Item as MAlloc<R>>::View, Error>;
 }
 
+#[allow(dead_code)]
 pub(crate) fn materialized_view_with_policy<R, Item>(
     policy: &crate::detail::CubePolicy<R>,
     inner: <Item as MAlloc<R>>::Inner,
@@ -868,8 +869,9 @@ pub trait MIter<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::copy_selected_from_view(policy, source, stencil, output)
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelRead::copy_selected_read(read, policy, stencil, output)
     }
 
     #[doc(hidden)]
@@ -884,10 +886,11 @@ pub trait MIter<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        let read = indices.lower_read(policy)?;
-        crate::detail::read::KernelRead::validate(&read)?;
-        <Self::Item as MAlloc<R>>::gather_from_view(policy, source, read, output)
+        let source = self.lower_read(policy)?;
+        let indices = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&source)?;
+        crate::detail::read::KernelRead::validate(&indices)?;
+        crate::detail::read::KernelRead::gather_read(source, policy, indices, output)
     }
 
     #[doc(hidden)]
@@ -903,10 +906,11 @@ pub trait MIter<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        let read = indices.lower_read(policy)?;
-        crate::detail::read::KernelRead::validate(&read)?;
-        <Self::Item as MAlloc<R>>::gather_where_from_view(policy, source, read, stencil, output)
+        let source = self.lower_read(policy)?;
+        let indices = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&source)?;
+        crate::detail::read::KernelRead::validate(&indices)?;
+        crate::detail::read::KernelRead::gather_where_read(source, policy, indices, stencil, output)
     }
 
     #[doc(hidden)]
@@ -921,10 +925,11 @@ pub trait MIter<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        let read = indices.lower_read(policy)?;
-        crate::detail::read::KernelRead::validate(&read)?;
-        <Self::Item as MAlloc<R>>::scatter_from_view(policy, source, read, output)
+        let source = self.lower_read(policy)?;
+        let indices = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&source)?;
+        crate::detail::read::KernelRead::validate(&indices)?;
+        crate::detail::read::KernelRead::scatter_read(source, policy, indices, output)
     }
 
     #[doc(hidden)]
@@ -940,10 +945,13 @@ pub trait MIter<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        let read = indices.lower_read(policy)?;
-        crate::detail::read::KernelRead::validate(&read)?;
-        <Self::Item as MAlloc<R>>::scatter_where_from_view(policy, source, read, stencil, output)
+        let source = self.lower_read(policy)?;
+        let indices = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&source)?;
+        crate::detail::read::KernelRead::validate(&indices)?;
+        crate::detail::read::KernelRead::scatter_where_read(
+            source, policy, indices, stencil, output,
+        )
     }
 
     #[doc(hidden)]
@@ -958,8 +966,9 @@ pub trait MIter<R: Runtime>: Sized {
         Pred: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::unique_from_view(policy, source, pred, output)
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelRead::unique_read(read, policy, pred, output)
     }
 
     #[doc(hidden)]
@@ -974,8 +983,9 @@ pub trait MIter<R: Runtime>: Sized {
         Pred: crate::op::PredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::partition_from_view(policy, source, pred, output)
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelRead::partition_read(read, policy, pred, output)
     }
 
     #[doc(hidden)]
@@ -990,8 +1000,9 @@ pub trait MIter<R: Runtime>: Sized {
         Op: crate::op::ReductionOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::adjacent_difference_from_view(policy, source, op, output)
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelRead::adjacent_difference_read(read, policy, op, output)
     }
 
     #[doc(hidden)]
@@ -1006,8 +1017,9 @@ pub trait MIter<R: Runtime>: Sized {
         Op: crate::op::ReductionOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::inclusive_scan_from_view(policy, source, op, output)
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelRead::inclusive_scan_read(read, policy, op, output)
     }
 
     #[doc(hidden)]
@@ -1023,8 +1035,9 @@ pub trait MIter<R: Runtime>: Sized {
         Op: crate::op::ReductionOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::exclusive_scan_from_view(policy, source, init, op, output)
+        let read = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        crate::detail::read::KernelRead::exclusive_scan_read(read, policy, init, op, output)
     }
 
     #[doc(hidden)]
@@ -1032,7 +1045,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
-        eq: Eq,
+        _eq: Eq,
         out_k: KeyOutput,
         out_v: ValueOutput,
     ) -> Result<MIndex, Error>
@@ -1044,16 +1057,37 @@ pub trait MIter<R: Runtime>: Sized {
         ValueOutput: MIterMut<R>,
         ValueOutput::Item: MAlloc<R>,
     {
-        let keys = self.into_alloc_view_with_policy(policy)?;
-        let values = values.into_alloc_view_with_policy(policy)?;
-        let (keys, control) =
-            <Self::Item as MAlloc<R>>::unique_by_key_control_from_view(policy, keys, eq)?;
-        let len = crate::index::mindex_from_usize(control.count)?;
-        out_k.write_prefix_from_inner(policy, keys)?;
-        <ValueOutput::Item as MAlloc<R>>::unique_by_key_values_from_view(
-            policy, values, &control, out_v,
+        let keys = self.lower_read(policy)?;
+        let values = values.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&keys)?;
+        crate::detail::read::KernelRead::validate(&values)?;
+        crate::error::ensure_same_len(
+            crate::detail::read::KernelRead::len(&keys),
+            crate::detail::read::KernelRead::len(&values),
         )?;
-        Ok(len)
+        let len = crate::detail::read::KernelRead::len(&keys);
+        let Some(flags) =
+            crate::detail::read::unique_logical7_flags_read::<R, _, Eq>(&keys, policy)?
+        else {
+            return Ok(0);
+        };
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
+        let count = crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+        let key_selection =
+            crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank.clone());
+        let value_selection =
+            crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank);
+        crate::detail::read::KernelRead::copy_selected_read(keys, policy, key_selection, out_k)?;
+        crate::detail::read::KernelRead::copy_selected_read(
+            values,
+            policy,
+            value_selection,
+            out_v,
+        )?;
+        crate::index::mindex_from_usize(count)
     }
 
     #[doc(hidden)]
@@ -1061,7 +1095,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
-        key_eq: KeyEq,
+        _key_eq: KeyEq,
         init: Values::Item,
         op: Op,
         out_k: KeyOutput,
@@ -1076,16 +1110,39 @@ pub trait MIter<R: Runtime>: Sized {
         ValueOutput: MIterMut<R>,
         ValueOutput::Item: MAlloc<R>,
     {
-        let keys = self.into_alloc_view_with_policy(policy)?;
-        let values = values.into_alloc_view_with_policy(policy)?;
-        let (keys, control) =
-            <Self::Item as MAlloc<R>>::reduce_by_key_control_from_view(policy, keys, key_eq)?;
-        let len = crate::index::mindex_from_usize(control.output_count)?;
-        out_k.write_prefix_from_inner(policy, keys)?;
-        <ValueOutput::Item as MAlloc<R>>::reduce_by_key_values_from_view::<KeyEq, Op, _>(
-            policy, values, &control, init, op, out_v,
+        let keys = self.lower_read(policy)?;
+        let values = values.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&keys)?;
+        crate::detail::read::KernelRead::validate(&values)?;
+        crate::error::ensure_same_len(
+            crate::detail::read::KernelRead::len(&keys),
+            crate::detail::read::KernelRead::len(&values),
         )?;
-        Ok(len)
+        let len = crate::detail::read::KernelRead::len(&keys);
+        let Some(head_flags) =
+            crate::detail::read::unique_logical7_flags_read::<R, _, KeyEq>(&keys, policy)?
+        else {
+            return Ok(0);
+        };
+        let end_flags = crate::detail::impls::end_flags_from_head_flags(policy, head_flags, len)?;
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, end_flags,
+        )?;
+        let count = crate::detail::primitives::select::selected_count(policy, &selected_rank)?;
+        let key_selection =
+            crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank.clone());
+        crate::detail::read::KernelRead::copy_selected_read(keys, policy, key_selection, out_k)?;
+        <ValueOutput::Item as crate::detail::write::MItemWriteDispatch<R>>::reduce_by_key_values_from_read::<KeyEq, Op, _, _>(
+            policy,
+            values,
+            &selected_rank,
+            count,
+            init,
+            op,
+            out_v,
+        )?;
+        crate::index::mindex_from_usize(count)
     }
 
     #[doc(hidden)]
@@ -1098,15 +1155,21 @@ pub trait MIter<R: Runtime>: Sized {
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::reverse_from_view(policy, source, output)
+        let len = self.len();
+        let source = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&source)?;
+        let indices = crate::detail::primitives::range::reverse_indices_mindex(policy, len)?;
+        let indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
+        crate::detail::read::KernelRead::gather_read(source, policy, indices, output)
     }
 
     #[doc(hidden)]
     fn sort_with_policy<Less, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        less: Less,
+        _less: Less,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1114,8 +1177,14 @@ pub trait MIter<R: Runtime>: Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::sort_from_view(policy, source, less, output)
+        let source = self.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&source)?;
+        let indices =
+            crate::detail::read::sort_logical7_indices_read::<R, _, Less>(&source, policy)?;
+        let indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
+        crate::detail::read::KernelRead::gather_read(source, policy, indices, output)
     }
 
     #[doc(hidden)]
@@ -1123,7 +1192,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         values: Values,
-        less: Less,
+        _less: Less,
         out_k: KeyOutput,
         out_v: ValueOutput,
     ) -> Result<(), Error>
@@ -1135,18 +1204,23 @@ pub trait MIter<R: Runtime>: Sized {
         ValueOutput: MIterMut<R>,
         ValueOutput::Item: MAlloc<R>,
     {
-        let keys = self.into_alloc_view_with_policy(policy)?;
-        let values = values.into_alloc_view_with_policy(policy)?;
-        let (keys, indices) =
-            <Self::Item as MAlloc<R>>::sort_by_key_control_from_view(policy, keys, less)?;
-        let control = crate::detail::control::OrderingControl::from_sorted_indices(&indices)?;
-        out_k.write_from_inner(policy, keys)?;
-        <ValueOutput::Item as MAlloc<R>>::sort_by_key_values_from_view(
-            policy,
-            values,
-            control.permutation(),
-            out_v,
-        )
+        let keys = self.lower_read(policy)?;
+        let values = values.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&keys)?;
+        crate::detail::read::KernelRead::validate(&values)?;
+        crate::error::ensure_same_len(
+            crate::detail::read::KernelRead::len(&keys),
+            crate::detail::read::KernelRead::len(&values),
+        )?;
+        let indices = crate::detail::read::sort_logical7_indices_read::<R, _, Less>(&keys, policy)?;
+        let key_indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
+        let value_indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
+        crate::detail::read::KernelRead::gather_read(keys, policy, key_indices, out_k)?;
+        crate::detail::read::KernelRead::gather_read(values, policy, value_indices, out_v)
     }
 
     #[doc(hidden)]
@@ -1154,7 +1228,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         right: Right,
-        less: Less,
+        _less: Less,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1163,9 +1237,13 @@ pub trait MIter<R: Runtime>: Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let left = self.into_alloc_view_with_policy(policy)?;
-        let right = right.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::merge_from_views(policy, left, right, less, output)
+        let left = self.lower_read(policy)?;
+        let right = right.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&left)?;
+        crate::detail::read::KernelRead::validate(&right)?;
+        <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::merge_from_read::<_, _, Less, _>(
+            policy, left, right, _less, output,
+        )
     }
 
     #[doc(hidden)]
@@ -1175,7 +1253,7 @@ pub trait MIter<R: Runtime>: Sized {
         left_values: LeftValues,
         right_keys: RightKeys,
         right_values: RightValues,
-        less: Less,
+        _less: Less,
         out_k: KeyOutput,
         out_v: ValueOutput,
     ) -> Result<(), Error>
@@ -1189,20 +1267,54 @@ pub trait MIter<R: Runtime>: Sized {
         ValueOutput: MIterMut<R>,
         ValueOutput::Item: MAlloc<R>,
     {
-        let left_keys = self.into_alloc_view_with_policy(policy)?;
-        let right_keys = right_keys.into_alloc_view_with_policy(policy)?;
-        let left_values = left_values.into_alloc_view_with_policy(policy)?;
-        let right_values = right_values.into_alloc_view_with_policy(policy)?;
-        let (keys, control) = <Self::Item as MAlloc<R>>::merge_by_key_control_from_views(
-            policy, left_keys, right_keys, less,
+        let left_keys = self.lower_read(policy)?;
+        let right_keys = right_keys.lower_read(policy)?;
+        let left_values = left_values.lower_read(policy)?;
+        let right_values = right_values.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&left_keys)?;
+        crate::detail::read::KernelRead::validate(&right_keys)?;
+        crate::detail::read::KernelRead::validate(&left_values)?;
+        crate::detail::read::KernelRead::validate(&right_values)?;
+        crate::error::ensure_same_len(
+            crate::detail::read::KernelRead::len(&left_keys),
+            crate::detail::read::KernelRead::len(&left_values),
         )?;
-        out_k.write_from_inner(policy, keys)?;
-        <ValueOutput::Item as MAlloc<R>>::merge_by_key_values_from_views(
-            policy,
+        crate::error::ensure_same_len(
+            crate::detail::read::KernelRead::len(&right_keys),
+            crate::detail::read::KernelRead::len(&right_values),
+        )?;
+        let left_len = crate::detail::read::KernelRead::len(&left_keys);
+        let right_len = crate::detail::read::KernelRead::len(&right_keys);
+        let output_len = crate::index::mindex_from_usize(left_len + right_len)?;
+        let (left_indices, right_indices) =
+            crate::detail::read::merge_by_key_logical7_indices_read::<R, _, _, Less>(
+                &left_keys,
+                &right_keys,
+                policy,
+            )?;
+        <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::merge_from_read::<
+            _,
+            _,
+            Less,
+            _,
+        >(policy, left_keys, right_keys, _less, out_k)?;
+        let left_indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&left_indices),
+        );
+        let right_indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&right_indices),
+        );
+        crate::detail::read::KernelRead::scatter_read(
             left_values,
+            policy,
+            left_indices,
+            out_v.slice_mut(0..output_len),
+        )?;
+        crate::detail::read::KernelRead::scatter_read(
             right_values,
-            &control,
-            out_v,
+            policy,
+            right_indices,
+            out_v.slice_mut(0..output_len),
         )
     }
 
@@ -1211,7 +1323,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         right: Right,
-        less: Less,
+        _less: Less,
         output: Output,
     ) -> Result<MIndex, Error>
     where
@@ -1220,9 +1332,23 @@ pub trait MIter<R: Runtime>: Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let left = self.into_alloc_view_with_policy(policy)?;
-        let right = right.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::set_difference_from_views(policy, left, right, less, output)
+        let left = self.lower_read(policy)?;
+        let right = right.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&left)?;
+        crate::detail::read::KernelRead::validate(&right)?;
+        let len = crate::detail::read::KernelRead::len(&left);
+        let Some(flags) = crate::detail::read::set_membership_logical7_flags_read::<R, _, _, Less>(
+            &left, &right, policy, false,
+        )?
+        else {
+            return Ok(0);
+        };
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
+        let selection = crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank);
+        crate::detail::read::KernelRead::copy_selected_read(left, policy, selection, output)
     }
 
     #[doc(hidden)]
@@ -1230,7 +1356,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         right: Right,
-        less: Less,
+        _less: Less,
         output: Output,
     ) -> Result<MIndex, Error>
     where
@@ -1239,9 +1365,23 @@ pub trait MIter<R: Runtime>: Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let left = self.into_alloc_view_with_policy(policy)?;
-        let right = right.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::set_intersection_from_views(policy, left, right, less, output)
+        let left = self.lower_read(policy)?;
+        let right = right.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&left)?;
+        crate::detail::read::KernelRead::validate(&right)?;
+        let len = crate::detail::read::KernelRead::len(&left);
+        let Some(flags) = crate::detail::read::set_membership_logical7_flags_read::<R, _, _, Less>(
+            &left, &right, policy, true,
+        )?
+        else {
+            return Ok(0);
+        };
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let selected_rank = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
+        let selection = crate::detail::api::PrecomputedSelection::from_selected_rank(selected_rank);
+        crate::detail::read::KernelRead::copy_selected_read(left, policy, selection, output)
     }
 
     #[doc(hidden)]
@@ -1249,7 +1389,7 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         right: Right,
-        less: Less,
+        _less: Less,
         output: Output,
     ) -> Result<MIndex, Error>
     where
@@ -1258,9 +1398,32 @@ pub trait MIter<R: Runtime>: Sized {
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
-        let left = self.into_alloc_view_with_policy(policy)?;
-        let right = right.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::set_union_from_views(policy, left, right, less, output)
+        let left = self.lower_read(policy)?;
+        let right = right.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&left)?;
+        crate::detail::read::KernelRead::validate(&right)?;
+        let right_len = crate::detail::read::KernelRead::len(&right);
+        let right_only = if let Some(flags) =
+            crate::detail::read::set_membership_logical7_flags_read::<R, _, _, Less>(
+                &right, &left, policy, false,
+            )? {
+            let right_len_u32 =
+                u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?;
+            crate::detail::primitives::select::selected_rank_from_flags(
+                policy,
+                right_len,
+                right_len_u32,
+                flags,
+            )?
+        } else {
+            crate::detail::control::SelectedRankControl::empty(policy.client())
+        };
+        <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::set_union_from_read::<
+            _,
+            _,
+            Less,
+            _,
+        >(policy, left, right, &right_only, _less, output)
     }
 }
 

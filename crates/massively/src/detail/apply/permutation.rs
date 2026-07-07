@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::*;
 
 pub(in crate::detail) struct PermutationPayloadApply<'a, R: Runtime> {

@@ -265,6 +265,37 @@ where
     Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
 }
 
+pub(crate) fn reverse_indices_mindex<R>(
+    policy: &CubePolicy<R>,
+    len: impl IntoMIndex,
+) -> Result<DeviceVec<R, MIndex>, Error>
+where
+    R: Runtime,
+{
+    let len = len.into_mindex();
+    if len == 0 {
+        return Ok(policy.empty_device_vec());
+    }
+    let len_usize = usize_from_mindex(len);
+
+    let client = policy.client();
+    let output_handle = client.empty(len_usize * std::mem::size_of::<u32>());
+
+    let block_count = len_usize.div_ceil(BLOCK_RANGE_SIZE as usize);
+    let block_count_u32 =
+        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+    unsafe {
+        reverse_indices_u32_kernel::launch_unchecked::<R>(
+            client,
+            CubeCount::Static(block_count_u32, 1, 1),
+            CubeDim::new_1d(BLOCK_RANGE_SIZE),
+            unsafe { BufferArg::from_raw_parts(output_handle.clone(), len_usize) },
+        );
+    }
+
+    Ok(DeviceVec::from_handle(policy.id(), output_handle, len))
+}
+
 #[allow(dead_code)]
 pub(crate) fn gather_device_with_policy<R, T>(
     policy: &CubePolicy<R>,

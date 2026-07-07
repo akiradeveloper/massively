@@ -16,9 +16,10 @@ pub(in crate::detail) use expr::{
     device_expr_selected_rank_with_policy, device_expr_selection_flags_with_policy,
 };
 pub use memory::{
-    MItemStorage, MaterializeOutput, TransformLogical3Output, TransformLogical7Output,
-    TransformUnaryOutput, TransformZip2Output, TransformZip3Output, TransformZip4Output,
-    TransformZip5Output, TransformZip6Output, TransformZip7Output,
+    GatherLogical7Output, MItemStorage, MaterializeOutput, SelectedLogical7Output,
+    TransformLogical3Output, TransformLogical7Output, TransformUnaryOutput, TransformZip2Output,
+    TransformZip3Output, TransformZip4Output, TransformZip5Output, TransformZip6Output,
+    TransformZip7Output,
 };
 pub(in crate::detail) use ordering::{
     device_expr_merge_by_key_values_into_with_control_with_policy,

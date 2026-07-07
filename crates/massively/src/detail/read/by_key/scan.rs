@@ -1305,7 +1305,7 @@ where
     ))
 }
 
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(dead_code, clippy::too_many_arguments, clippy::type_complexity)]
 pub(crate) fn inclusive_scan_by_flags_seven_views_into<R, A, B, C, D, E, F, G, Op>(
     policy: &CubePolicy<R>,
     a: &DeviceColumnView<R, A>,
@@ -1541,7 +1541,7 @@ where
     ))
 }
 
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(dead_code, clippy::too_many_arguments, clippy::type_complexity)]
 pub(crate) fn exclusive_scan_by_flags_seven_views_into<R, A, B, C, D, E, F, G, Op>(
     policy: &CubePolicy<R>,
     a: &DeviceColumnView<R, A>,
