@@ -19,7 +19,7 @@ where
     source.gather_with_policy(exec.policy(), indices, out)
 }
 
-/// Gathers elements whose `u32` stencil flag is non-zero.
+/// Gathers elements whose stencil flag is true.
 pub fn gather_where<R, Input, Indices, Stencil, Output>(
     exec: &Executor<R>,
     source: Input,
@@ -30,7 +30,7 @@ pub fn gather_where<R, Input, Indices, Stencil, Output>(
 where
     R: Runtime,
     Indices: MIter<R, Item = crate::MIndex>,
-    Stencil: MIter<R, Item = u32>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
 {
@@ -61,7 +61,7 @@ where
     source.scatter_with_policy(exec.policy(), indices, out)
 }
 
-/// Scatters values whose `u32` stencil flag is non-zero into a newly allocated output.
+/// Scatters values whose stencil flag is true into a newly allocated output.
 pub fn scatter_where<R, Input, Indices, Stencil, Output>(
     exec: &Executor<R>,
     source: Input,
@@ -72,7 +72,7 @@ pub fn scatter_where<R, Input, Indices, Stencil, Output>(
 where
     R: Runtime,
     Indices: MIter<R, Item = crate::MIndex>,
-    Stencil: MIter<R, Item = u32>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
 {

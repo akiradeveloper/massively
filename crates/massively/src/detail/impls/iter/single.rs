@@ -55,29 +55,6 @@ where
         std::mem::forget(view);
         Ok(alloc_view)
     }
-
-    fn stencil_selection_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-        invert: bool,
-        flags_only: bool,
-    ) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
-    where
-        Self: MIter<R, Item = u32>,
-    {
-        let stencil = self.aux_u32_column_view();
-        if flags_only {
-            crate::detail::api::PrecomputedSelection::from_stencil_flags_with_policy::<
-                _,
-                KernelOp<R, StencilFlag>,
-            >(policy, &(stencil,), invert)
-        } else {
-            crate::detail::api::PrecomputedSelection::from_stencil_with_policy::<
-                _,
-                KernelOp<R, StencilFlag>,
-            >(policy, &(stencil,), invert)
-        }
-    }
 }
 
 macro_rules! impl_single_zip_miter {

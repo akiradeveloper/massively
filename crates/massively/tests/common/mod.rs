@@ -147,6 +147,104 @@ impl BinaryPredicateOp<WgpuRuntime, (u32,)> for SameLowNibbleU32 {
     }
 }
 
+pub(crate) fn bool_stencil<Op>(
+    len: massively::MIndex,
+    op: Op,
+) -> impl MIter<WgpuRuntime, Item = bool>
+where
+    Op: UnaryOp<WgpuRuntime, u32, Output = bool>,
+{
+    massively::lazy::transform(massively::lazy::counting(0).take(len), op)
+}
+
+pub(crate) fn bool_stencil_from<Op>(
+    start: massively::MIndex,
+    len: massively::MIndex,
+    op: Op,
+) -> impl MIter<WgpuRuntime, Item = bool>
+where
+    Op: UnaryOp<WgpuRuntime, u32, Output = bool>,
+{
+    massively::lazy::transform(massively::lazy::counting(start).take(len), op)
+}
+
+pub(crate) struct IndexNonZero;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexNonZero {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input > 0
+    }
+}
+
+pub(crate) struct IndexGe2;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexGe2 {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input >= 2
+    }
+}
+
+pub(crate) struct IndexEq2;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexEq2 {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input == 2
+    }
+}
+
+pub(crate) struct IndexBetween1And2;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexBetween1And2 {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input >= 1 && input <= 2
+    }
+}
+
+pub(crate) struct IndexEven;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexEven {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input % 2 == 0
+    }
+}
+
+pub(crate) struct IndexOdd;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexOdd {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input % 2 == 1
+    }
+}
+
+pub(crate) struct IndexNot1;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexNot1 {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 1
+    }
+}
+
 pub(crate) struct MixedTupleLess;
 
 #[cubecl::cube]

@@ -1,5 +1,5 @@
 use super::*;
-/// Copies elements whose `u32` stencil flag is non-zero.
+/// Copies elements whose stencil flag is true.
 pub fn copy_where<R, Input, Stencil, Output>(
     exec: &Executor<R>,
     source: Input,
@@ -8,7 +8,7 @@ pub fn copy_where<R, Input, Stencil, Output>(
 ) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Stencil: MIter<R, Item = u32>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
 {
@@ -19,7 +19,7 @@ where
     source.copy_selected_with_policy(exec.policy(), stencil, out)
 }
 
-/// Removes elements whose `u32` stencil flag is non-zero.
+/// Removes elements whose stencil flag is true.
 pub fn remove_where<R, Input, Stencil, Output>(
     exec: &Executor<R>,
     source: Input,
@@ -28,7 +28,7 @@ pub fn remove_where<R, Input, Stencil, Output>(
 ) -> Result<MIndex, Error>
 where
     R: Runtime,
-    Stencil: MIter<R, Item = u32>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
     Input: MIter<R, Item = Output::Item>,
 {
@@ -39,7 +39,7 @@ where
     source.copy_selected_with_policy(exec.policy(), stencil, out)
 }
 
-/// Replaces elements whose `u32` stencil flag is non-zero.
+/// Replaces elements whose stencil flag is true.
 pub fn replace_where<R, Stencil, Output>(
     exec: &Executor<R>,
     replacement: Output::Item,
@@ -48,7 +48,7 @@ pub fn replace_where<R, Stencil, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Stencil: MIter<R, Item = u32>,
+    Stencil: MIter<R, Item = bool>,
     Output: MIterMut<R>,
 {
     validate_input(exec, &stencil)?;

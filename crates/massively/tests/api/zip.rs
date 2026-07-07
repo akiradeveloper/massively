@@ -263,7 +263,6 @@ fn zip7_gather_where_and_scatter_where_move_selected_columns() {
     let f = exec.to_device(&[15_u32, 25, 35, 45]).unwrap();
     let g = exec.to_device(&[16_u32, 26, 36, 46]).unwrap();
     let indices = exec.to_device(&[3_u32, 1, 0]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
 
     let out_a = exec.to_device(&[100_u32; 3]).unwrap();
     let out_b = exec.to_device(&[100_u32; 3]).unwrap();
@@ -284,7 +283,7 @@ fn zip7_gather_where_and_scatter_where_move_selected_columns() {
             g.slice(..),
         ),
         indices.slice(..),
-        stencil.slice(..),
+        bool_stencil(3, IndexNot1),
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -324,7 +323,7 @@ fn zip7_gather_where_and_scatter_where_move_selected_columns() {
             out_g.slice(..),
         ),
         indices.slice(..),
-        stencil.slice(..),
+        bool_stencil(3, IndexNot1),
         massively::Zip7(
             scatter_a.slice_mut(..),
             scatter_b.slice_mut(..),

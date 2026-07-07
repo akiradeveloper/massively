@@ -6,12 +6,12 @@ fn replace_where_accepts_three_tuple_columns() {
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let b = exec.to_device(&[10_u32, 20, 20, 30]).unwrap();
     let c = exec.to_device(&[1.0_f32, -1.0, 2.0, 3.0]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 1, 0]).unwrap();
+    let stencil = bool_stencil(4, IndexBetween1And2);
 
     replace_where(
         &exec,
         (99.0_f32, 77_u32, -99.0_f32),
-        stencil.slice(..),
+        stencil,
         massively::Zip3(a.slice_mut(..), b.slice_mut(..), c.slice_mut(..)),
     )
     .unwrap();
@@ -31,14 +31,14 @@ fn replace_where_accepts_seven_tuple_columns() {
     let e = exec.to_device(&[41_u32, 42, 43, 44]).unwrap();
     let f = exec.to_device(&[51_u32, 52, 53, 54]).unwrap();
     let g = exec.to_device(&[61_u32, 62, 63, 64]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
+    let stencil = bool_stencil(4, IndexOdd);
 
     replace_where(
         &exec,
         (
             101_u32, 102_u32, 103_u32, 104_u32, 105_u32, 106_u32, 107_u32,
         ),
-        stencil.slice(..),
+        stencil,
         massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
@@ -61,16 +61,16 @@ fn replace_where_accepts_seven_tuple_columns() {
 }
 
 #[test]
-fn replace_where_accepts_u32_stencil() {
+fn replace_where_accepts_bool_stencil() {
     let exec = exec();
     let a = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]).unwrap();
     let b = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
+    let stencil = bool_stencil(4, IndexGe2);
 
     replace_where(
         &exec,
         (-1.0_f32, 99_u32),
-        stencil.slice(..),
+        stencil,
         massively::Zip2(a.slice_mut(..), b.slice_mut(..)),
     )
     .unwrap();
@@ -83,12 +83,12 @@ fn replace_where_accepts_u32_stencil() {
 fn replace_where_leaves_values_unchanged_when_no_flags_are_selected() {
     let exec = exec();
     let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 0, 0]).unwrap();
+    let stencil = massively::lazy::constant(false).take(3);
 
     replace_where(
         &exec,
         (99_u32,),
-        stencil.slice(..),
+        stencil,
         massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();
@@ -100,12 +100,12 @@ fn replace_where_leaves_values_unchanged_when_no_flags_are_selected() {
 fn replace_where_replaces_all_values_when_all_flags_are_selected() {
     let exec = exec();
     let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 1, 1]).unwrap();
+    let stencil = massively::lazy::constant(true).take(3);
 
     replace_where(
         &exec,
         (99_u32,),
-        stencil.slice(..),
+        stencil,
         massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();
@@ -117,12 +117,12 @@ fn replace_where_replaces_all_values_when_all_flags_are_selected() {
 fn replace_where_accepts_sliced_output() {
     let exec = exec();
     let values = exec.to_device(&[1_u32, 10, 20, 30, 5]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 1]).unwrap();
+    let stencil = bool_stencil(3, IndexNonZero);
 
     replace_where(
         &exec,
         (99_u32,),
-        stencil.slice(..),
+        stencil,
         massively::Zip1(values.slice_mut(1..4)),
     )
     .unwrap();
@@ -138,7 +138,7 @@ fn replace_where_accepts_lazy_counting_stencil() {
     replace_where(
         &exec,
         (99_u32,),
-        massively::lazy::counting(0).take(4),
+        bool_stencil(4, IndexNonZero),
         massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();

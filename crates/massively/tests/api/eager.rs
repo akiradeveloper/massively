@@ -315,13 +315,12 @@ fn permute_returns_owned_three_column_output() {
 fn where_algorithms_accept_device_slice_stencil() {
     let exec = exec();
     let input = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
 
     let copied = exec.to_device(&[0_u32; 4]).unwrap();
     let copied_len = copy_where(
         &exec,
         massively::Zip1(input.slice(..)),
-        stencil.slice(..),
+        bool_stencil(4, IndexOdd),
         massively::Zip1(copied.slice_mut(..)),
     )
     .unwrap();
@@ -335,7 +334,7 @@ fn where_algorithms_accept_device_slice_stencil() {
         &exec,
         massively::Zip1(input.slice(..)),
         AddOneU32,
-        stencil.slice(..),
+        bool_stencil(4, IndexOdd),
         massively::Zip1(transformed.slice_mut(..)),
     )
     .unwrap();
@@ -398,7 +397,7 @@ fn permuted_owned_zip_can_feed_selection_algorithm() {
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[1_u32, 2, 3, 4]).unwrap();
     let indices = exec.to_device(&[3_u32, 1, 0]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let stencil = bool_stencil(3, IndexNot1);
 
     let permuted_left = exec.to_device(&[0_u32; 3]).unwrap();
     let permuted_right = exec.to_device(&[0_u32; 3]).unwrap();
@@ -415,7 +414,7 @@ fn permuted_owned_zip_can_feed_selection_algorithm() {
     let len = copy_where(
         &exec,
         permuted.slice(..),
-        stencil.slice(..),
+        stencil,
         massively::Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();

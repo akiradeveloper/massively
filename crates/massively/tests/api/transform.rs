@@ -106,14 +106,14 @@ fn device_slice_transform_reads_scalar_item() {
 fn device_slice_transform_where_reads_scalar_item() {
     let exec = exec();
     let input = exec.to_device(&[1.0_f32, 2.0, 3.0]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let stencil = bool_stencil(3, IndexNot1);
     let output = exec.to_device(&[100.0_f32; 3]).unwrap();
 
     transform_where(
         &exec,
         input.slice(..),
         Double,
-        stencil.slice(..),
+        stencil,
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -131,7 +131,7 @@ fn transform_where_accepts_lazy_counting_stencil() {
         &exec,
         input.slice(..),
         Double,
-        massively::lazy::counting(0).take(4),
+        bool_stencil(4, IndexNonZero),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -149,7 +149,7 @@ fn transform_where_accepts_lazy_constant_stencil() {
         &exec,
         input.slice(..),
         Double,
-        massively::lazy::constant(1_u32).take(3),
+        massively::lazy::constant(true).take(3),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -232,7 +232,7 @@ fn unary_transform_accepts_seven_tuple_output() {
 fn transform_where_accepts_seven_tuple_output() {
     let exec = exec();
     let input = exec.to_device(&[10_u32, 20, 30]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let stencil = bool_stencil(3, IndexNot1);
     let a = exec.to_device(&[100_u32; 3]).unwrap();
     let b = exec.to_device(&[100.0_f32; 3]).unwrap();
     let c = exec.to_device(&[100_u32; 3]).unwrap();
@@ -245,7 +245,7 @@ fn transform_where_accepts_seven_tuple_output() {
         &exec,
         massively::Zip1(input.slice(..)),
         ScalarToTuple7Mixed,
-        stencil.slice(..),
+        stencil,
         massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
@@ -330,7 +330,7 @@ fn transform_where_accepts_seven_tuple_input_and_output() {
     let g = exec
         .to_device(&[1000000.0_f32, 2000000.0, 3000000.0])
         .unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1]).unwrap();
+    let stencil = bool_stencil(3, IndexNot1);
     let out_a = exec.to_device(&[0.0_f32; 3]).unwrap();
     let out_b = exec.to_device(&[0_u32; 3]).unwrap();
     let out_c = exec.to_device(&[0.0_f32; 3]).unwrap();
@@ -351,7 +351,7 @@ fn transform_where_accepts_seven_tuple_input_and_output() {
             g.slice(..),
         ),
         TupleWideMixedSplit,
-        stencil.slice(..),
+        stencil,
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),

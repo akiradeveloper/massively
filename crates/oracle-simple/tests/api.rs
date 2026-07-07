@@ -1,3 +1,4 @@
+use cubecl::frontend::PartialEqExpand;
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
@@ -24,6 +25,16 @@ const MAX_LEN: usize = 64;
 static GPU_LOCK: Mutex<()> = Mutex::new(());
 
 struct TransformMap;
+struct U32Flag;
+
+#[cubecl::cube]
+impl UnaryOp<ApiRuntime, u32> for U32Flag {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 0
+    }
+}
 
 #[cubecl::cube]
 impl UnaryOp<ApiRuntime, (u32,)> for TransformMap {
@@ -202,7 +213,7 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let len = api_copy_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..))).unwrap();
+        let len = api_copy_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), massively::lazy::transform(stencil_g.slice(slice_range(&stencil)), U32Flag), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::copy_where(&input, &stencil));
     }
 
@@ -214,7 +225,7 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let len = api_remove_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..))).unwrap();
+        let len = api_remove_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), massively::lazy::transform(stencil_g.slice(slice_range(&stencil)), U32Flag), massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(..len)).unwrap(), oracle_simple::remove_where(&input, &stencil));
     }
 
@@ -285,7 +296,7 @@ proptest! {
         let stencil = stencil_flags(&input);
         let output_g = padded_device(&exec, &input);
         let stencil_g = padded_device(&exec, &stencil);
-        api_replace_where(&exec, (replacement,), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(slice_range(&input)))).unwrap();
+        api_replace_where(&exec, (replacement,), massively::lazy::transform(stencil_g.slice(slice_range(&stencil)), U32Flag), massively::Zip1(output_g.slice_mut(slice_range(&input)))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g.slice(slice_range(&input))).unwrap(), oracle_simple::replace_where(&input, replacement, &stencil));
     }
 
@@ -344,7 +355,7 @@ proptest! {
         prop_assert_eq!(
             {
                 let output_g = exec.to_device(&vec![0_u32; indices.len()]).unwrap();
-                gather_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..)))
+                gather_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::lazy::transform(stencil_g.slice(slice_range(&stencil)), U32Flag), massively::Zip1(output_g.slice_mut(..)))
                     .unwrap();
                 exec.to_host(&output_g).unwrap()
             },
@@ -378,7 +389,7 @@ proptest! {
         prop_assert_eq!(
             {
                 let output_g = exec.to_device(&vec![default; input.len()]).unwrap();
-                scatter_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), stencil_g.slice(slice_range(&stencil)), massively::Zip1(output_g.slice_mut(..))).unwrap();
+                scatter_where(&exec, massively::Zip1(input_g.slice(slice_range(&input))), indices_g.slice(slice_range(&indices)), massively::lazy::transform(stencil_g.slice(slice_range(&stencil)), U32Flag), massively::Zip1(output_g.slice_mut(..))).unwrap();
                 exec.to_host(&output_g).unwrap()
             },
             oracle_simple::scatter_where(&input, &indices, input.len(), default, &stencil)

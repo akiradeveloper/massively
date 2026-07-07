@@ -433,7 +433,7 @@ pub trait MIter<R: Runtime>: Sized {
         flags_only: bool,
     ) -> Result<crate::detail::api::PrecomputedSelection<R>, Error>
     where
-        Self: MIter<R, Item = u32>,
+        Self: MIter<R, Item = bool>,
         Self::Read: crate::detail::read::KernelStencilSelection<R>,
     {
         let read = self.lower_read(policy)?;

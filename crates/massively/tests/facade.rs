@@ -3,6 +3,38 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::algorithm::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 use massively::prelude::*;
 
+fn bool_stencil<Op>(
+    len: massively::MIndex,
+    op: Op,
+) -> impl massively::MIter<WgpuRuntime, Item = bool>
+where
+    Op: UnaryOp<WgpuRuntime, u32, Output = bool>,
+{
+    massively::lazy::transform(massively::lazy::counting(0).take(len), op)
+}
+
+struct IndexEven;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexEven {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input % 2 == 0
+    }
+}
+
+struct IndexOdd;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IndexOdd {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input % 2 == 1
+    }
+}
+
 #[test]
 fn wide_zip_types_are_exported() {
     let _ = massively::Zip4(1_u32, 2_u32, 3_u32, 4_u32);
@@ -523,29 +555,31 @@ where
     massively::gather(exec, source, indices, out)
 }
 
-fn copy_where2<'a, R, S1, S2>(
+fn copy_where2<R, S1, Stencil, S2>(
     exec: &Executor<R>,
     source: S1,
-    stencil: DeviceSlice<'a, R, u32>,
+    stencil: Stencil,
     out: S2,
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: massively::iter::MIter<R>,
+    Stencil: massively::iter::MIter<R, Item = bool>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
     massively::copy_where(exec, source, stencil, out)
 }
 
-fn replace_where2<R, S2>(
+fn replace_where2<R, Stencil, S2>(
     exec: &Executor<R>,
     replacement: S2::Item,
-    stencil: DeviceSlice<'_, R, u32>,
+    stencil: Stencil,
     out: S2,
 ) -> Result<(), massively::Error>
 where
     R: Runtime,
+    Stencil: massively::iter::MIter<R, Item = bool>,
     S2: MIterMut<R>,
 {
     massively::replace_where(exec, replacement, stencil, out)
@@ -577,15 +611,16 @@ where
     massively::find_if(exec, source, pred)
 }
 
-fn remove_where2<'a, R, S1, S2>(
+fn remove_where2<R, S1, Stencil, S2>(
     exec: &Executor<R>,
     source: S1,
-    stencil: DeviceSlice<'a, R, u32>,
+    stencil: Stencil,
     out: S2,
 ) -> Result<massively::MIndex, massively::Error>
 where
     R: Runtime,
     S1: massively::iter::MIter<R>,
+    Stencil: massively::iter::MIter<R, Item = bool>,
     S1::Item: MAlloc<R>,
     S2: MIterMut<R, Item = S1::Item>,
 {
@@ -941,14 +976,14 @@ fn copy_where2_wraps_two_column_copy_where_with_tuple_source() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
+    let stencil = bool_stencil(4, IndexEven);
     let out_left = exec.to_device(&[0_u32; 4]).unwrap();
     let out_right = exec.to_device(&[0_u32; 4]).unwrap();
 
     let len = copy_where2(
         &exec,
         Zip2(left.slice(..), right.slice(..)),
-        stencil.slice(..),
+        stencil,
         Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
@@ -966,12 +1001,12 @@ fn replace_where2_wraps_two_column_replace_where_with_tuple_replacement() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
-    let stencil = exec.to_device(&[1_u32, 0, 1, 0]).unwrap();
+    let stencil = bool_stencil(4, IndexEven);
 
     replace_where2(
         &exec,
         (7_u32, 70_u32),
-        stencil.slice(..),
+        stencil,
         Zip2(left.slice_mut(..), right.slice_mut(..)),
     )
     .unwrap();
@@ -998,14 +1033,14 @@ fn remove_where2_wraps_two_column_remove_where_with_stencil() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let left = exec.to_device(&[10_u32, 21, 30, 43]).unwrap();
     let right = exec.to_device(&[100_u32, 200, 300, 400]).unwrap();
-    let stencil = exec.to_device(&[0_u32, 1, 0, 1]).unwrap();
+    let stencil = bool_stencil(4, IndexOdd);
     let out_left = exec.to_device(&[0_u32; 4]).unwrap();
     let out_right = exec.to_device(&[0_u32; 4]).unwrap();
 
     let len = remove_where2(
         &exec,
         Zip2(left.slice(..), right.slice(..)),
-        stencil.slice(..),
+        stencil,
         Zip2(out_left.slice_mut(..), out_right.slice_mut(..)),
     )
     .unwrap();
