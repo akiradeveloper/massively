@@ -1328,27 +1328,29 @@ macro_rules! impl_mitem_tuple {
                 Ok(len)
             }
 
-            fn gather_from_view<Output>(
+            fn gather_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 let inner = indexed_gather_inner_from_tuple!(policy, values, indices; $( $var ),+)?;
                 output.write_from_inner(policy, inner)
             }
 
-            fn gather_where_from_view<Output>(
+            fn gather_where_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 let mask = stencil.mask();
@@ -1359,13 +1361,14 @@ macro_rules! impl_mitem_tuple {
                 )
             }
 
-            fn scatter_from_view<Output>(
+            fn scatter_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 indexed_apply_arity!(
@@ -1375,14 +1378,15 @@ macro_rules! impl_mitem_tuple {
                 )
             }
 
-            fn scatter_where_from_view<Output>(
+            fn scatter_where_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 let mask = stencil.mask();
@@ -2262,27 +2266,29 @@ macro_rules! impl_wide_mitem_tuple {
                 Ok(len)
             }
 
-            fn gather_from_view<Output>(
+            fn gather_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 let inner = indexed_gather_inner_from_tuple!(policy, values, indices; $( $var ),+)?;
                 output.write_from_inner(policy, inner)
             }
 
-            fn gather_where_from_view<Output>(
+            fn gather_where_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 let mask = stencil.mask();
@@ -2293,13 +2299,14 @@ macro_rules! impl_wide_mitem_tuple {
                 )
             }
 
-            fn scatter_from_view<Output>(
+            fn scatter_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 indexed_apply_arity!(
@@ -2309,14 +2316,15 @@ macro_rules! impl_wide_mitem_tuple {
                 )
             }
 
-            fn scatter_where_from_view<Output>(
+            fn scatter_where_from_view<IndexSource, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 values: Self::View,
-                indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+                indices: IndexSource,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
+                IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
                 Output: MIterMut<R, Item = Self>,
             {
                 let mask = stencil.mask();

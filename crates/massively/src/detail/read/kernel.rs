@@ -504,72 +504,6 @@ pub trait KernelRead<R: Runtime>: Sized {
         })
     }
 
-    fn gather_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let _ = (policy, indices, output);
-        Err(Error::Launch {
-            message: "gather is not supported for this iterator shape".to_string(),
-        })
-    }
-
-    fn gather_where_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        stencil: PrecomputedSelection<R>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let _ = (policy, indices, stencil, output);
-        Err(Error::Launch {
-            message: "gather_where is not supported for this iterator shape".to_string(),
-        })
-    }
-
-    fn scatter_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let _ = (policy, indices, output);
-        Err(Error::Launch {
-            message: "scatter is not supported for this iterator shape".to_string(),
-        })
-    }
-
-    fn scatter_where_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        stencil: PrecomputedSelection<R>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let _ = (policy, indices, stencil, output);
-        Err(Error::Launch {
-            message: "scatter_where is not supported for this iterator shape".to_string(),
-        })
-    }
-
     fn adjacent_find_read<Pred>(
         self,
         policy: &CubePolicy<R>,
@@ -2079,34 +2013,6 @@ where
         <Read as KernelReadBoundMany<R>>::ExprAt,
         LogicalIdentity,
     >(policy, bindings, len, LogicalIdentity)
-}
-
-fn materialize_scalar_logical7_read<R, Read>(
-    read: Read,
-    policy: &CubePolicy<R>,
-) -> Result<DeviceVec<R, <Read as KernelRead<R>>::Item>, Error>
-where
-    R: Runtime,
-    Read: KernelReadBoundMany<R>,
-    <Read as KernelRead<R>>::Item: MStorageElement + Send + Sync,
-{
-    let len = read.len();
-    let mut bindings = KernelColumnBindings::empty(policy.client());
-    <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(&read, &mut bindings)?;
-    bindings.finish();
-    let inner = <(<Read as KernelRead<R>>::Item,) as MItemDispatch<R>>::transform_logical7::<
-        <Read as KernelRead<R>>::Item,
-        <Read as KernelReadBoundMany<R>>::Leaf0,
-        <Read as KernelReadBoundMany<R>>::Leaf1,
-        <Read as KernelReadBoundMany<R>>::Leaf2,
-        <Read as KernelReadBoundMany<R>>::Leaf3,
-        <Read as KernelReadBoundMany<R>>::Leaf4,
-        <Read as KernelReadBoundMany<R>>::Leaf5,
-        <Read as KernelReadBoundMany<R>>::Leaf6,
-        <Read as KernelReadBoundMany<R>>::ExprAt,
-        ScalarToTuple1Identity,
-    >(policy, bindings, len, ScalarToTuple1Identity)?;
-    Ok(inner.0)
 }
 
 fn reduce_logical3_read<R, Read, Op>(
@@ -4294,11 +4200,6 @@ trait KernelReadScanByKeyValuesView<R: Runtime>: KernelReadScanByKeyView<R> {
     fn into_exclusive_scan_by_key_init(init: Self::Item) -> Self::ExclusiveInit;
 }
 
-pub trait KernelReadIndexColumn<R: Runtime>: KernelRead<R, Item = crate::MIndex> {
-    fn into_index_column(self, policy: &CubePolicy<R>)
-    -> Result<DeviceColumnView<R, crate::MIndex>, Error>;
-}
-
 trait KernelReadSearchView<R: Runtime>: KernelRead<R> {
     type View;
 
@@ -4568,100 +4469,6 @@ where
         Ok(len)
     }
 
-    fn gather_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<T>(&output)?
-            .ok_or_else(|| Error::Launch {
-                message: "gather output must match input shape".to_string(),
-            })?;
-        crate::detail::apply::IndexedExprApply::gather_expr_into(
-            policy,
-            &self.column,
-            &indices,
-            &out,
-        )
-    }
-
-    fn gather_where_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        stencil: PrecomputedSelection<R>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let mask = stencil.mask();
-        let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<T>(&output)?
-            .ok_or_else(|| Error::Launch {
-                message: "gather_where output must match input shape".to_string(),
-            })?;
-        crate::detail::apply::MaskedIndexedExprApply::gather_where_expr_into(
-            policy,
-            &self.column,
-            &indices,
-            &mask,
-            &out,
-        )
-    }
-
-    fn scatter_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<T>(&output)?
-            .ok_or_else(|| Error::Launch {
-                message: "scatter output must match input shape".to_string(),
-            })?;
-        crate::detail::apply::IndexedExprApply::scatter_expr_into(
-            policy,
-            &self.column,
-            &indices,
-            &out,
-        )
-    }
-
-    fn scatter_where_read<Output>(
-        self,
-        policy: &CubePolicy<R>,
-        indices: DeviceColumnView<R, crate::MIndex>,
-        stencil: PrecomputedSelection<R>,
-        output: Output,
-    ) -> Result<(), Error>
-    where
-        Output: MIterMut<R, Item = Self::Item>,
-        Self::Item: MAlloc<R>,
-    {
-        let mask = stencil.mask();
-        let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<T>(&output)?
-            .ok_or_else(|| Error::Launch {
-                message: "scatter_where output must match input shape".to_string(),
-            })?;
-        crate::detail::apply::MaskedIndexedExprApply::scatter_where_expr_into(
-            policy,
-            &self.column,
-            &indices,
-            &mask,
-            &out,
-        )
-    }
-
     fn adjacent_find_read<Pred>(
         self,
         policy: &CubePolicy<R>,
@@ -4811,20 +4618,6 @@ where
     }
 }
 
-impl<R, Read> KernelReadIndexColumn<R> for Read
-where
-    R: Runtime,
-    Read: KernelReadBoundMany<R, Item = crate::MIndex>,
-{
-    fn into_index_column(
-        self,
-        policy: &CubePolicy<R>,
-    ) -> Result<DeviceColumnView<R, crate::MIndex>, Error> {
-        let column = materialize_scalar_logical7_read(self, policy)?;
-        Ok(DeviceColumnView::from_column(&column))
-    }
-}
-
 impl<R, T> KernelReadScanByKeyValuesView<R> for ColumnRead<R, T>
 where
     R: Runtime,
@@ -4876,11 +4669,10 @@ where
         flags_only: bool,
     ) -> Result<PrecomputedSelection<R>, Error> {
         let len = self.len();
-        let Some(flags) = logical7_predicate_flags_read::<
-            R,
-            _,
-            crate::detail::op_adapter::ScalarStencilFlag,
-        >(&self, policy, invert)?
+        let Some(flags) =
+            logical7_predicate_flags_read::<R, _, crate::detail::op_adapter::ScalarStencilFlag>(
+                &self, policy, invert,
+            )?
         else {
             return Ok(PrecomputedSelection::from_selected_rank(
                 select::SelectedRankControl::empty(policy.client()),
@@ -7945,7 +7737,7 @@ impl<R, A, Indices, Output> KernelReadIndexed<R, Indices, Output> for ZipRead1<C
 where
     R: Runtime,
     A: MStorageElement + 'static,
-    Indices: KernelReadIndexColumn<R>,
+    Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
     Output: MIterMut<R, Item = (A,)>,
 {
     fn gather_into(
@@ -7954,7 +7746,6 @@ where
         indices: Indices,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column(policy)?;
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "gather output must match input shape".to_string(),
@@ -7974,7 +7765,6 @@ where
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column(policy)?;
         let mask = stencil.mask();
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
@@ -7995,7 +7785,6 @@ where
         indices: Indices,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column(policy)?;
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
                 message: "scatter output must match input shape".to_string(),
@@ -8015,7 +7804,6 @@ where
         stencil: PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error> {
-        let indices = indices.into_index_column(policy)?;
         let mask = stencil.mask();
         let output = <Output as crate::iter::MIterMut<R>>::column_mut_view_inner::<A>(&output)?
             .ok_or_else(|| Error::Launch {
@@ -8038,7 +7826,7 @@ macro_rules! impl_flat_zip_indexed {
         where
             R: Runtime,
             $( $ty: MStorageElement + 'static, )+
-            Indices: KernelReadIndexColumn<R>,
+            Indices: KernelReadBoundMany<R, Item = crate::MIndex>,
             Output: MIterMut<R, Item = ($( $ty, )+)>,
         {
             fn gather_into(
@@ -8047,7 +7835,6 @@ macro_rules! impl_flat_zip_indexed {
                 indices: Indices,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column(policy)?;
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?
                     .ok_or_else(|| Error::Launch {
@@ -8070,7 +7857,6 @@ macro_rules! impl_flat_zip_indexed {
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column(policy)?;
                 let mask = stencil.mask();
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?
@@ -8094,7 +7880,6 @@ macro_rules! impl_flat_zip_indexed {
                 indices: Indices,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column(policy)?;
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?
                     .ok_or_else(|| Error::Launch {
@@ -8117,7 +7902,6 @@ macro_rules! impl_flat_zip_indexed {
                 stencil: PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error> {
-                let indices = indices.into_index_column(policy)?;
                 let mask = stencil.mask();
                 $(
                     let out = <Output as crate::iter::MIterMut<R>>::column_mut_view_by_index_inner::<$ty>(&output, $idx,)?

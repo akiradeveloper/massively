@@ -1299,6 +1299,44 @@ impl<T: CubePrimitive, C: CubePrimitive> GpuExpr<C> for Slot3<T> {
 }
 
 #[cube]
+impl GpuExpr<u32> for ConstantSlot0<u32> {
+    fn eval(
+        input: &[u32],
+        _indices: &[u32],
+        _rhs: &[u32],
+        _rhs_indices: &[u32],
+        _index: usize,
+    ) -> u32 {
+        input[0]
+    }
+}
+
+#[cube]
+impl GpuExpr<u32> for CountingSlot0 {
+    fn eval(
+        input: &[u32],
+        indices: &[u32],
+        _rhs: &[u32],
+        _rhs_indices: &[u32],
+        index: usize,
+    ) -> u32 {
+        input[0] + indices[0] + index as u32
+    }
+}
+
+#[cube]
+impl<T, InputExpr, Op> GpuExpr<T> for TransformExpr<InputExpr, T, Op>
+where
+    T: CubePrimitive,
+    InputExpr: GpuExpr<T>,
+    Op: crate::detail::op::kernel::UnaryOp<T, Output = T>,
+{
+    fn eval(input: &[T], indices: &[u32], rhs: &[T], rhs_indices: &[u32], index: usize) -> T {
+        Op::apply(InputExpr::eval(input, indices, rhs, rhs_indices, index))
+    }
+}
+
+#[cube]
 impl<T: CubePrimitive, C: CubePrimitive> DeviceGpuExpr<C> for Slot0<T> {
     fn eval(
         slot0: &[C],
@@ -1351,5 +1389,59 @@ impl<T: CubePrimitive, C: CubePrimitive> DeviceGpuExpr<C> for Slot3<T> {
         index: usize,
     ) -> C {
         slot3[slot_offsets[3] as usize + index]
+    }
+}
+
+#[cube]
+impl DeviceGpuExpr<u32> for ConstantSlot0<u32> {
+    fn eval(
+        slot0: &[u32],
+        _slot1: &[u32],
+        _slot2: &[u32],
+        _slot3: &[u32],
+        _slot_offsets: &[u32],
+        _index: usize,
+    ) -> u32 {
+        slot0[0]
+    }
+}
+
+#[cube]
+impl DeviceGpuExpr<u32> for CountingSlot0 {
+    fn eval(
+        slot0: &[u32],
+        _slot1: &[u32],
+        _slot2: &[u32],
+        _slot3: &[u32],
+        slot_offsets: &[u32],
+        index: usize,
+    ) -> u32 {
+        slot0[0] + slot_offsets[0] + index as u32
+    }
+}
+
+#[cube]
+impl<T, InputExpr, Op> DeviceGpuExpr<T> for TransformExpr<InputExpr, T, Op>
+where
+    T: CubePrimitive,
+    InputExpr: DeviceGpuExpr<T>,
+    Op: crate::detail::op::kernel::UnaryOp<T, Output = T>,
+{
+    fn eval(
+        slot0: &[T],
+        slot1: &[T],
+        slot2: &[T],
+        slot3: &[T],
+        slot_offsets: &[u32],
+        index: usize,
+    ) -> T {
+        Op::apply(InputExpr::eval(
+            slot0,
+            slot1,
+            slot2,
+            slot3,
+            slot_offsets,
+            index,
+        ))
     }
 }

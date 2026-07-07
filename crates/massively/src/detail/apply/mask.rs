@@ -39,10 +39,9 @@ impl MaskedIndexedExprApply {
     where
         InputSource: KernelColumn + KernelColumnAt<S0>,
         InputSource::Runtime: Runtime,
-        IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+        IndexSource: crate::detail::read::KernelReadBoundMany<InputSource::Runtime, Item = u32>,
         InputSource::Item: CubePrimitive + CubeElement,
         InputSource::Expr: GpuExpr<InputSource::Item>,
-        IndexSource::Expr: DeviceGpuExpr<u32>,
     {
         expr::device_expr_gather_where_into_with_control(policy, input, indices, mask, output)
     }
@@ -57,10 +56,9 @@ impl MaskedIndexedExprApply {
     where
         ValueSource: KernelColumn + KernelColumnAt<S0>,
         ValueSource::Runtime: Runtime,
-        IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+        IndexSource: crate::detail::read::KernelReadBoundMany<ValueSource::Runtime, Item = u32>,
         ValueSource::Item: CubePrimitive + CubeElement,
         ValueSource::Expr: DeviceGpuExpr<ValueSource::Item>,
-        IndexSource::Expr: DeviceGpuExpr<u32>,
     {
         expr::device_expr_scatter_where_into_with_control(policy, values, indices, mask, output)
     }

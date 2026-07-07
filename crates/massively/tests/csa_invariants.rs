@@ -286,6 +286,51 @@ fn public_algorithm_apis_hide_iterator_lowering_details() {
 }
 
 #[test]
+fn public_indexed_apis_keep_indices_as_read_iterators() {
+    let indexed = read("src/algorithm/api/indexed.rs");
+    let iter = read("src/iter/mod.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
+
+    assert!(
+        !indexed.contains("index_column_with_policy")
+            && indexed
+                .matches("_with_policy(exec.policy(), indices")
+                .count()
+                == 4,
+        "indexed public APIs should pass index iterators through without materializing index columns"
+    );
+    assert!(
+        !iter.contains("index_column_with_policy")
+            && !read_kernel.contains("KernelReadIndexColumn")
+            && !read_kernel.contains("ReadIndexColumn")
+            && !read_kernel.contains("IndexExpr")
+            && !read_kernel.contains("KernelReadIndexExpr")
+            && !read_kernel.contains("materialize_scalar_logical7_read")
+            && !read_kernel.contains("DeviceColumnView<R, crate::MIndex>"),
+        "legacy index-column materialization should not remain as an alternate indexed path"
+    );
+    assert!(
+        !indexed.contains("MIndexIter")
+            && !iter.contains("trait MIndexIter")
+            && !iter.contains("IndexReadSource")
+            && !iter.contains("fn index_read_column_with_policy")
+            && iter.contains("gather_from_view(policy, source, read, output)")
+            && iter.contains("scatter_from_view(policy, source, read, output)")
+            && iter.contains("Indices: MIter<R, Item = MIndex>")
+            && indexed.contains("Indices: MIter<R, Item = crate::MIndex>"),
+        "indexed dispatch should expose MIter indices and pass lowered reads directly as index operands"
+    );
+    assert!(
+        read("src/detail/api/expr/indexed.rs").contains("KernelReadBoundMany")
+            && read("src/detail/api/expr/indexed.rs").contains("stage_at_env(indices")
+            && read("src/detail/kernels/expr.rs").contains("gather_device_expr_index7_into_kernel")
+            && read("src/detail/kernels/selection.rs")
+                .contains("gather_if_flags_index7_into_kernel"),
+        "indexed kernels should stage index reads as separate logical read operands"
+    );
+}
+
+#[test]
 fn legacy_miter_dispatch_module_is_removed() {
     let dispatch_mod = read("src/detail/dispatch/mod.rs");
     let iter = read("src/iter/mod.rs");

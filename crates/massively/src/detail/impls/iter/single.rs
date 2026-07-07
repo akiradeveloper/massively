@@ -78,17 +78,6 @@ where
             >(policy, &(stencil,), invert)
         }
     }
-
-    fn index_column_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-    ) -> Result<crate::detail::device::DeviceColumnView<R, MIndex>, Error>
-    where
-        Self: MIter<R, Item = MIndex>,
-    {
-        let _ = policy;
-        Ok(self.aux_u32_column_view())
-    }
 }
 
 macro_rules! impl_single_zip_miter {

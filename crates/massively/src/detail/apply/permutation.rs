@@ -23,6 +23,9 @@ impl<'a, R: Runtime> PermutationPayloadApply<'a, R> {
     {
         ensure_same_len(expr.len(), self.control.len)?;
         let indices = self.control.indices(policy);
+        let indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
         expr::device_expr_gather_with_policy(policy, expr, &indices)
     }
 
@@ -40,6 +43,9 @@ impl<'a, R: Runtime> PermutationPayloadApply<'a, R> {
         ensure_same_len(expr.len(), self.control.len)?;
         ensure_same_len(output.len, self.control.len)?;
         let indices = self.control.indices(policy);
+        let indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
         expr::device_expr_gather_into_with_policy(policy, expr, &indices, output)
     }
 
@@ -308,6 +314,9 @@ impl<'a, R: Runtime> IndexedWriteApply<'a, R> {
     {
         ensure_same_len(values.len(), self.control.len)?;
         let indices = self.control.indices(policy);
+        let indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
         expr::device_expr_scatter_into_with_policy(policy, values, &indices, output)
     }
 
@@ -326,6 +335,9 @@ impl<'a, R: Runtime> IndexedWriteApply<'a, R> {
         ensure_same_len(values.len(), self.control.len)?;
         ensure_same_len(mask.len, self.control.len)?;
         let indices = self.control.indices(policy);
+        let indices = crate::detail::read::ColumnRead::new(
+            crate::detail::device::DeviceColumnView::from_column(&indices),
+        );
         expr::device_expr_scatter_where_into_with_control(policy, values, &indices, mask, output)
     }
 }
@@ -341,10 +353,9 @@ impl IndexedExprApply {
     where
         InputSource: KernelColumn + KernelColumnAt<S0>,
         InputSource::Runtime: Runtime,
-        IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+        IndexSource: crate::detail::read::KernelReadBoundMany<InputSource::Runtime, Item = u32>,
         InputSource::Item: CubePrimitive + CubeElement,
         InputSource::Expr: GpuExpr<InputSource::Item>,
-        IndexSource::Expr: GpuExpr<u32>,
     {
         expr::device_expr_gather_with_policy(policy, input, indices)
     }
@@ -358,10 +369,9 @@ impl IndexedExprApply {
     where
         InputSource: KernelColumn + KernelColumnAt<S0>,
         InputSource::Runtime: Runtime,
-        IndexSource: KernelColumn<Runtime = InputSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+        IndexSource: crate::detail::read::KernelReadBoundMany<InputSource::Runtime, Item = u32>,
         InputSource::Item: CubePrimitive + CubeElement,
         InputSource::Expr: GpuExpr<InputSource::Item>,
-        IndexSource::Expr: GpuExpr<u32>,
     {
         expr::device_expr_gather_into_with_policy(policy, input, indices, output)
     }
@@ -375,10 +385,9 @@ impl IndexedExprApply {
     where
         ValueSource: KernelColumn + KernelColumnAt<S0>,
         ValueSource::Runtime: Runtime,
-        IndexSource: KernelColumn<Runtime = ValueSource::Runtime, Item = u32> + KernelColumnAt<S0>,
+        IndexSource: crate::detail::read::KernelReadBoundMany<ValueSource::Runtime, Item = u32>,
         ValueSource::Item: CubePrimitive + CubeElement,
         ValueSource::Expr: GpuExpr<ValueSource::Item>,
-        IndexSource::Expr: GpuExpr<u32>,
     {
         expr::device_expr_scatter_into_with_policy(policy, values, indices, output)
     }
