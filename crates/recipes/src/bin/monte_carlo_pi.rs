@@ -23,6 +23,19 @@ use massively::{Executor, MIndex, Zip1, Zip2, reduce, transform, util::random};
 const SCALE: u32 = 1_000_000;
 
 struct InsideQuarterCircle;
+struct MaterializeU32;
+
+#[cubecl::cube]
+impl<B> UnaryOp<B, u32> for MaterializeU32
+where
+    B: cubecl::prelude::Runtime,
+{
+    type Output = (u32,);
+
+    fn apply(input: u32) -> (u32,) {
+        (input,)
+    }
+}
 
 #[cubecl::cube]
 impl<B> UnaryOp<B, (u32, u32)> for InsideQuarterCircle
@@ -46,8 +59,21 @@ fn solve<B>(exec: &Executor<B>, samples: MIndex) -> common::Result<f32>
 where
     B: cubecl::prelude::Runtime,
 {
-    let x = random::uniform_distribution_u32(exec, samples, 0, SCALE, 0x1234_5678)?;
-    let y = random::uniform_distribution_u32(exec, samples, 0, SCALE, 0x8765_4321)?;
+    let x = exec.full(samples, 0_u32)?;
+    let y = exec.full(samples, 0_u32)?;
+    transform(
+        exec,
+        random::uniform_u32(samples, 0, SCALE, 0x1234_5678)?,
+        MaterializeU32,
+        Zip1(x.slice_mut(..)),
+    )?;
+    transform(
+        exec,
+        random::uniform_u32(samples, 0, SCALE, 0x8765_4321)?,
+        MaterializeU32,
+        Zip1(y.slice_mut(..)),
+    )?;
+
     let inside = exec.full(samples, 0_u32)?;
     transform(
         exec,
