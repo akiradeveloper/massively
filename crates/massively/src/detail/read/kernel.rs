@@ -1125,6 +1125,267 @@ where
     }
 }
 
+/// Leaf read expression for a scalar value broadcast over a logical range.
+#[doc(hidden)]
+pub struct ConstantRead<T> {
+    handle: cubecl::server::Handle,
+    len: usize,
+    _item: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T> ConstantRead<T> {
+    pub(crate) fn new(handle: cubecl::server::Handle, len: usize) -> Self {
+        Self {
+            handle,
+            len,
+            _item: std::marker::PhantomData,
+        }
+    }
+
+    fn stage_slot(&self, bindings: &mut KernelColumnBindings) {
+        bindings.push(self.handle.clone(), 1);
+    }
+}
+
+impl<R, T> KernelRead<R> for ConstantRead<T>
+where
+    R: Runtime,
+    T: MStorageElement + 'static,
+{
+    type Item = T;
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn transform_read<Output, Op>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_logical7_read(self, policy, op, env, output)
+    }
+
+    fn transform_where_read<Output, Op>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        stencil: PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_where_logical7_read(self, policy, op, env, stencil, output)
+    }
+}
+
+/// Leaf read expression for `start + logical_index`.
+#[doc(hidden)]
+pub struct CountingRead {
+    handle: cubecl::server::Handle,
+    len: usize,
+}
+
+impl CountingRead {
+    pub(crate) fn new(handle: cubecl::server::Handle, len: usize) -> Self {
+        Self { handle, len }
+    }
+
+    fn stage_slot(&self, bindings: &mut KernelColumnBindings) {
+        bindings.push(self.handle.clone(), 1);
+    }
+}
+
+impl<R> KernelRead<R> for CountingRead
+where
+    R: Runtime,
+{
+    type Item = crate::MIndex;
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn validate(&self) -> Result<(), Error> {
+        Ok(())
+    }
+
+    fn transform_read<Output, Op>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_logical7_read(self, policy, op, env, output)
+    }
+
+    fn transform_where_read<Output, Op>(
+        self,
+        policy: &CubePolicy<R>,
+        op: Op,
+        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
+        stencil: PrecomputedSelection<R>,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Output: MIterMut<R>,
+        Self::Item: MItem<R>,
+        Self: KernelReadBoundMany<R>,
+        Output::Item: MAlloc<R> + MItemDispatch<R>,
+        Op: op::UnaryOp<R, Self::Item, Output = Output::Item>,
+    {
+        transform_where_logical7_read(self, policy, op, env, stencil, output)
+    }
+}
+
+macro_rules! impl_lazy_read_at {
+    ($slot:ty, $next:ty, $constant_expr:ty, $counting_expr:ty) => {
+        impl<R, T> KernelReadAt<R, $slot> for ConstantRead<T>
+        where
+            R: Runtime,
+            T: MStorageElement + 'static,
+        {
+            type LogicalItem = T;
+            type ExprAt = $constant_expr;
+            type Next = $next;
+
+            fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+                self.stage_slot(bindings);
+                Ok(())
+            }
+        }
+
+        impl<R> KernelReadAt<R, $slot> for CountingRead
+        where
+            R: Runtime,
+        {
+            type LogicalItem = crate::MIndex;
+            type ExprAt = $counting_expr;
+            type Next = $next;
+
+            fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+                self.stage_slot(bindings);
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_lazy_read_at!(
+    S0,
+    S1,
+    crate::expr::ConstantSlot0<T>,
+    crate::expr::CountingSlot0
+);
+impl_lazy_read_at!(
+    S1,
+    S2,
+    crate::expr::ConstantSlot1<T>,
+    crate::expr::CountingSlot1
+);
+impl_lazy_read_at!(
+    S2,
+    S3,
+    crate::expr::ConstantSlot2<T>,
+    crate::expr::CountingSlot2
+);
+impl_lazy_read_at!(
+    S3,
+    S4,
+    crate::expr::ConstantSlot3<T>,
+    crate::expr::CountingSlot3
+);
+impl_lazy_read_at!(
+    S4,
+    S5,
+    crate::expr::ConstantSlot4<T>,
+    crate::expr::CountingSlot4
+);
+impl_lazy_read_at!(
+    S5,
+    S6,
+    crate::expr::ConstantSlot5<T>,
+    crate::expr::CountingSlot5
+);
+impl_lazy_read_at!(
+    S6,
+    crate::detail::device::S7,
+    crate::expr::ConstantSlot6<T>,
+    crate::expr::CountingSlot6
+);
+
+macro_rules! impl_lazy_read_at_env {
+    (impl < $($env_ty:ident),* > $env:ty => $constant_next:ty, $counting_next:ty, $constant_expr:ty, $counting_expr:ty) => {
+        impl<R, T, $($env_ty),*> KernelReadAtEnv<R, $env> for ConstantRead<T>
+        where
+            R: Runtime,
+            T: MStorageElement + 'static,
+            $($env_ty: MStorageElement + 'static,)*
+            $constant_next: EnvLeaf7,
+        {
+            type LogicalItem = T;
+            type ExprAt = $constant_expr;
+            type NextEnv = $constant_next;
+
+            fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+                self.stage_slot(bindings);
+                Ok(())
+            }
+        }
+
+        impl<R, $($env_ty),*> KernelReadAtEnv<R, $env> for CountingRead
+        where
+            R: Runtime,
+            $($env_ty: MStorageElement + 'static,)*
+            $counting_next: EnvLeaf7,
+        {
+            type LogicalItem = crate::MIndex;
+            type ExprAt = $counting_expr;
+            type NextEnv = $counting_next;
+
+            fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+                self.stage_slot(bindings);
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_lazy_read_at_env!(impl <> Env0 => Env1<T>, Env1<crate::MIndex>, crate::expr::ConstantSlot0<T>, crate::expr::CountingSlot0);
+impl_lazy_read_at_env!(impl <A> Env1<A> => Env2<A, T>, Env2<A, crate::MIndex>, crate::expr::ConstantSlot1<T>, crate::expr::CountingSlot1);
+impl_lazy_read_at_env!(impl <A, B> Env2<A, B> => Env3<A, B, T>, Env3<A, B, crate::MIndex>, crate::expr::ConstantSlot2<T>, crate::expr::CountingSlot2);
+impl_lazy_read_at_env!(impl <A, B, C> Env3<A, B, C> => Env4<A, B, C, T>, Env4<A, B, C, crate::MIndex>, crate::expr::ConstantSlot3<T>, crate::expr::CountingSlot3);
+impl_lazy_read_at_env!(impl <A, B, C, D> Env4<A, B, C, D> => Env5<A, B, C, D, T>, Env5<A, B, C, D, crate::MIndex>, crate::expr::ConstantSlot4<T>, crate::expr::CountingSlot4);
+impl_lazy_read_at_env!(impl <A, B, C, D, E> Env5<A, B, C, D, E> => Env6<A, B, C, D, E, T>, Env6<A, B, C, D, E, crate::MIndex>, crate::expr::ConstantSlot5<T>, crate::expr::CountingSlot5);
+impl_lazy_read_at_env!(impl <A, B, C, D, E, F> Env6<A, B, C, D, E, F> => Env7<A, B, C, D, E, F, T>, Env7<A, B, C, D, E, F, crate::MIndex>, crate::expr::ConstantSlot6<T>, crate::expr::CountingSlot6);
+
 #[doc(hidden)]
 pub trait KernelReadExpr7At<R: Runtime, Env, FinalEnv>: KernelReadAtEnv<R, Env>
 where

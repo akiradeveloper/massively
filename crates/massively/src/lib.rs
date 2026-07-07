@@ -23,6 +23,7 @@ mod detail;
 mod error;
 mod index;
 pub mod iter;
+pub mod lazy;
 pub mod op;
 pub mod runtime;
 pub mod util;

@@ -63,6 +63,13 @@ fn nested_zip_values_are_logical_miters() {
     assert_miter_item::<WgpuRuntime, Nested<'static>, ((u32, f32), i32)>();
 }
 
+#[test]
+fn lazy_constant_is_a_finite_miter_after_take() {
+    type LazyConstant = massively::lazy::Taken<massively::lazy::Constant<u32>>;
+
+    assert_miter_item::<WgpuRuntime, LazyConstant, u32>();
+}
+
 struct AddOne;
 
 #[cubecl::cube]
@@ -269,6 +276,62 @@ where
     S2: MIterMut<R, Item = (u32,)>,
 {
     massively::transform(exec, source, AddOne, (), out)
+}
+
+#[test]
+fn lazy_constant_transform_reads_broadcast_value() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+
+    transform3(
+        &exec,
+        massively::Zip1(massively::lazy::constant(7_u32).take(4)),
+        AddOne,
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![8, 8, 8, 8]);
+}
+
+#[test]
+fn lazy_counting_slice_transform_reads_offset_indices() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let output = exec.to_device(&[0_u32; 4]).unwrap();
+
+    transform3(
+        &exec,
+        massively::Zip1(massively::MIter::<WgpuRuntime>::slice(
+            &massively::lazy::counting(10).take(8),
+            2..6,
+        )),
+        AddOne,
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![13, 14, 15, 16]);
+}
+
+#[test]
+fn lazy_iterators_zip_with_each_other() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let left = exec.to_device(&[0_u32; 3]).unwrap();
+    let right = exec.to_device(&[0_u32; 3]).unwrap();
+
+    transform4(
+        &exec,
+        massively::Zip2(
+            massively::lazy::counting(2).take(3),
+            massively::lazy::constant(5_u32).take(3),
+        ),
+        PairShift,
+        massively::Zip2(left.slice_mut(..), right.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&left).unwrap(), vec![7, 8, 9]);
+    assert_eq!(exec.to_host(&right).unwrap(), vec![105, 105, 105]);
 }
 
 fn reverse2<R, S1, S2>(exec: &Executor<R>, source: S1, out: S2) -> Result<(), massively::Error>

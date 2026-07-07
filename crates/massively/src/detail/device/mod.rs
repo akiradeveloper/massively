@@ -4,7 +4,7 @@ mod vec;
 pub use expr::Zip;
 pub(crate) use expr::{
     DeviceColumnMutView, DeviceColumnView, KernelColumn, KernelColumnAt, KernelColumnBindings,
-    ReadOnlyKernelColumn, ReadOnlyZip, S0, S1, S2, S3, S4, S5, S6, StorageKernelColumn, Zip1, Zip2,
-    Zip3, ZipView1, ZipView2, ZipView3, ZipView4, ZipView5, ZipView6, ZipView7,
+    ReadOnlyKernelColumn, ReadOnlyZip, S0, S1, S2, S3, S4, S5, S6, S7, StorageKernelColumn, Zip1,
+    Zip2, Zip3, ZipView1, ZipView2, ZipView3, ZipView4, ZipView5, ZipView6, ZipView7,
 };
 pub use vec::DeviceVec;
