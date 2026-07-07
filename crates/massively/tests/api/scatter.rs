@@ -37,3 +37,20 @@ fn scatter_accepts_lazy_counting_indices() {
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![0, 10, 20, 30, 0]);
 }
+
+#[test]
+fn scatter_accepts_lazy_transform_indices() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30]).unwrap();
+    let output = exec.to_device(&[0_u32; 5]).unwrap();
+
+    scatter(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::transform(massively::lazy::counting(0).take(3), AddOneIndex),
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![0, 10, 20, 30, 0]);
+}

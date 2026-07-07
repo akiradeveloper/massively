@@ -6293,6 +6293,60 @@ pub(crate) fn gather_device_expr_into_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn gather_device_expr_index7_into_kernel<
+    T: CubePrimitive,
+    ValueExpr: GpuExpr<T>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    I0: CubePrimitive,
+    I1: CubePrimitive,
+    I2: CubePrimitive,
+    I3: CubePrimitive,
+    I4: CubePrimitive,
+    I5: CubePrimitive,
+    I6: CubePrimitive,
+>(
+    value_input: &[T],
+    value_indices: &[u32],
+    value_rhs: &[T],
+    value_rhs_indices: &[u32],
+    index_slot0: &[I0],
+    index_slot1: &[I1],
+    index_slot2: &[I2],
+    index_slot3: &[I3],
+    index_slot4: &[I4],
+    index_slot5: &[I5],
+    index_slot6: &[I6],
+    index_slot_offsets: &[u32],
+    len: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let index = IndexExpr::eval7(
+            index_slot0,
+            index_slot1,
+            index_slot2,
+            index_slot3,
+            index_slot4,
+            index_slot5,
+            index_slot6,
+            index_slot_offsets,
+            global,
+        );
+        output[output_offset[0] as usize + global] = ValueExpr::eval(
+            value_input,
+            value_indices,
+            value_rhs,
+            value_rhs_indices,
+            index as usize,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn scatter_expr_kernel<
     T: CubePrimitive,
     ValueExpr: GpuExpr<T>,
@@ -6365,6 +6419,61 @@ pub(crate) fn scatter_expr_into_kernel<
             index_indices,
             index_rhs,
             index_rhs_indices,
+            global,
+        );
+        output[output_offset[0] as usize + index as usize] = value;
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn scatter_expr_index7_into_kernel<
+    T: CubePrimitive,
+    ValueExpr: GpuExpr<T>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    I0: CubePrimitive,
+    I1: CubePrimitive,
+    I2: CubePrimitive,
+    I3: CubePrimitive,
+    I4: CubePrimitive,
+    I5: CubePrimitive,
+    I6: CubePrimitive,
+>(
+    value_input: &[T],
+    value_indices: &[u32],
+    value_rhs: &[T],
+    value_rhs_indices: &[u32],
+    index_slot0: &[I0],
+    index_slot1: &[I1],
+    index_slot2: &[I2],
+    index_slot3: &[I3],
+    index_slot4: &[I4],
+    index_slot5: &[I5],
+    index_slot6: &[I6],
+    index_slot_offsets: &[u32],
+    len: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < (len[0] as usize) {
+        let value = ValueExpr::eval(
+            value_input,
+            value_indices,
+            value_rhs,
+            value_rhs_indices,
+            global,
+        );
+        let index = IndexExpr::eval7(
+            index_slot0,
+            index_slot1,
+            index_slot2,
+            index_slot3,
+            index_slot4,
+            index_slot5,
+            index_slot6,
+            index_slot_offsets,
             global,
         );
         output[output_offset[0] as usize + index as usize] = value;

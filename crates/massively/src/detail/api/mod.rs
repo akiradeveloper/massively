@@ -42,7 +42,8 @@ pub use sequence::unique;
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp},
     device::{
-        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, S0, ZipView2, ZipView3,
+        DeviceColumnMutView, DeviceVec, KernelColumn, KernelColumnAt, KernelColumnBindings, S0,
+        ZipView2, ZipView3,
     },
     error::{Error, ensure_same_len},
     expr::{DeviceGpuExpr, GpuExpr},

@@ -444,20 +444,6 @@ pub trait MIter<R: Runtime>: Sized {
     }
 
     #[doc(hidden)]
-    fn index_column_with_policy(
-        self,
-        policy: &crate::detail::CubePolicy<R>,
-    ) -> Result<crate::detail::device::DeviceColumnView<R, MIndex>, Error>
-    where
-        Self: MIter<R, Item = MIndex>,
-        Self::Read: crate::detail::read::KernelReadIndexColumn<R>,
-    {
-        let read = self.lower_read(policy)?;
-        crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelReadIndexColumn::into_index_column(read, policy)
-    }
-
-    #[doc(hidden)]
     fn transform_with_policy<Output, Op>(
         self,
         policy: &crate::detail::CubePolicy<R>,
@@ -888,65 +874,77 @@ pub trait MIter<R: Runtime>: Sized {
     }
 
     #[doc(hidden)]
-    fn gather_with_policy<Output>(
+    fn gather_with_policy<Indices, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: Indices,
         output: Output,
     ) -> Result<(), Error>
     where
+        Indices: MIter<R, Item = MIndex>,
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
         let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::gather_from_view(policy, source, indices, output)
+        let read = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        <Self::Item as MAlloc<R>>::gather_from_view(policy, source, read, output)
     }
 
     #[doc(hidden)]
-    fn gather_where_with_policy<Output>(
+    fn gather_where_with_policy<Indices, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: Indices,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
     where
+        Indices: MIter<R, Item = MIndex>,
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
         let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::gather_where_from_view(policy, source, indices, stencil, output)
+        let read = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        <Self::Item as MAlloc<R>>::gather_where_from_view(policy, source, read, stencil, output)
     }
 
     #[doc(hidden)]
-    fn scatter_with_policy<Output>(
+    fn scatter_with_policy<Indices, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: Indices,
         output: Output,
     ) -> Result<(), Error>
     where
+        Indices: MIter<R, Item = MIndex>,
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
         let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::scatter_from_view(policy, source, indices, output)
+        let read = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        <Self::Item as MAlloc<R>>::scatter_from_view(policy, source, read, output)
     }
 
     #[doc(hidden)]
-    fn scatter_where_with_policy<Output>(
+    fn scatter_where_with_policy<Indices, Output>(
         self,
         policy: &crate::detail::CubePolicy<R>,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: Indices,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
     where
+        Indices: MIter<R, Item = MIndex>,
         Self::Item: MAlloc<R>,
         Output: MIterMut<R, Item = Self::Item>,
     {
         let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::scatter_where_from_view(policy, source, indices, stencil, output)
+        let read = indices.lower_read(policy)?;
+        crate::detail::read::KernelRead::validate(&read)?;
+        <Self::Item as MAlloc<R>>::scatter_where_from_view(policy, source, read, stencil, output)
     }
 
     #[doc(hidden)]

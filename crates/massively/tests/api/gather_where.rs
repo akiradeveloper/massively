@@ -99,3 +99,21 @@ fn gather_where_accepts_lazy_indices_and_stencil() {
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![99, 20, 30, 40]);
 }
+
+#[test]
+fn gather_where_accepts_lazy_constant_indices() {
+    let exec = exec();
+    let values = exec.to_device(&[10_u32, 20, 30, 40]).unwrap();
+    let output = exec.to_device(&[99_u32; 4]).unwrap();
+
+    gather_where(
+        &exec,
+        massively::Zip1(values.slice(..)),
+        massively::lazy::constant(2_u32).take(4),
+        massively::lazy::constant(1_u32).take(4),
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![30, 30, 30, 30]);
+}

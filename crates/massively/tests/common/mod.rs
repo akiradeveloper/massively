@@ -321,6 +321,17 @@ impl UnaryOp<WgpuRuntime, f32> for Double {
     }
 }
 
+pub(crate) struct AddOneIndex;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for AddOneIndex {
+    type Output = u32;
+
+    fn apply(input: u32) -> u32 {
+        input + 1
+    }
+}
+
 pub(crate) struct ScalarToTuple5Mixed;
 
 #[cubecl::cube]

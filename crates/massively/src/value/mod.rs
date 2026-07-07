@@ -261,13 +261,14 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
     }
 
     #[doc(hidden)]
-    fn gather_from_view<Output>(
+    fn gather_from_view<IndexSource, Output>(
         policy: &crate::detail::CubePolicy<R>,
         values: Self::View,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: IndexSource,
         output: Output,
     ) -> Result<(), Error>
     where
+        IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
         Output: MIterMut<R, Item = Self>,
     {
         let _ = (policy, values, indices, output);
@@ -277,14 +278,15 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
     }
 
     #[doc(hidden)]
-    fn gather_where_from_view<Output>(
+    fn gather_where_from_view<IndexSource, Output>(
         policy: &crate::detail::CubePolicy<R>,
         values: Self::View,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: IndexSource,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
     where
+        IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
         Output: MIterMut<R, Item = Self>,
     {
         let _ = (policy, values, indices, stencil, output);
@@ -294,13 +296,14 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
     }
 
     #[doc(hidden)]
-    fn scatter_from_view<Output>(
+    fn scatter_from_view<IndexSource, Output>(
         policy: &crate::detail::CubePolicy<R>,
         values: Self::View,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: IndexSource,
         output: Output,
     ) -> Result<(), Error>
     where
+        IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
         Output: MIterMut<R, Item = Self>,
     {
         let _ = (policy, values, indices, output);
@@ -310,14 +313,15 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
     }
 
     #[doc(hidden)]
-    fn scatter_where_from_view<Output>(
+    fn scatter_where_from_view<IndexSource, Output>(
         policy: &crate::detail::CubePolicy<R>,
         values: Self::View,
-        indices: crate::detail::device::DeviceColumnView<R, MIndex>,
+        indices: IndexSource,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
     where
+        IndexSource: crate::detail::read::KernelReadBoundMany<R, Item = MIndex>,
         Output: MIterMut<R, Item = Self>,
     {
         let _ = (policy, values, indices, stencil, output);

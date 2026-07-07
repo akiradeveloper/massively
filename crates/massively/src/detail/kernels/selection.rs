@@ -90,6 +90,62 @@ pub(crate) fn gather_if_flags_into_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn gather_if_flags_index7_into_kernel<
+    T: CubePrimitive,
+    InputExpr: crate::expr::DeviceGpuExpr<T>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    I0: CubePrimitive,
+    I1: CubePrimitive,
+    I2: CubePrimitive,
+    I3: CubePrimitive,
+    I4: CubePrimitive,
+    I5: CubePrimitive,
+    I6: CubePrimitive,
+>(
+    input_slot0: &[T],
+    input_slot1: &[T],
+    input_slot2: &[T],
+    input_slot3: &[T],
+    input_slot_offsets: &[u32],
+    index_slot0: &[I0],
+    index_slot1: &[I1],
+    index_slot2: &[I2],
+    index_slot3: &[I3],
+    index_slot4: &[I4],
+    index_slot5: &[I5],
+    index_slot6: &[I6],
+    index_slot_offsets: &[u32],
+    flags: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        let index = IndexExpr::eval7(
+            index_slot0,
+            index_slot1,
+            index_slot2,
+            index_slot3,
+            index_slot4,
+            index_slot5,
+            index_slot6,
+            index_slot_offsets,
+            global,
+        ) as usize;
+        output[output_offset[0] as usize + global] = InputExpr::eval(
+            input_slot0,
+            input_slot1,
+            input_slot2,
+            input_slot3,
+            input_slot_offsets,
+            index,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn copy_if_flags_into_kernel<
     T: CubePrimitive,
     InputExpr: crate::expr::DeviceGpuExpr<T>,
@@ -189,6 +245,62 @@ pub(crate) fn scatter_if_flags_into_kernel<
             index_slot1,
             index_slot2,
             index_slot3,
+            index_slot_offsets,
+            global,
+        ) as usize;
+        output[output_offset[0] as usize + index] = ValueExpr::eval(
+            value_slot0,
+            value_slot1,
+            value_slot2,
+            value_slot3,
+            value_slot_offsets,
+            global,
+        );
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn scatter_if_flags_index7_into_kernel<
+    T: CubePrimitive,
+    ValueExpr: crate::expr::DeviceGpuExpr<T>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    I0: CubePrimitive,
+    I1: CubePrimitive,
+    I2: CubePrimitive,
+    I3: CubePrimitive,
+    I4: CubePrimitive,
+    I5: CubePrimitive,
+    I6: CubePrimitive,
+>(
+    value_slot0: &[T],
+    value_slot1: &[T],
+    value_slot2: &[T],
+    value_slot3: &[T],
+    value_slot_offsets: &[u32],
+    index_slot0: &[I0],
+    index_slot1: &[I1],
+    index_slot2: &[I2],
+    index_slot3: &[I3],
+    index_slot4: &[I4],
+    index_slot5: &[I5],
+    index_slot6: &[I6],
+    index_slot_offsets: &[u32],
+    flags: &[u32],
+    output_offset: &[u32],
+    output: &mut [T],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < flags.len() && flags[global] != 0u32 {
+        let index = IndexExpr::eval7(
+            index_slot0,
+            index_slot1,
+            index_slot2,
+            index_slot3,
+            index_slot4,
+            index_slot5,
+            index_slot6,
             index_slot_offsets,
             global,
         ) as usize;

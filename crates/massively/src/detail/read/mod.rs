@@ -52,9 +52,7 @@ pub(crate) use kernel::{
     ColumnRead, ConstantRead, CountingRead, GatherRead, ScanByKeyValueItem, SliceRead,
     TransformRead, ZipRead1, ZipRead2, ZipRead3, ZipRead4, ZipRead5, ZipRead6, ZipRead7,
 };
-pub(crate) use kernel::{
-    KernelReadIndexColumn, KernelStencilSelection,
-};
+pub(crate) use kernel::{Env0, KernelReadAtEnv, KernelStencilSelection};
 pub use kernel::{KernelRead, KernelReadBoundMany, KernelReadReduce};
 
 #[allow(unused_imports)]
