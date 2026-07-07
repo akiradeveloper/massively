@@ -13,7 +13,6 @@ fn main() -> common::Result {
         &exec,
         Zip1(values.slice(..)),
         common::AddOne,
-        (),
         Zip1(output.slice_mut(..)),
     )?;
 

@@ -12,6 +12,5 @@ pub use api::{
     lexicographical_compare, lower_bound, max_element, merge, merge_by_key, min_element,
     minmax_element, mismatch, none_of, partition, reduce, reduce_by_key, remove_where,
     replace_where, reverse, scatter, scatter_where, set_difference, set_intersection, set_union,
-    sort, sort_by_key, stable_sort, stable_sort_by_key, transform, transform_where, unique,
-    unique_by_key, upper_bound,
+    sort, sort_by_key, transform, transform_where, unique, unique_by_key, upper_bound,
 };

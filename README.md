@@ -48,10 +48,9 @@ impl<R> UnaryOp<R, (u32, u32, u32)> for SumProduct3
 where
     R: Runtime,
 {
-    type Env = ();
     type Output = (u32, u32);
 
-    fn apply(_env: (), input: (u32, u32, u32)) -> (u32, u32) {
+    fn apply(input: (u32, u32, u32)) -> (u32, u32) {
         let sum = input.0 + input.1 + input.2;
         let product = input.0 * input.1 * input.2;
         (sum, product)
@@ -71,7 +70,6 @@ fn main() -> Result<(), massively::Error> {
         &exec,
         Zip3(a.slice(..), b.slice(..), c.slice(..)),
         SumProduct3,
-        (),
         Zip2(sum_out.slice_mut(..), product_out.slice_mut(..)),
     )?;
 

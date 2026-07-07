@@ -22,7 +22,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let out = exec.constant(a.len().min(b.len()), 0_u32)?;
+    let out = exec.full(a.len().min(b.len()), 0_u32)?;
     let len = set_intersection(
         exec,
         Zip1(a.slice(..)),

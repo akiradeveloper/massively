@@ -33,11 +33,10 @@ where
     T: MStorageElement + MItem<R>,
     Op: op::UnaryOp<R, (T,), Output = (T,)>,
 {
-    type Env = Op::Env;
     type Output = T;
 
-    fn apply(env: Self::Env, input: T) -> T {
-        Op::apply(env, (input,)).0
+    fn apply(input: T) -> T {
+        Op::apply((input,)).0
     }
 }
 
@@ -60,10 +59,8 @@ where
     T: MStorageElement + MItem<R>,
     Op: op::PredicateOp<R, (T,)>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: T) -> bool {
-        Op::apply(env, (input,))
+    fn apply(input: T) -> bool {
+        Op::apply((input,))
     }
 }
 
@@ -86,11 +83,10 @@ where
     Input: MItem<R>,
     Op: op::UnaryOp<R, Input>,
 {
-    type Env = Op::Env;
     type Output = Op::Output;
 
-    fn apply(env: Self::Env, input: Input) -> Self::Output {
-        Op::apply(env, input)
+    fn apply(input: Input) -> Self::Output {
+        Op::apply(input)
     }
 }
 
@@ -113,10 +109,8 @@ where
     Item: MItem<R>,
     Op: op::PredicateOp<R, Item>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: Item) -> bool {
-        Op::apply(env, input)
+    fn apply(input: Item) -> bool {
+        Op::apply(input)
     }
 }
 
@@ -143,11 +137,10 @@ where
     T: MStorageElement + MItem<R>,
     Op: op::UnaryOp<R, T>,
 {
-    type Env = Op::Env;
     type Output = Op::Output;
 
-    fn apply(env: Self::Env, input: (T,)) -> Self::Output {
-        Op::apply(env, input.0)
+    fn apply(input: (T,)) -> Self::Output {
+        Op::apply(input.0)
     }
 }
 
@@ -180,10 +173,8 @@ where
     T: MStorageElement + MItem<R>,
     Op: op::PredicateOp<R, T>,
 {
-    type Env = Op::Env;
-
-    fn apply(env: Self::Env, input: (T,)) -> bool {
-        Op::apply(env, input.0)
+    fn apply(input: (T,)) -> bool {
+        Op::apply(input.0)
     }
 }
 
@@ -207,9 +198,7 @@ impl<R> op::PredicateOp<R, (u32,)> for StencilFlag
 where
     R: Runtime,
 {
-    type Env = ();
-
-    fn apply(_env: (), input: (u32,)) -> bool {
+    fn apply(input: (u32,)) -> bool {
         input.0 > 0
     }
 }

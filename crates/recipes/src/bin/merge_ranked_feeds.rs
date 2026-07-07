@@ -31,8 +31,8 @@ where
     B: cubecl::prelude::Runtime,
 {
     let len = left_timestamp.len() + right_timestamp.len();
-    let timestamp = exec.constant(len, 0_u32)?;
-    let event_id = exec.constant(len, 0_u32)?;
+    let timestamp = exec.full(len, 0_u32)?;
+    let event_id = exec.full(len, 0_u32)?;
     merge_by_key(
         exec,
         Zip1(left_timestamp.slice(..)),

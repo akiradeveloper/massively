@@ -18,7 +18,6 @@ impl TransformPayloadApply {
     pub(in crate::detail) fn unary<Output, R, Input, Op>(
         policy: &CubePolicy<R>,
         input: DeviceColumnView<R, Input>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -26,14 +25,13 @@ impl TransformPayloadApply {
         Output: TransformUnaryOutput<R, Input, Op>,
         Op: UnaryOp<(Input,), Output = Output>,
     {
-        Output::run(policy, input, env)
+        Output::run(policy, input)
     }
 
     pub(in crate::detail) fn zip2<Output, R, A, B, Op>(
         policy: &CubePolicy<R>,
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -42,7 +40,7 @@ impl TransformPayloadApply {
         Output: TransformZip2Output<R, A, B, Op>,
         Op: UnaryOp<(A, B), Output = Output>,
     {
-        Output::run(policy, a, b, env)
+        Output::run(policy, a, b)
     }
 
     pub(in crate::detail) fn zip3<Output, R, A, B, C, Op>(
@@ -50,7 +48,6 @@ impl TransformPayloadApply {
         a: DeviceColumnView<R, A>,
         b: DeviceColumnView<R, B>,
         c: DeviceColumnView<R, C>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -60,7 +57,7 @@ impl TransformPayloadApply {
         Output: TransformZip3Output<R, A, B, C, Op>,
         Op: UnaryOp<(A, B, C), Output = Output>,
     {
-        Output::run(policy, a, b, c, env)
+        Output::run(policy, a, b, c)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -70,7 +67,6 @@ impl TransformPayloadApply {
         b: DeviceColumnView<R, B>,
         c: DeviceColumnView<R, C>,
         d: DeviceColumnView<R, D>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -81,7 +77,7 @@ impl TransformPayloadApply {
         Output: TransformZip4Output<R, A, B, C, D, Op>,
         Op: UnaryOp<(A, B, C, D), Output = Output>,
     {
-        Output::run(policy, a, b, c, d, env)
+        Output::run(policy, a, b, c, d)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -92,7 +88,6 @@ impl TransformPayloadApply {
         c: DeviceColumnView<R, C>,
         d: DeviceColumnView<R, D>,
         e: DeviceColumnView<R, E>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -104,7 +99,7 @@ impl TransformPayloadApply {
         Output: TransformZip5Output<R, A, B, C, D, E, Op>,
         Op: UnaryOp<(A, B, C, D, E), Output = Output>,
     {
-        Output::run(policy, a, b, c, d, e, env)
+        Output::run(policy, a, b, c, d, e)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -116,7 +111,6 @@ impl TransformPayloadApply {
         d: DeviceColumnView<R, D>,
         e: DeviceColumnView<R, E>,
         f: DeviceColumnView<R, F>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -129,7 +123,7 @@ impl TransformPayloadApply {
         Output: TransformZip6Output<R, A, B, C, D, E, F, Op>,
         Op: UnaryOp<(A, B, C, D, E, F), Output = Output>,
     {
-        Output::run(policy, a, b, c, d, e, f, env)
+        Output::run(policy, a, b, c, d, e, f)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -142,7 +136,6 @@ impl TransformPayloadApply {
         e: DeviceColumnView<R, E>,
         f: DeviceColumnView<R, F>,
         g: DeviceColumnView<R, G>,
-        env: <Op::Env as LaunchArg>::RuntimeArg<R>,
     ) -> Result<<Output as MItemStorage<R>>::Storage, Error>
     where
         R: Runtime,
@@ -156,6 +149,6 @@ impl TransformPayloadApply {
         Output: TransformZip7Output<R, A, B, C, D, E, F, G, Op>,
         Op: UnaryOp<(A, B, C, D, E, F, G), Output = Output>,
     {
-        Output::run(policy, a, b, c, d, e, f, g, env)
+        Output::run(policy, a, b, c, d, e, f, g)
     }
 }

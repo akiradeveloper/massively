@@ -12,7 +12,6 @@ fn transform_zip_output_returns_storage() {
         &exec,
         massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
-        (),
         massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
@@ -32,7 +31,6 @@ fn transform_returns_device_storage() {
         &exec,
         massively::Zip2(left.slice(..), right.slice(..)),
         PairMixedSplit,
-        (),
         massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
@@ -55,7 +53,6 @@ fn transform_tuple_output_maps_to_mitem_storage() {
         &exec,
         massively::Zip3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
-        (),
         massively::Zip3(
             values_out.slice_mut(..),
             flags.slice_mut(..),
@@ -81,7 +78,6 @@ fn tuple1_transform_returns_zip1_storage() {
         &exec,
         massively::Zip1(input.slice(..)),
         Double,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -99,7 +95,6 @@ fn device_slice_transform_reads_scalar_item() {
         &exec,
         input.slice(..),
         Double,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -118,7 +113,6 @@ fn device_slice_transform_where_reads_scalar_item() {
         &exec,
         input.slice(..),
         Double,
-        (),
         stencil.slice(..),
         massively::Zip1(output.slice_mut(..)),
     )
@@ -136,7 +130,6 @@ fn transform_can_write_in_place_for_single_column() {
         &exec,
         massively::Zip1(values.slice(..)),
         Double,
-        (),
         massively::Zip1(values.slice_mut(..)),
     )
     .unwrap();
@@ -154,7 +147,6 @@ fn transform_can_write_in_place_for_multi_column() {
         &exec,
         massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
-        (),
         massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();
@@ -179,7 +171,6 @@ fn unary_transform_accepts_seven_tuple_output() {
         &exec,
         massively::Zip1(input.slice(..)),
         ScalarToTuple7Mixed,
-        (),
         massively::Zip7(
             a.slice_mut(..),
             b.slice_mut(..),
@@ -218,7 +209,6 @@ fn transform_where_accepts_seven_tuple_output() {
         &exec,
         massively::Zip1(input.slice(..)),
         ScalarToTuple7Mixed,
-        (),
         stencil.slice(..),
         massively::Zip7(
             a.slice_mut(..),
@@ -271,7 +261,6 @@ fn transform_accepts_seven_tuple_input_and_output() {
             g.slice(..),
         ),
         TupleWideMixedSplit,
-        (),
         massively::Zip7(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -326,7 +315,6 @@ fn transform_where_accepts_seven_tuple_input_and_output() {
             g.slice(..),
         ),
         TupleWideMixedSplit,
-        (),
         stencil.slice(..),
         massively::Zip7(
             out_a.slice_mut(..),
@@ -366,7 +354,6 @@ fn unary_transform_accepts_wide_tuple_outputs() {
         &exec,
         massively::Zip1(input.slice(..)),
         ScalarToTuple5Mixed,
-        (),
         massively::Zip5(
             a.slice_mut(..),
             b.slice_mut(..),
@@ -398,7 +385,6 @@ fn tuple_transform_uses_flat_zip_input() {
         &exec,
         massively::Zip3(lhs.slice(..), rhs.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
-        (),
         massively::Zip3(
             values.slice_mut(..),
             tags.slice_mut(..),
@@ -432,7 +418,6 @@ fn tuple_transform_preserves_nested_zip_input_shape() {
             bias.slice(..),
         ),
         NestedTuple3MixedSplit,
-        (),
         massively::Zip3(
             values.slice_mut(..),
             tags.slice_mut(..),
@@ -461,7 +446,6 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
         &exec,
         massively::Zip2(values.slice(..), tags.slice(..)),
         PairMixedSplit,
-        (),
         massively::Zip2(pair_values.slice_mut(..), pair_tags.slice_mut(..)),
     )
     .unwrap();
@@ -475,7 +459,6 @@ fn transform_accepts_heterogeneous_tuple_inputs() {
         &exec,
         massively::Zip3(values.slice(..), tags.slice(..), bias.slice(..)),
         Tuple3MixedSplit,
-        (),
         massively::Zip3(
             tuple_values.slice_mut(..),
             tuple_tags.slice_mut(..),
@@ -510,7 +493,6 @@ fn transform_accepts_zip4_heterogeneous_inputs_and_checks_every_column() {
         &exec,
         massively::Zip4(a.slice(..), b.slice(..), c.slice(..), d.slice(..)),
         Tuple4MixedSplit,
-        (),
         massively::Zip4(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -548,7 +530,6 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
             e.slice(..),
         ),
         Tuple5To3MixedSplit,
-        (),
         massively::Zip3(x.slice_mut(..), y.slice_mut(..), z.slice_mut(..)),
     )
     .unwrap();
@@ -565,7 +546,6 @@ fn transform_accepts_mismatched_input_and_output_tuple_widths() {
         &exec,
         massively::Zip3(a.slice(..), b.slice(..), c.slice(..)),
         Tuple3To5MixedSplit,
-        (),
         massively::Zip5(
             x.slice_mut(..),
             y.slice_mut(..),
@@ -608,7 +588,6 @@ fn transform_accepts_zip5_to_zip7_heterogeneous_tuple_outputs() {
             e.slice(..),
         ),
         TupleWideMixedSplit,
-        (),
         massively::Zip5(
             a5.slice_mut(..),
             b5.slice_mut(..),
@@ -641,7 +620,6 @@ fn transform_accepts_zip5_to_zip7_heterogeneous_tuple_outputs() {
             f.slice(..),
         ),
         TupleWideMixedSplit,
-        (),
         massively::Zip6(
             a6.slice_mut(..),
             b6.slice_mut(..),
@@ -678,7 +656,6 @@ fn transform_accepts_zip5_to_zip7_heterogeneous_tuple_outputs() {
             g.slice(..),
         ),
         TupleWideMixedSplit,
-        (),
         massively::Zip7(
             a7.slice_mut(..),
             b7.slice_mut(..),
@@ -711,7 +688,6 @@ fn transform_zip_flattens_zip1_columns() {
         &exec,
         massively::Zip2(left.slice(..), right.slice(..)),
         PairMixedSplit,
-        (),
         massively::Zip2(values.slice_mut(..), tags.slice_mut(..)),
     )
     .unwrap();

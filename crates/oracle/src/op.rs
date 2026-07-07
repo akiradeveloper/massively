@@ -1,10 +1,9 @@
 //! Host-side operation traits mirroring `massively::op`.
 
 pub trait UnaryOp<Input>: 'static + Send + Sync {
-    type Env: Copy;
     type Output;
 
-    fn apply(env: Self::Env, input: Input) -> Self::Output;
+    fn apply(input: Input) -> Self::Output;
 }
 
 pub trait BinaryOp<X, Y>: 'static + Send + Sync {
@@ -18,9 +17,7 @@ pub trait ReductionOp<X>: 'static + Send + Sync {
 }
 
 pub trait PredicateOp<T>: 'static + Send + Sync {
-    type Env: Copy;
-
-    fn apply(env: Self::Env, input: T) -> bool;
+    fn apply(input: T) -> bool;
 }
 
 pub trait BinaryPredicateOp<T>: 'static + Send + Sync {

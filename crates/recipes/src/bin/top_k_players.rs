@@ -31,8 +31,8 @@ where
     B: cubecl::prelude::Runtime,
 {
     let len = player_id.len();
-    let sorted_score = exec.constant(len, 0.0_f32)?;
-    let sorted_player_id = exec.constant(len, 0_u32)?;
+    let sorted_score = exec.full(len, 0.0_f32)?;
+    let sorted_player_id = exec.full(len, 0_u32)?;
     sort_by_key(
         exec,
         Zip1(score.slice(..)),
@@ -41,8 +41,8 @@ where
         Zip1(sorted_score.slice_mut(..)),
         Zip1(sorted_player_id.slice_mut(..)),
     )?;
-    let score = exec.constant(len, 0.0_f32)?;
-    let player_id = exec.constant(len, 0_u32)?;
+    let score = exec.full(len, 0.0_f32)?;
+    let player_id = exec.full(len, 0_u32)?;
     reverse(
         exec,
         Zip1(sorted_score.slice(..)),

@@ -56,25 +56,25 @@ where
     B: cubecl::prelude::Runtime,
 {
     let len = page_id.len();
-    let sorted_page_id = exec.constant(len, 0_u32)?;
-    let sorted_user_id = exec.constant(len, 0_u32)?;
+    let sorted_page_id = exec.full(len, 0_u32)?;
+    let sorted_user_id = exec.full(len, 0_u32)?;
     sort(
         exec,
         Zip2(page_id.slice(..), user_id.slice(..)),
         LessVisitPair,
         Zip2(sorted_page_id.slice_mut(..), sorted_user_id.slice_mut(..)),
     )?;
-    let page_id = exec.constant(len, 0_u32)?;
-    let user_id = exec.constant(len, 0_u32)?;
+    let page_id = exec.full(len, 0_u32)?;
+    let user_id = exec.full(len, 0_u32)?;
     let unique_len = unique(
         exec,
         Zip2(sorted_page_id.slice(..), sorted_user_id.slice(..)),
         EqualVisitPair,
         Zip2(page_id.slice_mut(..), user_id.slice_mut(..)),
     )?;
-    let ones = exec.constant(unique_len, 1_u32)?;
-    let out_page_id = exec.constant(unique_len, 0_u32)?;
-    let unique_count = exec.constant(unique_len, 0_u32)?;
+    let ones = exec.full(unique_len, 1_u32)?;
+    let out_page_id = exec.full(unique_len, 0_u32)?;
+    let unique_count = exec.full(unique_len, 0_u32)?;
     let len = reduce_by_key(
         exec,
         Zip1(page_id.slice(..unique_len)),

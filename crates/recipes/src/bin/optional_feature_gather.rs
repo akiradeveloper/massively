@@ -24,7 +24,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let out = exec.constant(index.len(), -1.0_f32)?;
+    let out = exec.full(index.len(), -1.0_f32)?;
     gather_where(
         exec,
         Zip1(value.slice(..)),

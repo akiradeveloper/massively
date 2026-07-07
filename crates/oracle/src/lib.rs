@@ -8,40 +8,35 @@ pub mod op;
 
 use std::cmp::Ordering;
 
-pub fn transform<T, Op>(source: &[T], _op: Op, env: Op::Env, output: &mut [Op::Output])
+pub fn transform<T, Op>(source: &[T], _op: Op, output: &mut [Op::Output])
 where
     T: Copy,
     Op: op::UnaryOp<T>,
 {
     for i in 0..source.len() {
-        output[i] = Op::apply(env, source[i]);
+        output[i] = Op::apply(source[i]);
     }
 }
 
-pub fn map<T, Op>(source: &[T], _op: Op, env: Op::Env) -> Vec<Op::Output>
+pub fn map<T, Op>(source: &[T], _op: Op) -> Vec<Op::Output>
 where
     T: Copy,
     Op: op::UnaryOp<T>,
 {
     let mut output = Vec::with_capacity(source.len());
-    output.extend(source.iter().copied().map(|value| Op::apply(env, value)));
+    output.extend(source.iter().copied().map(Op::apply));
     output
 }
 
-pub fn transform_where<T, Op>(
-    source: &[T],
-    _op: Op,
-    env: Op::Env,
-    stencil: &[u32],
-    output: &mut [Op::Output],
-) where
+pub fn transform_where<T, Op>(source: &[T], _op: Op, stencil: &[u32], output: &mut [Op::Output])
+where
     T: Copy,
     Op: op::UnaryOp<T>,
     Op::Output: Copy,
 {
     for i in 0..source.len() {
         if stencil[i] != 0 {
-            output[i] = Op::apply(env, source[i]);
+            output[i] = Op::apply(source[i]);
         }
     }
 }
@@ -189,7 +184,7 @@ where
     (out_keys, out_values)
 }
 
-pub fn count_if<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> usize
+pub fn count_if<T, Pred>(source: &[T], _pred: Pred) -> usize
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
@@ -197,46 +192,43 @@ where
     source
         .iter()
         .copied()
-        .filter(|value| Pred::apply(env, *value))
+        .filter(|value| Pred::apply(*value))
         .count()
 }
 
-pub fn all_of<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> bool
+pub fn all_of<T, Pred>(source: &[T], _pred: Pred) -> bool
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
 {
-    source.iter().copied().all(|value| Pred::apply(env, value))
+    source.iter().copied().all(Pred::apply)
 }
 
-pub fn any_of<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> bool
+pub fn any_of<T, Pred>(source: &[T], _pred: Pred) -> bool
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
 {
-    source.iter().copied().any(|value| Pred::apply(env, value))
+    source.iter().copied().any(Pred::apply)
 }
 
-pub fn none_of<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> bool
+pub fn none_of<T, Pred>(source: &[T], _pred: Pred) -> bool
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
 {
-    !any_of(source, _pred, env)
+    !any_of(source, _pred)
 }
 
-pub fn find_if<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> Option<usize>
+pub fn find_if<T, Pred>(source: &[T], _pred: Pred) -> Option<usize>
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
 {
-    source
-        .iter()
-        .copied()
-        .position(|value| Pred::apply(env, value))
+    source.iter().copied().position(Pred::apply)
 }
 
-pub fn partition<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> (Vec<T>, Vec<T>)
+pub fn partition<T, Pred>(source: &[T], _pred: Pred) -> (Vec<T>, Vec<T>)
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
@@ -244,7 +236,7 @@ where
     let mut matching = Vec::new();
     let mut failing = Vec::new();
     for value in source.iter().copied() {
-        if Pred::apply(env, value) {
+        if Pred::apply(value) {
             matching.push(value);
         } else {
             failing.push(value);
@@ -253,14 +245,14 @@ where
     (matching, failing)
 }
 
-pub fn is_partitioned<T, Pred>(source: &[T], _pred: Pred, env: Pred::Env) -> bool
+pub fn is_partitioned<T, Pred>(source: &[T], _pred: Pred) -> bool
 where
     T: Copy,
     Pred: op::PredicateOp<T>,
 {
     let mut seen_false = false;
     for value in source.iter().copied() {
-        if Pred::apply(env, value) {
+        if Pred::apply(value) {
             if seen_false {
                 return false;
             }
@@ -505,16 +497,8 @@ where
     Less: op::BinaryPredicateOp<T>,
 {
     let mut out = source.to_vec();
-    stable_sort_by(&mut out, |lhs, rhs| Less::apply(lhs, rhs));
+    sort_by_less(&mut out, |lhs, rhs| Less::apply(lhs, rhs));
     out
-}
-
-pub fn stable_sort<T, Less>(source: &[T], less: Less) -> Vec<T>
-where
-    T: Copy,
-    Less: op::BinaryPredicateOp<T>,
-{
-    sort(source, less)
 }
 
 pub fn merge<T, Less>(left: &[T], right: &[T], _less: Less) -> Vec<T>
@@ -546,17 +530,8 @@ where
     Less: op::BinaryPredicateOp<K>,
 {
     let mut pairs: Vec<_> = keys.iter().copied().zip(values.iter().copied()).collect();
-    stable_sort_by(&mut pairs, |lhs, rhs| Less::apply(lhs.0, rhs.0));
+    sort_by_less(&mut pairs, |lhs, rhs| Less::apply(lhs.0, rhs.0));
     pairs.into_iter().unzip()
-}
-
-pub fn stable_sort_by_key<K, V, Less>(keys: &[K], values: &[V], less: Less) -> (Vec<K>, Vec<V>)
-where
-    K: Copy,
-    V: Copy,
-    Less: op::BinaryPredicateOp<K>,
-{
-    sort_by_key(keys, values, less)
 }
 
 pub fn merge_by_key<K, V, Less>(
@@ -699,7 +674,7 @@ where
     out
 }
 
-fn stable_sort_by<T, F>(values: &mut [T], less: F)
+fn sort_by_less<T, F>(values: &mut [T], less: F)
 where
     F: Fn(T, T) -> bool,
     T: Copy,

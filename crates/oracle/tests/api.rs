@@ -44,20 +44,18 @@ macro_rules! impl_arity_tuple_to_tuple {
     (($($ty:ty),+), $input:ident => $seed:expr) => {
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple1 {
-            type Env = ();
             type Output = (u32,);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32,) {
+            fn apply($input: ($($ty,)+)) -> (u32,) {
                 let seed = $seed;
                 (seed ^ 0x5a5a_5a5a,)
             }
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple1 {
-            type Env = ();
             type Output = (u32,);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32,) {
+            fn apply($input: ($($ty,)+)) -> (u32,) {
                 let seed = $seed;
                 (seed ^ 0x5a5a_5a5a,)
             }
@@ -65,20 +63,18 @@ macro_rules! impl_arity_tuple_to_tuple {
 
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple2 {
-            type Env = ();
             type Output = (u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32) {
                 let seed = $seed;
                 (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5)
             }
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple2 {
-            type Env = ();
             type Output = (u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32) {
                 let seed = $seed;
                 (seed ^ 0x5a5a_5a5a, (seed << 1) ^ 0xa5a5_a5a5)
             }
@@ -86,10 +82,9 @@ macro_rules! impl_arity_tuple_to_tuple {
 
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple3 {
-            type Env = ();
             type Output = (u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -100,10 +95,9 @@ macro_rules! impl_arity_tuple_to_tuple {
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple3 {
-            type Env = ();
             type Output = (u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -115,10 +109,9 @@ macro_rules! impl_arity_tuple_to_tuple {
 
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple4 {
-            type Env = ();
             type Output = (u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -130,10 +123,9 @@ macro_rules! impl_arity_tuple_to_tuple {
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple4 {
-            type Env = ();
             type Output = (u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -146,10 +138,9 @@ macro_rules! impl_arity_tuple_to_tuple {
 
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple5 {
-            type Env = ();
             type Output = (u32, u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -162,10 +153,9 @@ macro_rules! impl_arity_tuple_to_tuple {
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple5 {
-            type Env = ();
             type Output = (u32, u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -179,10 +169,9 @@ macro_rules! impl_arity_tuple_to_tuple {
 
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple6 {
-            type Env = ();
             type Output = (u32, u32, u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -196,10 +185,9 @@ macro_rules! impl_arity_tuple_to_tuple {
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple6 {
-            type Env = ();
             type Output = (u32, u32, u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -214,10 +202,9 @@ macro_rules! impl_arity_tuple_to_tuple {
 
         #[cubecl::cube]
         impl gpu_op::UnaryOp<ApiRuntime, ($($ty,)+)> for ArityTupleToTuple7 {
-            type Env = ();
             type Output = (u32, u32, u32, u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -232,10 +219,9 @@ macro_rules! impl_arity_tuple_to_tuple {
         }
 
         impl host_op::UnaryOp<($($ty,)+)> for ArityTupleToTuple7 {
-            type Env = ();
             type Output = (u32, u32, u32, u32, u32, u32, u32);
 
-            fn apply(_env: (), $input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32, u32) {
+            fn apply($input: ($($ty,)+)) -> (u32, u32, u32, u32, u32, u32, u32) {
                 let seed = $seed;
                 (
                     seed ^ 0x5a5a_5a5a,
@@ -293,17 +279,15 @@ macro_rules! impl_keep_tuple {
     (($($ty:ty),+), $zero:expr) => {
         #[cubecl::cube]
         impl gpu_op::PredicateOp<ApiRuntime, ($($ty,)+)> for KeepTuple {
-            type Env = ();
 
-            fn apply(_env: (), input: ($($ty,)+)) -> bool {
+            fn apply(input: ($($ty,)+)) -> bool {
                 input.0 > $zero
             }
         }
 
         impl host_op::PredicateOp<($($ty,)+)> for KeepTuple {
-            type Env = ();
 
-            fn apply(_env: (), input: ($($ty,)+)) -> bool {
+            fn apply(input: ($($ty,)+)) -> bool {
                 input.0 > $zero
             }
         }
@@ -618,9 +602,9 @@ macro_rules! map_arity_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $input_zip, ($($input_ty),+));
         let gpu_output = make_zip!(&exec, &vec![$init; input.len()], $output_zip, ($($output_ty),+));
-        massively::transform(&exec, gpu_input.slice(..), $op, (), gpu_output.slice_mut(..)).unwrap();
+        massively::transform(&exec, gpu_input.slice(..), $op, gpu_output.slice_mut(..)).unwrap();
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
-        let host = oracle::map(&input, $op, ());
+        let host = oracle::map(&input, $op);
         prop_assert_eq!(gpu, host);
     }};
 }
@@ -637,11 +621,10 @@ macro_rules! transform_arity_case {
             &exec,
             gpu_input.slice(..),
             $op,
-            (),
             gpu_output.slice_mut(..),
         )
         .unwrap();
-        oracle::transform(&input, $op, (), &mut host);
+        oracle::transform(&input, $op, &mut host);
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
         prop_assert_eq!(gpu, host);
     }};
@@ -661,12 +644,11 @@ macro_rules! transform_where_arity_case {
             &exec,
             gpu_input.slice(..),
             $op,
-            (),
             gpu_stencil.slice(..),
             gpu_output.slice_mut(..),
         )
         .unwrap();
-        oracle::transform_where(&input, $op, (), &stencil, &mut host);
+        oracle::transform_where(&input, $op, &stencil, &mut host);
         let gpu = cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $output_zip);
         prop_assert_eq!(gpu, host);
     }};
@@ -684,23 +666,6 @@ macro_rules! sort_by_key_only_case {
         let out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
         massively::sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
         let (host_keys, host_values) = oracle::sort_by_key(&keys, &values, $less);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_zip), host_keys);
-        prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_zip), host_values);
-    }};
-}
-
-macro_rules! stable_sort_by_key_case {
-    ($pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $less:ident) => {{
-        let _guard = gpu_lock();
-        let exec = exec();
-        let pairs = $pairs;
-        let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
-        let gpu_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
-        let gpu_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
-        let out_keys = make_zip!(&exec, &keys, $key_zip, ($($key_ty),+));
-        let out_values = make_zip!(&exec, &values, $value_zip, ($($value_ty),+));
-        massively::stable_sort_by_key(&exec, gpu_keys.slice(..), gpu_values.slice(..), $less, out_keys.slice_mut(..), out_values.slice_mut(..)).unwrap();
-        let (host_keys, host_values) = oracle::stable_sort_by_key(&keys, &values, $less);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_keys).unwrap(), $key_zip), host_keys);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&out_values).unwrap(), $value_zip), host_values);
     }};
@@ -943,8 +908,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::count_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            mindex(oracle::count_if(&input, KeepTuple, ()))
+            massively::count_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            mindex(oracle::count_if(&input, KeepTuple))
         );
     }};
     (all_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -953,8 +918,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::all_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::all_of(&input, KeepTuple, ())
+            massively::all_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::all_of(&input, KeepTuple)
         );
     }};
     (any_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -963,8 +928,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::any_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::any_of(&input, KeepTuple, ())
+            massively::any_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::any_of(&input, KeepTuple)
         );
     }};
     (none_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -973,8 +938,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::none_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::none_of(&input, KeepTuple, ())
+            massively::none_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::none_of(&input, KeepTuple)
         );
     }};
     (find_if, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -983,8 +948,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::find_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            opt_mindex(oracle::find_if(&input, KeepTuple, ()))
+            massively::find_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            opt_mindex(oracle::find_if(&input, KeepTuple))
         );
     }};
     (is_partitioned, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -993,8 +958,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::is_partitioned(&input, KeepTuple, ())
+            massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::is_partitioned(&input, KeepTuple)
         );
     }};
     (partition, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1003,8 +968,8 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, (), gpu_output.slice_mut(..)).unwrap();
-        let (host_yes, host_no) = oracle::partition(&input, KeepTuple, ());
+        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, gpu_output.slice_mut(..)).unwrap();
+        let (host_yes, host_no) = oracle::partition(&input, KeepTuple);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $zip), host_yes);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
     }};
@@ -1014,32 +979,32 @@ macro_rules! value_case {
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
         prop_assert_eq!(
-            massively::count_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            mindex(oracle::count_if(&input, KeepTuple, ()))
+            massively::count_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            mindex(oracle::count_if(&input, KeepTuple))
         );
         prop_assert_eq!(
-            massively::all_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::all_of(&input, KeepTuple, ())
+            massively::all_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::all_of(&input, KeepTuple)
         );
         prop_assert_eq!(
-            massively::any_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::any_of(&input, KeepTuple, ())
+            massively::any_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::any_of(&input, KeepTuple)
         );
         prop_assert_eq!(
-            massively::none_of(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::none_of(&input, KeepTuple, ())
+            massively::none_of(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::none_of(&input, KeepTuple)
         );
         prop_assert_eq!(
-            massively::find_if(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            opt_mindex(oracle::find_if(&input, KeepTuple, ()))
+            massively::find_if(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            opt_mindex(oracle::find_if(&input, KeepTuple))
         );
         prop_assert_eq!(
-            massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple, ()).unwrap(),
-            oracle::is_partitioned(&input, KeepTuple, ())
+            massively::is_partitioned(&exec, gpu_input.slice(..), KeepTuple).unwrap(),
+            oracle::is_partitioned(&input, KeepTuple)
         );
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, (), gpu_output.slice_mut(..)).unwrap();
-        let (host_yes, host_no) = oracle::partition(&input, KeepTuple, ());
+        let split = massively::partition(&exec, gpu_input.slice(..), KeepTuple, gpu_output.slice_mut(..)).unwrap();
+        let (host_yes, host_no) = oracle::partition(&input, KeepTuple);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(..split)).unwrap(), $zip), host_yes);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
     }};
@@ -1283,13 +1248,12 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             Identity,
-            (),
             gpu_stencil.slice(..),
             gpu_output.slice_mut(..),
         )
         .unwrap();
         let mut host = input.clone();
-        oracle::transform_where(&input, Identity, (), &stencil, &mut host);
+        oracle::transform_where(&input, Identity, &stencil, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (fill, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1332,13 +1296,12 @@ macro_rules! value_case {
             &exec,
             gpu_input.slice(..),
             Identity,
-            (),
             gpu_stencil.slice(..),
             gpu_output.slice_mut(..),
         )
         .unwrap();
         let mut host = input.clone();
-        oracle::transform_where(&input, Identity, (), &stencil, &mut host);
+        oracle::transform_where(&input, Identity, &stencil, &mut host);
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (ordering, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1356,14 +1319,6 @@ macro_rules! value_case {
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
         massively::sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), sorted.clone());
-
-        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::stable_sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
-        prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
-            oracle::stable_sort(&input, LessTuple)
-        );
-
         let merge_init = sorted.iter().chain(right.iter()).copied().collect::<Vec<_>>();
         let gpu_output = make_zip!(&exec, &merge_init, $zip, ($($ty),+));
         massively::merge(&exec, gpu_sorted.slice(..), gpu_right.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
@@ -1440,18 +1395,6 @@ macro_rules! value_case {
         prop_assert_eq!(
             cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
             oracle::sort(&input, LessTuple)
-        );
-    }};
-    (stable_sort, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
-        let exec = exec();
-        let input = $input;
-        let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
-        let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
-        massively::stable_sort(&exec, gpu_input.slice(..), LessTuple, gpu_output.slice_mut(..)).unwrap();
-        prop_assert_eq!(
-            cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip),
-            oracle::stable_sort(&input, LessTuple)
         );
     }};
     (merge, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
@@ -1758,7 +1701,6 @@ macro_rules! define_ordering_arity_module {
 }
 
 define_ordering_arity_module!(sort_arity, sort);
-define_ordering_arity_module!(stable_sort_arity, stable_sort);
 define_ordering_arity_module!(merge_arity, merge);
 define_ordering_arity_module!(is_sorted_arity, is_sorted);
 define_ordering_arity_module!(is_sorted_until_arity, is_sorted_until);
@@ -2153,124 +2095,6 @@ macro_rules! define_sort_by_key_arity_product_module {
     };
 }
 
-macro_rules! define_stable_sort_by_key_arity_product_module {
-    ($module:ident, $case:ident) => {
-        mod $module {
-            use super::*;
-
-            proptest! {
-                #![proptest_config(ProptestConfig::with_cases(CASES))]
-
-                #[test]
-                fn key_1_value_1(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip1, (u32), LessU32);
-                }
-
-                #[test]
-                fn key_1_value_2(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip2, (u32, u32), LessU32);
-                }
-
-                #[test]
-                fn key_1_value_3(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip3, (u32, u32, u32), LessU32);
-                }
-
-                #[test]
-                fn key_1_value_4(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip4, (u32, u32, u32, u32), LessU32);
-                }
-
-                #[test]
-                fn key_1_value_5(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip5, (u32, u32, u32, u32, u32), LessU32);
-                }
-
-                #[test]
-                fn key_1_value_6(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip6, (u32, u32, u32, u32, u32, u32), LessU32);
-                }
-
-                #[test]
-                fn key_1_value_7(pairs in prop::collection::vec((any::<u32>().prop_map(|k| (k,)), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip1, (u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), LessU32);
-                }
-
-                #[test]
-                fn key_2_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip1, (u32), Less2);
-                }
-
-                #[test]
-                fn key_2_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip2, (u32, u32), Less2);
-                }
-
-                #[test]
-                fn key_2_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip3, (u32, u32, u32), Less2);
-                }
-
-                #[test]
-                fn key_2_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip4, (u32, u32, u32, u32), Less2);
-                }
-
-                #[test]
-                fn key_2_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip5, (u32, u32, u32, u32, u32), Less2);
-                }
-
-                #[test]
-                fn key_2_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less2);
-                }
-
-                #[test]
-                fn key_2_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip2, (u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less2);
-                }
-
-                #[test]
-                fn key_3_value_1(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), any::<u32>().prop_map(|v| (v,))), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip1, (u32), Less3);
-                }
-
-                #[test]
-                fn key_3_value_2(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip2, (u32, u32), Less3);
-                }
-
-                #[test]
-                fn key_3_value_3(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip3, (u32, u32, u32), Less3);
-                }
-
-                #[test]
-                fn key_3_value_4(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip4, (u32, u32, u32, u32), Less3);
-                }
-
-                #[test]
-                fn key_3_value_5(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip5, (u32, u32, u32, u32, u32), Less3);
-                }
-
-                #[test]
-                fn key_3_value_6(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip6, (u32, u32, u32, u32, u32, u32), Less3);
-                }
-
-                #[test]
-                fn key_3_value_7(pairs in prop::collection::vec(((any::<u32>(), any::<u32>(), any::<u32>()), (any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>(), any::<u32>())), 0..MAX_LEN)) {
-                    stable_sort_by_key_case!(pairs, Zip3, (u32, u32, u32), Zip7, (u32, u32, u32, u32, u32, u32, u32), Less3);
-                }
-
-            }
-        }
-    };
-}
-
 macro_rules! define_scan_by_key_arity_product_module {
     ($module:ident, $case:ident) => {
         mod $module {
@@ -2508,7 +2332,6 @@ macro_rules! define_merge_by_key_arity_product_module {
 }
 
 define_sort_by_key_arity_product_module!(sort_by_key_arity, sort_by_key);
-define_stable_sort_by_key_arity_product_module!(stable_sort_by_key_arity, stable_sort_by_key);
 define_scan_by_key_arity_product_module!(inclusive_scan_by_key_arity, inclusive_scan_by_key);
 define_scan_by_key_arity_product_module!(exclusive_scan_by_key_arity, exclusive_scan_by_key);
 define_scan_by_key_arity_product_module!(reduce_by_key_arity, reduce_by_key);

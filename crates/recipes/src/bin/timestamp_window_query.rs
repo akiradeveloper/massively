@@ -25,7 +25,7 @@ where
     B: cubecl::prelude::Runtime,
 {
     let queries = exec.to_device(&[start, end])?;
-    let indices = exec.constant(2, 0_u32)?;
+    let indices = exec.full(2, 0_u32)?;
     lower_bound(
         exec,
         Zip1(timestamp.slice(..)),

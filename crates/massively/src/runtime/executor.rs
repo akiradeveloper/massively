@@ -80,8 +80,8 @@ impl<R: Runtime> Executor<R> {
         Ok(DeviceVec::from_inner(self.inner.to_device(input)?))
     }
 
-    /// Allocates device-resident storage and fills it with `value`.
-    pub fn constant<T>(&self, len: MIndex, value: T) -> Result<DeviceVec<R, T>, Error>
+    /// Allocates device-resident storage and fills every element with `value`.
+    pub fn full<T>(&self, len: MIndex, value: T) -> Result<DeviceVec<R, T>, Error>
     where
         T: MStorageElement,
     {
@@ -99,13 +99,6 @@ impl<R: Runtime> Executor<R> {
         Item: MAlloc<R>,
     {
         Item::alloc_storage(self, len)
-    }
-
-    /// Allocates an `MIndex` device vector containing `0..len`.
-    pub fn counting(&self, len: MIndex) -> Result<DeviceVec<R, MIndex>, Error> {
-        Ok(DeviceVec::from_inner(
-            crate::detail::primitives::range::indices_mindex(self.policy(), len)?,
-        ))
     }
 
     /// Copies device-resident storage back to host memory.

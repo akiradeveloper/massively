@@ -458,7 +458,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -469,7 +468,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::transform_read(read, policy, op, env, output)
+        crate::detail::read::KernelRead::transform_read(read, policy, op, output)
     }
 
     #[doc(hidden)]
@@ -477,7 +476,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -489,9 +487,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::transform_where_read(
-            read, policy, op, env, stencil, output,
-        )
+        crate::detail::read::KernelRead::transform_where_read(read, policy, op, stencil, output)
     }
 
     #[doc(hidden)]
@@ -499,7 +495,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<MIndex, Error>
     where
         Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
@@ -507,7 +502,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::count_if_read(read, policy, pred, env)
+        crate::detail::read::KernelRead::count_if_read(read, policy, pred)
     }
 
     #[doc(hidden)]
@@ -515,7 +510,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
@@ -523,7 +517,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::all_of_read(read, policy, pred, env)
+        crate::detail::read::KernelRead::all_of_read(read, policy, pred)
     }
 
     #[doc(hidden)]
@@ -531,7 +525,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
@@ -539,7 +532,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::any_of_read(read, policy, pred, env)
+        crate::detail::read::KernelRead::any_of_read(read, policy, pred)
     }
 
     #[doc(hidden)]
@@ -547,7 +540,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
@@ -555,7 +547,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::none_of_read(read, policy, pred, env)
+        crate::detail::read::KernelRead::none_of_read(read, policy, pred)
     }
 
     #[doc(hidden)]
@@ -563,7 +555,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<Option<MIndex>, Error>
     where
         Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
@@ -571,7 +562,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::find_if_read(read, policy, pred, env)
+        crate::detail::read::KernelRead::find_if_read(read, policy, pred)
     }
 
     #[doc(hidden)]
@@ -579,7 +570,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
     ) -> Result<bool, Error>
     where
         Self::Read: crate::detail::read::KernelReadBoundMany<R, Item = Self::Item>,
@@ -587,7 +577,7 @@ pub trait MIter<R: Runtime>: Sized {
     {
         let read = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&read)?;
-        crate::detail::read::KernelRead::is_partitioned_read(read, policy, pred, env)
+        crate::detail::read::KernelRead::is_partitioned_read(read, policy, pred)
     }
 
     #[doc(hidden)]
@@ -976,7 +966,6 @@ pub trait MIter<R: Runtime>: Sized {
         self,
         policy: &crate::detail::CubePolicy<R>,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<MIndex, Error>
     where
@@ -985,7 +974,7 @@ pub trait MIter<R: Runtime>: Sized {
         Output: MIterMut<R, Item = Self::Item>,
     {
         let source = self.into_alloc_view_with_policy(policy)?;
-        <Self::Item as MAlloc<R>>::partition_from_view(policy, source, pred, env, output)
+        <Self::Item as MAlloc<R>>::partition_from_view(policy, source, pred, output)
     }
 
     #[doc(hidden)]

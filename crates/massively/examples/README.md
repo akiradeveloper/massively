@@ -13,7 +13,7 @@ Run one example:
 cargo run --example sort
 cargo run --example util-random
 cargo run --example runtime-alloc
-cargo run --example runtime-constant
+cargo run --example runtime-full
 ```
 
 Algorithm example names match the Rust function names, for example:

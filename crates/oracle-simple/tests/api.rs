@@ -12,8 +12,7 @@ use massively::{
     none_of as api_none_of, partition as api_partition, reduce as api_reduce, reduce_by_key,
     remove_where as api_remove_where, replace_where as api_replace_where, reverse as api_reverse,
     scatter, scatter_where, set_difference, set_intersection, set_union, sort as api_sort,
-    sort_by_key, stable_sort, stable_sort_by_key, transform as api_transform, unique as api_unique,
-    unique_by_key, upper_bound,
+    sort_by_key, transform as api_transform, unique as api_unique, unique_by_key, upper_bound,
 };
 use proptest::prelude::*;
 use std::sync::{Mutex, MutexGuard};
@@ -28,10 +27,9 @@ struct TransformMap;
 
 #[cubecl::cube]
 impl UnaryOp<ApiRuntime, (u32,)> for TransformMap {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32,)) -> (u32,) {
+    fn apply(input: (u32,)) -> (u32,) {
         (input.0 / 3 + 17,)
     }
 }
@@ -49,9 +47,7 @@ struct TupleKeep;
 
 #[cubecl::cube]
 impl PredicateOp<ApiRuntime, (u32,)> for TupleKeep {
-    type Env = ();
-
-    fn apply(_env: (), input: (u32,)) -> bool {
+    fn apply(input: (u32,)) -> bool {
         input.0 % 2 == 0
     }
 }
@@ -156,7 +152,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        api_transform(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TransformMap, (), massively::Zip1(output_g.slice_mut(..))).unwrap();
+        api_transform(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TransformMap, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), transform_map(&input));
     }
 
@@ -228,7 +224,7 @@ proptest! {
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        let split = api_partition(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, (), massively::Zip1(output_g.slice_mut(..))).unwrap();
+        let split = api_partition(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, massively::Zip1(output_g.slice_mut(..))).unwrap();
         let (matching, failing) = oracle_simple::partition(&input);
         prop_assert_eq!(exec.to_host(&output_g.slice(..split)).unwrap(), matching);
         prop_assert_eq!(exec.to_host(&output_g.slice(split..mindex(input.len()))).unwrap(), failing);
@@ -239,7 +235,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_count_if(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), mindex(oracle_simple::count_if(&input)));
+        prop_assert_eq!(api_count_if(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), mindex(oracle_simple::count_if(&input)));
     }
 
     #[test]
@@ -247,7 +243,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_all_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::all_of(&input));
+        prop_assert_eq!(api_all_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle_simple::all_of(&input));
     }
 
     #[test]
@@ -255,7 +251,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_any_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::any_of(&input));
+        prop_assert_eq!(api_any_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle_simple::any_of(&input));
     }
 
     #[test]
@@ -263,7 +259,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_none_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::none_of(&input));
+        prop_assert_eq!(api_none_of(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle_simple::none_of(&input));
     }
 
     #[test]
@@ -271,7 +267,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_find_if(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), opt_mindex(oracle_simple::find_if(&input)));
+        prop_assert_eq!(api_find_if(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), opt_mindex(oracle_simple::find_if(&input)));
     }
 
     #[test]
@@ -279,7 +275,7 @@ proptest! {
         let _guard = gpu_lock();
         let exec = api_exec();
         let input_g = padded_device(&exec, &input);
-        prop_assert_eq!(api_is_partitioned(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep, ()).unwrap(), oracle_simple::is_partitioned(&input));
+        prop_assert_eq!(api_is_partitioned(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleKeep).unwrap(), oracle_simple::is_partitioned(&input));
     }
 
     #[test]
@@ -396,16 +392,6 @@ proptest! {
         let input_g = padded_device(&exec, &input);
         let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
         api_sort(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
-        prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::sort(&input));
-    }
-
-    #[test]
-    fn stable_sort_matches_oracle(input in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
-        let _guard = gpu_lock();
-        let exec = exec();
-        let input_g = padded_device(&exec, &input);
-        let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
-        stable_sort(&exec, massively::Zip1(input_g.slice(slice_range(&input))), TupleBucketThenValueLess, massively::Zip1(output_g.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&output_g).unwrap(), oracle_simple::sort(&input));
     }
 
@@ -657,21 +643,6 @@ proptest! {
         let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
         let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
         sort_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::Zip1(actual_keys.slice_mut(..)), massively::Zip1(actual_values.slice_mut(..))).unwrap();
-        prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
-        prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
-    }
-
-    #[test]
-    fn stable_sort_by_key_matches_oracle(values in prop::collection::vec(any::<u32>(), 0..MAX_LEN)) {
-        let _guard = gpu_lock();
-        let keys = unique_keys(values.len());
-        let exec = exec();
-        let keys_g = padded_device(&exec, &keys);
-        let values_g = padded_device(&exec, &values);
-        let (expected_keys, expected_values) = oracle_simple::sort_by_key(&keys, &values);
-        let actual_keys = exec.to_device(&vec![0_u32; keys.len()]).unwrap();
-        let actual_values = exec.to_device(&vec![0_u32; values.len()]).unwrap();
-        stable_sort_by_key(&exec, massively::Zip1(keys_g.slice(slice_range(&keys))), massively::Zip1(values_g.slice(slice_range(&values))), TupleBucketThenValueLess, massively::Zip1(actual_keys.slice_mut(..)), massively::Zip1(actual_values.slice_mut(..))).unwrap();
         prop_assert_eq!(exec.to_host(&actual_keys).unwrap(), expected_keys);
         prop_assert_eq!(exec.to_host(&actual_values).unwrap(), expected_values);
     }

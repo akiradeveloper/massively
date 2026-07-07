@@ -201,9 +201,8 @@ macro_rules! impl_arity_ops {
 
         #[cubecl::cube]
         impl PredicateOp<WgpuRuntime, ($($ty,)+)> for ArityPred {
-            type Env = ();
 
-            fn apply(_env: (), _input: ($($ty,)+)) -> bool {
+            fn apply(_input: ($($ty,)+)) -> bool {
                 true
             }
         }
@@ -222,10 +221,9 @@ macro_rules! impl_tuple_to_scalar {
     ($($ty:ty),+) => {
         #[cubecl::cube]
         impl UnaryOp<WgpuRuntime, ($($ty,)+)> for ArityTupleToScalar {
-            type Env = ();
             type Output = (u32,);
 
-            fn apply(_env: (), _input: ($($ty,)+)) -> (u32,) {
+            fn apply(_input: ($($ty,)+)) -> (u32,) {
                 (1_u32,)
             }
         }
@@ -236,10 +234,9 @@ macro_rules! impl_scalar_to_tuple {
     ($op:ident, ($($ty:ty),+), ($($out:expr),+)) => {
         #[cubecl::cube]
         impl UnaryOp<WgpuRuntime, (u32,)> for $op {
-            type Env = ();
             type Output = ($($ty,)+);
 
-            fn apply(_env: (), input: (u32,)) -> ($($ty,)+) {
+            fn apply(input: (u32,)) -> ($($ty,)+) {
                 let _ = input;
                 ($($out,)+)
             }
@@ -491,7 +488,7 @@ macro_rules! all_of_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::all_of(&exec, values.slice(..), ArityPred, ()).unwrap();
+        massively::all_of(&exec, values.slice(..), ArityPred).unwrap();
     }};
 }
 define_value_arity_tests!(all_of_arity, all_of_case);
@@ -500,7 +497,7 @@ macro_rules! any_of_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::any_of(&exec, values.slice(..), ArityPred, ()).unwrap();
+        massively::any_of(&exec, values.slice(..), ArityPred).unwrap();
     }};
 }
 define_value_arity_tests!(any_of_arity, any_of_case);
@@ -526,7 +523,7 @@ macro_rules! count_if_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::count_if(&exec, values.slice(..), ArityPred, ()).unwrap();
+        massively::count_if(&exec, values.slice(..), ArityPred).unwrap();
     }};
 }
 define_value_arity_tests!(count_if_arity, count_if_case);
@@ -627,7 +624,7 @@ macro_rules! find_if_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::find_if(&exec, values.slice(..), ArityPred, ()).unwrap();
+        massively::find_if(&exec, values.slice(..), ArityPred).unwrap();
     }};
 }
 define_value_arity_tests!(find_if_arity, find_if_case);
@@ -726,7 +723,7 @@ macro_rules! is_partitioned_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::is_partitioned(&exec, values.slice(..), ArityPred, ()).unwrap();
+        massively::is_partitioned(&exec, values.slice(..), ArityPred).unwrap();
     }};
 }
 define_value_arity_tests!(is_partitioned_arity, is_partitioned_case);
@@ -787,7 +784,6 @@ macro_rules! map_input_case {
             &exec,
             values.slice(..),
             ArityTupleToScalar,
-            (),
             out.slice_mut(..),
         )
         .unwrap();
@@ -801,7 +797,7 @@ macro_rules! map_output_case {
         let _ = $values_fn;
         let values = values1(&exec);
         let out = $output(&exec);
-        massively::transform(&exec, values.slice(..), $op, (), out.slice_mut(..)).unwrap();
+        massively::transform(&exec, values.slice(..), $op, out.slice_mut(..)).unwrap();
     }};
 }
 define_output_arity_tests!(map_output_arity, map_output_case);
@@ -913,7 +909,7 @@ macro_rules! none_of_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
         let values = $values(&exec);
-        massively::none_of(&exec, values.slice(..), ArityPred, ()).unwrap();
+        massively::none_of(&exec, values.slice(..), ArityPred).unwrap();
     }};
 }
 define_value_arity_tests!(none_of_arity, none_of_case);
@@ -923,7 +919,7 @@ macro_rules! partition_case {
         let exec = exec();
         let values = $values(&exec);
         let out = $output(&exec);
-        massively::partition(&exec, values.slice(..), ArityPred, (), out.slice_mut(..)).unwrap();
+        massively::partition(&exec, values.slice(..), ArityPred, out.slice_mut(..)).unwrap();
     }};
 }
 define_value_arity_tests!(partition_arity, partition_case);
@@ -1175,59 +1171,6 @@ macro_rules! sort_by_key_value_case {
 }
 define_value_arity_tests!(sort_by_key_value_arity, sort_by_key_value_case);
 
-macro_rules! stable_sort_case {
-    ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
-        let exec = exec();
-        let values = $values(&exec);
-        let out = $output(&exec);
-        massively::stable_sort(&exec, values.slice(..), ArityLess, out.slice_mut(..)).unwrap();
-    }};
-}
-define_value_arity_tests!(stable_sort_arity, stable_sort_case);
-
-macro_rules! stable_sort_by_key_key_case {
-    ($keys:ident, $owned:ty) => {{
-        let exec = exec();
-        let keys = $keys(&exec);
-        let values = values1(&exec);
-        let out_keys = $keys(&exec);
-        let out_values = output1(&exec);
-        massively::stable_sort_by_key(
-            &exec,
-            keys.slice(..),
-            values.slice(..),
-            ArityLess,
-            out_keys.slice_mut(..),
-            out_values.slice_mut(..),
-        )
-        .unwrap();
-    }};
-}
-define_key_arity_tests!(stable_sort_by_key_key_arity, stable_sort_by_key_key_case);
-
-macro_rules! stable_sort_by_key_value_case {
-    ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
-        let exec = exec();
-        let keys = values1(&exec);
-        let values = $values(&exec);
-        let out_keys = output1(&exec);
-        let out_values = $output(&exec);
-        massively::stable_sort_by_key(
-            &exec,
-            keys.slice(..),
-            values.slice(..),
-            ArityLess,
-            out_keys.slice_mut(..),
-            out_values.slice_mut(..),
-        )
-        .unwrap();
-    }};
-}
-define_value_arity_tests!(
-    stable_sort_by_key_value_arity,
-    stable_sort_by_key_value_case
-);
-
 macro_rules! transform_input_case {
     ($values:ident, $output:ident, $owned:ty, $init:expr) => {{
         let exec = exec();
@@ -1237,7 +1180,6 @@ macro_rules! transform_input_case {
             &exec,
             values.slice(..),
             ArityTupleToScalar,
-            (),
             out.slice_mut(..),
         )
         .unwrap();
@@ -1251,7 +1193,7 @@ macro_rules! transform_output_case {
         let _ = $values_fn;
         let values = values1(&exec);
         let out = $output(&exec);
-        massively::transform(&exec, values.slice(..), $op, (), out.slice_mut(..)).unwrap();
+        massively::transform(&exec, values.slice(..), $op, out.slice_mut(..)).unwrap();
     }};
 }
 define_output_arity_tests!(transform_output_arity, transform_output_case);
@@ -1266,7 +1208,6 @@ macro_rules! transform_where_input_case {
             &exec,
             values.slice(..),
             ArityTupleToScalar,
-            (),
             stencil.slice(..),
             out.slice_mut(..),
         )
@@ -1286,7 +1227,6 @@ macro_rules! transform_where_output_case {
             &exec,
             values.slice(..),
             $op,
-            (),
             stencil.slice(..),
             out.slice_mut(..),
         )

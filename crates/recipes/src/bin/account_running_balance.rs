@@ -23,7 +23,7 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let balance = exec.constant(amount_delta.len(), 0.0_f32)?;
+    let balance = exec.full(amount_delta.len(), 0.0_f32)?;
     inclusive_scan_by_key(
         exec,
         Zip1(account_id.slice(..)),

@@ -25,19 +25,38 @@ fn executor_to_host_rejects_other_executor_data() {
 }
 
 #[test]
-fn executor_constant_allocates_owned_device_vec() {
+fn executor_full_allocates_owned_device_vec() {
     let exec = exec();
-    let input = exec.constant(4, 7_u32).unwrap();
+    let input = exec.full(4, 7_u32).unwrap();
 
     assert_eq!(exec.to_host(&input).unwrap(), vec![7, 7, 7, 7]);
 }
 
-#[test]
-fn executor_counting_allocates_owned_device_vec() {
-    let exec = exec();
-    let input = exec.counting(5).unwrap();
+struct IdentityU32;
 
-    assert_eq!(exec.to_host(&input).unwrap(), vec![0, 1, 2, 3, 4]);
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, u32> for IdentityU32 {
+    type Output = (u32,);
+
+    fn apply(input: u32) -> (u32,) {
+        (input,)
+    }
+}
+
+#[test]
+fn lazy_counting_can_be_materialized_into_owned_device_vec() {
+    let exec = exec();
+    let input = exec.alloc::<(u32,)>(5).unwrap();
+
+    transform(
+        &exec,
+        massively::lazy::counting(0).take(5),
+        IdentityU32,
+        input.slice_mut(..),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&input.0).unwrap(), vec![0, 1, 2, 3, 4]);
 }
 
 #[test]
@@ -228,7 +247,6 @@ fn algorithms_reject_other_executor_data() {
         &other_exec,
         massively::Zip1(input.slice(..)),
         Double,
-        (),
         massively::Zip1(output.slice_mut(..)),
     );
 
@@ -245,7 +263,6 @@ fn transform_accepts_device_slice() {
         &exec,
         input.slice(1..3),
         Double,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();
@@ -298,7 +315,6 @@ fn transform_accepts_multi_column_device_slices() {
         &exec,
         massively::Zip2(values.slice(1..4), tags.slice(1..4)),
         PairMixedSplit,
-        (),
         massively::Zip2(out_values.slice_mut(..), out_tags.slice_mut(..)),
     )
     .unwrap();
@@ -870,7 +886,6 @@ fn transform_accepts_three_column_device_slices() {
         &exec,
         massively::Zip3(a.slice(1..4), b.slice(1..4), c.slice(1..4)),
         Tuple3MixedSplit,
-        (),
         massively::Zip3(
             out_a.slice_mut(..),
             out_b.slice_mut(..),
@@ -900,7 +915,6 @@ fn empty_device_slice_is_valid_input() {
         &exec,
         massively::Zip1(values.slice(1..1)),
         Double,
-        (),
         massively::Zip1(output.slice_mut(..)),
     )
     .unwrap();

@@ -167,7 +167,7 @@ where
     InputItem: CubeType + 'static,
     OutputItem: CubeType + 'static,
     InputExpr: LogicalDeviceExpr<InputItem>,
-    Op: crate::detail::op::kernel::UnaryOp<InputItem, Env = (), Output = OutputItem>,
+    Op: crate::detail::op::kernel::UnaryOp<InputItem, Output = OutputItem>,
 {
 }
 
@@ -662,7 +662,7 @@ where
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
     InputExpr: LogicalDeviceExpr7<InputItem, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
-    Op: crate::detail::op::kernel::UnaryOp<InputItem, Env = (), Output = OutputItem>,
+    Op: crate::detail::op::kernel::UnaryOp<InputItem, Output = OutputItem>,
 {
     fn eval7(
         slot0: &[Leaf0],
@@ -686,7 +686,7 @@ where
             slot_offsets,
             index,
         );
-        Op::apply((), input)
+        Op::apply(input)
     }
 }
 

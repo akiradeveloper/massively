@@ -949,7 +949,6 @@ pub(in crate::detail) fn device_expr_count_if_with_policy<ExprSource, Pred>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<MIndex, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -959,7 +958,7 @@ where
     Pred: PredicateOp<ExprSource::Item>,
 {
     let selected_rank =
-        device_expr_selected_rank_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
+        device_expr_selected_rank_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
     if selected_rank.len == 0 {
         return Ok(0);
     }
@@ -974,7 +973,6 @@ pub(in crate::detail) fn device_expr_find_if_with_policy<ExprSource, Pred>(
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<Option<MIndex>, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -983,8 +981,7 @@ where
     ExprSource::Expr: GpuExpr<ExprSource::Item>,
     Pred: PredicateOp<ExprSource::Item>,
 {
-    let mask =
-        device_expr_selection_flags_with_policy::<ExprSource, Pred>(policy, expr, invert, env)?;
+    let mask = device_expr_selection_flags_with_policy::<ExprSource, Pred>(policy, expr, invert)?;
     primitive_search::first_flag(policy, mask.flag.clone(), mask.len, expr.len())
 }
 
@@ -992,7 +989,6 @@ pub(in crate::detail) fn device_expr_selected_rank_with_policy<ExprSource, Pred>
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<select::SelectedRankControl, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -1032,7 +1028,6 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-            env,
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
@@ -1051,7 +1046,6 @@ pub(in crate::detail) fn device_expr_selection_flags_with_policy<ExprSource, Pre
     policy: &crate::policy::CubePolicy<ExprSource::Runtime>,
     expr: &ExprSource,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<ExprSource::Runtime>,
 ) -> Result<select::MaskControl, Error>
 where
     ExprSource: KernelColumn + KernelColumnAt<S0>,
@@ -1090,7 +1084,6 @@ where
             client,
             CubeCount::Static(block_count_u32, 1, 1),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
-            env,
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
             unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },

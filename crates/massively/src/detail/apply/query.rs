@@ -7,7 +7,6 @@ impl QueryApply {
         policy: &crate::policy::CubePolicy<Source::Runtime>,
         source: &Source,
         invert: bool,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Source::Runtime>,
     ) -> Result<MIndex, Error>
     where
         Source: KernelColumn + KernelColumnAt<S0>,
@@ -15,14 +14,13 @@ impl QueryApply {
         Source::Expr: GpuExpr<Source::Item>,
         Pred: PredicateOp<Source::Item>,
     {
-        device_expr_count_if_with_policy::<Source, Pred>(policy, source, invert, env)
+        device_expr_count_if_with_policy::<Source, Pred>(policy, source, invert)
     }
 
     pub(in crate::detail) fn find_expr<Source, Pred>(
         policy: &crate::policy::CubePolicy<Source::Runtime>,
         source: &Source,
         invert: bool,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Source::Runtime>,
     ) -> Result<Option<MIndex>, Error>
     where
         Source: KernelColumn + KernelColumnAt<S0>,
@@ -30,7 +28,7 @@ impl QueryApply {
         Source::Expr: GpuExpr<Source::Item>,
         Pred: PredicateOp<Source::Item>,
     {
-        device_expr_find_if_with_policy::<Source, Pred>(policy, source, invert, env)
+        device_expr_find_if_with_policy::<Source, Pred>(policy, source, invert)
     }
 
     pub(in crate::detail) fn minmax_expr<Source, Less>(

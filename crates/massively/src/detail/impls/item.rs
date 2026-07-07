@@ -855,7 +855,7 @@ macro_rules! wide_scan_apply_from_tuple {
 }
 
 macro_rules! wide_predicate_rank_from_tuple {
-    ($policy:expr, $env:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr) => {{
+    ($policy:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr) => {{
         let dummy_e = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_f = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_g = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
@@ -863,43 +863,43 @@ macro_rules! wide_predicate_rank_from_tuple {
         let dummy_f = crate::detail::device::DeviceColumnView::from_column(&dummy_f);
         let dummy_g = crate::detail::device::DeviceColumnView::from_column(&dummy_g);
         wide_predicate_rank_from_tuple!(
-            @launch $policy, $env,
+            @launch $policy,
             crate::detail::api::Tuple4AsTuple7PredicateOp<KernelOp<R, $pred>>,
             ($a, $b, $c, $d, &dummy_e, &dummy_f, &dummy_g),
             (A, B, C, D, u32, u32, u32)
         )
     }};
-    ($policy:expr, $env:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr, $e:expr) => {{
+    ($policy:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr, $e:expr) => {{
         let dummy_f = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_g = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_f = crate::detail::device::DeviceColumnView::from_column(&dummy_f);
         let dummy_g = crate::detail::device::DeviceColumnView::from_column(&dummy_g);
         wide_predicate_rank_from_tuple!(
-            @launch $policy, $env,
+            @launch $policy,
             crate::detail::api::Tuple5AsTuple7PredicateOp<KernelOp<R, $pred>>,
             ($a, $b, $c, $d, $e, &dummy_f, &dummy_g),
             (A, B, C, D, E, u32, u32)
         )
     }};
-    ($policy:expr, $env:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr) => {{
+    ($policy:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr) => {{
         let dummy_g = crate::detail::primitives::range::indices_mindex($policy, $a.len)?;
         let dummy_g = crate::detail::device::DeviceColumnView::from_column(&dummy_g);
         wide_predicate_rank_from_tuple!(
-            @launch $policy, $env,
+            @launch $policy,
             crate::detail::api::Tuple6AsTuple7PredicateOp<KernelOp<R, $pred>>,
             ($a, $b, $c, $d, $e, $f, &dummy_g),
             (A, B, C, D, E, F, u32)
         )
     }};
-    ($policy:expr, $env:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr) => {
+    ($policy:expr; $pred:ty; $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr) => {
         wide_predicate_rank_from_tuple!(
-            @launch $policy, $env,
+            @launch $policy,
             KernelOp<R, $pred>,
             ($a, $b, $c, $d, $e, $f, $g),
             (A, B, C, D, E, F, G)
         )
     };
-    (@launch $policy:expr, $env:expr, $pred:ty, ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty)) => {{
+    (@launch $policy:expr, $pred:ty, ($a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr), ($ty0:ty, $ty1:ty, $ty2:ty, $ty3:ty, $ty4:ty, $ty5:ty, $ty6:ty)) => {{
         let len = $a.len;
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         if len == 0 {
@@ -940,7 +940,6 @@ macro_rules! wide_predicate_rank_from_tuple {
                     client,
                     CubeCount::Static(block_count_u32, 1, 1),
                     CubeDim::new_1d(block_size),
-                    $env,
                     BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
                     BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
                     BufferArg::from_raw_parts($c.source.handle.clone(), $c.source.len()),
@@ -1008,33 +1007,29 @@ macro_rules! zip_into_inner {
 }
 
 macro_rules! transform_from_tuple_view {
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident) => {
-        <$output as sealed::MItemDispatch<R>>::transform_unary($policy, $a, $op, $env)
+    ($output:ty, $policy:expr, $op:expr; $a:ident) => {
+        <$output as sealed::MItemDispatch<R>>::transform_unary($policy, $a, $op)
     };
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident, $b:ident) => {
-        <$output as sealed::MItemDispatch<R>>::transform_binary($policy, $a, $b, $op, $env)
+    ($output:ty, $policy:expr, $op:expr; $a:ident, $b:ident) => {
+        <$output as sealed::MItemDispatch<R>>::transform_binary($policy, $a, $b, $op)
     };
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident, $b:ident, $c:ident) => {
-        <$output as sealed::MItemDispatch<R>>::transform_ternary($policy, $a, $b, $c, $op, $env)
+    ($output:ty, $policy:expr, $op:expr; $a:ident, $b:ident, $c:ident) => {
+        <$output as sealed::MItemDispatch<R>>::transform_ternary($policy, $a, $b, $c, $op)
     };
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident, $b:ident, $c:ident, $d:ident) => {
-        <$output as sealed::MItemDispatch<R>>::transform_quaternary(
-            $policy, $a, $b, $c, $d, $op, $env,
-        )
+    ($output:ty, $policy:expr, $op:expr; $a:ident, $b:ident, $c:ident, $d:ident) => {
+        <$output as sealed::MItemDispatch<R>>::transform_quaternary($policy, $a, $b, $c, $d, $op)
     };
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident) => {
-        <$output as sealed::MItemDispatch<R>>::transform_quinary(
-            $policy, $a, $b, $c, $d, $e, $op, $env,
-        )
+    ($output:ty, $policy:expr, $op:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident) => {
+        <$output as sealed::MItemDispatch<R>>::transform_quinary($policy, $a, $b, $c, $d, $e, $op)
     };
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident) => {
+    ($output:ty, $policy:expr, $op:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident) => {
         <$output as sealed::MItemDispatch<R>>::transform_senary(
-            $policy, $a, $b, $c, $d, $e, $f, $op, $env,
+            $policy, $a, $b, $c, $d, $e, $f, $op,
         )
     };
-    ($output:ty, $policy:expr, $op:expr, $env:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident, $g:ident) => {
+    ($output:ty, $policy:expr, $op:expr; $a:ident, $b:ident, $c:ident, $d:ident, $e:ident, $f:ident, $g:ident) => {
         <$output as sealed::MItemDispatch<R>>::transform_septenary(
-            $policy, $a, $b, $c, $d, $e, $f, $g, $op, $env,
+            $policy, $a, $b, $c, $d, $e, $f, $g, $op,
         )
     };
 }
@@ -1402,7 +1397,6 @@ macro_rules! impl_mitem_tuple {
                 policy: &crate::detail::CubePolicy<R>,
                 input: Self::View,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<(), Error>
             where
@@ -1414,8 +1408,7 @@ macro_rules! impl_mitem_tuple {
                 let inner = transform_from_tuple_view!(
                     Output::Item,
                     policy,
-                    op,
-                    env;
+                    op;
                     $( $var ),+
                 )?;
                 output.write_from_inner(policy, inner)
@@ -1425,7 +1418,6 @@ macro_rules! impl_mitem_tuple {
                 policy: &crate::detail::CubePolicy<R>,
                 input: Self::View,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 stencil: crate::detail::api::PrecomputedSelection<R>,
                 output: Output,
             ) -> Result<(), Error>
@@ -1438,8 +1430,7 @@ macro_rules! impl_mitem_tuple {
                 let inner = transform_from_tuple_view!(
                     Output::Item,
                     policy,
-                    op,
-                    env;
+                    op;
                     $( $var ),+
                 )?;
                 output.write_where_from_inner(policy, inner, stencil)
@@ -1478,7 +1469,6 @@ macro_rules! impl_mitem_tuple {
                 policy: &crate::detail::CubePolicy<R>,
                 input: Self::View,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<MIndex, Error>
             where
@@ -1487,7 +1477,7 @@ macro_rules! impl_mitem_tuple {
             {
                 let input = partition_input_from_tuple!(input; $( $var ),+);
                 let (matching, failing) =
-                    crate::detail::partition(policy, input, KernelOp::<R, Pred>::new(), env)?;
+                    crate::detail::partition(policy, input, KernelOp::<R, Pred>::new())?;
                 let split = mindex_from_usize(matching.0.len())?;
                 output.write_split_from_inner(policy, matching, failing)?;
                 Ok(split)
@@ -1646,7 +1636,6 @@ macro_rules! impl_mitem_tuple {
                 policy: &crate::detail::CubePolicy<R>,
                 input: crate::detail::device::DeviceColumnView<R, Input>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MStorageElement + MItem<R>,
@@ -1666,7 +1655,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelScalarInputOp<R, Op>>(policy, input, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelScalarInputOp<R, Op>>(policy, input)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1677,7 +1666,6 @@ macro_rules! impl_mitem_tuple {
                     Input,
                 >,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MStorageElement,
@@ -1697,7 +1685,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelOp<R, Op>>(policy, input, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelOp<R, Op>>(policy, input)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1712,7 +1700,6 @@ macro_rules! impl_mitem_tuple {
                     Right,
                 >,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Left: MStorageElement,
@@ -1734,7 +1721,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1753,7 +1740,6 @@ macro_rules! impl_mitem_tuple {
                     Third,
                 >,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -1777,7 +1763,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1786,7 +1772,6 @@ macro_rules! impl_mitem_tuple {
                 bindings: crate::detail::device::KernelColumnBindings,
                 len: usize,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MItem<R> + Send + Sync,
@@ -1822,7 +1807,7 @@ macro_rules! impl_mitem_tuple {
                     LeafC,
                     Expr,
                     KernelOp<R, Op>,
-                >>::run_logical3(policy, bindings, len, env)?;
+                >>::run_logical3(policy, bindings, len)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1843,7 +1828,6 @@ macro_rules! impl_mitem_tuple {
                 bindings: crate::detail::device::KernelColumnBindings,
                 len: usize,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MItem<R> + Send + Sync,
@@ -1900,7 +1884,7 @@ macro_rules! impl_mitem_tuple {
                     Leaf6,
                     Expr,
                     KernelOp<R, Op>,
-                >>::run_logical7(policy, bindings, len, env)?;
+                >>::run_logical7(policy, bindings, len)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1911,7 +1895,6 @@ macro_rules! impl_mitem_tuple {
                 third: crate::detail::device::DeviceColumnView<R, Third>,
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -1937,7 +1920,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1949,7 +1932,6 @@ macro_rules! impl_mitem_tuple {
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -1977,7 +1959,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -1991,7 +1973,6 @@ macro_rules! impl_mitem_tuple {
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2021,7 +2002,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2036,7 +2017,6 @@ macro_rules! impl_mitem_tuple {
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2072,7 +2052,7 @@ macro_rules! impl_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2380,7 +2360,6 @@ macro_rules! impl_wide_mitem_tuple {
                 policy: &crate::detail::CubePolicy<R>,
                 input: Self::View,
                 _pred: Pred,
-                env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
                 output: Output,
             ) -> Result<MIndex, Error>
             where
@@ -2389,8 +2368,7 @@ macro_rules! impl_wide_mitem_tuple {
             {
                 let ($( $var, )+) = input;
                 let selected_rank = wide_predicate_rank_from_tuple!(
-                    policy,
-                    env;
+                    policy;
                     Pred;
                     $( &$var ),+
                 )?;
@@ -2572,7 +2550,6 @@ macro_rules! impl_wide_mitem_tuple {
                 policy: &crate::detail::CubePolicy<R>,
                 input: crate::detail::device::DeviceColumnView<R, Input>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MStorageElement + MItem<R>,
@@ -2592,7 +2569,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelScalarInputOp<R, Op>>(policy, input, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelScalarInputOp<R, Op>>(policy, input)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2603,7 +2580,6 @@ macro_rules! impl_wide_mitem_tuple {
                     Input,
                 >,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MStorageElement,
@@ -2623,7 +2599,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelOp<R, Op>>(policy, input, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::unary::<Self, R, Input, KernelOp<R, Op>>(policy, input)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2638,7 +2614,6 @@ macro_rules! impl_wide_mitem_tuple {
                     Right,
                 >,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Left: MStorageElement,
@@ -2660,7 +2635,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip2::<Self, R, Left, Right, KernelOp<R, Op>>(policy, left, right)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2679,7 +2654,6 @@ macro_rules! impl_wide_mitem_tuple {
                     Third,
                 >,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2703,7 +2677,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip3::<Self, R, First, Second, Third, KernelOp<R, Op>>(policy, first, second, third)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2712,7 +2686,6 @@ macro_rules! impl_wide_mitem_tuple {
                 bindings: crate::detail::device::KernelColumnBindings,
                 len: usize,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MItem<R> + Send + Sync,
@@ -2748,7 +2721,7 @@ macro_rules! impl_wide_mitem_tuple {
                     LeafC,
                     Expr,
                     KernelOp<R, Op>,
-                >>::run_logical3(policy, bindings, len, env)?;
+                >>::run_logical3(policy, bindings, len)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2769,7 +2742,6 @@ macro_rules! impl_wide_mitem_tuple {
                 bindings: crate::detail::device::KernelColumnBindings,
                 len: usize,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 Input: MItem<R> + Send + Sync,
@@ -2826,7 +2798,7 @@ macro_rules! impl_wide_mitem_tuple {
                     Leaf6,
                     Expr,
                     KernelOp<R, Op>,
-                >>::run_logical7(policy, bindings, len, env)?;
+                >>::run_logical7(policy, bindings, len)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2837,7 +2809,6 @@ macro_rules! impl_wide_mitem_tuple {
                 third: crate::detail::device::DeviceColumnView<R, Third>,
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2863,7 +2834,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip4::<Self, R, First, Second, Third, Fourth, KernelOp<R, Op>>(policy, first, second, third, fourth)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2875,7 +2846,6 @@ macro_rules! impl_wide_mitem_tuple {
                 fourth: crate::detail::device::DeviceColumnView<R, Fourth>,
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2903,7 +2873,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip5::<Self, R, First, Second, Third, Fourth, Fifth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2917,7 +2887,6 @@ macro_rules! impl_wide_mitem_tuple {
                 fifth: crate::detail::device::DeviceColumnView<R, Fifth>,
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2947,7 +2916,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip6::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
 
@@ -2962,7 +2931,6 @@ macro_rules! impl_wide_mitem_tuple {
                 sixth: crate::detail::device::DeviceColumnView<R, Sixth>,
                 seventh: crate::detail::device::DeviceColumnView<R, Seventh>,
                 op: Op,
-                env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
             ) -> Result<<Self as MAlloc<R>>::Inner, Error>
             where
                 First: MStorageElement,
@@ -2998,7 +2966,7 @@ macro_rules! impl_wide_mitem_tuple {
                 >,
             {
                 let _ = op;
-                let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh, env)?;
+                let storage = crate::detail::apply::TransformPayloadApply::zip7::<Self, R, First, Second, Third, Fourth, Fifth, Sixth, Seventh, KernelOp<R, Op>>(policy, first, second, third, fourth, fifth, sixth, seventh)?;
                 crate::detail::MaterializeOutput::materialize_output(storage, policy)
             }
         }

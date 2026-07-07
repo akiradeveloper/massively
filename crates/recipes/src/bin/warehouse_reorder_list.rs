@@ -26,10 +26,9 @@ impl<B> UnaryOp<B, (u32, u32)> for InventoryUrgency
 where
     B: cubecl::prelude::Runtime,
 {
-    type Env = ();
     type Output = (u32,);
 
-    fn apply(_env: (), input: (u32, u32)) -> (u32,) {
+    fn apply(input: (u32, u32)) -> (u32,) {
         let stock = input.0;
         let daily_sales = input.1;
         let target = daily_sales * 3_u32;
@@ -55,24 +54,23 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let urgency = exec.constant(stock.len(), 0_u32)?;
+    let urgency = exec.full(stock.len(), 0_u32)?;
     transform(
         exec,
         Zip2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
-        (),
         Zip1(urgency.slice_mut(..)),
     )?;
-    let filtered_sku = exec.constant(sku.len(), 0_u32)?;
-    let filtered_urgency = exec.constant(urgency.len(), 0_u32)?;
+    let filtered_sku = exec.full(sku.len(), 0_u32)?;
+    let filtered_urgency = exec.full(urgency.len(), 0_u32)?;
     let len = copy_where(
         exec,
         Zip2(sku.slice(..), urgency.slice(..)),
         urgency.slice(..),
         Zip2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
     )?;
-    let sorted_urgency = exec.constant(len, 0_u32)?;
-    let sorted_sku = exec.constant(len, 0_u32)?;
+    let sorted_urgency = exec.full(len, 0_u32)?;
+    let sorted_sku = exec.full(len, 0_u32)?;
     sort_by_key(
         exec,
         Zip1(filtered_urgency.slice(..len)),
@@ -81,8 +79,8 @@ where
         Zip1(sorted_urgency.slice_mut(..)),
         Zip1(sorted_sku.slice_mut(..)),
     )?;
-    let urgency = exec.constant(len, 0_u32)?;
-    let sku = exec.constant(len, 0_u32)?;
+    let urgency = exec.full(len, 0_u32)?;
+    let sku = exec.full(len, 0_u32)?;
     reverse(
         exec,
         Zip1(sorted_urgency.slice(..)),

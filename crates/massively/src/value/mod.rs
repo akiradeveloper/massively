@@ -331,7 +331,6 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
         policy: &crate::detail::CubePolicy<R>,
         input: Self::View,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -339,7 +338,7 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
         Output::Item: MAlloc<R> + dispatch::MItemDispatch<R>,
         Op: op::UnaryOp<R, Self, Output = Output::Item>,
     {
-        let _ = (policy, input, op, env, output);
+        let _ = (policy, input, op, output);
         Err(Error::Launch {
             message: "transform is not supported for this item storage shape".to_string(),
         })
@@ -350,7 +349,6 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
         policy: &crate::detail::CubePolicy<R>,
         input: Self::View,
         op: Op,
-        env: <Op::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         stencil: crate::detail::api::PrecomputedSelection<R>,
         output: Output,
     ) -> Result<(), Error>
@@ -359,7 +357,7 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
         Output::Item: MAlloc<R> + dispatch::MItemDispatch<R>,
         Op: op::UnaryOp<R, Self, Output = Output::Item>,
     {
-        let _ = (policy, input, op, env, stencil, output);
+        let _ = (policy, input, op, stencil, output);
         Err(Error::Launch {
             message: "transform_where is not supported for this item storage shape".to_string(),
         })
@@ -448,14 +446,13 @@ pub trait MAlloc<R: Runtime>: MItem<R> + dispatch::MItemDispatch<R> {
         policy: &crate::detail::CubePolicy<R>,
         input: Self::View,
         pred: Pred,
-        env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<R>,
         output: Output,
     ) -> Result<MIndex, Error>
     where
         Pred: op::PredicateOp<R, Self>,
         Output: MIterMut<R, Item = Self>,
     {
-        let _ = (policy, input, pred, env, output);
+        let _ = (policy, input, pred, output);
         Err(Error::Launch {
             message: "partition is not supported for this item storage shape".to_string(),
         })

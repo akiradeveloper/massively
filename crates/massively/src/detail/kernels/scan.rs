@@ -2684,15 +2684,13 @@ pub(crate) fn transform_if_kernel<
     Op: UnaryOp<T, Output = T>,
     Pred: PredicateOp<S>,
 >(
-    op_env: Op::Env,
-    pred_env: Pred::Env,
     input: &[T],
     stencil: &[S],
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < output.len() && Pred::apply(pred_env, stencil[unit]) {
-        output[unit] = Op::apply(op_env, input[unit]);
+    if unit < output.len() && Pred::apply(stencil[unit]) {
+        output[unit] = Op::apply(input[unit]);
     }
 }
 
@@ -2703,14 +2701,13 @@ pub(crate) fn transform_binary_if_kernel<
     Op: BinaryOp<T>,
     Pred: PredicateOp<S>,
 >(
-    pred_env: Pred::Env,
     lhs: &[T],
     rhs: &[T],
     stencil: &[S],
     output: &mut [T],
 ) {
     let unit = UNIT_POS as usize;
-    if unit < output.len() && Pred::apply(pred_env, stencil[unit]) {
+    if unit < output.len() && Pred::apply(stencil[unit]) {
         output[unit] = Op::apply(lhs[unit], rhs[unit]);
     }
 }

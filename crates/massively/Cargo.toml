@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.49.0"
+version = "0.50.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -241,14 +241,6 @@ name = "sort-by-key"
 path = "examples/algorithm/sort_by_key.rs"
 
 [[example]]
-name = "stable-sort"
-path = "examples/algorithm/stable_sort.rs"
-
-[[example]]
-name = "stable-sort-by-key"
-path = "examples/algorithm/stable_sort_by_key.rs"
-
-[[example]]
 name = "transform"
 path = "examples/algorithm/transform.rs"
 
@@ -273,8 +265,8 @@ name = "runtime-alloc"
 path = "examples/runtime/alloc.rs"
 
 [[example]]
-name = "runtime-constant"
-path = "examples/runtime/constant.rs"
+name = "runtime-full"
+path = "examples/runtime/full.rs"
 
 [[example]]
 name = "runtime-counting"

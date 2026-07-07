@@ -29,33 +29,24 @@ pub(crate) trait KernelReplaceWhereInput<Stencil, Pred>: Sized {
 pub(crate) trait KernelSelectInput<Pred>: Sized {
     type Runtime: Runtime;
     type Output;
-    type Env: cubecl::prelude::LaunchArg + Copy;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error>;
 }
 
 #[allow(dead_code)]
 pub(crate) trait KernelPredicateQueryInput<Pred>: Sized {
     type Runtime: Runtime;
-    type Env: cubecl::prelude::LaunchArg + Copy;
 
-    fn count_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<MIndex, Error>;
+    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<MIndex, Error>;
 
     fn find_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error>;
 }
 
@@ -64,18 +55,12 @@ pub(crate) trait KernelPartitionInput<Pred>: Sized {
     type Runtime: Runtime;
     type Output;
     type SplitOutput;
-    type Env: cubecl::prelude::LaunchArg + Copy;
 
-    fn is_partitioned_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<bool, Error>;
+    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error>;
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error>;
 }
 
@@ -317,7 +302,6 @@ fn selected_expr_with_predicate<Source, Pred>(
     policy: &CubePolicy<Source::Runtime>,
     source: &Source,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Source::Runtime>,
 ) -> Result<DeviceVec<Source::Runtime, Source::Item>, Error>
 where
     Source: KernelColumn + KernelColumnAt<S0>,
@@ -326,7 +310,7 @@ where
     Pred: PredicateOp<Source::Item>,
 {
     let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<Source, Pred>(
-        policy, source, invert, env,
+        policy, source, invert,
     )?;
     let count = select::selected_count(policy, &selected_rank)?;
     let payload_apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
@@ -662,7 +646,6 @@ fn tuple2_selected_rank_read<Left, Right, Pred>(
     left: &Left,
     right: &Right,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Left::Runtime>,
 ) -> Result<select::SelectedRankControl, Error>
 where
     Left: KernelColumn + KernelColumnAt<S0>,
@@ -706,7 +689,6 @@ where
                 client,
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(256),
-                env,
                 BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1),
                 BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1),
                 BufferArg::from_raw_parts(left_slot2.0.clone(), left_slot2.1),
@@ -732,7 +714,6 @@ fn tuple3_selected_rank_read<First, Second, Third, Pred>(
     second: &Second,
     third: &Third,
     invert: bool,
-    env: <Pred::Env as cubecl::prelude::LaunchArg>::RuntimeArg<First::Runtime>,
 ) -> Result<select::SelectedRankControl, Error>
 where
     First: KernelColumn + KernelColumnAt<S0>,
@@ -787,7 +768,6 @@ where
                 client,
                 CubeCount::Static(block_count_u32, 1, 1),
                 CubeDim::new_1d(256),
-                env,
                 BufferArg::from_raw_parts(first_slot0.0.clone(), first_slot0.1),
                 BufferArg::from_raw_parts(first_slot1.0.clone(), first_slot1.1),
                 BufferArg::from_raw_parts(first_slot2.0.clone(), first_slot2.1),
@@ -821,17 +801,15 @@ where
 {
     type Runtime = Source::Runtime;
     type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
-    type Env = Pred::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <Source as KernelColumn>::validate(&self)?;
         Ok(DeviceZip1 {
-            source: selected_expr_with_predicate::<Source, Pred>(policy, &self, invert, env)?,
+            source: selected_expr_with_predicate::<Source, Pred>(policy, &self, invert)?,
         })
     }
 }
@@ -847,13 +825,11 @@ macro_rules! impl_kernel_select_tuple1 {
         {
             type Runtime = Source::Runtime;
             type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
-            type Env = Pred::Env;
 
             fn select_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 Ok(DeviceZip1 {
@@ -861,7 +837,6 @@ macro_rules! impl_kernel_select_tuple1 {
                         policy,
                         &self.$field,
                         invert,
-                        env,
                     )?,
                 })
             }
@@ -881,16 +856,14 @@ where
         <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Runtime;
     type Output =
         <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Output;
-    type Env = <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <Source as KernelSelectInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::select_read(
-            self.0, policy, invert, env,
+            self.0, policy, invert,
         )
     }
 }
@@ -910,20 +883,17 @@ macro_rules! impl_kernel_select_tuple2 {
             type Runtime = Left::Runtime;
             type Output =
                 $out<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
-            type Env = Pred::Env;
 
             fn select_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
-                    env,
                 )?;
                 let count = select::selected_count(policy, &selected_rank)?;
                 let apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
@@ -943,13 +913,11 @@ where
 {
     type Runtime = <ZipView2<Left, Right> as KernelSelectInput<Pred>>::Runtime;
     type Output = <ZipView2<Left, Right> as KernelSelectInput<Pred>>::Output;
-    type Env = <ZipView2<Left, Right> as KernelSelectInput<Pred>>::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <ZipView2<Left, Right> as KernelSelectInput<Pred>>::select_read(
             ZipView2 {
@@ -958,7 +926,6 @@ where
             },
             policy,
             invert,
-            env,
         )
     }
 }
@@ -984,13 +951,11 @@ macro_rules! impl_kernel_select_tuple3 {
                 DeviceVec<First::Runtime, Second::Item>,
                 DeviceVec<First::Runtime, Third::Item>,
             >;
-            type Env = Pred::Env;
 
             fn select_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::Output, Error> {
                 let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
@@ -998,7 +963,6 @@ macro_rules! impl_kernel_select_tuple3 {
                     &self.$second,
                     &self.$third,
                     invert,
-                    env,
                 )?;
                 let count = select::selected_count(policy, &selected_rank)?;
                 let apply = crate::detail::apply::SelectedPayloadApply::new(&selected_rank, count);
@@ -1035,13 +999,11 @@ where
 {
     type Runtime = <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::Runtime;
     type Output = <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::Output;
-    type Env = <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::Env;
 
     fn select_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::Output, Error> {
         <ZipView3<First, Second, Third> as KernelSelectInput<Pred>>::select_read(
             ZipView3 {
@@ -1051,7 +1013,6 @@ where
             },
             policy,
             invert,
-            env,
         )
     }
 }
@@ -1064,26 +1025,19 @@ where
     Pred: PredicateOp<Source::Item>,
 {
     type Runtime = Source::Runtime;
-    type Env = Pred::Env;
 
-    fn count_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<MIndex, Error> {
+    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<MIndex, Error> {
         <Source as KernelColumn>::validate(&self)?;
-        crate::detail::apply::QueryApply::count_expr::<Source, Pred>(policy, &self, invert, env)
+        crate::detail::apply::QueryApply::count_expr::<Source, Pred>(policy, &self, invert)
     }
 
     fn find_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error> {
         <Source as KernelColumn>::validate(&self)?;
-        crate::detail::apply::QueryApply::find_expr::<Source, Pred>(policy, &self, invert, env)
+        crate::detail::apply::QueryApply::find_expr::<Source, Pred>(policy, &self, invert)
     }
 }
 
@@ -1097,20 +1051,17 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
             Pred: PredicateOp<Source::Item>,
         {
             type Runtime = Source::Runtime;
-            type Env = Pred::Env;
 
             fn count_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<MIndex, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 crate::detail::apply::QueryApply::count_expr::<Source, Pred>(
                     policy,
                     &self.$field,
                     invert,
-                    env,
                 )
             }
 
@@ -1118,14 +1069,12 @@ macro_rules! impl_kernel_predicate_query_tuple1 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<MIndex>, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 crate::detail::apply::QueryApply::find_expr::<Source, Pred>(
                     policy,
                     &self.$field,
                     invert,
-                    env,
                 )
             }
         }
@@ -1141,17 +1090,10 @@ where
 {
     type Runtime =
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Runtime;
-    type Env =
-        <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Env;
 
-    fn count_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<MIndex, Error> {
+    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<MIndex, Error> {
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::count_read(
-            self.0, policy, invert, env,
+            self.0, policy, invert,
         )
     }
 
@@ -1159,10 +1101,9 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error> {
         <Source as KernelPredicateQueryInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::find_read(
-            self.0, policy, invert, env,
+            self.0, policy, invert,
         )
     }
 }
@@ -1180,20 +1121,17 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
             Pred: PredicateOp<(Left::Item, Right::Item)>,
         {
             type Runtime = Left::Runtime;
-            type Env = Pred::Env;
 
             fn count_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<MIndex, Error> {
                 let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
-                    env,
                 )?;
                 crate::detail::apply::QueryApply::count_selected(policy, &selected_rank)
             }
@@ -1202,14 +1140,12 @@ macro_rules! impl_kernel_predicate_query_tuple2 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<MIndex>, Error> {
                 let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     invert,
-                    env,
                 )?;
                 crate::detail::apply::QueryApply::first_selected(policy, selected_rank)
             }
@@ -1225,14 +1161,8 @@ where
     ZipView2<Left, Right>: KernelPredicateQueryInput<Pred>,
 {
     type Runtime = <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Runtime;
-    type Env = <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::Env;
 
-    fn count_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<MIndex, Error> {
+    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<MIndex, Error> {
         <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::count_read(
             ZipView2 {
                 left: self.0,
@@ -1240,7 +1170,6 @@ where
             },
             policy,
             invert,
-            env,
         )
     }
 
@@ -1248,7 +1177,6 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error> {
         <ZipView2<Left, Right> as KernelPredicateQueryInput<Pred>>::find_read(
             ZipView2 {
@@ -1257,7 +1185,6 @@ where
             },
             policy,
             invert,
-            env,
         )
     }
 }
@@ -1278,13 +1205,11 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
             Pred: PredicateOp<(First::Item, Second::Item, Third::Item)>,
         {
             type Runtime = First::Runtime;
-            type Env = Pred::Env;
 
             fn count_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<MIndex, Error> {
                 let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
@@ -1292,7 +1217,6 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     &self.$second,
                     &self.$third,
                     invert,
-                    env,
                 )?;
                 crate::detail::apply::QueryApply::count_selected(policy, &selected_rank)
             }
@@ -1301,7 +1225,6 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                 self,
                 policy: &CubePolicy<Self::Runtime>,
                 invert: bool,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Option<MIndex>, Error> {
                 let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
@@ -1309,7 +1232,6 @@ macro_rules! impl_kernel_predicate_query_tuple3 {
                     &self.$second,
                     &self.$third,
                     invert,
-                    env,
                 )?;
                 crate::detail::apply::QueryApply::first_selected(policy, selected_rank)
             }
@@ -1325,14 +1247,8 @@ where
     ZipView3<First, Second, Third>: KernelPredicateQueryInput<Pred>,
 {
     type Runtime = <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Runtime;
-    type Env = <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::Env;
 
-    fn count_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<MIndex, Error> {
+    fn count_read(self, policy: &CubePolicy<Self::Runtime>, invert: bool) -> Result<MIndex, Error> {
         <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::count_read(
             ZipView3 {
                 first: self.0,
@@ -1341,7 +1257,6 @@ where
             },
             policy,
             invert,
-            env,
         )
     }
 
@@ -1349,7 +1264,6 @@ where
         self,
         policy: &CubePolicy<Self::Runtime>,
         invert: bool,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Option<MIndex>, Error> {
         <ZipView3<First, Second, Third> as KernelPredicateQueryInput<Pred>>::find_read(
             ZipView3 {
@@ -1359,7 +1273,6 @@ where
             },
             policy,
             invert,
-            env,
         )
     }
 }
@@ -1432,31 +1345,25 @@ where
     type Runtime = Source::Runtime;
     type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
     type SplitOutput = (Self::Output, Self::Output);
-    type Env = Pred::Env;
 
-    fn is_partitioned_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<bool, Error> {
+    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
         <Source as KernelColumn>::validate(&self)?;
         let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<
             Source,
             Pred,
-        >(policy, &self, false, env)?;
+        >(policy, &self, false)?;
         is_partitioned_single_read(policy, selected_rank)
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <Source as KernelColumn>::validate(&self)?;
         let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<
             Source,
             Pred,
-        >(policy, &self, false, env)?;
+        >(policy, &self, false)?;
         let (split_rank, matching_count, failing_count) =
             select::split_rank_from_selected(policy, selected_rank)?;
         let payload_apply = crate::detail::apply::SplitPayloadApply::new(
@@ -1484,31 +1391,28 @@ macro_rules! impl_kernel_partition_tuple1 {
             type Runtime = Source::Runtime;
             type Output = DeviceZip1<DeviceVec<Source::Runtime, Source::Item>>;
             type SplitOutput = (Self::Output, Self::Output);
-            type Env = Pred::Env;
 
             fn is_partitioned_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<
                     Source,
                     Pred,
-                >(policy, &self.$field, false, env)?;
+                >(policy, &self.$field, false)?;
                 is_partitioned_single_read(policy, selected_rank)
             }
 
             fn partition_copy_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::SplitOutput, Error> {
                 <Source as KernelColumn>::validate(&self.$field)?;
                 let selected_rank = crate::detail::api::device_expr_selected_rank_with_policy::<
                     Source,
                     Pred,
-                >(policy, &self.$field, false, env)?;
+                >(policy, &self.$field, false)?;
                 let (split_rank, matching_count, failing_count) =
                     select::split_rank_from_selected(policy, selected_rank)?;
                 let payload_apply = crate::detail::apply::SplitPayloadApply::new(
@@ -1539,25 +1443,19 @@ where
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Output;
     type SplitOutput =
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::SplitOutput;
-    type Env = <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::Env;
 
-    fn is_partitioned_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<bool, Error> {
+    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::is_partitioned_read(
-            self.0, policy, env,
+            self.0, policy,
         )
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <Source as KernelPartitionInput<crate::detail::api::Tuple1PredicateOp<Pred>>>::partition_copy_read(
-            self.0, policy, env,
+            self.0, policy,
         )
     }
 }
@@ -1578,19 +1476,16 @@ macro_rules! impl_kernel_partition_tuple2 {
             type Output =
                 $out<DeviceVec<Left::Runtime, Left::Item>, DeviceVec<Left::Runtime, Right::Item>>;
             type SplitOutput = (Self::Output, Self::Output);
-            type Env = Pred::Env;
 
             fn is_partitioned_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     false,
-                    env,
                 )?;
                 is_partitioned_from_flags_read(policy, &selected_rank)
             }
@@ -1598,14 +1493,12 @@ macro_rules! impl_kernel_partition_tuple2 {
             fn partition_copy_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::SplitOutput, Error> {
                 let selected_rank = tuple2_selected_rank_read::<Left, Right, Pred>(
                     policy,
                     &self.$left,
                     &self.$right,
                     false,
-                    env,
                 )?;
                 let (split_rank, selected_count, rejected_count) =
                     select::split_rank_from_selected(policy, selected_rank)?;
@@ -1641,27 +1534,20 @@ where
     type Runtime = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::Runtime;
     type Output = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::Output;
     type SplitOutput = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::SplitOutput;
-    type Env = <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::Env;
 
-    fn is_partitioned_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<bool, Error> {
+    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
         <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::is_partitioned_read(
             ZipView2 {
                 left: self.0,
                 right: self.1,
             },
             policy,
-            env,
         )
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <ZipView2<Left, Right> as KernelPartitionInput<Pred>>::partition_copy_read(
             ZipView2 {
@@ -1669,7 +1555,6 @@ where
                 right: self.1,
             },
             policy,
-            env,
         )
     }
 }
@@ -1696,12 +1581,10 @@ macro_rules! impl_kernel_partition_tuple3 {
                 DeviceVec<First::Runtime, Third::Item>,
             >;
             type SplitOutput = (Self::Output, Self::Output);
-            type Env = Pred::Env;
 
             fn is_partitioned_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<bool, Error> {
                 let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
@@ -1709,7 +1592,6 @@ macro_rules! impl_kernel_partition_tuple3 {
                     &self.$second,
                     &self.$third,
                     false,
-                    env,
                 )?;
                 is_partitioned_from_flags_read(policy, &selected_rank)
             }
@@ -1717,7 +1599,6 @@ macro_rules! impl_kernel_partition_tuple3 {
             fn partition_copy_read(
                 self,
                 policy: &CubePolicy<Self::Runtime>,
-                env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
             ) -> Result<Self::SplitOutput, Error> {
                 let selected_rank = tuple3_selected_rank_read::<First, Second, Third, Pred>(
                     policy,
@@ -1725,7 +1606,6 @@ macro_rules! impl_kernel_partition_tuple3 {
                     &self.$second,
                     &self.$third,
                     false,
-                    env,
                 )?;
                 let (split_rank, selected_count, rejected_count) =
                     select::split_rank_from_selected(policy, selected_rank)?;
@@ -1777,13 +1657,8 @@ where
     type Runtime = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::Runtime;
     type Output = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::Output;
     type SplitOutput = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::SplitOutput;
-    type Env = <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::Env;
 
-    fn is_partitioned_read(
-        self,
-        policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
-    ) -> Result<bool, Error> {
+    fn is_partitioned_read(self, policy: &CubePolicy<Self::Runtime>) -> Result<bool, Error> {
         <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::is_partitioned_read(
             ZipView3 {
                 first: self.0,
@@ -1791,14 +1666,12 @@ where
                 third: self.2,
             },
             policy,
-            env,
         )
     }
 
     fn partition_copy_read(
         self,
         policy: &CubePolicy<Self::Runtime>,
-        env: <Self::Env as cubecl::prelude::LaunchArg>::RuntimeArg<Self::Runtime>,
     ) -> Result<Self::SplitOutput, Error> {
         <ZipView3<First, Second, Third> as KernelPartitionInput<Pred>>::partition_copy_read(
             ZipView3 {
@@ -1807,7 +1680,6 @@ where
                 third: self.2,
             },
             policy,
-            env,
         )
     }
 }
