@@ -109,7 +109,7 @@ where
             unsafe {
                 transform_unary_tuple1_kernel::launch_unchecked::<T, A, Op, R>(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
@@ -155,7 +155,7 @@ where
             unsafe {
                 transform_unary_tuple2_kernel::launch_unchecked::<T, A, B, Op, R>(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
@@ -205,7 +205,7 @@ where
             unsafe {
                 transform_unary_tuple3_kernel::launch_unchecked::<T, A, B, C, Op, R>(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len())
@@ -258,7 +258,7 @@ macro_rules! impl_wide_transform_unary_output {
                     unsafe {
                         $kernel::launch_unchecked::<T, $( $out_ty, )+ Op, R>(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts(input.source.handle.clone(), input.source.len()),
                             BufferArg::from_raw_parts(offset_handle.clone(), 1),
@@ -353,7 +353,7 @@ where
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -415,7 +415,7 @@ where
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -482,7 +482,7 @@ where
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -553,7 +553,7 @@ macro_rules! impl_transform_logical3_wide_output {
                             R,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -604,6 +604,7 @@ pub trait TransformLogical7Output<
     Leaf4,
     Leaf5,
     Leaf6,
+    Leaf7,
     Expr,
     Op,
 >: MItemStorage<R> where
@@ -616,7 +617,8 @@ pub trait TransformLogical7Output<
     Leaf4: CubePrimitive + CubeElement,
     Leaf5: CubePrimitive + CubeElement,
     Leaf6: CubePrimitive + CubeElement,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Op: UnaryOp<Input, Output = Self>,
 {
     fn run_logical7(
@@ -632,7 +634,7 @@ macro_rules! impl_transform_logical7_output {
         ($( $out_ty:ident : $out_handle:ident ),+),
         $storage:expr
     ) => {
-        impl<R, Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr, $( $out_ty, )+ Op>
+        impl<R, Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7, Expr, $( $out_ty, )+ Op>
             TransformLogical7Output<
                 R,
                 Input,
@@ -643,6 +645,7 @@ macro_rules! impl_transform_logical7_output {
                 Leaf4,
                 Leaf5,
                 Leaf6,
+                Leaf7,
                 Expr,
                 Op,
             > for ($( $out_ty, )+)
@@ -656,7 +659,8 @@ macro_rules! impl_transform_logical7_output {
             Leaf4: CubePrimitive + CubeElement,
             Leaf5: CubePrimitive + CubeElement,
             Leaf6: CubePrimitive + CubeElement,
-            Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive + CubeElement,
+            Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             $( $out_ty: CubePrimitive + CubeElement, )+
             Op: UnaryOp<Input, Output = ($( $out_ty, )+)>,
         {
@@ -672,7 +676,7 @@ macro_rules! impl_transform_logical7_output {
                 if len != 0 {
                     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-                    let offsets = bindings.slot_offsets7_handle(client)?;
+                    let offsets = bindings.slot_offsets8_handle(client)?;
                     let slot0 = bindings.slot_or_first(0);
                     let slot1 = bindings.slot_or_first(1);
                     let slot2 = bindings.slot_or_first(2);
@@ -680,6 +684,7 @@ macro_rules! impl_transform_logical7_output {
                     let slot4 = bindings.slot_or_first(4);
                     let slot5 = bindings.slot_or_first(5);
                     let slot6 = bindings.slot_or_first(6);
+                    let slot7 = bindings.slot_or_first(7);
                     let block_size = 256_u32;
                     let block_count = len.div_ceil(block_size as usize);
                     let block_count_u32 = u32::try_from(block_count)
@@ -694,13 +699,14 @@ macro_rules! impl_transform_logical7_output {
                             Leaf4,
                             Leaf5,
                             Leaf6,
+                            Leaf7,
                             Expr,
                             $( $out_ty, )+
                             Op,
                             R,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -709,7 +715,8 @@ macro_rules! impl_transform_logical7_output {
                             BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                             BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                             BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                            BufferArg::from_raw_parts(offsets.clone(), 7),
+                            BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                            BufferArg::from_raw_parts(offsets.clone(), 8),
                             BufferArg::from_raw_parts(len_handle.clone(), 1),
                             $(
                                 BufferArg::from_raw_parts($out_handle.clone(), len),
@@ -828,7 +835,7 @@ impl_transform_logical7_output!(
 );
 
 #[doc(hidden)]
-pub trait SelectedLogical7Output<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr>:
+pub trait SelectedLogical7Output<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7, Expr>:
     MItemStorage<R> + Sized
 where
     R: Runtime,
@@ -840,7 +847,8 @@ where
     Leaf4: CubePrimitive + CubeElement,
     Leaf5: CubePrimitive + CubeElement,
     Leaf6: CubePrimitive + CubeElement,
-    Expr: LogicalDeviceExpr7<Self, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive + CubeElement,
+    Expr: LogicalDeviceExpr7<Self, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
 {
     fn run_selected_logical7(
         policy: &CubePolicy<R>,
@@ -856,8 +864,8 @@ macro_rules! impl_selected_logical7_output {
         ($( $out_ty:ident : $out_handle:ident ),+),
         $storage:expr
     ) => {
-        impl<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr, $( $out_ty, )+>
-            SelectedLogical7Output<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr>
+        impl<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7, Expr, $( $out_ty, )+>
+            SelectedLogical7Output<R, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7, Expr>
             for ($( $out_ty, )+)
         where
             R: Runtime,
@@ -868,7 +876,8 @@ macro_rules! impl_selected_logical7_output {
             Leaf4: CubePrimitive + CubeElement,
             Leaf5: CubePrimitive + CubeElement,
             Leaf6: CubePrimitive + CubeElement,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive + CubeElement,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             $( $out_ty: CubePrimitive + CubeElement, )+
         {
             fn run_selected_logical7(
@@ -886,7 +895,7 @@ macro_rules! impl_selected_logical7_output {
                     };
                 )+
                 if selected_rank.len != 0 && count != 0 {
-                    let offsets = bindings.slot_offsets7_handle(client)?;
+                    let offsets = bindings.slot_offsets8_handle(client)?;
                     let slot0 = bindings.slot_or_first(0);
                     let slot1 = bindings.slot_or_first(1);
                     let slot2 = bindings.slot_or_first(2);
@@ -894,6 +903,7 @@ macro_rules! impl_selected_logical7_output {
                     let slot4 = bindings.slot_or_first(4);
                     let slot5 = bindings.slot_or_first(5);
                     let slot6 = bindings.slot_or_first(6);
+                    let slot7 = bindings.slot_or_first(7);
                     let block_size = 256_u32;
                     let block_count = selected_rank.len.div_ceil(block_size as usize);
                     let block_count_u32 = u32::try_from(block_count)
@@ -907,12 +917,13 @@ macro_rules! impl_selected_logical7_output {
                             Leaf4,
                             Leaf5,
                             Leaf6,
+                            Leaf7,
                             Expr,
                             $( $out_ty, )+
                             R,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len),
                             BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len),
@@ -923,7 +934,8 @@ macro_rules! impl_selected_logical7_output {
                             BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                             BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                             BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                            BufferArg::from_raw_parts(offsets.clone(), 7),
+                            BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                            BufferArg::from_raw_parts(offsets.clone(), 8),
                             $(
                                 BufferArg::from_raw_parts($out_handle.clone(), count),
                             )+
@@ -983,6 +995,7 @@ pub trait GatherLogical7Output<
     Leaf4,
     Leaf5,
     Leaf6,
+    Leaf7,
     ValueExpr,
     IndexLeaf0,
     IndexLeaf1,
@@ -991,6 +1004,7 @@ pub trait GatherLogical7Output<
     IndexLeaf4,
     IndexLeaf5,
     IndexLeaf6,
+    IndexLeaf7,
     IndexExpr,
 >: MItemStorage<R> + Sized where
     R: Runtime,
@@ -1002,6 +1016,7 @@ pub trait GatherLogical7Output<
     Leaf4: CubePrimitive + CubeElement,
     Leaf5: CubePrimitive + CubeElement,
     Leaf6: CubePrimitive + CubeElement,
+    Leaf7: CubePrimitive + CubeElement,
     IndexLeaf0: CubePrimitive + CubeElement,
     IndexLeaf1: CubePrimitive + CubeElement,
     IndexLeaf2: CubePrimitive + CubeElement,
@@ -1009,7 +1024,8 @@ pub trait GatherLogical7Output<
     IndexLeaf4: CubePrimitive + CubeElement,
     IndexLeaf5: CubePrimitive + CubeElement,
     IndexLeaf6: CubePrimitive + CubeElement,
-    ValueExpr: LogicalDeviceExpr7<Self, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    IndexLeaf7: CubePrimitive + CubeElement,
+    ValueExpr: LogicalDeviceExpr7<Self, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     IndexExpr: LogicalDeviceExpr7<
             crate::index::MIndex,
             IndexLeaf0,
@@ -1019,6 +1035,7 @@ pub trait GatherLogical7Output<
             IndexLeaf4,
             IndexLeaf5,
             IndexLeaf6,
+            IndexLeaf7,
         >,
 {
     fn run_gather_logical7(
@@ -1044,6 +1061,7 @@ macro_rules! impl_gather_logical7_output {
                 Leaf4,
                 Leaf5,
                 Leaf6,
+                Leaf7,
                 ValueExpr,
                 IndexLeaf0,
                 IndexLeaf1,
@@ -1052,6 +1070,7 @@ macro_rules! impl_gather_logical7_output {
                 IndexLeaf4,
                 IndexLeaf5,
                 IndexLeaf6,
+                IndexLeaf7,
                 IndexExpr,
                 $( $out_ty, )+
             >
@@ -1064,6 +1083,7 @@ macro_rules! impl_gather_logical7_output {
                 Leaf4,
                 Leaf5,
                 Leaf6,
+                Leaf7,
                 ValueExpr,
                 IndexLeaf0,
                 IndexLeaf1,
@@ -1072,6 +1092,7 @@ macro_rules! impl_gather_logical7_output {
                 IndexLeaf4,
                 IndexLeaf5,
                 IndexLeaf6,
+                IndexLeaf7,
                 IndexExpr,
             > for ($( $out_ty, )+)
         where
@@ -1083,6 +1104,7 @@ macro_rules! impl_gather_logical7_output {
             Leaf4: CubePrimitive + CubeElement,
             Leaf5: CubePrimitive + CubeElement,
             Leaf6: CubePrimitive + CubeElement,
+            Leaf7: CubePrimitive + CubeElement,
             IndexLeaf0: CubePrimitive + CubeElement,
             IndexLeaf1: CubePrimitive + CubeElement,
             IndexLeaf2: CubePrimitive + CubeElement,
@@ -1090,7 +1112,8 @@ macro_rules! impl_gather_logical7_output {
             IndexLeaf4: CubePrimitive + CubeElement,
             IndexLeaf5: CubePrimitive + CubeElement,
             IndexLeaf6: CubePrimitive + CubeElement,
-            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            IndexLeaf7: CubePrimitive + CubeElement,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             IndexExpr: LogicalDeviceExpr7<
                 crate::index::MIndex,
                 IndexLeaf0,
@@ -1100,6 +1123,7 @@ macro_rules! impl_gather_logical7_output {
                 IndexLeaf4,
                 IndexLeaf5,
                 IndexLeaf6,
+                IndexLeaf7,
             >,
             $( $out_ty: CubePrimitive + CubeElement, )+
         {
@@ -1116,8 +1140,8 @@ macro_rules! impl_gather_logical7_output {
                 if len != 0 {
                     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-                    let value_offsets = value_bindings.slot_offsets7_handle(client)?;
-                    let index_offsets = index_bindings.slot_offsets7_handle(client)?;
+                    let value_offsets = value_bindings.slot_offsets8_handle(client)?;
+                    let index_offsets = index_bindings.slot_offsets8_handle(client)?;
                     let value_slot0 = value_bindings.slot_or_first(0);
                     let value_slot1 = value_bindings.slot_or_first(1);
                     let value_slot2 = value_bindings.slot_or_first(2);
@@ -1125,6 +1149,7 @@ macro_rules! impl_gather_logical7_output {
                     let value_slot4 = value_bindings.slot_or_first(4);
                     let value_slot5 = value_bindings.slot_or_first(5);
                     let value_slot6 = value_bindings.slot_or_first(6);
+                    let value_slot7 = value_bindings.slot_or_first(7);
                     let index_slot0 = index_bindings.slot_or_first(0);
                     let index_slot1 = index_bindings.slot_or_first(1);
                     let index_slot2 = index_bindings.slot_or_first(2);
@@ -1132,6 +1157,7 @@ macro_rules! impl_gather_logical7_output {
                     let index_slot4 = index_bindings.slot_or_first(4);
                     let index_slot5 = index_bindings.slot_or_first(5);
                     let index_slot6 = index_bindings.slot_or_first(6);
+                    let index_slot7 = index_bindings.slot_or_first(7);
                     let block_size = 256_u32;
                     let block_count = len.div_ceil(block_size as usize);
                     let block_count_u32 = u32::try_from(block_count)
@@ -1145,6 +1171,7 @@ macro_rules! impl_gather_logical7_output {
                             Leaf4,
                             Leaf5,
                             Leaf6,
+                            Leaf7,
                             IndexLeaf0,
                             IndexLeaf1,
                             IndexLeaf2,
@@ -1152,13 +1179,14 @@ macro_rules! impl_gather_logical7_output {
                             IndexLeaf4,
                             IndexLeaf5,
                             IndexLeaf6,
+                            IndexLeaf7,
                             ValueExpr,
                             IndexExpr,
                             $( $out_ty, )+
                             R,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1),
                             BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1),
@@ -1167,7 +1195,8 @@ macro_rules! impl_gather_logical7_output {
                             BufferArg::from_raw_parts(value_slot4.0.clone(), value_slot4.1),
                             BufferArg::from_raw_parts(value_slot5.0.clone(), value_slot5.1),
                             BufferArg::from_raw_parts(value_slot6.0.clone(), value_slot6.1),
-                            BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                            BufferArg::from_raw_parts(value_slot7.0.clone(), value_slot7.1),
+                            BufferArg::from_raw_parts(value_offsets.clone(), 8),
                             BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1),
                             BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1),
                             BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1),
@@ -1175,7 +1204,8 @@ macro_rules! impl_gather_logical7_output {
                             BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1),
                             BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1),
                             BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1),
-                            BufferArg::from_raw_parts(index_offsets.clone(), 7),
+                            BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1),
+                            BufferArg::from_raw_parts(index_offsets.clone(), 8),
                             BufferArg::from_raw_parts(len_handle.clone(), 1),
                             $(
                                 BufferArg::from_raw_parts($out_handle.clone(), len),
@@ -1264,7 +1294,7 @@ macro_rules! impl_transform_tuple_output {
                             $first_in, $( $in_ty, )+ $( $out_ty, )+ Op, R,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             unsafe { BufferArg::from_raw_parts($first_arg.source.handle.clone(), $first_arg.source.len()) },
                             $(
@@ -1394,7 +1424,7 @@ where
             unsafe {
                 transform_tuple2_to_tuple1_kernel::launch_unchecked::<InA, InB, OutA, Op, R>(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(left.source.handle.clone(), left.source.len())
@@ -1445,7 +1475,7 @@ where
             unsafe {
                 transform_tuple2_to_tuple2_kernel::launch_unchecked::<InA, InB, OutA, OutB, Op, R>(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(left.source.handle.clone(), left.source.len())
@@ -1516,7 +1546,7 @@ where
             unsafe {
                 transform_tuple3_to_tuple1_kernel::launch_unchecked::<InA, InB, InC, OutA, Op, R>(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(first.source.handle.clone(), first.source.len())
@@ -1586,7 +1616,7 @@ where
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     unsafe {
                         BufferArg::from_raw_parts(first.source.handle.clone(), first.source.len())
@@ -1710,7 +1740,7 @@ macro_rules! impl_wide_transform_zip_output {
                     unsafe {
                         $kernel::launch_unchecked::<$first_in, $( $in_ty, )+ $( $out_ty, )+ Op, R>(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts($first_arg.1.source.handle.clone(), $first_arg.1.source.len()),
                             $(
@@ -1906,7 +1936,7 @@ macro_rules! impl_transform_zip7_output {
                             R,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(block_size),
                             BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
                             BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),

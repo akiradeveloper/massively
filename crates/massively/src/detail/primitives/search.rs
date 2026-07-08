@@ -33,7 +33,7 @@ where
     unsafe {
         minmax_element_partials_kernel::launch_unchecked::<T, Less, R>(
             client,
-            CubeCount::Static(current_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(current_count_u32),
             CubeDim::new_1d(BLOCK_SELECT_SIZE),
             unsafe { BufferArg::from_raw_parts(input.handle.clone(), input.len()) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -51,7 +51,7 @@ where
         unsafe {
             minmax_index_partials_kernel::launch_unchecked::<T, Less, R>(
                 client,
-                CubeCount::Static(next_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(next_count_u32),
                 CubeDim::new_1d(BLOCK_SELECT_SIZE),
                 unsafe { BufferArg::from_raw_parts(input.handle.clone(), input.len()) },
                 unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
@@ -144,7 +144,7 @@ where
         match kind {
             FlagIndexKind::First => first_flag_partials_kernel::launch_unchecked::<R>(
                 client,
-                CubeCount::Static(current_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(current_count_u32),
                 CubeDim::new_1d(BLOCK_SELECT_SIZE),
                 unsafe { BufferArg::from_raw_parts(flag_handle.clone(), storage_len) },
                 unsafe { BufferArg::from_raw_parts(logical_len_handle.clone(), 1) },
@@ -152,7 +152,7 @@ where
             ),
             FlagIndexKind::FirstUnset => first_unset_flag_partials_kernel::launch_unchecked::<R>(
                 client,
-                CubeCount::Static(current_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(current_count_u32),
                 CubeDim::new_1d(BLOCK_SELECT_SIZE),
                 unsafe { BufferArg::from_raw_parts(flag_handle.clone(), storage_len) },
                 unsafe { BufferArg::from_raw_parts(logical_len_handle.clone(), 1) },
@@ -173,7 +173,7 @@ where
                 FlagIndexKind::First | FlagIndexKind::FirstUnset => {
                     first_index_partials_kernel::launch_unchecked::<R>(
                         client,
-                        CubeCount::Static(next_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(next_count_u32),
                         CubeDim::new_1d(BLOCK_SELECT_SIZE),
                         unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count) },
                         unsafe { BufferArg::from_raw_parts(candidate_len_handle.clone(), 1) },

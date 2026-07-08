@@ -43,7 +43,7 @@ where
         unsafe {
             radix_digit_histogram_u32_kernel::launch_unchecked::<R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(RADIX_DIGITS as u32),
                 unsafe { BufferArg::from_raw_parts(input_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(shift_handle.clone(), 1) },
@@ -56,7 +56,7 @@ where
         unsafe {
             radix_digit_scatter_u32_kernel::launch_unchecked::<R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(shift_handle.clone(), 1) },
@@ -120,7 +120,7 @@ where
         unsafe {
             radix_digit_histogram_u32_kernel::launch_unchecked::<R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(RADIX_DIGITS as u32),
                 unsafe { BufferArg::from_raw_parts(input_key_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(shift_handle.clone(), 1) },
@@ -133,7 +133,7 @@ where
         unsafe {
             radix_digit_scatter_by_key_u32_kernel::launch_unchecked::<T, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_key_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(input_value_handle.clone(), len) },

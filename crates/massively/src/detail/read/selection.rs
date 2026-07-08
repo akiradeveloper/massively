@@ -356,7 +356,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_REPLACE_WHERE_SIZE),
             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -687,7 +687,7 @@ where
                 Left::Runtime,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(256),
                 BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1),
                 BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1),
@@ -766,7 +766,7 @@ where
                 First::Runtime,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(256),
                 BufferArg::from_raw_parts(first_slot0.0.clone(), first_slot0.1),
                 BufferArg::from_raw_parts(first_slot1.0.clone(), first_slot1.1),
@@ -1319,7 +1319,7 @@ fn is_partitioned_single_read<R: Runtime>(
     unsafe {
         partition_tail_selected_flags_kernel::launch_unchecked::<R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(256),
             BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len),
             BufferArg::from_raw_parts(point_handle.clone(), 1),
@@ -1755,7 +1755,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -1805,7 +1805,7 @@ where
             Left::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
             BufferArg::from_raw_parts(staged_left.slot0.0.clone(), staged_left.slot0.1),
             BufferArg::from_raw_parts(staged_left.slot1.0.clone(), staged_left.slot1.1),
@@ -1865,7 +1865,7 @@ where
             First::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
             BufferArg::from_raw_parts(staged_first.slot0.0.clone(), staged_first.slot0.1),
             BufferArg::from_raw_parts(staged_first.slot1.0.clone(), staged_first.slot1.1),
@@ -1979,7 +1979,7 @@ where
             A::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
             BufferArg::from_raw_parts(staged_a.slot0.0.clone(), staged_a.slot0.1),
             BufferArg::from_raw_parts(staged_a.slot1.0.clone(), staged_a.slot1.1),
@@ -2133,7 +2133,7 @@ where
     unsafe {
         tuple7_view_set_membership_flags_kernel::launch_unchecked::<A, B, C, D, E, F, G, Less, R>(
             client,
-            CubeCount::Static(block_count, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count),
             CubeDim::new_1d(crate::detail::api::search::BLOCK_SEARCH_SIZE),
             BufferArg::from_raw_parts(candidate_a.source.handle.clone(), candidate_a.source.len()),
             BufferArg::from_raw_parts(candidate_b.source.handle.clone(), candidate_b.source.len()),
@@ -2272,7 +2272,7 @@ macro_rules! impl_kernel_unique_tuple2 {
                             Left::Runtime,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
                             BufferArg::from_raw_parts(left.slot0.0.clone(), left.slot0.1),
                             BufferArg::from_raw_parts(left.slot1.0.clone(), left.slot1.1),
@@ -2369,7 +2369,7 @@ macro_rules! impl_kernel_unique_tuple3 {
                             First::Runtime,
                         >(
                             client,
-                            CubeCount::Static(block_count_u32, 1, 1),
+                            crate::detail::launch::cube_count_1d(block_count_u32),
                             CubeDim::new_1d(BLOCK_UNIQUE_SIZE),
                             BufferArg::from_raw_parts(first.slot0.0.clone(), first.slot0.1),
                             BufferArg::from_raw_parts(first.slot1.0.clone(), first.slot1.1),

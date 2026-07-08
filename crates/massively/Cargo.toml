@@ -9,7 +9,7 @@ license = "MIT"
 name = "massively"
 readme = "../../README.md"
 repository = "https://github.com/akiradeveloper/massively"
-version = "0.59.0"
+version = "0.60.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -17,6 +17,8 @@ futures-lite = "2.6"
 
 [dev-dependencies]
 criterion = "0.5"
+oracle_ref = { package = "oracle", path = "../oracle" }
+proptest = "1"
 
 [[bench]]
 name = "transform"

@@ -93,7 +93,7 @@ pub trait MItemDispatch<R: Runtime>: Sized {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn transform_logical7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Expr, Op>(
+    fn transform_logical7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7, Expr, Op>(
         policy: &crate::detail::CubePolicy<R>,
         bindings: crate::detail::device::KernelColumnBindings,
         len: usize,
@@ -109,8 +109,18 @@ pub trait MItemDispatch<R: Runtime>: Sized {
         Leaf4: MStorageElement,
         Leaf5: MStorageElement,
         Leaf6: MStorageElement,
-        Expr:
-            crate::expr::LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+        Leaf7: MStorageElement,
+        Expr: crate::expr::LogicalDeviceExpr7<
+                Input,
+                Leaf0,
+                Leaf1,
+                Leaf2,
+                Leaf3,
+                Leaf4,
+                Leaf5,
+                Leaf6,
+                Leaf7,
+            >,
         Op: op::UnaryOp<R, Input, Output = Self>,
     {
         let _ = (policy, bindings, len, op);

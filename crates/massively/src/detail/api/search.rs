@@ -100,7 +100,7 @@ where
             Left::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -162,7 +162,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -211,7 +211,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -262,7 +262,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -314,7 +314,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -378,7 +378,7 @@ where
             Left::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1) },
             unsafe { BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1) },
@@ -444,7 +444,7 @@ where
             Left::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_SEARCH_SIZE),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -1607,7 +1607,7 @@ macro_rules! impl_tuple_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
@@ -1699,7 +1699,7 @@ macro_rules! impl_tuple_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
@@ -1767,7 +1767,7 @@ macro_rules! impl_tuple_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
@@ -1823,7 +1823,7 @@ macro_rules! impl_tuple_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.slot0.0.clone(), $first_field.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.slot1.0.clone(), $first_field.slot1.1) },
@@ -2023,7 +2023,7 @@ macro_rules! impl_tuple_pair_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },
@@ -2108,7 +2108,7 @@ macro_rules! impl_tuple_pair_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },
@@ -2184,7 +2184,7 @@ macro_rules! impl_tuple_pair_search {
                         <$first as KernelColumn>::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($left_first.slot0.0.clone(), $left_first.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($left_first.slot1.0.clone(), $left_first.slot1.1) },

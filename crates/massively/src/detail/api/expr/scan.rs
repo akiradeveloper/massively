@@ -35,7 +35,7 @@ where
                 ExprSource::Runtime,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                 unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
                 unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },

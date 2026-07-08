@@ -40,7 +40,8 @@ where
     let index_slot4 = index_bindings.slot_or_first(4);
     let index_slot5 = index_bindings.slot_or_first(5);
     let index_slot6 = index_bindings.slot_or_first(6);
-    let index_slot_offsets = index_bindings.slot_offsets7_handle(client)?;
+    let index_slot7 = index_bindings.slot_or_first(7);
+    let index_slot_offsets = index_bindings.slot_offsets8_handle(client)?;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let output_offset = client.create_from_slice(u32::as_bytes(&[0_u32]));
@@ -57,10 +58,11 @@ where
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf4,
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf5,
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf6,
+            <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf7,
             InputSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(input_bindings.input.clone(), input_bindings.input_len)
@@ -77,7 +79,8 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1) },
             unsafe { BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1) },
             unsafe { BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
@@ -127,7 +130,8 @@ where
     let index_slot4 = index_bindings.slot_or_first(4);
     let index_slot5 = index_bindings.slot_or_first(5);
     let index_slot6 = index_bindings.slot_or_first(6);
-    let index_slot_offsets = index_bindings.slot_offsets7_handle(client)?;
+    let index_slot7 = index_bindings.slot_or_first(7);
+    let index_slot_offsets = index_bindings.slot_offsets8_handle(client)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let output_offset = offset_handle(client, output.offset)?;
 
@@ -143,10 +147,11 @@ where
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf4,
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf5,
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf6,
+            <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf7,
             InputSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(input_bindings.input.clone(), input_bindings.input_len)
@@ -163,7 +168,8 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1) },
             unsafe { BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1) },
             unsafe { BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
@@ -213,7 +219,8 @@ where
     let index_slot4 = index_bindings.slot_or_first(4);
     let index_slot5 = index_bindings.slot_or_first(5);
     let index_slot6 = index_bindings.slot_or_first(6);
-    let index_slot_offsets = index_bindings.slot_offsets7_handle(client)?;
+    let index_slot7 = index_bindings.slot_or_first(7);
+    let index_slot_offsets = index_bindings.slot_offsets8_handle(client)?;
     let output_offset = offset_handle(client, output.offset)?;
 
     unsafe {
@@ -228,10 +235,11 @@ where
             <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf4,
             <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf5,
             <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf6,
+            <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf7,
             ValueSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(value_bindings.input.clone(), value_bindings.input_len)
@@ -248,7 +256,8 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1) },
             unsafe { BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1) },
             unsafe { BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
@@ -299,8 +308,9 @@ where
     let index_slot4 = index_bindings.slot_or_first(4);
     let index_slot5 = index_bindings.slot_or_first(5);
     let index_slot6 = index_bindings.slot_or_first(6);
+    let index_slot7 = index_bindings.slot_or_first(7);
     let input_slot_offsets = input_bindings.slot_offsets_handle(client)?;
-    let index_slot_offsets = index_bindings.slot_offsets7_handle(client)?;
+    let index_slot_offsets = index_bindings.slot_offsets8_handle(client)?;
     let output_offset = offset_handle(client, output.offset)?;
     let block_count_u32 = api_expr_block_count(len)?;
 
@@ -316,10 +326,11 @@ where
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf4,
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf5,
             <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf6,
+            <IndexSource as crate::detail::read::KernelReadBoundMany<InputSource::Runtime>>::Leaf7,
             InputSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1) },
             unsafe { BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1) },
@@ -333,7 +344,8 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1) },
             unsafe { BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1) },
             unsafe { BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },
@@ -405,8 +417,9 @@ where
     let index_slot4 = index_bindings.slot_or_first(4);
     let index_slot5 = index_bindings.slot_or_first(5);
     let index_slot6 = index_bindings.slot_or_first(6);
+    let index_slot7 = index_bindings.slot_or_first(7);
     let value_slot_offsets = value_bindings.slot_offsets_handle(client)?;
-    let index_slot_offsets = index_bindings.slot_offsets7_handle(client)?;
+    let index_slot_offsets = index_bindings.slot_offsets8_handle(client)?;
     let output_offset = offset_handle(client, output.offset)?;
     let block_count_u32 = api_expr_block_count(len)?;
 
@@ -422,10 +435,11 @@ where
             <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf4,
             <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf5,
             <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf6,
+            <IndexSource as crate::detail::read::KernelReadBoundMany<ValueSource::Runtime>>::Leaf7,
             ValueSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1) },
             unsafe { BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1) },
@@ -439,7 +453,8 @@ where
             unsafe { BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1) },
             unsafe { BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1) },
             unsafe { BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(index_slot_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
             unsafe { BufferArg::from_raw_parts(output_offset.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.source.handle.clone(), output.source.len()) },

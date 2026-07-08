@@ -121,7 +121,7 @@ where
                 KeySource::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1),
                 BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1),

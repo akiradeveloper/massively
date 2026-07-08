@@ -64,6 +64,7 @@ Each test area has a specific role.
   single-column-specific optimizations, improving the single-column foundation
   should also improve multi-column cases.
 - `massively/tests`: Use simple data to verify that multi-column support works.
-- `oracle/tests`: Property tests against the multi-column AoS CPU reference.
-- `oracle-simple/tests`: Property tests against a reference implementation,
-  limited to single-column `u32`.
+- `massively/tests/oracle.rs`: Property tests against the multi-column AoS CPU
+  reference.
+- `massively/tests/oracle_scale.rs`: Ignored scale property tests against the
+  multi-column AoS CPU reference.

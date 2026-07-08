@@ -93,7 +93,7 @@ pub(crate) fn gather_if_flags_into_kernel<
 pub(crate) fn gather_if_flags_index7_into_kernel<
     T: CubePrimitive,
     InputExpr: crate::expr::DeviceGpuExpr<T>,
-    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6, I7>,
     I0: CubePrimitive,
     I1: CubePrimitive,
     I2: CubePrimitive,
@@ -101,6 +101,7 @@ pub(crate) fn gather_if_flags_index7_into_kernel<
     I4: CubePrimitive,
     I5: CubePrimitive,
     I6: CubePrimitive,
+    I7: CubePrimitive,
 >(
     input_slot0: &[T],
     input_slot1: &[T],
@@ -114,6 +115,7 @@ pub(crate) fn gather_if_flags_index7_into_kernel<
     index_slot4: &[I4],
     index_slot5: &[I5],
     index_slot6: &[I6],
+    index_slot7: &[I7],
     index_slot_offsets: &[u32],
     flags: &[u32],
     output_offset: &[u32],
@@ -131,6 +133,7 @@ pub(crate) fn gather_if_flags_index7_into_kernel<
             index_slot4,
             index_slot5,
             index_slot6,
+            index_slot7,
             index_slot_offsets,
             global,
         ) as usize;
@@ -263,7 +266,7 @@ pub(crate) fn scatter_if_flags_into_kernel<
 pub(crate) fn scatter_if_flags_index7_into_kernel<
     T: CubePrimitive,
     ValueExpr: crate::expr::DeviceGpuExpr<T>,
-    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6, I7>,
     I0: CubePrimitive,
     I1: CubePrimitive,
     I2: CubePrimitive,
@@ -271,6 +274,7 @@ pub(crate) fn scatter_if_flags_index7_into_kernel<
     I4: CubePrimitive,
     I5: CubePrimitive,
     I6: CubePrimitive,
+    I7: CubePrimitive,
 >(
     value_slot0: &[T],
     value_slot1: &[T],
@@ -284,6 +288,7 @@ pub(crate) fn scatter_if_flags_index7_into_kernel<
     index_slot4: &[I4],
     index_slot5: &[I5],
     index_slot6: &[I6],
+    index_slot7: &[I7],
     index_slot_offsets: &[u32],
     flags: &[u32],
     output_offset: &[u32],
@@ -301,6 +306,7 @@ pub(crate) fn scatter_if_flags_index7_into_kernel<
             index_slot4,
             index_slot5,
             index_slot6,
+            index_slot7,
             index_slot_offsets,
             global,
         ) as usize;
@@ -349,7 +355,7 @@ pub(crate) fn first_flag_partials_kernel(flags: &[u32], logical_len: &[u32], par
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize {
+    if unit == 0usize && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = candidates[0];
     }
 }
@@ -392,7 +398,7 @@ pub(crate) fn first_unset_flag_partials_kernel(
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize {
+    if unit == 0usize && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = candidates[0];
     }
 }
@@ -431,7 +437,7 @@ pub(crate) fn last_flag_partials_kernel(flags: &[u32], logical_len: &[u32], part
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize {
+    if unit == 0usize && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = candidates[0];
     }
 }
@@ -475,7 +481,7 @@ pub(crate) fn first_index_partials_kernel(
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize {
+    if unit == 0usize && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = candidates[0];
     }
 }
@@ -519,7 +525,7 @@ pub(crate) fn last_index_partials_kernel(
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize {
+    if unit == 0usize && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = candidates[0];
     }
 }
@@ -1335,7 +1341,7 @@ pub(crate) fn minmax_element_partials_kernel<T: CubePrimitive, Less: BinaryPredi
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize && valid[0] != 0u32 {
+    if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
         let out = (CUBE_POS as usize) * 2usize;
         partials[out] = min_indices[0];
         partials[out + 1usize] = max_indices[0];
@@ -1421,7 +1427,7 @@ pub(crate) fn minmax_index_partials_kernel<T: CubePrimitive, Less: BinaryPredica
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize && valid[0] != 0u32 {
+    if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
         let out = (CUBE_POS as usize) * 2usize;
         partials[out] = min_indices[0];
         partials[out + 1usize] = max_indices[0];
@@ -1538,7 +1544,7 @@ pub(crate) fn minmax_element_device_expr_partials_kernel<
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize && valid[0] != 0u32 {
+    if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
         let out = (CUBE_POS as usize) * 2usize;
         partials[out] = min_indices[0];
         partials[out + 1usize] = max_indices[0];
@@ -1656,7 +1662,7 @@ pub(crate) fn minmax_index_device_expr_partials_kernel<
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize && valid[0] != 0u32 {
+    if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
         let out = (CUBE_POS as usize) * 2usize;
         partials[out] = min_indices[0];
         partials[out + 1usize] = max_indices[0];

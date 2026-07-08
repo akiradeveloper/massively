@@ -301,7 +301,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
                 ValueSource::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(inclusive.handle.clone(), self.control.len),
                 BufferArg::from_raw_parts(init_handle.clone(), 1),
@@ -357,7 +357,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
                 ValueSource::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(inclusive.handle.clone(), self.control.len),
                 BufferArg::from_raw_parts(init_handle.clone(), 1),
@@ -417,7 +417,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
                 ValueA::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(inclusive.left.handle.clone(), self.control.len),
                 BufferArg::from_raw_parts(inclusive.right.handle.clone(), self.control.len),
@@ -487,7 +487,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
                 ValueA::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(inclusive.left.handle.clone(), self.control.len),
                 BufferArg::from_raw_parts(inclusive.right.handle.clone(), self.control.len),
@@ -568,7 +568,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
                 ValueA::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(inclusive.first.handle.clone(), self.control.len),
                 BufferArg::from_raw_parts(inclusive.second.handle.clone(), self.control.len),
@@ -652,7 +652,7 @@ impl<'a, R: Runtime> SegmentedReduceApply<'a, R> {
                 ValueA::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts(inclusive.first.handle.clone(), self.control.len),
                 BufferArg::from_raw_parts(inclusive.second.handle.clone(), self.control.len),
@@ -719,7 +719,7 @@ macro_rules! reduce_by_key_tuple7_scanned_values {
                 R,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts($inclusive.0.handle.clone(), $control.len),
                 BufferArg::from_raw_parts($inclusive.1.handle.clone(), $control.len),
@@ -797,7 +797,7 @@ macro_rules! reduce_by_key_tuple7_scanned_values_into {
                 R,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(primitive_scan::BLOCK_SCAN_SIZE),
                 BufferArg::from_raw_parts($inclusive.0.handle.clone(), $control.len),
                 BufferArg::from_raw_parts($inclusive.1.handle.clone(), $control.len),

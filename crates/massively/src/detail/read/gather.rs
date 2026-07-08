@@ -293,7 +293,7 @@ where
                 InputSource::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_GATHER_WHERE_SIZE),
                 BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1),
                 BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1),

@@ -51,7 +51,7 @@ where
     unsafe {
         fill_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(value_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -90,7 +90,7 @@ where
     unsafe {
         fill_slice_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(value_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), 2) },
@@ -129,7 +129,7 @@ where
     unsafe {
         concat_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(left.handle.clone(), left.len()) },
             unsafe { BufferArg::from_raw_parts(right.handle.clone(), right.len()) },
@@ -164,7 +164,7 @@ where
     unsafe {
         copy_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(input_handle.clone(), len_usize) },
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), len_usize) },
@@ -223,7 +223,7 @@ where
     unsafe {
         copy_slice_to_slice_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(input.handle.clone(), input.len()) },
             unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), 3) },
@@ -256,7 +256,7 @@ where
     unsafe {
         indices_u32_kernel::launch_unchecked::<R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), len_usize) },
         );
@@ -287,7 +287,7 @@ where
     unsafe {
         reverse_indices_u32_kernel::launch_unchecked::<R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), len_usize) },
         );
@@ -321,7 +321,7 @@ where
     unsafe {
         gather_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_RANGE_SIZE),
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), indices_len) },
             unsafe { BufferArg::from_raw_parts(indices.handle.clone(), indices_len) },

@@ -336,12 +336,14 @@ impl_wide_miter_zip!(Zip4 => ZipRead4; apply_expr4; A: 0: a, C: 1: c, D: 2: d, E
 impl_wide_miter_zip!(Zip5 => ZipRead5; apply_expr5; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f);
 impl_wide_miter_zip!(Zip6 => ZipRead6; apply_expr6; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g);
 impl_wide_miter_zip!(Zip7 => ZipRead7; apply_expr7; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g, H: 6: h);
+impl_wide_miter_zip!(Zip8 => ZipRead8; apply_expr8; A: 0: a, C: 1: c, D: 2: d, E: 3: e, F: 4: f, G: 5: g, H: 6: h, I: 7: i);
 impl_miter_mut_zip!(Zip2; A: 0, C: 1);
 impl_miter_mut_zip!(Zip3; A: 0, C: 1, D: 2);
 impl_miter_mut_zip!(Zip4; A: 0, C: 1, D: 2, E: 3);
 impl_miter_mut_zip!(Zip5; A: 0, C: 1, D: 2, E: 3, F: 4);
 impl_miter_mut_zip!(Zip6; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5);
 impl_miter_mut_zip!(Zip7; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5, H: 6);
+impl_miter_mut_zip!(Zip8; A: 0, C: 1, D: 2, E: 3, F: 4, G: 5, H: 6, I: 7);
 
 macro_rules! impl_sliced_output_inner {
     ($read:ident; $( $ty:ident : $idx:tt ),+) => {
@@ -521,3 +523,4 @@ impl_sliced_output_inner!(ZipRead4; A: 0, B: 1, C: 2, D: 3);
 impl_sliced_output_inner!(ZipRead5; A: 0, B: 1, C: 2, D: 3, E: 4);
 impl_sliced_output_inner!(ZipRead6; A: 0, B: 1, C: 2, D: 3, E: 4, F: 5);
 impl_sliced_output_inner!(ZipRead7; A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6);
+impl_sliced_output_inner!(ZipRead8; A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7);

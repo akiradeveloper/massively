@@ -4,15 +4,14 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op as gpu_op;
 use massively::{Executor, MIndex, MIter};
 use oracle::op as host_op;
+use oracle_ref as oracle;
 use proptest::prelude::*;
-use std::sync::{Mutex, MutexGuard};
 
 type ApiRuntime = WgpuRuntime;
 type ApiExecutor = Executor<ApiRuntime>;
 
 const CASES: u32 = 24;
 const MAX_LEN: usize = 64;
-static GPU_LOCK: Mutex<()> = Mutex::new(());
 
 fn mindex(value: usize) -> MIndex {
     value.try_into().unwrap()
@@ -389,15 +388,20 @@ fn exec() -> ApiExecutor {
     Executor::<ApiRuntime>::new(WgpuDevice::DefaultDevice)
 }
 
-fn gpu_lock() -> MutexGuard<'static, ()> {
-    GPU_LOCK.lock().unwrap_or_else(|err| err.into_inner())
-}
-
-fn lazify<Input>(input: Input) -> massively::lazy::Identity<Input>
+fn lazify<Input>(
+    input: Input,
+) -> massively::lazy::Transform<
+    massively::lazy::Permute<Input, massively::lazy::Taken<massively::lazy::Counting>>,
+    massively::op::Identity,
+>
 where
     Input: MIter<ApiRuntime>,
 {
-    massively::lazy::identity(input)
+    let len = input.len();
+    massively::lazy::transform(
+        massively::lazy::permute(input, massively::lazy::counting(0).take(len)),
+        massively::op::Identity,
+    )
 }
 
 fn unique_by<T, K, F>(input: &[T], first: F) -> bool
@@ -615,7 +619,6 @@ macro_rules! make_zip {
 macro_rules! map_arity_case {
     ($input:expr, $input_zip:ident, ($($input_ty:ty),+), $output_zip:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
         let _ = $init;
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $input_zip, ($($input_ty),+));
@@ -629,7 +632,6 @@ macro_rules! map_arity_case {
 
 macro_rules! transform_arity_case {
     ($input:expr, $input_zip:ident, ($($input_ty:ty),+), $output_zip:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut host = vec![$init; input.len()];
@@ -650,7 +652,6 @@ macro_rules! transform_arity_case {
 
 macro_rules! transform_where_arity_case {
     ($input:expr, $input_zip:ident, ($($input_ty:ty),+), $output_zip:ident, ($($output_ty:ty),+), $init:expr, $op:ident) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
@@ -674,7 +675,6 @@ macro_rules! transform_where_arity_case {
 
 macro_rules! sort_by_key_only_case {
     ($pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $less:ident) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
@@ -691,7 +691,6 @@ macro_rules! sort_by_key_only_case {
 
 macro_rules! scan_by_key_case {
     (inclusive_scan_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
@@ -713,7 +712,6 @@ macro_rules! scan_by_key_case {
         );
     }};
     (exclusive_scan_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
@@ -736,7 +734,6 @@ macro_rules! scan_by_key_case {
         );
     }};
     (reduce_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
@@ -761,7 +758,6 @@ macro_rules! scan_by_key_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_out_values.slice(..len)).unwrap(), $value_zip), host_values);
     }};
     (unique_by_key, $pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let (keys, values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
@@ -786,7 +782,6 @@ macro_rules! scan_by_key_case {
 
 macro_rules! merge_by_key_case {
     ($pairs:expr, $key_zip:ident, ($($key_ty:ty),+), $value_zip:ident, ($($value_ty:ty),+), $less:ident) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let pairs = $pairs;
         let mid = pairs.len() / 2;
@@ -842,7 +837,6 @@ macro_rules! reverse_indices_for {
 
 macro_rules! value_case {
     (reduce, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -851,7 +845,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (inclusive_scan, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -862,7 +855,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (exclusive_scan, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -873,7 +865,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (adjacent_difference, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -884,7 +875,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (copy_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
@@ -897,7 +887,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (remove_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
@@ -910,7 +899,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (reverse, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -921,7 +909,6 @@ macro_rules! value_case {
         prop_assert_eq!(gpu, host);
     }};
     (count_if, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -931,7 +918,6 @@ macro_rules! value_case {
         );
     }};
     (all_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -941,7 +927,6 @@ macro_rules! value_case {
         );
     }};
     (any_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -951,7 +936,6 @@ macro_rules! value_case {
         );
     }};
     (none_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -961,7 +945,6 @@ macro_rules! value_case {
         );
     }};
     (find_if, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -971,7 +954,6 @@ macro_rules! value_case {
         );
     }};
     (is_partitioned, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -981,7 +963,6 @@ macro_rules! value_case {
         );
     }};
     (partition, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -992,7 +973,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
     }};
     (predicate, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1027,7 +1007,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output.slice(split..mindex(input.len()))).unwrap(), $zip), host_no);
     }};
     (indexed, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
@@ -1081,7 +1060,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (permute, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
@@ -1094,7 +1072,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (gather, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
@@ -1107,7 +1084,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (gather_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
@@ -1129,7 +1105,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (scatter, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
@@ -1142,7 +1117,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (scatter_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let indices = reverse_indices_for!(input.len());
@@ -1164,7 +1138,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (search_eq, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut other = input.clone();
@@ -1189,7 +1162,6 @@ macro_rules! value_case {
         );
     }};
     (equal, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1199,7 +1171,6 @@ macro_rules! value_case {
         );
     }};
     (mismatch, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut other = input.clone();
@@ -1212,7 +1183,6 @@ macro_rules! value_case {
         );
     }};
     (adjacent_find, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1222,7 +1192,6 @@ macro_rules! value_case {
         );
     }};
     (find_first_of, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let mut other = input.clone();
@@ -1235,7 +1204,6 @@ macro_rules! value_case {
         );
     }};
     (mutating, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
@@ -1275,7 +1243,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (fill, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_output = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1285,7 +1252,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (replace_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
@@ -1303,7 +1269,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (transform_where, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let stencil = stencil_for!(input.len());
@@ -1323,7 +1288,6 @@ macro_rules! value_case {
         prop_assert_eq!(cols_to_aos!(exec.to_host(&gpu_output).unwrap(), $zip), host);
     }};
     (ordering, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1404,7 +1368,6 @@ macro_rules! value_case {
         );
     }};
     (sort, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1416,7 +1379,6 @@ macro_rules! value_case {
         );
     }};
     (merge, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1437,7 +1399,6 @@ macro_rules! value_case {
         );
     }};
     (is_sorted, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1448,7 +1409,6 @@ macro_rules! value_case {
         );
     }};
     (is_sorted_until, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1458,7 +1418,6 @@ macro_rules! value_case {
         );
     }};
     (lexicographical_compare, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1473,7 +1432,6 @@ macro_rules! value_case {
         );
     }};
     (min_element, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1483,7 +1441,6 @@ macro_rules! value_case {
         );
     }};
     (max_element, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1493,7 +1450,6 @@ macro_rules! value_case {
         );
     }};
     (minmax_element, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let gpu_input = make_zip!(&exec, &input, $zip, ($($ty),+));
@@ -1503,7 +1459,6 @@ macro_rules! value_case {
         );
     }};
     (lower_bound, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1517,7 +1472,6 @@ macro_rules! value_case {
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::lower_bound(&sorted, &right, LessTuple));
     }};
     (upper_bound, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1531,7 +1485,6 @@ macro_rules! value_case {
         prop_assert_eq!(exec.to_host(&gpu_bounds).unwrap(), oracle::upper_bound(&sorted, &right, LessTuple));
     }};
     (unique, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1544,7 +1497,6 @@ macro_rules! value_case {
         );
     }};
     (set_union, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1562,7 +1514,6 @@ macro_rules! value_case {
         );
     }};
     (set_intersection, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);
@@ -1580,7 +1531,6 @@ macro_rules! value_case {
         );
     }};
     (set_difference, $input:expr, $zip:ident, ($($ty:ty),+), $init:expr) => {{
-        let _guard = gpu_lock();
         let exec = exec();
         let input = $input;
         let sorted = oracle::sort(&input, LessTuple);

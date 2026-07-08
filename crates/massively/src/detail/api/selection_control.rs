@@ -242,7 +242,7 @@ where
                     A::Runtime,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                     unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
                     unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -335,7 +335,7 @@ where
                     A::Runtime,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                     unsafe { BufferArg::from_raw_parts(first_slot0.0.clone(), first_slot0.1) },
                     unsafe { BufferArg::from_raw_parts(first_slot1.0.clone(), first_slot1.1) },

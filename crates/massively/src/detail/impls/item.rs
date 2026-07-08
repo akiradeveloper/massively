@@ -418,7 +418,7 @@ macro_rules! adjacent_logical7_into_output {
                 &mut bindings,
             )?;
             bindings.finish();
-            let offsets = bindings.slot_offsets7_handle(client)?;
+            let offsets = bindings.slot_offsets8_handle(client)?;
             let slot0 = bindings.slot_or_first(0);
             let slot1 = bindings.slot_or_first(1);
             let slot2 = bindings.slot_or_first(2);
@@ -426,6 +426,7 @@ macro_rules! adjacent_logical7_into_output {
             let slot4 = bindings.slot_or_first(4);
             let slot5 = bindings.slot_or_first(5);
             let slot6 = bindings.slot_or_first(6);
+            let slot7 = bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
                 $(
@@ -447,13 +448,14 @@ macro_rules! adjacent_logical7_into_output {
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     KernelOp<R, Op>,
                     $( $ty, )+
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -462,7 +464,8 @@ macro_rules! adjacent_logical7_into_output {
                     BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                     BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                     BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
@@ -550,7 +553,7 @@ macro_rules! inclusive_scan_logical7_into_output {
                 &mut bindings,
             )?;
             bindings.finish();
-            let offsets = bindings.slot_offsets7_handle(client)?;
+            let offsets = bindings.slot_offsets8_handle(client)?;
             let slot0 = bindings.slot_or_first(0);
             let slot1 = bindings.slot_or_first(1);
             let slot2 = bindings.slot_or_first(2);
@@ -558,6 +561,7 @@ macro_rules! inclusive_scan_logical7_into_output {
             let slot4 = bindings.slot_or_first(4);
             let slot5 = bindings.slot_or_first(5);
             let slot6 = bindings.slot_or_first(6);
+            let slot7 = bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
                 $(
@@ -579,13 +583,14 @@ macro_rules! inclusive_scan_logical7_into_output {
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     KernelOp<R, Op>,
                     $( $ty, )+
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -594,7 +599,8 @@ macro_rules! inclusive_scan_logical7_into_output {
                     BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                     BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                     BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
@@ -636,7 +642,7 @@ macro_rules! exclusive_scan_logical7_into_output {
                 &mut bindings,
             )?;
             bindings.finish();
-            let offsets = bindings.slot_offsets7_handle(client)?;
+            let offsets = bindings.slot_offsets8_handle(client)?;
             let slot0 = bindings.slot_or_first(0);
             let slot1 = bindings.slot_or_first(1);
             let slot2 = bindings.slot_or_first(2);
@@ -644,6 +650,7 @@ macro_rules! exclusive_scan_logical7_into_output {
             let slot4 = bindings.slot_or_first(4);
             let slot5 = bindings.slot_or_first(5);
             let slot6 = bindings.slot_or_first(6);
+            let slot7 = bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
                 $(
@@ -668,13 +675,14 @@ macro_rules! exclusive_scan_logical7_into_output {
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     KernelOp<R, Op>,
                     $( $ty, )+
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
                     BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -683,7 +691,8 @@ macro_rules! exclusive_scan_logical7_into_output {
                     BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                     BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                     BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($init_var.clone(), 1),
@@ -782,7 +791,7 @@ macro_rules! reduce_by_key_logical7_into_output {
                 &mut bindings,
             )?;
             bindings.finish();
-            let offsets = bindings.slot_offsets7_handle(client)?;
+            let offsets = bindings.slot_offsets8_handle(client)?;
             let slot0 = bindings.slot_or_first(0);
             let slot1 = bindings.slot_or_first(1);
             let slot2 = bindings.slot_or_first(2);
@@ -790,6 +799,7 @@ macro_rules! reduce_by_key_logical7_into_output {
             let slot4 = bindings.slot_or_first(4);
             let slot5 = bindings.slot_or_first(5);
             let slot6 = bindings.slot_or_first(6);
+            let slot7 = bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
                 $(
@@ -814,13 +824,14 @@ macro_rules! reduce_by_key_logical7_into_output {
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     KernelOp<R, Op>,
                     $( $ty, )+
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(selection.flag.clone(), selection.len),
                     BufferArg::from_raw_parts(selection.position.clone(), selection.len),
@@ -831,7 +842,8 @@ macro_rules! reduce_by_key_logical7_into_output {
                     BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                     BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                     BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($init_var.clone(), 1),
@@ -907,8 +919,8 @@ macro_rules! merge_logical7_into_output {
                 &mut right_bindings,
             )?;
             right_bindings.finish();
-            let left_offsets = left_bindings.slot_offsets7_handle(client)?;
-            let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+            let left_offsets = left_bindings.slot_offsets8_handle(client)?;
+            let right_offsets = right_bindings.slot_offsets8_handle(client)?;
             let left_slot0 = left_bindings.slot_or_first(0);
             let left_slot1 = left_bindings.slot_or_first(1);
             let left_slot2 = left_bindings.slot_or_first(2);
@@ -916,6 +928,7 @@ macro_rules! merge_logical7_into_output {
             let left_slot4 = left_bindings.slot_or_first(4);
             let left_slot5 = left_bindings.slot_or_first(5);
             let left_slot6 = left_bindings.slot_or_first(6);
+            let left_slot7 = left_bindings.slot_or_first(7);
             let right_slot0 = right_bindings.slot_or_first(0);
             let right_slot1 = right_bindings.slot_or_first(1);
             let right_slot2 = right_bindings.slot_or_first(2);
@@ -923,6 +936,7 @@ macro_rules! merge_logical7_into_output {
             let right_slot4 = right_bindings.slot_or_first(4);
             let right_slot5 = right_bindings.slot_or_first(5);
             let right_slot6 = right_bindings.slot_or_first(6);
+            let right_slot7 = right_bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?,
                 u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?,
@@ -944,6 +958,7 @@ macro_rules! merge_logical7_into_output {
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
@@ -951,6 +966,7 @@ macro_rules! merge_logical7_into_output {
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     KernelOp<R, Less>,
@@ -967,7 +983,8 @@ macro_rules! merge_logical7_into_output {
                     BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1),
                     BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1),
                     BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1),
-                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(left_slot7.0.clone(), left_slot7.1),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 8),
                     BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1),
                     BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1),
                     BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1),
@@ -975,7 +992,8 @@ macro_rules! merge_logical7_into_output {
                     BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1),
                     BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1),
                     BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1),
-                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(right_slot7.0.clone(), right_slot7.1),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
@@ -1052,8 +1070,8 @@ macro_rules! set_union_logical7_into_output {
                 &mut right_bindings,
             )?;
             right_bindings.finish();
-            let left_offsets = left_bindings.slot_offsets7_handle(client)?;
-            let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+            let left_offsets = left_bindings.slot_offsets8_handle(client)?;
+            let right_offsets = right_bindings.slot_offsets8_handle(client)?;
             let left_slot0 = left_bindings.slot_or_first(0);
             let left_slot1 = left_bindings.slot_or_first(1);
             let left_slot2 = left_bindings.slot_or_first(2);
@@ -1061,6 +1079,7 @@ macro_rules! set_union_logical7_into_output {
             let left_slot4 = left_bindings.slot_or_first(4);
             let left_slot5 = left_bindings.slot_or_first(5);
             let left_slot6 = left_bindings.slot_or_first(6);
+            let left_slot7 = left_bindings.slot_or_first(7);
             let right_slot0 = right_bindings.slot_or_first(0);
             let right_slot1 = right_bindings.slot_or_first(1);
             let right_slot2 = right_bindings.slot_or_first(2);
@@ -1068,6 +1087,7 @@ macro_rules! set_union_logical7_into_output {
             let right_slot4 = right_bindings.slot_or_first(4);
             let right_slot5 = right_bindings.slot_or_first(5);
             let right_slot6 = right_bindings.slot_or_first(6);
+            let right_slot7 = right_bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?,
                 u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?,
@@ -1089,6 +1109,7 @@ macro_rules! set_union_logical7_into_output {
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
@@ -1096,6 +1117,7 @@ macro_rules! set_union_logical7_into_output {
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Right as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     <Right as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     KernelOp<R, Less>,
@@ -1114,7 +1136,8 @@ macro_rules! set_union_logical7_into_output {
                     BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1),
                     BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1),
                     BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1),
-                    BufferArg::from_raw_parts(left_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(left_slot7.0.clone(), left_slot7.1),
+                    BufferArg::from_raw_parts(left_offsets.clone(), 8),
                     BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1),
                     BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1),
                     BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1),
@@ -1122,7 +1145,8 @@ macro_rules! set_union_logical7_into_output {
                     BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1),
                     BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1),
                     BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1),
-                    BufferArg::from_raw_parts(right_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(right_slot7.0.clone(), right_slot7.1),
+                    BufferArg::from_raw_parts(right_offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
@@ -1189,7 +1213,7 @@ macro_rules! partition_logical7_into_output {
                 &mut bindings,
             )?;
             bindings.finish();
-            let offsets = bindings.slot_offsets7_handle(client)?;
+            let offsets = bindings.slot_offsets8_handle(client)?;
             let slot0 = bindings.slot_or_first(0);
             let slot1 = bindings.slot_or_first(1);
             let slot2 = bindings.slot_or_first(2);
@@ -1197,6 +1221,7 @@ macro_rules! partition_logical7_into_output {
             let slot4 = bindings.slot_or_first(4);
             let slot5 = bindings.slot_or_first(5);
             let slot6 = bindings.slot_or_first(6);
+            let slot7 = bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
                 u32::try_from($matching_count)
@@ -1220,12 +1245,13 @@ macro_rules! partition_logical7_into_output {
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     $( $ty, )+
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(split_rank.flag.clone(), split_rank.len),
                     BufferArg::from_raw_parts(split_rank.position.clone(), split_rank.len),
@@ -1236,7 +1262,8 @@ macro_rules! partition_logical7_into_output {
                     BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
                     BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
                     BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-                    BufferArg::from_raw_parts(offsets.clone(), 7),
+                    BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+                    BufferArg::from_raw_parts(offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts($var.source.handle.clone(), $var.source.len()),
@@ -1313,8 +1340,8 @@ macro_rules! scatter_logical7_into_output {
                 &mut index_bindings,
             )?;
             index_bindings.finish();
-            let value_offsets = value_bindings.slot_offsets7_handle(client)?;
-            let index_offsets = index_bindings.slot_offsets7_handle(client)?;
+            let value_offsets = value_bindings.slot_offsets8_handle(client)?;
+            let index_offsets = index_bindings.slot_offsets8_handle(client)?;
             let value_slot0 = value_bindings.slot_or_first(0);
             let value_slot1 = value_bindings.slot_or_first(1);
             let value_slot2 = value_bindings.slot_or_first(2);
@@ -1322,6 +1349,7 @@ macro_rules! scatter_logical7_into_output {
             let value_slot4 = value_bindings.slot_or_first(4);
             let value_slot5 = value_bindings.slot_or_first(5);
             let value_slot6 = value_bindings.slot_or_first(6);
+            let value_slot7 = value_bindings.slot_or_first(7);
             let index_slot0 = index_bindings.slot_or_first(0);
             let index_slot1 = index_bindings.slot_or_first(1);
             let index_slot2 = index_bindings.slot_or_first(2);
@@ -1329,6 +1357,7 @@ macro_rules! scatter_logical7_into_output {
             let index_slot4 = index_bindings.slot_or_first(4);
             let index_slot5 = index_bindings.slot_or_first(5);
             let index_slot6 = index_bindings.slot_or_first(6);
+            let index_slot7 = index_bindings.slot_or_first(7);
             let metadata = [
                 u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?,
                 $(
@@ -1350,6 +1379,7 @@ macro_rules! scatter_logical7_into_output {
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <Read as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf1,
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf2,
@@ -1357,13 +1387,14 @@ macro_rules! scatter_logical7_into_output {
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf4,
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf5,
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf6,
+                    <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::Leaf7,
                     <Read as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     <IndexSource as crate::detail::read::KernelReadBoundMany<R>>::ExprAt,
                     $( $ty, )+
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(value_slot0.0.clone(), value_slot0.1),
                     BufferArg::from_raw_parts(value_slot1.0.clone(), value_slot1.1),
@@ -1372,7 +1403,8 @@ macro_rules! scatter_logical7_into_output {
                     BufferArg::from_raw_parts(value_slot4.0.clone(), value_slot4.1),
                     BufferArg::from_raw_parts(value_slot5.0.clone(), value_slot5.1),
                     BufferArg::from_raw_parts(value_slot6.0.clone(), value_slot6.1),
-                    BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(value_slot7.0.clone(), value_slot7.1),
+                    BufferArg::from_raw_parts(value_offsets.clone(), 8),
                     BufferArg::from_raw_parts(index_slot0.0.clone(), index_slot0.1),
                     BufferArg::from_raw_parts(index_slot1.0.clone(), index_slot1.1),
                     BufferArg::from_raw_parts(index_slot2.0.clone(), index_slot2.1),
@@ -1380,7 +1412,8 @@ macro_rules! scatter_logical7_into_output {
                     BufferArg::from_raw_parts(index_slot4.0.clone(), index_slot4.1),
                     BufferArg::from_raw_parts(index_slot5.0.clone(), index_slot5.1),
                     BufferArg::from_raw_parts(index_slot6.0.clone(), index_slot6.1),
-                    BufferArg::from_raw_parts(index_offsets.clone(), 7),
+                    BufferArg::from_raw_parts(index_slot7.0.clone(), index_slot7.1),
+                    BufferArg::from_raw_parts(index_offsets.clone(), 8),
                     BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()),
                     $(
                         BufferArg::from_raw_parts(mask.flag.clone(), {
@@ -2041,7 +2074,7 @@ macro_rules! wide_predicate_rank_from_tuple {
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
                     BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
@@ -2928,6 +2961,7 @@ macro_rules! impl_mitem_tuple {
                 Leaf4,
                 Leaf5,
                 Leaf6,
+                Leaf7,
                 Expr,
                 Op,
             >(
@@ -2945,6 +2979,7 @@ macro_rules! impl_mitem_tuple {
                 Leaf4: MStorageElement,
                 Leaf5: MStorageElement,
                 Leaf6: MStorageElement,
+                Leaf7: MStorageElement,
                 Expr: crate::expr::LogicalDeviceExpr7<
                     Input,
                     Leaf0,
@@ -2954,6 +2989,7 @@ macro_rules! impl_mitem_tuple {
                     Leaf4,
                     Leaf5,
                     Leaf6,
+                    Leaf7,
                 >,
                 Op: op::UnaryOp<R, Input, Output = Self>,
                 Self: crate::detail::TransformLogical7Output<
@@ -2966,6 +3002,7 @@ macro_rules! impl_mitem_tuple {
                     Leaf4,
                     Leaf5,
                     Leaf6,
+                    Leaf7,
                     Expr,
                     KernelOp<R, Op>,
                 >,
@@ -2989,6 +3026,7 @@ macro_rules! impl_mitem_tuple {
                     Leaf4,
                     Leaf5,
                     Leaf6,
+                    Leaf7,
                     Expr,
                     KernelOp<R, Op>,
                 >>::run_logical7(policy, bindings, len)?;
@@ -4208,6 +4246,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Leaf4,
                 Leaf5,
                 Leaf6,
+                Leaf7,
                 Expr,
                 Op,
             >(
@@ -4225,6 +4264,7 @@ macro_rules! impl_wide_mitem_tuple {
                 Leaf4: MStorageElement,
                 Leaf5: MStorageElement,
                 Leaf6: MStorageElement,
+                Leaf7: MStorageElement,
                 Expr: crate::expr::LogicalDeviceExpr7<
                     Input,
                     Leaf0,
@@ -4234,6 +4274,7 @@ macro_rules! impl_wide_mitem_tuple {
                     Leaf4,
                     Leaf5,
                     Leaf6,
+                    Leaf7,
                 >,
                 Op: op::UnaryOp<R, Input, Output = Self>,
                 Self: crate::detail::TransformLogical7Output<
@@ -4246,6 +4287,7 @@ macro_rules! impl_wide_mitem_tuple {
                     Leaf4,
                     Leaf5,
                     Leaf6,
+                    Leaf7,
                     Expr,
                     KernelOp<R, Op>,
                 >,
@@ -4269,6 +4311,7 @@ macro_rules! impl_wide_mitem_tuple {
                     Leaf4,
                     Leaf5,
                     Leaf6,
+                    Leaf7,
                     Expr,
                     KernelOp<R, Op>,
                 >>::run_logical7(policy, bindings, len)?;

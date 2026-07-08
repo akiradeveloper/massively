@@ -7,7 +7,9 @@ use crate::detail::dispatch as sealed;
 use crate::detail::op_adapter::{KernelOp, KernelScalarInputOp, StencilFlag};
 use crate::error::ensure_same_len;
 use crate::index::{MIndex, mindex_from_usize, usize_from_mindex};
-use crate::iter::{MIter, MIterMut, SlicedOutputInner, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7};
+use crate::iter::{
+    MIter, MIterMut, SlicedOutputInner, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7, Zip8,
+};
 use crate::op;
 use crate::runtime::{DeviceSliceMut, DeviceVec, Executor};
 use crate::value::{MAlloc, MItem, MStorageElement, StorageFromInner};
@@ -38,7 +40,7 @@ where
     unsafe {
         crate::kernels::head_flags_to_end_flags_kernel::launch_unchecked::<R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(crate::detail::primitives::scan::BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(head_flags.clone(), len),
             BufferArg::from_raw_parts(len_handle.clone(), 1),

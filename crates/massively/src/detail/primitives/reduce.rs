@@ -78,7 +78,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(partial_len_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(partial_len_u32),
             CubeDim::new_1d(BLOCK_REDUCE_SIZE),
             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -116,7 +116,7 @@ where
                 R,
             >(
                 client,
-                CubeCount::Static(next_len_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(next_len_u32),
                 CubeDim::new_1d(BLOCK_REDUCE_SIZE),
                 BufferArg::from_raw_parts(current_a.clone(), current_len),
                 BufferArg::from_raw_parts(current_b.clone(), current_len),
@@ -174,6 +174,7 @@ pub(crate) fn reduce_logical7_device_expr<
     ExprLeaf4,
     ExprLeaf5,
     ExprLeaf6,
+    ExprLeaf7,
     Leaf0,
     Leaf1,
     Leaf2,
@@ -181,6 +182,7 @@ pub(crate) fn reduce_logical7_device_expr<
     Leaf4,
     Leaf5,
     Leaf6,
+    Leaf7,
     Expr,
     Pack,
     Op,
@@ -200,6 +202,7 @@ where
     ExprLeaf4: CubePrimitive + CubeElement,
     ExprLeaf5: CubePrimitive + CubeElement,
     ExprLeaf6: CubePrimitive + CubeElement,
+    ExprLeaf7: CubePrimitive + CubeElement,
     Leaf0: CubePrimitive + CubeElement,
     Leaf1: CubePrimitive + CubeElement,
     Leaf2: CubePrimitive + CubeElement,
@@ -207,6 +210,7 @@ where
     Leaf4: CubePrimitive + CubeElement,
     Leaf5: CubePrimitive + CubeElement,
     Leaf6: CubePrimitive + CubeElement,
+    Leaf7: CubePrimitive + CubeElement,
     Expr: LogicalDeviceExpr7<
             Item,
             ExprLeaf0,
@@ -216,9 +220,20 @@ where
             ExprLeaf4,
             ExprLeaf5,
             ExprLeaf6,
+            ExprLeaf7,
         >,
-    Pack: crate::expr::LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
-        + LogicalHostPack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+    Pack: crate::expr::LogicalDevicePack7<
+            Item,
+            Leaf0,
+            Leaf1,
+            Leaf2,
+            Leaf3,
+            Leaf4,
+            Leaf5,
+            Leaf6,
+            Leaf7,
+        >
+        + LogicalHostPack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>
         + 'static
         + Send
         + Sync,
@@ -242,6 +257,7 @@ where
     let partial4 = workspace.alloc::<Leaf4>(partial_len);
     let partial5 = workspace.alloc::<Leaf5>(partial_len);
     let partial6 = workspace.alloc::<Leaf6>(partial_len);
+    let partial7 = workspace.alloc::<Leaf7>(partial_len);
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -249,7 +265,8 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let slot7 = bindings.slot_or_first(7);
+    let offsets = bindings.slot_offsets8_handle(client)?;
 
     unsafe {
         logical7_reduce_expr_partials_kernel::launch_unchecked::<
@@ -261,6 +278,7 @@ where
             ExprLeaf4,
             ExprLeaf5,
             ExprLeaf6,
+            ExprLeaf7,
             Leaf0,
             Leaf1,
             Leaf2,
@@ -268,13 +286,14 @@ where
             Leaf4,
             Leaf5,
             Leaf6,
+            Leaf7,
             Expr,
             Pack,
             Op,
             R,
         >(
             client,
-            CubeCount::Static(partial_len_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(partial_len_u32),
             CubeDim::new_1d(BLOCK_REDUCE_SIZE),
             BufferArg::from_raw_parts(slot0.0.clone(), slot0.1),
             BufferArg::from_raw_parts(slot1.0.clone(), slot1.1),
@@ -283,7 +302,8 @@ where
             BufferArg::from_raw_parts(slot4.0.clone(), slot4.1),
             BufferArg::from_raw_parts(slot5.0.clone(), slot5.1),
             BufferArg::from_raw_parts(slot6.0.clone(), slot6.1),
-            BufferArg::from_raw_parts(offsets.clone(), 7),
+            BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
+            BufferArg::from_raw_parts(offsets.clone(), 8),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
             BufferArg::from_raw_parts(partial0.clone(), partial_len),
             BufferArg::from_raw_parts(partial1.clone(), partial_len),
@@ -292,6 +312,7 @@ where
             BufferArg::from_raw_parts(partial4.clone(), partial_len),
             BufferArg::from_raw_parts(partial5.clone(), partial_len),
             BufferArg::from_raw_parts(partial6.clone(), partial_len),
+            BufferArg::from_raw_parts(partial7.clone(), partial_len),
         );
     }
 
@@ -302,6 +323,7 @@ where
     let mut current4 = partial4;
     let mut current5 = partial5;
     let mut current6 = partial6;
+    let mut current7 = partial7;
     let mut current_len = partial_len;
     while current_len > 1 {
         let next_len = current_len.div_ceil(BLOCK_REDUCE_SIZE as usize);
@@ -317,6 +339,7 @@ where
         let next4 = workspace.alloc::<Leaf4>(next_len);
         let next5 = workspace.alloc::<Leaf5>(next_len);
         let next6 = workspace.alloc::<Leaf6>(next_len);
+        let next7 = workspace.alloc::<Leaf7>(next_len);
         unsafe {
             logical7_reduce_partials_kernel::launch_unchecked::<
                 Item,
@@ -327,12 +350,13 @@ where
                 Leaf4,
                 Leaf5,
                 Leaf6,
+                Leaf7,
                 Pack,
                 Op,
                 R,
             >(
                 client,
-                CubeCount::Static(next_len_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(next_len_u32),
                 CubeDim::new_1d(BLOCK_REDUCE_SIZE),
                 BufferArg::from_raw_parts(current0.clone(), current_len),
                 BufferArg::from_raw_parts(current1.clone(), current_len),
@@ -341,6 +365,7 @@ where
                 BufferArg::from_raw_parts(current4.clone(), current_len),
                 BufferArg::from_raw_parts(current5.clone(), current_len),
                 BufferArg::from_raw_parts(current6.clone(), current_len),
+                BufferArg::from_raw_parts(current7.clone(), current_len),
                 BufferArg::from_raw_parts(current_len_handle.clone(), 1),
                 BufferArg::from_raw_parts(next0.clone(), next_len),
                 BufferArg::from_raw_parts(next1.clone(), next_len),
@@ -349,6 +374,7 @@ where
                 BufferArg::from_raw_parts(next4.clone(), next_len),
                 BufferArg::from_raw_parts(next5.clone(), next_len),
                 BufferArg::from_raw_parts(next6.clone(), next_len),
+                BufferArg::from_raw_parts(next7.clone(), next_len),
             );
         }
         current0 = next0;
@@ -358,10 +384,11 @@ where
         current4 = next4;
         current5 = next5;
         current6 = next6;
+        current7 = next7;
         current_len = next_len;
     }
 
-    let (init0, init1, init2, init3, init4, init5, init6) = Pack::leaves_host(init);
+    let (init0, init1, init2, init3, init4, init5, init6, init7) = Pack::leaves_host(init);
     let init0 = client.create_from_slice(Leaf0::as_bytes(&[init0]));
     let init1 = client.create_from_slice(Leaf1::as_bytes(&[init1]));
     let init2 = client.create_from_slice(Leaf2::as_bytes(&[init2]));
@@ -369,6 +396,7 @@ where
     let init4 = client.create_from_slice(Leaf4::as_bytes(&[init4]));
     let init5 = client.create_from_slice(Leaf5::as_bytes(&[init5]));
     let init6 = client.create_from_slice(Leaf6::as_bytes(&[init6]));
+    let init7 = client.create_from_slice(Leaf7::as_bytes(&[init7]));
     let output0 = client.empty(std::mem::size_of::<Leaf0>());
     let output1 = client.empty(std::mem::size_of::<Leaf1>());
     let output2 = client.empty(std::mem::size_of::<Leaf2>());
@@ -376,6 +404,7 @@ where
     let output4 = client.empty(std::mem::size_of::<Leaf4>());
     let output5 = client.empty(std::mem::size_of::<Leaf5>());
     let output6 = client.empty(std::mem::size_of::<Leaf6>());
+    let output7 = client.empty(std::mem::size_of::<Leaf7>());
     unsafe {
         logical7_reduce_finalize_kernel::launch_unchecked::<
             Item,
@@ -386,6 +415,7 @@ where
             Leaf4,
             Leaf5,
             Leaf6,
+            Leaf7,
             Pack,
             Op,
             R,
@@ -400,6 +430,7 @@ where
             BufferArg::from_raw_parts(current4.clone(), 1),
             BufferArg::from_raw_parts(current5.clone(), 1),
             BufferArg::from_raw_parts(current6.clone(), 1),
+            BufferArg::from_raw_parts(current7.clone(), 1),
             BufferArg::from_raw_parts(init0.clone(), 1),
             BufferArg::from_raw_parts(init1.clone(), 1),
             BufferArg::from_raw_parts(init2.clone(), 1),
@@ -407,6 +438,7 @@ where
             BufferArg::from_raw_parts(init4.clone(), 1),
             BufferArg::from_raw_parts(init5.clone(), 1),
             BufferArg::from_raw_parts(init6.clone(), 1),
+            BufferArg::from_raw_parts(init7.clone(), 1),
             BufferArg::from_raw_parts(output0.clone(), 1),
             BufferArg::from_raw_parts(output1.clone(), 1),
             BufferArg::from_raw_parts(output2.clone(), 1),
@@ -414,6 +446,7 @@ where
             BufferArg::from_raw_parts(output4.clone(), 1),
             BufferArg::from_raw_parts(output5.clone(), 1),
             BufferArg::from_raw_parts(output6.clone(), 1),
+            BufferArg::from_raw_parts(output7.clone(), 1),
         );
     }
 
@@ -425,6 +458,7 @@ where
         read_one(policy, output4)?,
         read_one(policy, output5)?,
         read_one(policy, output6)?,
+        read_one(policy, output7)?,
     ))
 }
 
@@ -508,7 +542,7 @@ where
     unsafe {
         tuple2_device_reduce_expr_partials_kernel::launch_unchecked::<A, B, ExprA, ExprB, Op, R>(
             client,
-            CubeCount::Static(partial_len_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(partial_len_u32),
             CubeDim::new_1d(BLOCK_REDUCE_SIZE),
             unsafe { BufferArg::from_raw_parts(a0.0.clone(), a0.1) },
             unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
@@ -541,7 +575,7 @@ where
         unsafe {
             tuple2_reduce_partials_kernel::launch_unchecked::<A, B, Op, R>(
                 client,
-                CubeCount::Static(next_len_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(next_len_u32),
                 CubeDim::new_1d(BLOCK_REDUCE_SIZE),
                 unsafe { BufferArg::from_raw_parts(current_a.clone(), current_len) },
                 unsafe { BufferArg::from_raw_parts(current_b.clone(), current_len) },
@@ -636,7 +670,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(partial_len_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(partial_len_u32),
             CubeDim::new_1d(BLOCK_REDUCE_SIZE),
             unsafe { BufferArg::from_raw_parts(a0.0.clone(), a0.1) },
             unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
@@ -677,7 +711,7 @@ where
         unsafe {
             tuple3_reduce_partials_kernel::launch_unchecked::<A, B, C, Op, R>(
                 client,
-                CubeCount::Static(next_len_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(next_len_u32),
                 CubeDim::new_1d(BLOCK_REDUCE_SIZE),
                 unsafe { BufferArg::from_raw_parts(current_a.clone(), current_len) },
                 unsafe { BufferArg::from_raw_parts(current_b.clone(), current_len) },
@@ -846,7 +880,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(partial_len_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(partial_len_u32),
             CubeDim::new_1d(BLOCK_REDUCE_SIZE),
             BufferArg::from_raw_parts(a0.0.clone(), a0.1),
             BufferArg::from_raw_parts(a1.0.clone(), a1.1),
@@ -919,7 +953,7 @@ where
         unsafe {
             tuple7_reduce_partials_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
                 client,
-                CubeCount::Static(next_len_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(next_len_u32),
                 CubeDim::new_1d(BLOCK_REDUCE_SIZE),
                 BufferArg::from_raw_parts(current_a.clone(), current_len),
                 BufferArg::from_raw_parts(current_b.clone(), current_len),

@@ -147,6 +147,14 @@ macro_rules! impl_random_miter {
             R: Runtime,
             $item: lazy::ConstantItem<R>,
             u64: lazy::ConstantItem<R>,
+            ($item, $item, u64): lazy::ConstantItem<
+                    R,
+                    Read = crate::detail::read::ZipRead3<
+                        <$item as lazy::ConstantItem<R>>::Read,
+                        <$item as lazy::ConstantItem<R>>::Read,
+                        <u64 as lazy::ConstantItem<R>>::Read,
+                    >,
+                >,
             crate::detail::read::ZipRead4<
                 crate::detail::read::CountingRead,
                 <$item as lazy::ConstantItem<R>>::Read,
@@ -188,23 +196,18 @@ macro_rules! impl_random_miter {
                 policy: &crate::detail::CubePolicy<R>,
             ) -> Result<Self::Read, Error> {
                 let len = self.len;
+                let params: crate::detail::read::ZipRead3<
+                    <$item as lazy::ConstantItem<R>>::Read,
+                    <$item as lazy::ConstantItem<R>>::Read,
+                    <u64 as lazy::ConstantItem<R>>::Read,
+                > = lazy::constant((self.expr.$a, self.expr.$b, self.expr.seed))
+                    .take(len)
+                    .lower_read_ref(policy)?;
                 let input = crate::detail::read::ZipRead4::new(
                     counting_read::<R>(len, policy),
-                    <$item as lazy::ConstantItem<R>>::lower_constant_read(
-                        self.expr.$a,
-                        len,
-                        policy,
-                    )?,
-                    <$item as lazy::ConstantItem<R>>::lower_constant_read(
-                        self.expr.$b,
-                        len,
-                        policy,
-                    )?,
-                    <u64 as lazy::ConstantItem<R>>::lower_constant_read(
-                        self.expr.seed,
-                        len,
-                        policy,
-                    )?,
+                    params.a,
+                    params.b,
+                    params.c,
                 );
                 Ok(crate::detail::read::TransformRead::new(input))
             }

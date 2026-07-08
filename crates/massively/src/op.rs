@@ -76,6 +76,26 @@ pub fn compose<First, Second>(_first: First, _second: Second) -> Compose<First, 
     Compose::new()
 }
 
+/// Built-in identity unary operator.
+///
+/// This is useful both as a no-op transform and as a lightweight way to force
+/// algorithms through the lazy transform expression path.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Identity;
+
+#[cube]
+impl<R, Input> UnaryOp<R, Input> for Identity
+where
+    R: cubecl::prelude::Runtime,
+    Input: crate::MItem<R>,
+{
+    type Output = Input;
+
+    fn apply(input: Input) -> Input {
+        input
+    }
+}
+
 #[cube]
 impl<R, Input, First, Second> UnaryOp<R, Input> for Compose<First, Second>
 where

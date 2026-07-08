@@ -1,7 +1,7 @@
 use super::DeviceVec;
 use crate::{
     error::{Error, ensure_same_len},
-    expr::{DeviceGpuExpr, GpuExpr, Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6},
+    expr::{DeviceGpuExpr, GpuExpr, Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7},
     index::usize_from_mindex,
     policy::CubePolicy,
 };
@@ -83,6 +83,19 @@ pub struct ZipView7<A, B, C, D, E, F, G> {
 }
 
 #[doc(hidden)]
+#[allow(dead_code)]
+pub struct ZipView8<A, B, C, D, E, F, G, H> {
+    pub(crate) a: A,
+    pub(crate) b: B,
+    pub(crate) c: C,
+    pub(crate) d: D,
+    pub(crate) e: E,
+    pub(crate) f: F,
+    pub(crate) g: G,
+    pub(crate) h: H,
+}
+
+#[doc(hidden)]
 pub struct S0;
 #[doc(hidden)]
 pub struct S1;
@@ -98,6 +111,8 @@ pub struct S5;
 pub struct S6;
 #[doc(hidden)]
 pub struct S7;
+#[doc(hidden)]
+pub struct S8;
 
 /// Internal scalar-column expression that can be lowered into GPU kernels.
 ///
@@ -522,6 +537,16 @@ impl_read_only_wide_zip_view!(ZipView7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>
     <F as KernelColumn>::Item,
     <G as KernelColumn>::Item
 ));
+impl_read_only_wide_zip_view!(ZipView8<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h> => (
+    <A as KernelColumn>::Item,
+    <B as KernelColumn>::Item,
+    <C as KernelColumn>::Item,
+    <D as KernelColumn>::Item,
+    <E as KernelColumn>::Item,
+    <F as KernelColumn>::Item,
+    <G as KernelColumn>::Item,
+    <H as KernelColumn>::Item
+));
 
 impl<First, Second, Third> Zip for Zip3<First, Second, Third>
 where
@@ -649,12 +674,12 @@ impl KernelColumnBindings {
         Ok(client.create_from_slice(u32::as_bytes(&offsets)))
     }
 
-    pub(crate) fn slot_offsets7_handle<R: Runtime>(
+    pub(crate) fn slot_offsets8_handle<R: Runtime>(
         &self,
         client: &ComputeClient<R>,
     ) -> Result<cubecl::server::Handle, Error> {
-        let mut offsets = [0_u32; 7];
-        for (index, offset) in self.slot_offsets.iter().take(7).enumerate() {
+        let mut offsets = [0_u32; 8];
+        for (index, offset) in self.slot_offsets.iter().take(8).enumerate() {
             offsets[index] = crate::index::mindex_from_usize(*offset)?;
         }
         Ok(client.create_from_slice(u32::as_bytes(&offsets)))
@@ -799,6 +824,19 @@ where
     }
 }
 
+impl<'a, R, T> KernelColumnAt<S7> for &'a DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot7<T>;
+    type Next = S8;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
 impl<R, T> KernelColumn for DeviceColumnView<R, T>
 where
     R: Runtime,
@@ -929,6 +967,20 @@ where
     }
 }
 
+impl<R, T> KernelColumnAt<S7> for DeviceColumnView<R, T>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+{
+    type ExprAt = Slot7<T>;
+    type Next = S8;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push_with_offset(self.source.handle.clone(), self.source.len(), self.offset);
+        Ok(())
+    }
+}
+
 impl<R, T> KernelColumn for DeviceVec<R, T>
 where
     R: Runtime,
@@ -1038,6 +1090,19 @@ where
 {
     type ExprAt = Slot6<T>;
     type Next = S7;
+
+    fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        bindings.push(self.handle.clone(), usize_from_mindex(self.len));
+        Ok(())
+    }
+}
+
+impl<R, T> KernelColumnAt<S7> for DeviceVec<R, T>
+where
+    R: Runtime,
+{
+    type ExprAt = Slot7<T>;
+    type Next = S8;
 
     fn stage_at(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
         bindings.push(self.handle.clone(), usize_from_mindex(self.len));

@@ -211,7 +211,7 @@ impl SearchPayloadApply {
                 Source::Runtime,
             >(
                 policy.client(),
-                CubeCount::Static(launch.block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(launch.block_count_u32),
                 CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                 unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
                 unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
@@ -268,7 +268,7 @@ impl SearchPayloadApply {
                 Source::Runtime,
             >(
                 policy.client(),
-                CubeCount::Static(launch.block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(launch.block_count_u32),
                 CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                 unsafe { BufferArg::from_raw_parts(input.slot0.0.clone(), input.slot0.1) },
                 unsafe { BufferArg::from_raw_parts(input.slot1.0.clone(), input.slot1.1) },
@@ -378,7 +378,7 @@ macro_rules! impl_tuple_search_payload_apply {
                         <$first as KernelColumn>::Runtime,
                     >(
                         policy.client(),
-                        CubeCount::Static(launch.block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(launch.block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot0.0.clone(), $first_field.0.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot1.0.clone(), $first_field.0.slot1.1) },
@@ -447,7 +447,7 @@ macro_rules! impl_tuple_search_payload_apply {
                         <$first as KernelColumn>::Runtime,
                     >(
                         policy.client(),
-                        CubeCount::Static(launch.block_count_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(launch.block_count_u32),
                         CubeDim::new_1d(BLOCK_SEARCH_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot0.0.clone(), $first_field.0.slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_field.0.slot1.0.clone(), $first_field.0.slot1.1) },

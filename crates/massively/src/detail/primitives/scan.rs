@@ -563,7 +563,7 @@ macro_rules! define_scan_tuple_value_by_key_handle {
             unsafe {
                 $block_kernel::launch_unchecked::<K, $( $ty, )+ KeyEq, Op, R>(
                     client,
-                    CubeCount::Static(num_blocks_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(num_blocks_u32),
                     CubeDim::new_1d(BLOCK_SCAN_SIZE),
                     unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
                     $(
@@ -597,7 +597,7 @@ macro_rules! define_scan_tuple_value_by_key_handle {
                 unsafe {
                     $add_prefix_kernel::launch_unchecked::<K, $( $ty, )+ KeyEq, Op, R>(
                         client,
-                        CubeCount::Static(num_blocks_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(num_blocks_u32),
                         CubeDim::new_1d(BLOCK_SCAN_SIZE),
                         unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
                         unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
@@ -763,7 +763,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             unsafe {
                 $block_kernel::launch_unchecked::<$( $ty, )+ T, KeyEq, Op, R>(
                     client,
-                    CubeCount::Static(num_blocks_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(num_blocks_u32),
                     CubeDim::new_1d(BLOCK_SCAN_SIZE),
                     $(
                         unsafe { BufferArg::from_raw_parts($key.handle.clone(), len) },
@@ -793,7 +793,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
                 unsafe {
                     $add_prefix_kernel::launch_unchecked::<$( $ty, )+ T, KeyEq, Op, R>(
                         client,
-                        CubeCount::Static(num_blocks_u32, 1, 1),
+                        crate::detail::launch::cube_count_1d(num_blocks_u32),
                         CubeDim::new_1d(BLOCK_SCAN_SIZE),
                         $(
                             unsafe { BufferArg::from_raw_parts($key.handle.clone(), len) },
@@ -848,7 +848,7 @@ macro_rules! define_scan_tuple_by_key_device_vec {
             unsafe {
                 $exclusive_kernel::launch_unchecked::<$( $ty, )+ T, KeyEq, Op, R>(
                     client,
-                    CubeCount::Static(num_blocks_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(num_blocks_u32),
                     CubeDim::new_1d(BLOCK_SCAN_SIZE),
                     $(
                         unsafe { BufferArg::from_raw_parts($key.handle.clone(), len) },
@@ -1104,7 +1104,7 @@ where
     unsafe {
         tuple2_device_inclusive_scan_expr_block_kernel::launch_unchecked::<A, B, ExprA, ExprB, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
@@ -1134,7 +1134,7 @@ where
         unsafe {
             tuple2_scan_add_block_prefix_kernel::launch_unchecked::<A, B, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_a.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(block_prefixes_b.clone(), num_blocks) },
@@ -1213,7 +1213,7 @@ where
     unsafe {
         tuple2_inclusive_scan_block_kernel::launch_unchecked::<A, B, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(input_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(input_b.clone(), len) },
@@ -1235,7 +1235,7 @@ where
         unsafe {
             tuple2_scan_add_block_prefix_kernel::launch_unchecked::<A, B, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_a.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(block_prefixes_b.clone(), num_blocks) },
@@ -1277,7 +1277,7 @@ where
     unsafe {
         tuple2_scan_make_exclusive_kernel::launch_unchecked::<A, B, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(inclusive_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(inclusive_b.clone(), len) },
@@ -1357,7 +1357,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
@@ -1396,7 +1396,7 @@ where
         unsafe {
             tuple3_scan_add_block_prefix_kernel::launch_unchecked::<A, B, C, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_a.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(block_prefixes_b.clone(), num_blocks) },
@@ -1498,7 +1498,7 @@ where
     unsafe {
         tuple3_inclusive_scan_block_kernel::launch_unchecked::<A, B, C, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(input_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(input_b.clone(), len) },
@@ -1525,7 +1525,7 @@ where
         unsafe {
             tuple3_scan_add_block_prefix_kernel::launch_unchecked::<A, B, C, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_a.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(block_prefixes_b.clone(), num_blocks) },
@@ -1584,7 +1584,7 @@ where
     unsafe {
         tuple3_scan_make_exclusive_kernel::launch_unchecked::<A, B, C, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(inclusive_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(inclusive_b.clone(), len) },
@@ -1748,7 +1748,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(a0.0.clone(), a0.1),
             BufferArg::from_raw_parts(a1.0.clone(), a1.1),
@@ -2033,7 +2033,7 @@ where
     unsafe {
         tuple7_view_inclusive_scan_block_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
             BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
@@ -2233,7 +2233,7 @@ where
     unsafe {
         tuple7_view_adjacent_difference_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(a.source.handle.clone(), a.source.len()),
             BufferArg::from_raw_parts(b.source.handle.clone(), b.source.len()),
@@ -2325,7 +2325,7 @@ where
     unsafe {
         tuple7_inclusive_scan_block_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(input_a.clone(), len),
             BufferArg::from_raw_parts(input_b.clone(), len),
@@ -2416,7 +2416,7 @@ where
     unsafe {
         tuple7_scan_add_block_prefix_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
             policy.client(),
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(block_prefixes.0.clone(), num_blocks),
             BufferArg::from_raw_parts(block_prefixes.1.clone(), num_blocks),
@@ -2495,7 +2495,7 @@ where
     unsafe {
         tuple7_scan_make_exclusive_kernel::launch_unchecked::<A, B, C, D, E, F, G, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             BufferArg::from_raw_parts(inclusive_a.clone(), len),
             BufferArg::from_raw_parts(inclusive_b.clone(), len),
@@ -2560,7 +2560,7 @@ where
     unsafe {
         scan_by_key_block_kernel::launch_unchecked::<K, T, KeyEq, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
             unsafe { BufferArg::from_raw_parts(value_handle.clone(), len) },
@@ -2582,7 +2582,7 @@ where
         unsafe {
             scan_by_key_add_block_prefix_kernel::launch_unchecked::<K, T, KeyEq, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(keys.handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(block_tail_keys.clone(), num_blocks) },
@@ -2647,7 +2647,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
             unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -2684,7 +2684,7 @@ where
                 R,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
                 unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -2742,7 +2742,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
             unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -2831,7 +2831,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
             unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -2881,7 +2881,7 @@ where
                 R,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
                 unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -2945,7 +2945,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
             unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -3062,7 +3062,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
             unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -3123,7 +3123,7 @@ where
                 R,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(num_blocks_u32),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
                 unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },
@@ -3208,7 +3208,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(num_blocks_u32),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(key_slot0.0.clone(), key_slot0.1) },
             unsafe { BufferArg::from_raw_parts(key_slot1.0.clone(), key_slot1.1) },

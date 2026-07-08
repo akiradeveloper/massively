@@ -25,7 +25,7 @@ where
     unsafe {
         replace_with_flags_into_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(replacement_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
@@ -93,7 +93,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -276,7 +276,7 @@ where
             Left::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len) },
             unsafe { BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len) },
@@ -377,7 +377,7 @@ where
             First::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len) },
             unsafe { BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len) },
@@ -498,7 +498,7 @@ macro_rules! define_device_expr_apply_selected_tuple_with_policy {
                     $first_ty::Runtime,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                     unsafe { BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len) },
                     unsafe { BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len) },
@@ -621,7 +621,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
             unsafe { BufferArg::from_raw_parts(control.position.clone(), control.len) },
@@ -768,7 +768,7 @@ macro_rules! define_device_expr_apply_split_tuple_with_policy {
                     $first_ty::Runtime,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                     unsafe { BufferArg::from_raw_parts(control.flag.clone(), control.len) },
                     unsafe { BufferArg::from_raw_parts(control.position.clone(), control.len) },
@@ -1026,7 +1026,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -1082,7 +1082,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },

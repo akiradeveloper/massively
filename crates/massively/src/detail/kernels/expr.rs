@@ -878,7 +878,7 @@ pub(crate) fn logical3_reduce_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial_a.len() {
         partial_a[CUBE_POS as usize] = values_a[0];
         partial_b[CUBE_POS as usize] = values_b[0];
         partial_c[CUBE_POS as usize] = values_c[0];
@@ -969,7 +969,7 @@ pub(crate) fn logical3_reduce_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial_a.len() {
         partial_a[CUBE_POS as usize] = values_a[0];
         partial_b[CUBE_POS as usize] = values_b[0];
         partial_c[CUBE_POS as usize] = values_c[0];
@@ -1017,6 +1017,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     ExprLeaf4: CubePrimitive,
     ExprLeaf5: CubePrimitive,
     ExprLeaf6: CubePrimitive,
+    ExprLeaf7: CubePrimitive,
     Leaf0: CubePrimitive,
     Leaf1: CubePrimitive,
     Leaf2: CubePrimitive,
@@ -1024,6 +1025,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
+    Leaf7: CubePrimitive,
     Expr: LogicalDeviceExpr7<
             Item,
             ExprLeaf0,
@@ -1033,8 +1035,9 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
             ExprLeaf4,
             ExprLeaf5,
             ExprLeaf6,
+            ExprLeaf7,
         >,
-    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>
         + 'static
         + Send
         + Sync,
@@ -1047,6 +1050,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     slot4: &[ExprLeaf4],
     slot5: &[ExprLeaf5],
     slot6: &[ExprLeaf6],
+    slot7: &[ExprLeaf7],
     slot_offsets: &[u32],
     len: &[u32],
     partial0: &mut [Leaf0],
@@ -1056,6 +1060,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     partial4: &mut [Leaf4],
     partial5: &mut [Leaf5],
     partial6: &mut [Leaf6],
+    partial7: &mut [Leaf7],
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
@@ -1067,6 +1072,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     let mut values4 = Shared::<[Leaf4]>::new_slice(cube_dim);
     let mut values5 = Shared::<[Leaf5]>::new_slice(cube_dim);
     let mut values6 = Shared::<[Leaf6]>::new_slice(cube_dim);
+    let mut values7 = Shared::<[Leaf7]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
@@ -1080,6 +1086,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
         slot4,
         slot5,
         slot6,
+        slot7,
         slot_offsets,
         0,
     );
@@ -1091,6 +1098,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     let acc4 = RuntimeCell::<Leaf4>::new(first.4);
     let acc5 = RuntimeCell::<Leaf5>::new(first.5);
     let acc6 = RuntimeCell::<Leaf6>::new(first.6);
+    let acc7 = RuntimeCell::<Leaf7>::new(first.7);
 
     while i.read() < logical_len {
         if has_value.read() != 0 {
@@ -1102,6 +1110,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                 slot4,
                 slot5,
                 slot6,
+                slot7,
                 slot_offsets,
                 i.read(),
             );
@@ -1114,6 +1123,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                     acc4.read(),
                     acc5.read(),
                     acc6.read(),
+                    acc7.read(),
                 ),
                 value,
             );
@@ -1125,6 +1135,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
             acc4.store(next.4);
             acc5.store(next.5);
             acc6.store(next.6);
+            acc7.store(next.7);
         } else {
             let value = Expr::eval7(
                 slot0,
@@ -1134,6 +1145,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                 slot4,
                 slot5,
                 slot6,
+                slot7,
                 slot_offsets,
                 i.read(),
             );
@@ -1145,6 +1157,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
             acc4.store(value.4);
             acc5.store(value.5);
             acc6.store(value.6);
+            acc7.store(value.7);
             has_value.store(1u32);
         }
         i.store(i.read() + step);
@@ -1157,6 +1170,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     values4[unit] = acc4.read();
     values5[unit] = acc5.read();
     values6[unit] = acc6.read();
+    values7[unit] = acc7.read();
     valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
@@ -1173,6 +1187,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                         values4[unit],
                         values5[unit],
                         values6[unit],
+                        values7[unit],
                     ),
                     Pack::pack(
                         values0[unit + stride.read()],
@@ -1182,6 +1197,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                         values4[unit + stride.read()],
                         values5[unit + stride.read()],
                         values6[unit + stride.read()],
+                        values7[unit + stride.read()],
                     ),
                 );
                 let next = Pack::unpack(next);
@@ -1192,6 +1208,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                 values4[unit] = next.4;
                 values5[unit] = next.5;
                 values6[unit] = next.6;
+                values7[unit] = next.7;
             } else {
                 values0[unit] = values0[unit + stride.read()];
                 values1[unit] = values1[unit + stride.read()];
@@ -1200,6 +1217,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
                 values4[unit] = values4[unit + stride.read()];
                 values5[unit] = values5[unit + stride.read()];
                 values6[unit] = values6[unit + stride.read()];
+                values7[unit] = values7[unit + stride.read()];
                 valid[unit] = 1u32;
             }
         }
@@ -1207,7 +1225,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial0.len() {
         partial0[CUBE_POS as usize] = values0[0];
         partial1[CUBE_POS as usize] = values1[0];
         partial2[CUBE_POS as usize] = values2[0];
@@ -1215,6 +1233,7 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
         partial4[CUBE_POS as usize] = values4[0];
         partial5[CUBE_POS as usize] = values5[0];
         partial6[CUBE_POS as usize] = values6[0];
+        partial7[CUBE_POS as usize] = values7[0];
     }
 }
 
@@ -1228,7 +1247,8 @@ pub(crate) fn logical7_reduce_partials_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+    Leaf7: CubePrimitive,
+    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>
         + 'static
         + Send
         + Sync,
@@ -1241,6 +1261,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
     input4: &[Leaf4],
     input5: &[Leaf5],
     input6: &[Leaf6],
+    input7: &[Leaf7],
     len: &[u32],
     partial0: &mut [Leaf0],
     partial1: &mut [Leaf1],
@@ -1249,6 +1270,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
     partial4: &mut [Leaf4],
     partial5: &mut [Leaf5],
     partial6: &mut [Leaf6],
+    partial7: &mut [Leaf7],
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
@@ -1260,6 +1282,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
     let mut values4 = Shared::<[Leaf4]>::new_slice(cube_dim);
     let mut values5 = Shared::<[Leaf5]>::new_slice(cube_dim);
     let mut values6 = Shared::<[Leaf6]>::new_slice(cube_dim);
+    let mut values7 = Shared::<[Leaf7]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
@@ -1272,6 +1295,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
     let acc4 = RuntimeCell::<Leaf4>::new(input4[0]);
     let acc5 = RuntimeCell::<Leaf5>::new(input5[0]);
     let acc6 = RuntimeCell::<Leaf6>::new(input6[0]);
+    let acc7 = RuntimeCell::<Leaf7>::new(input7[0]);
 
     while i.read() < logical_len {
         if has_value.read() != 0 {
@@ -1283,6 +1307,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
                 input4[i.read()],
                 input5[i.read()],
                 input6[i.read()],
+                input7[i.read()],
             );
             let next = Op::apply(
                 Pack::pack(
@@ -1293,6 +1318,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
                     acc4.read(),
                     acc5.read(),
                     acc6.read(),
+                    acc7.read(),
                 ),
                 value,
             );
@@ -1304,6 +1330,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
             acc4.store(next.4);
             acc5.store(next.5);
             acc6.store(next.6);
+            acc7.store(next.7);
         } else {
             acc0.store(input0[i.read()]);
             acc1.store(input1[i.read()]);
@@ -1312,6 +1339,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
             acc4.store(input4[i.read()]);
             acc5.store(input5[i.read()]);
             acc6.store(input6[i.read()]);
+            acc7.store(input7[i.read()]);
             has_value.store(1u32);
         }
         i.store(i.read() + step);
@@ -1324,6 +1352,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
     values4[unit] = acc4.read();
     values5[unit] = acc5.read();
     values6[unit] = acc6.read();
+    values7[unit] = acc7.read();
     valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
@@ -1340,6 +1369,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
                         values4[unit],
                         values5[unit],
                         values6[unit],
+                        values7[unit],
                     ),
                     Pack::pack(
                         values0[unit + stride.read()],
@@ -1349,6 +1379,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
                         values4[unit + stride.read()],
                         values5[unit + stride.read()],
                         values6[unit + stride.read()],
+                        values7[unit + stride.read()],
                     ),
                 );
                 let next = Pack::unpack(next);
@@ -1359,6 +1390,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
                 values4[unit] = next.4;
                 values5[unit] = next.5;
                 values6[unit] = next.6;
+                values7[unit] = next.7;
             } else {
                 values0[unit] = values0[unit + stride.read()];
                 values1[unit] = values1[unit + stride.read()];
@@ -1367,6 +1399,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
                 values4[unit] = values4[unit + stride.read()];
                 values5[unit] = values5[unit + stride.read()];
                 values6[unit] = values6[unit + stride.read()];
+                values7[unit] = values7[unit + stride.read()];
                 valid[unit] = 1u32;
             }
         }
@@ -1374,7 +1407,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial0.len() {
         partial0[CUBE_POS as usize] = values0[0];
         partial1[CUBE_POS as usize] = values1[0];
         partial2[CUBE_POS as usize] = values2[0];
@@ -1382,6 +1415,7 @@ pub(crate) fn logical7_reduce_partials_kernel<
         partial4[CUBE_POS as usize] = values4[0];
         partial5[CUBE_POS as usize] = values5[0];
         partial6[CUBE_POS as usize] = values6[0];
+        partial7[CUBE_POS as usize] = values7[0];
     }
 }
 
@@ -1395,7 +1429,8 @@ pub(crate) fn logical7_reduce_finalize_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>
+    Leaf7: CubePrimitive,
+    Pack: LogicalDevicePack7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>
         + 'static
         + Send
         + Sync,
@@ -1408,6 +1443,7 @@ pub(crate) fn logical7_reduce_finalize_kernel<
     partial4: &[Leaf4],
     partial5: &[Leaf5],
     partial6: &[Leaf6],
+    partial7: &[Leaf7],
     init0: &[Leaf0],
     init1: &[Leaf1],
     init2: &[Leaf2],
@@ -1415,6 +1451,7 @@ pub(crate) fn logical7_reduce_finalize_kernel<
     init4: &[Leaf4],
     init5: &[Leaf5],
     init6: &[Leaf6],
+    init7: &[Leaf7],
     output0: &mut [Leaf0],
     output1: &mut [Leaf1],
     output2: &mut [Leaf2],
@@ -1422,11 +1459,12 @@ pub(crate) fn logical7_reduce_finalize_kernel<
     output4: &mut [Leaf4],
     output5: &mut [Leaf5],
     output6: &mut [Leaf6],
+    output7: &mut [Leaf7],
 ) {
     if UNIT_POS == 0 {
         let output = Op::apply(
             Pack::pack(
-                init0[0], init1[0], init2[0], init3[0], init4[0], init5[0], init6[0],
+                init0[0], init1[0], init2[0], init3[0], init4[0], init5[0], init6[0], init7[0],
             ),
             Pack::pack(
                 partial0[0],
@@ -1436,6 +1474,7 @@ pub(crate) fn logical7_reduce_finalize_kernel<
                 partial4[0],
                 partial5[0],
                 partial6[0],
+                partial7[0],
             ),
         );
         let output = Pack::unpack(output);
@@ -1446,6 +1485,7 @@ pub(crate) fn logical7_reduce_finalize_kernel<
         output4[0] = output.4;
         output5[0] = output.5;
         output6[0] = output.6;
+        output7[0] = output.7;
     }
 }
 
@@ -1459,7 +1499,8 @@ pub(crate) fn transform_logical7_to_tuple1_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     Op: UnaryOp<Input, Output = (OutA,)>,
 >(
@@ -1470,6 +1511,7 @@ pub(crate) fn transform_logical7_to_tuple1_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1486,6 +1528,7 @@ pub(crate) fn transform_logical7_to_tuple1_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1503,7 +1546,8 @@ pub(crate) fn transform_logical7_to_tuple2_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     OutB: CubePrimitive,
     Op: UnaryOp<Input, Output = (OutA, OutB)>,
@@ -1515,6 +1559,7 @@ pub(crate) fn transform_logical7_to_tuple2_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1532,6 +1577,7 @@ pub(crate) fn transform_logical7_to_tuple2_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1550,7 +1596,8 @@ pub(crate) fn transform_logical7_to_tuple3_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     OutB: CubePrimitive,
     OutC: CubePrimitive,
@@ -1563,6 +1610,7 @@ pub(crate) fn transform_logical7_to_tuple3_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1581,6 +1629,7 @@ pub(crate) fn transform_logical7_to_tuple3_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1600,7 +1649,8 @@ pub(crate) fn transform_logical7_to_tuple4_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     OutB: CubePrimitive,
     OutC: CubePrimitive,
@@ -1614,6 +1664,7 @@ pub(crate) fn transform_logical7_to_tuple4_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1633,6 +1684,7 @@ pub(crate) fn transform_logical7_to_tuple4_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1653,7 +1705,8 @@ pub(crate) fn transform_logical7_to_tuple5_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     OutB: CubePrimitive,
     OutC: CubePrimitive,
@@ -1668,6 +1721,7 @@ pub(crate) fn transform_logical7_to_tuple5_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1688,6 +1742,7 @@ pub(crate) fn transform_logical7_to_tuple5_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1709,7 +1764,8 @@ pub(crate) fn transform_logical7_to_tuple6_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     OutB: CubePrimitive,
     OutC: CubePrimitive,
@@ -1725,6 +1781,7 @@ pub(crate) fn transform_logical7_to_tuple6_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1746,6 +1803,7 @@ pub(crate) fn transform_logical7_to_tuple6_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1768,7 +1826,8 @@ pub(crate) fn transform_logical7_to_tuple7_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     OutA: CubePrimitive,
     OutB: CubePrimitive,
     OutC: CubePrimitive,
@@ -1785,6 +1844,7 @@ pub(crate) fn transform_logical7_to_tuple7_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_a: &mut [OutA],
@@ -1807,6 +1867,7 @@ pub(crate) fn transform_logical7_to_tuple7_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1830,7 +1891,8 @@ pub(crate) fn logical7_predicate_flags_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Pred: PredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -1840,6 +1902,7 @@ pub(crate) fn logical7_predicate_flags_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     invert: &[u32],
@@ -1857,6 +1920,7 @@ pub(crate) fn logical7_predicate_flags_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         ));
@@ -1878,6 +1942,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
     LeftLeaf4: CubePrimitive,
     LeftLeaf5: CubePrimitive,
     LeftLeaf6: CubePrimitive,
+    LeftLeaf7: CubePrimitive,
     RightLeaf0: CubePrimitive,
     RightLeaf1: CubePrimitive,
     RightLeaf2: CubePrimitive,
@@ -1885,6 +1950,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
     RightLeaf4: CubePrimitive,
     RightLeaf5: CubePrimitive,
     RightLeaf6: CubePrimitive,
+    RightLeaf7: CubePrimitive,
     LeftExpr: LogicalDeviceExpr7<
             Input,
             LeftLeaf0,
@@ -1894,6 +1960,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
             LeftLeaf4,
             LeftLeaf5,
             LeftLeaf6,
+            LeftLeaf7,
         >,
     RightExpr: LogicalDeviceExpr7<
             Input,
@@ -1904,6 +1971,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
             RightLeaf4,
             RightLeaf5,
             RightLeaf6,
+            RightLeaf7,
         >,
     Eq: BinaryPredicateOp<Input>,
 >(
@@ -1914,6 +1982,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
     left_slot4: &[LeftLeaf4],
     left_slot5: &[LeftLeaf5],
     left_slot6: &[LeftLeaf6],
+    left_slot7: &[LeftLeaf7],
     left_slot_offsets: &[u32],
     right_slot0: &[RightLeaf0],
     right_slot1: &[RightLeaf1],
@@ -1922,6 +1991,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
     right_slot4: &[RightLeaf4],
     right_slot5: &[RightLeaf5],
     right_slot6: &[RightLeaf6],
+    right_slot7: &[RightLeaf7],
     right_slot_offsets: &[u32],
     flags: &mut [u32],
 ) {
@@ -1937,6 +2007,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
             left_slot4,
             left_slot5,
             left_slot6,
+            left_slot7,
             left_slot_offsets,
             global,
         );
@@ -1948,6 +2019,7 @@ pub(crate) fn logical7_mismatch_flags_kernel<
             right_slot4,
             right_slot5,
             right_slot6,
+            right_slot7,
             right_slot_offsets,
             global,
         );
@@ -1965,6 +2037,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
     InputLeaf4: CubePrimitive,
     InputLeaf5: CubePrimitive,
     InputLeaf6: CubePrimitive,
+    InputLeaf7: CubePrimitive,
     NeedleLeaf0: CubePrimitive,
     NeedleLeaf1: CubePrimitive,
     NeedleLeaf2: CubePrimitive,
@@ -1972,6 +2045,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
     NeedleLeaf4: CubePrimitive,
     NeedleLeaf5: CubePrimitive,
     NeedleLeaf6: CubePrimitive,
+    NeedleLeaf7: CubePrimitive,
     InputExpr: LogicalDeviceExpr7<
             Input,
             InputLeaf0,
@@ -1981,6 +2055,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
             InputLeaf4,
             InputLeaf5,
             InputLeaf6,
+            InputLeaf7,
         >,
     NeedleExpr: LogicalDeviceExpr7<
             Input,
@@ -1991,6 +2066,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
             NeedleLeaf4,
             NeedleLeaf5,
             NeedleLeaf6,
+            NeedleLeaf7,
         >,
     Eq: BinaryPredicateOp<Input>,
 >(
@@ -2001,6 +2077,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
     input_slot4: &[InputLeaf4],
     input_slot5: &[InputLeaf5],
     input_slot6: &[InputLeaf6],
+    input_slot7: &[InputLeaf7],
     input_slot_offsets: &[u32],
     needle_slot0: &[NeedleLeaf0],
     needle_slot1: &[NeedleLeaf1],
@@ -2009,6 +2086,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
     needle_slot4: &[NeedleLeaf4],
     needle_slot5: &[NeedleLeaf5],
     needle_slot6: &[NeedleLeaf6],
+    needle_slot7: &[NeedleLeaf7],
     needle_slot_offsets: &[u32],
     needle_len: &[u32],
     flags: &mut [u32],
@@ -2028,6 +2106,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
                 input_slot4,
                 input_slot5,
                 input_slot6,
+                input_slot7,
                 input_slot_offsets,
                 global,
             );
@@ -2039,6 +2118,7 @@ pub(crate) fn logical7_find_first_of_flags_kernel<
                 needle_slot4,
                 needle_slot5,
                 needle_slot6,
+                needle_slot7,
                 needle_slot_offsets,
                 needle.read(),
             );
@@ -2061,6 +2141,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
     LeftLeaf4: CubePrimitive,
     LeftLeaf5: CubePrimitive,
     LeftLeaf6: CubePrimitive,
+    LeftLeaf7: CubePrimitive,
     RightLeaf0: CubePrimitive,
     RightLeaf1: CubePrimitive,
     RightLeaf2: CubePrimitive,
@@ -2068,6 +2149,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
     RightLeaf4: CubePrimitive,
     RightLeaf5: CubePrimitive,
     RightLeaf6: CubePrimitive,
+    RightLeaf7: CubePrimitive,
     LeftExpr: LogicalDeviceExpr7<
             Input,
             LeftLeaf0,
@@ -2077,6 +2159,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
             LeftLeaf4,
             LeftLeaf5,
             LeftLeaf6,
+            LeftLeaf7,
         >,
     RightExpr: LogicalDeviceExpr7<
             Input,
@@ -2087,6 +2170,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
             RightLeaf4,
             RightLeaf5,
             RightLeaf6,
+            RightLeaf7,
         >,
     Less: BinaryPredicateOp<Input>,
 >(
@@ -2097,6 +2181,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
     left_slot4: &[LeftLeaf4],
     left_slot5: &[LeftLeaf5],
     left_slot6: &[LeftLeaf6],
+    left_slot7: &[LeftLeaf7],
     left_slot_offsets: &[u32],
     right_slot0: &[RightLeaf0],
     right_slot1: &[RightLeaf1],
@@ -2105,6 +2190,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
     right_slot4: &[RightLeaf4],
     right_slot5: &[RightLeaf5],
     right_slot6: &[RightLeaf6],
+    right_slot7: &[RightLeaf7],
     right_slot_offsets: &[u32],
     flags: &mut [u32],
 ) {
@@ -2120,6 +2206,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
             left_slot4,
             left_slot5,
             left_slot6,
+            left_slot7,
             left_slot_offsets,
             global,
         );
@@ -2131,6 +2218,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
             right_slot4,
             right_slot5,
             right_slot6,
+            right_slot7,
             right_slot_offsets,
             global,
         );
@@ -2145,6 +2233,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
                 left_slot4,
                 left_slot5,
                 left_slot6,
+                left_slot7,
                 left_slot_offsets,
                 global,
             );
@@ -2156,6 +2245,7 @@ pub(crate) fn logical7_lexicographical_diff_flags_kernel<
                 right_slot4,
                 right_slot5,
                 right_slot6,
+                right_slot7,
                 right_slot_offsets,
                 global,
             );
@@ -2174,6 +2264,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
     LeftLeaf4: CubePrimitive,
     LeftLeaf5: CubePrimitive,
     LeftLeaf6: CubePrimitive,
+    LeftLeaf7: CubePrimitive,
     RightLeaf0: CubePrimitive,
     RightLeaf1: CubePrimitive,
     RightLeaf2: CubePrimitive,
@@ -2181,6 +2272,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
     RightLeaf4: CubePrimitive,
     RightLeaf5: CubePrimitive,
     RightLeaf6: CubePrimitive,
+    RightLeaf7: CubePrimitive,
     LeftExpr: LogicalDeviceExpr7<
             Input,
             LeftLeaf0,
@@ -2190,6 +2282,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
             LeftLeaf4,
             LeftLeaf5,
             LeftLeaf6,
+            LeftLeaf7,
         >,
     RightExpr: LogicalDeviceExpr7<
             Input,
@@ -2200,6 +2293,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
             RightLeaf4,
             RightLeaf5,
             RightLeaf6,
+            RightLeaf7,
         >,
     Less: BinaryPredicateOp<Input>,
 >(
@@ -2210,6 +2304,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
     left_slot4: &[LeftLeaf4],
     left_slot5: &[LeftLeaf5],
     left_slot6: &[LeftLeaf6],
+    left_slot7: &[LeftLeaf7],
     left_slot_offsets: &[u32],
     right_slot0: &[RightLeaf0],
     right_slot1: &[RightLeaf1],
@@ -2218,6 +2313,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
     right_slot4: &[RightLeaf4],
     right_slot5: &[RightLeaf5],
     right_slot6: &[RightLeaf6],
+    right_slot7: &[RightLeaf7],
     right_slot_offsets: &[u32],
     index: &[u32],
     output: &mut [u32],
@@ -2232,6 +2328,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
             left_slot4,
             left_slot5,
             left_slot6,
+            left_slot7,
             left_slot_offsets,
             i,
         );
@@ -2243,6 +2340,7 @@ pub(crate) fn logical7_lexicographical_compare_at_kernel<
             right_slot4,
             right_slot5,
             right_slot6,
+            right_slot7,
             right_slot_offsets,
             i,
         );
@@ -2260,7 +2358,8 @@ pub(crate) fn logical7_adjacent_find_flags_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Pred: BinaryPredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -2270,6 +2369,7 @@ pub(crate) fn logical7_adjacent_find_flags_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     flags: &mut [u32],
 ) {
@@ -2285,6 +2385,7 @@ pub(crate) fn logical7_adjacent_find_flags_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         );
@@ -2296,6 +2397,7 @@ pub(crate) fn logical7_adjacent_find_flags_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global + 1,
         );
@@ -2313,7 +2415,8 @@ pub(crate) fn logical7_scan_by_key_head_flags_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     KeyEq: BinaryPredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -2323,6 +2426,7 @@ pub(crate) fn logical7_scan_by_key_head_flags_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     flags: &mut [u32],
 ) {
@@ -2341,6 +2445,7 @@ pub(crate) fn logical7_scan_by_key_head_flags_kernel<
                 slot4,
                 slot5,
                 slot6,
+                slot7,
                 slot_offsets,
                 global - 1usize,
             );
@@ -2352,6 +2457,7 @@ pub(crate) fn logical7_scan_by_key_head_flags_kernel<
                 slot4,
                 slot5,
                 slot6,
+                slot7,
                 slot_offsets,
                 global,
             );
@@ -2374,7 +2480,8 @@ pub(crate) fn logical7_sorted_break_flags_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Less: BinaryPredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -2384,6 +2491,7 @@ pub(crate) fn logical7_sorted_break_flags_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     flags: &mut [u32],
 ) {
@@ -2399,6 +2507,7 @@ pub(crate) fn logical7_sorted_break_flags_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global,
         );
@@ -2410,6 +2519,7 @@ pub(crate) fn logical7_sorted_break_flags_kernel<
             slot4,
             slot5,
             slot6,
+            slot7,
             slot_offsets,
             global + 1,
         );
@@ -2431,7 +2541,8 @@ pub(crate) fn logical7_minmax_flags_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Less: BinaryPredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -2441,6 +2552,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     min_flags: &mut [u32],
@@ -2463,6 +2575,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     index,
                 ),
@@ -2474,6 +2587,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     global,
                 ),
@@ -2489,6 +2603,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     global,
                 ),
@@ -2500,6 +2615,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     index,
                 ),
@@ -2516,6 +2632,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         global,
                     ),
@@ -2527,6 +2644,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         index,
                     ),
@@ -2540,6 +2658,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         index,
                     ),
@@ -2551,6 +2670,7 @@ pub(crate) fn logical7_minmax_flags_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         global,
                     ),
@@ -2576,7 +2696,8 @@ pub(crate) fn logical7_minmax_partials_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Less: BinaryPredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -2586,6 +2707,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     partials: &mut [u32],
@@ -2621,6 +2743,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     other_min,
                 ),
@@ -2632,6 +2755,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_min,
                 ),
@@ -2645,6 +2769,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_min,
                 ),
@@ -2656,6 +2781,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     other_min,
                 ),
@@ -2675,6 +2801,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_max,
                 ),
@@ -2686,6 +2813,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     other_max,
                 ),
@@ -2699,6 +2827,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     other_max,
                 ),
@@ -2710,6 +2839,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_max,
                 ),
@@ -2745,6 +2875,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_min,
                     ),
@@ -2756,6 +2887,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_min,
                     ),
@@ -2769,6 +2901,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_min,
                     ),
@@ -2780,6 +2913,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_min,
                     ),
@@ -2799,6 +2933,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_max,
                     ),
@@ -2810,6 +2945,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_max,
                     ),
@@ -2823,6 +2959,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_max,
                     ),
@@ -2834,6 +2971,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_max,
                     ),
@@ -2847,7 +2985,7 @@ pub(crate) fn logical7_minmax_partials_kernel<
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize && valid[0] != 0u32 {
+    if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
         let out = (CUBE_POS as usize) * 2usize;
         partials[out] = min_indices[0];
         partials[out + 1usize] = max_indices[0];
@@ -2864,7 +3002,8 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Less: BinaryPredicateOp<Input>,
 >(
     slot0: &[Leaf0],
@@ -2874,6 +3013,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     candidates: &[u32],
     candidate_len: &[u32],
@@ -2911,6 +3051,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     candidate_min,
                 ),
@@ -2922,6 +3063,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_min,
                 ),
@@ -2935,6 +3077,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_min,
                 ),
@@ -2946,6 +3089,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     candidate_min,
                 ),
@@ -2964,6 +3108,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_max,
                 ),
@@ -2975,6 +3120,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     candidate_max,
                 ),
@@ -2988,6 +3134,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     candidate_max,
                 ),
@@ -2999,6 +3146,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     current_max,
                 ),
@@ -3034,6 +3182,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_min,
                     ),
@@ -3045,6 +3194,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_min,
                     ),
@@ -3058,6 +3208,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_min,
                     ),
@@ -3069,6 +3220,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_min,
                     ),
@@ -3088,6 +3240,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_max,
                     ),
@@ -3099,6 +3252,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_max,
                     ),
@@ -3112,6 +3266,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         other_max,
                     ),
@@ -3123,6 +3278,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         current_max,
                     ),
@@ -3136,7 +3292,7 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
         stride.store(stride.read() / 2usize);
     }
 
-    if unit == 0usize && valid[0] != 0u32 {
+    if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
         let out = (CUBE_POS as usize) * 2usize;
         partials[out] = min_indices[0];
         partials[out + 1usize] = max_indices[0];
@@ -3153,6 +3309,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
     SourceLeaf4: CubePrimitive,
     SourceLeaf5: CubePrimitive,
     SourceLeaf6: CubePrimitive,
+    SourceLeaf7: CubePrimitive,
     ValueLeaf0: CubePrimitive,
     ValueLeaf1: CubePrimitive,
     ValueLeaf2: CubePrimitive,
@@ -3160,6 +3317,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
     ValueLeaf4: CubePrimitive,
     ValueLeaf5: CubePrimitive,
     ValueLeaf6: CubePrimitive,
+    ValueLeaf7: CubePrimitive,
     SourceExpr: LogicalDeviceExpr7<
             Input,
             SourceLeaf0,
@@ -3169,6 +3327,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
             SourceLeaf4,
             SourceLeaf5,
             SourceLeaf6,
+            SourceLeaf7,
         >,
     ValueExpr: LogicalDeviceExpr7<
             Input,
@@ -3179,6 +3338,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
             ValueLeaf4,
             ValueLeaf5,
             ValueLeaf6,
+            ValueLeaf7,
         >,
     Less: BinaryPredicateOp<Input>,
 >(
@@ -3189,6 +3349,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
     source4: &[SourceLeaf4],
     source5: &[SourceLeaf5],
     source6: &[SourceLeaf6],
+    source7: &[SourceLeaf7],
     source_offsets: &[u32],
     value0: &[ValueLeaf0],
     value1: &[ValueLeaf1],
@@ -3197,6 +3358,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
     value4: &[ValueLeaf4],
     value5: &[ValueLeaf5],
     value6: &[ValueLeaf6],
+    value7: &[ValueLeaf7],
     value_offsets: &[u32],
     source_len: &[u32],
     value_len: &[u32],
@@ -3219,6 +3381,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
                 source4,
                 source5,
                 source6,
+                source7,
                 source_offsets,
                 mid,
             );
@@ -3232,6 +3395,7 @@ pub(crate) fn logical7_lower_bound_many_kernel<
                     value4,
                     value5,
                     value6,
+                    value7,
                     value_offsets,
                     global,
                 ),
@@ -3256,6 +3420,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
     SourceLeaf4: CubePrimitive,
     SourceLeaf5: CubePrimitive,
     SourceLeaf6: CubePrimitive,
+    SourceLeaf7: CubePrimitive,
     ValueLeaf0: CubePrimitive,
     ValueLeaf1: CubePrimitive,
     ValueLeaf2: CubePrimitive,
@@ -3263,6 +3428,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
     ValueLeaf4: CubePrimitive,
     ValueLeaf5: CubePrimitive,
     ValueLeaf6: CubePrimitive,
+    ValueLeaf7: CubePrimitive,
     SourceExpr: LogicalDeviceExpr7<
             Input,
             SourceLeaf0,
@@ -3272,6 +3438,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
             SourceLeaf4,
             SourceLeaf5,
             SourceLeaf6,
+            SourceLeaf7,
         >,
     ValueExpr: LogicalDeviceExpr7<
             Input,
@@ -3282,6 +3449,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
             ValueLeaf4,
             ValueLeaf5,
             ValueLeaf6,
+            ValueLeaf7,
         >,
     Less: BinaryPredicateOp<Input>,
 >(
@@ -3292,6 +3460,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
     source4: &[SourceLeaf4],
     source5: &[SourceLeaf5],
     source6: &[SourceLeaf6],
+    source7: &[SourceLeaf7],
     source_offsets: &[u32],
     value0: &[ValueLeaf0],
     value1: &[ValueLeaf1],
@@ -3300,6 +3469,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
     value4: &[ValueLeaf4],
     value5: &[ValueLeaf5],
     value6: &[ValueLeaf6],
+    value7: &[ValueLeaf7],
     value_offsets: &[u32],
     source_len: &[u32],
     value_len: &[u32],
@@ -3322,6 +3492,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
                 source4,
                 source5,
                 source6,
+                source7,
                 source_offsets,
                 mid,
             );
@@ -3334,6 +3505,7 @@ pub(crate) fn logical7_upper_bound_many_kernel<
                     value4,
                     value5,
                     value6,
+                    value7,
                     value_offsets,
                     global,
                 ),
@@ -6045,7 +6217,7 @@ macro_rules! define_tuple_minmax_device_expr_kernels {
                 stride.store(stride.read() / 2usize);
             }
 
-            if unit == 0usize && valid[0] != 0u32 {
+            if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
                 let out = (CUBE_POS as usize) * 2usize;
                 partials[out] = min_indices[0];
                 partials[out + 1usize] = max_indices[0];
@@ -6260,7 +6432,7 @@ macro_rules! define_tuple_minmax_device_expr_kernels {
                 stride.store(stride.read() / 2usize);
             }
 
-            if unit == 0usize && valid[0] != 0u32 {
+            if unit == 0usize && valid[0] != 0u32 && (CUBE_POS as usize) < partial_count {
                 let out = (CUBE_POS as usize) * 2usize;
                 partials[out] = min_indices[0];
                 partials[out + 1usize] = max_indices[0];
@@ -6894,7 +7066,7 @@ pub(crate) fn gather_device_expr_into_kernel<
 pub(crate) fn gather_device_expr_index7_into_kernel<
     T: CubePrimitive,
     ValueExpr: GpuExpr<T>,
-    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6, I7>,
     I0: CubePrimitive,
     I1: CubePrimitive,
     I2: CubePrimitive,
@@ -6902,6 +7074,7 @@ pub(crate) fn gather_device_expr_index7_into_kernel<
     I4: CubePrimitive,
     I5: CubePrimitive,
     I6: CubePrimitive,
+    I7: CubePrimitive,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -6914,6 +7087,7 @@ pub(crate) fn gather_device_expr_index7_into_kernel<
     index_slot4: &[I4],
     index_slot5: &[I5],
     index_slot6: &[I6],
+    index_slot7: &[I7],
     index_slot_offsets: &[u32],
     len: &[u32],
     output_offset: &[u32],
@@ -6931,6 +7105,7 @@ pub(crate) fn gather_device_expr_index7_into_kernel<
             index_slot4,
             index_slot5,
             index_slot6,
+            index_slot7,
             index_slot_offsets,
             global,
         );
@@ -7027,7 +7202,7 @@ pub(crate) fn scatter_expr_into_kernel<
 pub(crate) fn scatter_expr_index7_into_kernel<
     T: CubePrimitive,
     ValueExpr: GpuExpr<T>,
-    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6>,
+    IndexExpr: crate::expr::LogicalDeviceExpr7<u32, I0, I1, I2, I3, I4, I5, I6, I7>,
     I0: CubePrimitive,
     I1: CubePrimitive,
     I2: CubePrimitive,
@@ -7035,6 +7210,7 @@ pub(crate) fn scatter_expr_index7_into_kernel<
     I4: CubePrimitive,
     I5: CubePrimitive,
     I6: CubePrimitive,
+    I7: CubePrimitive,
 >(
     value_input: &[T],
     value_indices: &[u32],
@@ -7047,6 +7223,7 @@ pub(crate) fn scatter_expr_index7_into_kernel<
     index_slot4: &[I4],
     index_slot5: &[I5],
     index_slot6: &[I6],
+    index_slot7: &[I7],
     index_slot_offsets: &[u32],
     len: &[u32],
     output_offset: &[u32],
@@ -7071,6 +7248,7 @@ pub(crate) fn scatter_expr_index7_into_kernel<
             index_slot4,
             index_slot5,
             index_slot6,
+            index_slot7,
             index_slot_offsets,
             global,
         );
@@ -7164,7 +7342,7 @@ pub(crate) fn u32_block_inclusive_scan_kernel(
     if global < logical_len {
         output[global] = values[unit];
     }
-    if unit == cube_dim - 1usize {
+    if unit == cube_dim - 1usize && (CUBE_POS as usize) < block_sums.len() {
         block_sums[CUBE_POS as usize] = values[unit];
     }
 }
@@ -8665,7 +8843,8 @@ macro_rules! define_selected_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             $( $out_ty: CubePrimitive, )+
         >(
             flags: &[u32],
@@ -8677,6 +8856,7 @@ macro_rules! define_selected_logical7_to_tuple_kernel {
             slot4: &[Leaf4],
             slot5: &[Leaf5],
             slot6: &[Leaf6],
+            slot7: &[Leaf7],
             slot_offsets: &[u32],
             $( $output: &mut [$out_ty], )+
         ) {
@@ -8693,6 +8873,7 @@ macro_rules! define_selected_logical7_to_tuple_kernel {
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     global,
                 );
@@ -8746,6 +8927,7 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
+            Leaf7: CubePrimitive,
             IndexLeaf0: CubePrimitive,
             IndexLeaf1: CubePrimitive,
             IndexLeaf2: CubePrimitive,
@@ -8753,8 +8935,9 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
             IndexLeaf4: CubePrimitive,
             IndexLeaf5: CubePrimitive,
             IndexLeaf6: CubePrimitive,
-            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
-            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6>,
+            IndexLeaf7: CubePrimitive,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
+            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6, IndexLeaf7>,
             $( $out_ty: CubePrimitive, )+
         >(
             value_slot0: &[Leaf0],
@@ -8764,6 +8947,7 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
             value_slot4: &[Leaf4],
             value_slot5: &[Leaf5],
             value_slot6: &[Leaf6],
+            value_slot7: &[Leaf7],
             value_slot_offsets: &[u32],
             index_slot0: &[IndexLeaf0],
             index_slot1: &[IndexLeaf1],
@@ -8772,6 +8956,7 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
             index_slot4: &[IndexLeaf4],
             index_slot5: &[IndexLeaf5],
             index_slot6: &[IndexLeaf6],
+            index_slot7: &[IndexLeaf7],
             index_slot_offsets: &[u32],
             len: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -8788,6 +8973,7 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
                     index_slot4,
                     index_slot5,
                     index_slot6,
+                    index_slot7,
                     index_slot_offsets,
                     global,
                 );
@@ -8799,6 +8985,7 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
                     value_slot4,
                     value_slot5,
                     value_slot6,
+                    value_slot7,
                     value_slot_offsets,
                     index as usize,
                 );
@@ -8851,6 +9038,7 @@ macro_rules! define_scatter_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
+            Leaf7: CubePrimitive,
             IndexLeaf0: CubePrimitive,
             IndexLeaf1: CubePrimitive,
             IndexLeaf2: CubePrimitive,
@@ -8858,8 +9046,9 @@ macro_rules! define_scatter_logical7_to_tuple_kernel {
             IndexLeaf4: CubePrimitive,
             IndexLeaf5: CubePrimitive,
             IndexLeaf6: CubePrimitive,
-            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
-            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6>,
+            IndexLeaf7: CubePrimitive,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
+            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6, IndexLeaf7>,
             $( $out_ty: CubePrimitive, )+
         >(
             value_slot0: &[Leaf0],
@@ -8869,6 +9058,7 @@ macro_rules! define_scatter_logical7_to_tuple_kernel {
             value_slot4: &[Leaf4],
             value_slot5: &[Leaf5],
             value_slot6: &[Leaf6],
+            value_slot7: &[Leaf7],
             value_slot_offsets: &[u32],
             index_slot0: &[IndexLeaf0],
             index_slot1: &[IndexLeaf1],
@@ -8877,6 +9067,7 @@ macro_rules! define_scatter_logical7_to_tuple_kernel {
             index_slot4: &[IndexLeaf4],
             index_slot5: &[IndexLeaf5],
             index_slot6: &[IndexLeaf6],
+            index_slot7: &[IndexLeaf7],
             index_slot_offsets: &[u32],
             metadata: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -8893,6 +9084,7 @@ macro_rules! define_scatter_logical7_to_tuple_kernel {
                     index_slot4,
                     index_slot5,
                     index_slot6,
+                    index_slot7,
                     index_slot_offsets,
                     global,
                 ) as usize;
@@ -8904,6 +9096,7 @@ macro_rules! define_scatter_logical7_to_tuple_kernel {
                     value_slot4,
                     value_slot5,
                     value_slot6,
+                    value_slot7,
                     value_slot_offsets,
                     global,
                 );
@@ -8958,6 +9151,7 @@ macro_rules! define_scatter_where_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
+            Leaf7: CubePrimitive,
             IndexLeaf0: CubePrimitive,
             IndexLeaf1: CubePrimitive,
             IndexLeaf2: CubePrimitive,
@@ -8965,8 +9159,9 @@ macro_rules! define_scatter_where_logical7_to_tuple_kernel {
             IndexLeaf4: CubePrimitive,
             IndexLeaf5: CubePrimitive,
             IndexLeaf6: CubePrimitive,
-            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
-            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6>,
+            IndexLeaf7: CubePrimitive,
+            ValueExpr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
+            IndexExpr: LogicalDeviceExpr7<u32, IndexLeaf0, IndexLeaf1, IndexLeaf2, IndexLeaf3, IndexLeaf4, IndexLeaf5, IndexLeaf6, IndexLeaf7>,
             $( $out_ty: CubePrimitive, )+
         >(
             value_slot0: &[Leaf0],
@@ -8976,6 +9171,7 @@ macro_rules! define_scatter_where_logical7_to_tuple_kernel {
             value_slot4: &[Leaf4],
             value_slot5: &[Leaf5],
             value_slot6: &[Leaf6],
+            value_slot7: &[Leaf7],
             value_slot_offsets: &[u32],
             index_slot0: &[IndexLeaf0],
             index_slot1: &[IndexLeaf1],
@@ -8984,6 +9180,7 @@ macro_rules! define_scatter_where_logical7_to_tuple_kernel {
             index_slot4: &[IndexLeaf4],
             index_slot5: &[IndexLeaf5],
             index_slot6: &[IndexLeaf6],
+            index_slot7: &[IndexLeaf7],
             index_slot_offsets: &[u32],
             metadata: &[u32],
             flags: &[u32],
@@ -9001,6 +9198,7 @@ macro_rules! define_scatter_where_logical7_to_tuple_kernel {
                     index_slot4,
                     index_slot5,
                     index_slot6,
+                    index_slot7,
                     index_slot_offsets,
                     global,
                 ) as usize;
@@ -9012,6 +9210,7 @@ macro_rules! define_scatter_where_logical7_to_tuple_kernel {
                     value_slot4,
                     value_slot5,
                     value_slot6,
+                    value_slot7,
                     value_slot_offsets,
                     global,
                 );
@@ -9066,7 +9265,8 @@ macro_rules! define_adjacent_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             Op: BinaryOp<($( $out_ty, )+)>,
             $( $out_ty: CubePrimitive, )+
         >(
@@ -9077,6 +9277,7 @@ macro_rules! define_adjacent_logical7_to_tuple_kernel {
             slot4: &[Leaf4],
             slot5: &[Leaf5],
             slot6: &[Leaf6],
+            slot7: &[Leaf7],
             slot_offsets: &[u32],
             metadata: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -9094,6 +9295,7 @@ macro_rules! define_adjacent_logical7_to_tuple_kernel {
                         slot4,
                         slot5,
                         slot6,
+                        slot7,
                         slot_offsets,
                         global,
                     )
@@ -9107,6 +9309,7 @@ macro_rules! define_adjacent_logical7_to_tuple_kernel {
                             slot4,
                             slot5,
                             slot6,
+                            slot7,
                             slot_offsets,
                             global,
                         ),
@@ -9118,6 +9321,7 @@ macro_rules! define_adjacent_logical7_to_tuple_kernel {
                             slot4,
                             slot5,
                             slot6,
+                            slot7,
                             slot_offsets,
                             global - 1usize,
                         ),
@@ -9174,7 +9378,8 @@ macro_rules! define_inclusive_scan_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             Op: BinaryOp<($( $out_ty, )+)>,
             $( $out_ty: CubePrimitive, )+
         >(
@@ -9185,6 +9390,7 @@ macro_rules! define_inclusive_scan_logical7_to_tuple_kernel {
             slot4: &[Leaf4],
             slot5: &[Leaf5],
             slot6: &[Leaf6],
+            slot7: &[Leaf7],
             slot_offsets: &[u32],
             metadata: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -9201,6 +9407,7 @@ macro_rules! define_inclusive_scan_logical7_to_tuple_kernel {
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     0usize,
                 );
@@ -9216,6 +9423,7 @@ macro_rules! define_inclusive_scan_logical7_to_tuple_kernel {
                             slot4,
                             slot5,
                             slot6,
+                            slot7,
                             slot_offsets,
                             cursor.read(),
                         ),
@@ -9244,7 +9452,8 @@ macro_rules! define_exclusive_scan_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             Op: BinaryOp<($( $out_ty, )+)>,
             $( $out_ty: CubePrimitive, )+
         >(
@@ -9255,6 +9464,7 @@ macro_rules! define_exclusive_scan_logical7_to_tuple_kernel {
             slot4: &[Leaf4],
             slot5: &[Leaf5],
             slot6: &[Leaf6],
+            slot7: &[Leaf7],
             slot_offsets: &[u32],
             metadata: &[u32],
             $( $init: &[$out_ty], )+
@@ -9277,6 +9487,7 @@ macro_rules! define_exclusive_scan_logical7_to_tuple_kernel {
                             slot4,
                             slot5,
                             slot6,
+                            slot7,
                             slot_offsets,
                             cursor.read(),
                         ),
@@ -9363,7 +9574,8 @@ macro_rules! define_partition_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             $( $out_ty: CubePrimitive, )+
         >(
             flags: &[u32],
@@ -9375,6 +9587,7 @@ macro_rules! define_partition_logical7_to_tuple_kernel {
             slot4: &[Leaf4],
             slot5: &[Leaf5],
             slot6: &[Leaf6],
+            slot7: &[Leaf7],
             slot_offsets: &[u32],
             metadata: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -9397,6 +9610,7 @@ macro_rules! define_partition_logical7_to_tuple_kernel {
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     global,
                 );
@@ -9451,7 +9665,8 @@ macro_rules! define_reduce_by_key_logical7_to_tuple_kernel {
             Leaf4: CubePrimitive,
             Leaf5: CubePrimitive,
             Leaf6: CubePrimitive,
-            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+            Leaf7: CubePrimitive,
+            Expr: LogicalDeviceExpr7<($( $out_ty, )+), Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
             Op: BinaryOp<($( $out_ty, )+)>,
             $( $out_ty: CubePrimitive, )+
         >(
@@ -9464,6 +9679,7 @@ macro_rules! define_reduce_by_key_logical7_to_tuple_kernel {
             slot4: &[Leaf4],
             slot5: &[Leaf5],
             slot6: &[Leaf6],
+            slot7: &[Leaf7],
             slot_offsets: &[u32],
             metadata: &[u32],
             $( $init: &[$out_ty], )+
@@ -9491,6 +9707,7 @@ macro_rules! define_reduce_by_key_logical7_to_tuple_kernel {
                             slot4,
                             slot5,
                             slot6,
+                            slot7,
                             slot_offsets,
                             cursor.read(),
                         ),
@@ -9546,7 +9763,8 @@ pub(crate) fn sort_logical7_indices_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Less: BinaryPredicateOp<Item>,
 >(
     slot0: &[Leaf0],
@@ -9556,6 +9774,7 @@ pub(crate) fn sort_logical7_indices_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     output_indices: &mut [u32],
@@ -9577,6 +9796,7 @@ pub(crate) fn sort_logical7_indices_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     cursor.read(),
                 ),
@@ -9588,6 +9808,7 @@ pub(crate) fn sort_logical7_indices_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     global,
                 ),
@@ -9601,6 +9822,7 @@ pub(crate) fn sort_logical7_indices_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     global,
                 ),
@@ -9612,6 +9834,7 @@ pub(crate) fn sort_logical7_indices_kernel<
                     slot4,
                     slot5,
                     slot6,
+                    slot7,
                     slot_offsets,
                     cursor.read(),
                 ),
@@ -9641,6 +9864,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
             LeftLeaf4: CubePrimitive,
             LeftLeaf5: CubePrimitive,
             LeftLeaf6: CubePrimitive,
+            LeftLeaf7: CubePrimitive,
             RightLeaf0: CubePrimitive,
             RightLeaf1: CubePrimitive,
             RightLeaf2: CubePrimitive,
@@ -9648,8 +9872,9 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
             RightLeaf4: CubePrimitive,
             RightLeaf5: CubePrimitive,
             RightLeaf6: CubePrimitive,
-            LeftExpr: LogicalDeviceExpr7<($( $out_ty, )+), LeftLeaf0, LeftLeaf1, LeftLeaf2, LeftLeaf3, LeftLeaf4, LeftLeaf5, LeftLeaf6>,
-            RightExpr: LogicalDeviceExpr7<($( $out_ty, )+), RightLeaf0, RightLeaf1, RightLeaf2, RightLeaf3, RightLeaf4, RightLeaf5, RightLeaf6>,
+            RightLeaf7: CubePrimitive,
+            LeftExpr: LogicalDeviceExpr7<($( $out_ty, )+), LeftLeaf0, LeftLeaf1, LeftLeaf2, LeftLeaf3, LeftLeaf4, LeftLeaf5, LeftLeaf6, LeftLeaf7>,
+            RightExpr: LogicalDeviceExpr7<($( $out_ty, )+), RightLeaf0, RightLeaf1, RightLeaf2, RightLeaf3, RightLeaf4, RightLeaf5, RightLeaf6, RightLeaf7>,
             Less: BinaryPredicateOp<($( $out_ty, )+)>,
             $( $out_ty: CubePrimitive, )+
         >(
@@ -9660,6 +9885,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
             left_slot4: &[LeftLeaf4],
             left_slot5: &[LeftLeaf5],
             left_slot6: &[LeftLeaf6],
+            left_slot7: &[LeftLeaf7],
             left_slot_offsets: &[u32],
             right_slot0: &[RightLeaf0],
             right_slot1: &[RightLeaf1],
@@ -9668,6 +9894,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
             right_slot4: &[RightLeaf4],
             right_slot5: &[RightLeaf5],
             right_slot6: &[RightLeaf6],
+            right_slot7: &[RightLeaf7],
             right_slot_offsets: &[u32],
             metadata: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -9695,6 +9922,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
                                 right_slot4,
                                 right_slot5,
                                 right_slot6,
+                                right_slot7,
                                 right_slot_offsets,
                                 cursor.read(),
                             ),
@@ -9706,6 +9934,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
                                 left_slot4,
                                 left_slot5,
                                 left_slot6,
+                                left_slot7,
                                 left_slot_offsets,
                                 local,
                             ),
@@ -9725,6 +9954,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
                                 right_slot4,
                                 right_slot5,
                                 right_slot6,
+                                right_slot7,
                                 right_slot_offsets,
                                 local,
                             ),
@@ -9736,6 +9966,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
                                 left_slot4,
                                 left_slot5,
                                 left_slot6,
+                                left_slot7,
                                 left_slot_offsets,
                                 cursor.read(),
                             ),
@@ -9755,6 +9986,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
                         left_slot4,
                         left_slot5,
                         left_slot6,
+                        left_slot7,
                         left_slot_offsets,
                         local,
                     )
@@ -9767,6 +9999,7 @@ macro_rules! define_merge_logical7_to_tuple_kernel {
                         right_slot4,
                         right_slot5,
                         right_slot6,
+                        right_slot7,
                         right_slot_offsets,
                         local,
                     )
@@ -9818,6 +10051,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
     LeftLeaf4: CubePrimitive,
     LeftLeaf5: CubePrimitive,
     LeftLeaf6: CubePrimitive,
+    LeftLeaf7: CubePrimitive,
     RightLeaf0: CubePrimitive,
     RightLeaf1: CubePrimitive,
     RightLeaf2: CubePrimitive,
@@ -9825,6 +10059,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
     RightLeaf4: CubePrimitive,
     RightLeaf5: CubePrimitive,
     RightLeaf6: CubePrimitive,
+    RightLeaf7: CubePrimitive,
     LeftExpr: LogicalDeviceExpr7<
             Item,
             LeftLeaf0,
@@ -9834,6 +10069,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
             LeftLeaf4,
             LeftLeaf5,
             LeftLeaf6,
+            LeftLeaf7,
         >,
     RightExpr: LogicalDeviceExpr7<
             Item,
@@ -9844,6 +10080,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
             RightLeaf4,
             RightLeaf5,
             RightLeaf6,
+            RightLeaf7,
         >,
     Less: BinaryPredicateOp<Item>,
 >(
@@ -9854,6 +10091,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
     left_slot4: &[LeftLeaf4],
     left_slot5: &[LeftLeaf5],
     left_slot6: &[LeftLeaf6],
+    left_slot7: &[LeftLeaf7],
     left_slot_offsets: &[u32],
     right_slot0: &[RightLeaf0],
     right_slot1: &[RightLeaf1],
@@ -9862,6 +10100,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
     right_slot4: &[RightLeaf4],
     right_slot5: &[RightLeaf5],
     right_slot6: &[RightLeaf6],
+    right_slot7: &[RightLeaf7],
     right_slot_offsets: &[u32],
     metadata: &[u32],
     left_indices: &mut [u32],
@@ -9890,6 +10129,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
                         right_slot4,
                         right_slot5,
                         right_slot6,
+                        right_slot7,
                         right_slot_offsets,
                         cursor.read(),
                     ),
@@ -9901,6 +10141,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
                         left_slot4,
                         left_slot5,
                         left_slot6,
+                        left_slot7,
                         left_slot_offsets,
                         local,
                     ),
@@ -9921,6 +10162,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
                         right_slot4,
                         right_slot5,
                         right_slot6,
+                        right_slot7,
                         right_slot_offsets,
                         local,
                     ),
@@ -9932,6 +10174,7 @@ pub(crate) fn merge_by_key_logical7_indices_kernel<
                         left_slot4,
                         left_slot5,
                         left_slot6,
+                        left_slot7,
                         left_slot_offsets,
                         cursor.read(),
                     ),
@@ -9955,6 +10198,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
     CandidateLeaf4: CubePrimitive,
     CandidateLeaf5: CubePrimitive,
     CandidateLeaf6: CubePrimitive,
+    CandidateLeaf7: CubePrimitive,
     SortedLeaf0: CubePrimitive,
     SortedLeaf1: CubePrimitive,
     SortedLeaf2: CubePrimitive,
@@ -9962,6 +10206,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
     SortedLeaf4: CubePrimitive,
     SortedLeaf5: CubePrimitive,
     SortedLeaf6: CubePrimitive,
+    SortedLeaf7: CubePrimitive,
     CandidateExpr: LogicalDeviceExpr7<
             Item,
             CandidateLeaf0,
@@ -9971,6 +10216,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
             CandidateLeaf4,
             CandidateLeaf5,
             CandidateLeaf6,
+            CandidateLeaf7,
         >,
     SortedExpr: LogicalDeviceExpr7<
             Item,
@@ -9981,6 +10227,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
             SortedLeaf4,
             SortedLeaf5,
             SortedLeaf6,
+            SortedLeaf7,
         >,
     Less: BinaryPredicateOp<Item>,
 >(
@@ -9991,6 +10238,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
     candidate_slot4: &[CandidateLeaf4],
     candidate_slot5: &[CandidateLeaf5],
     candidate_slot6: &[CandidateLeaf6],
+    candidate_slot7: &[CandidateLeaf7],
     candidate_slot_offsets: &[u32],
     sorted_slot0: &[SortedLeaf0],
     sorted_slot1: &[SortedLeaf1],
@@ -9999,6 +10247,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
     sorted_slot4: &[SortedLeaf4],
     sorted_slot5: &[SortedLeaf5],
     sorted_slot6: &[SortedLeaf6],
+    sorted_slot7: &[SortedLeaf7],
     sorted_slot_offsets: &[u32],
     metadata: &[u32],
     flags: &mut [u32],
@@ -10026,6 +10275,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot4,
                     candidate_slot5,
                     candidate_slot6,
+                    candidate_slot7,
                     candidate_slot_offsets,
                     mid,
                 ),
@@ -10037,6 +10287,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot4,
                     candidate_slot5,
                     candidate_slot6,
+                    candidate_slot7,
                     candidate_slot_offsets,
                     global_index,
                 ),
@@ -10062,6 +10313,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     sorted_slot4,
                     sorted_slot5,
                     sorted_slot6,
+                    sorted_slot7,
                     sorted_slot_offsets,
                     mid,
                 ),
@@ -10073,6 +10325,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot4,
                     candidate_slot5,
                     candidate_slot6,
+                    candidate_slot7,
                     candidate_slot_offsets,
                     global_index,
                 ),
@@ -10098,6 +10351,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot4,
                     candidate_slot5,
                     candidate_slot6,
+                    candidate_slot7,
                     candidate_slot_offsets,
                     global_index,
                 ),
@@ -10109,6 +10363,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     sorted_slot4,
                     sorted_slot5,
                     sorted_slot6,
+                    sorted_slot7,
                     sorted_slot_offsets,
                     mid,
                 ),
@@ -10142,6 +10397,7 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
             LeftLeaf4: CubePrimitive,
             LeftLeaf5: CubePrimitive,
             LeftLeaf6: CubePrimitive,
+            LeftLeaf7: CubePrimitive,
             RightLeaf0: CubePrimitive,
             RightLeaf1: CubePrimitive,
             RightLeaf2: CubePrimitive,
@@ -10149,8 +10405,9 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
             RightLeaf4: CubePrimitive,
             RightLeaf5: CubePrimitive,
             RightLeaf6: CubePrimitive,
-            LeftExpr: LogicalDeviceExpr7<($( $out_ty, )+), LeftLeaf0, LeftLeaf1, LeftLeaf2, LeftLeaf3, LeftLeaf4, LeftLeaf5, LeftLeaf6>,
-            RightExpr: LogicalDeviceExpr7<($( $out_ty, )+), RightLeaf0, RightLeaf1, RightLeaf2, RightLeaf3, RightLeaf4, RightLeaf5, RightLeaf6>,
+            RightLeaf7: CubePrimitive,
+            LeftExpr: LogicalDeviceExpr7<($( $out_ty, )+), LeftLeaf0, LeftLeaf1, LeftLeaf2, LeftLeaf3, LeftLeaf4, LeftLeaf5, LeftLeaf6, LeftLeaf7>,
+            RightExpr: LogicalDeviceExpr7<($( $out_ty, )+), RightLeaf0, RightLeaf1, RightLeaf2, RightLeaf3, RightLeaf4, RightLeaf5, RightLeaf6, RightLeaf7>,
             Less: BinaryPredicateOp<($( $out_ty, )+)>,
             $( $out_ty: CubePrimitive, )+
         >(
@@ -10163,6 +10420,7 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
             left_slot4: &[LeftLeaf4],
             left_slot5: &[LeftLeaf5],
             left_slot6: &[LeftLeaf6],
+            left_slot7: &[LeftLeaf7],
             left_slot_offsets: &[u32],
             right_slot0: &[RightLeaf0],
             right_slot1: &[RightLeaf1],
@@ -10171,6 +10429,7 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
             right_slot4: &[RightLeaf4],
             right_slot5: &[RightLeaf5],
             right_slot6: &[RightLeaf6],
+            right_slot7: &[RightLeaf7],
             right_slot_offsets: &[u32],
             metadata: &[u32],
             $( $output: &mut [$out_ty], )+
@@ -10198,7 +10457,8 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
                                     right_slot4,
                                     right_slot5,
                                     right_slot6,
-                                    right_slot_offsets,
+                                    right_slot7,
+                            right_slot_offsets,
                                     cursor.read(),
                                 ),
                                 LeftExpr::eval7(
@@ -10209,7 +10469,8 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
                                     left_slot4,
                                     left_slot5,
                                     left_slot6,
-                                    left_slot_offsets,
+                                    left_slot7,
+                            left_slot_offsets,
                                     local,
                                 ),
                             )
@@ -10226,6 +10487,7 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
                         left_slot4,
                         left_slot5,
                         left_slot6,
+                        left_slot7,
                         left_slot_offsets,
                         local,
                     );
@@ -10246,7 +10508,8 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
                                 right_slot4,
                                 right_slot5,
                                 right_slot6,
-                                right_slot_offsets,
+                                right_slot7,
+                            right_slot_offsets,
                                 local,
                             ),
                             LeftExpr::eval7(
@@ -10257,7 +10520,8 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
                                 left_slot4,
                                 left_slot5,
                                 left_slot6,
-                                left_slot_offsets,
+                                left_slot7,
+                            left_slot_offsets,
                                 cursor.read(),
                             ),
                         ) {
@@ -10273,6 +10537,7 @@ macro_rules! define_set_union_logical7_to_tuple_kernel {
                         right_slot4,
                         right_slot5,
                         right_slot6,
+                        right_slot7,
                         right_slot_offsets,
                         local,
                     );
@@ -10325,7 +10590,8 @@ pub(crate) fn unique_logical7_flags_kernel<
     Leaf4: CubePrimitive,
     Leaf5: CubePrimitive,
     Leaf6: CubePrimitive,
-    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Leaf7: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Item, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6, Leaf7>,
     Pred: BinaryPredicateOp<Item>,
 >(
     slot0: &[Leaf0],
@@ -10335,6 +10601,7 @@ pub(crate) fn unique_logical7_flags_kernel<
     slot4: &[Leaf4],
     slot5: &[Leaf5],
     slot6: &[Leaf6],
+    slot7: &[Leaf7],
     slot_offsets: &[u32],
     len: &[u32],
     flags: &mut [u32],
@@ -10354,6 +10621,7 @@ pub(crate) fn unique_logical7_flags_kernel<
                 slot4,
                 slot5,
                 slot6,
+                slot7,
                 slot_offsets,
                 global - 1usize,
             ),
@@ -10365,6 +10633,7 @@ pub(crate) fn unique_logical7_flags_kernel<
                 slot4,
                 slot5,
                 slot6,
+                slot7,
                 slot_offsets,
                 global,
             ),
@@ -11072,7 +11341,7 @@ pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = values[0];
     }
 }
@@ -11189,7 +11458,7 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial_a.len() {
         partial_a[CUBE_POS as usize] = values_a[0];
         partial_b[CUBE_POS as usize] = values_b[0];
     }
@@ -11266,7 +11535,7 @@ pub(crate) fn tuple2_reduce_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial_a.len() {
         partial_a[CUBE_POS as usize] = values_a[0];
         partial_b[CUBE_POS as usize] = values_b[0];
     }
@@ -11414,7 +11683,7 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial_a.len() {
         partial_a[CUBE_POS as usize] = values_a[0];
         partial_b[CUBE_POS as usize] = values_b[0];
         partial_c[CUBE_POS as usize] = values_c[0];
@@ -11503,7 +11772,7 @@ pub(crate) fn tuple3_reduce_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 && valid[0] != 0 {
+    if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < partial_a.len() {
         partial_a[CUBE_POS as usize] = values_a[0];
         partial_b[CUBE_POS as usize] = values_b[0];
         partial_c[CUBE_POS as usize] = values_c[0];
@@ -11634,7 +11903,7 @@ macro_rules! define_tuple_reduce_device_expr_partials_kernel {
                 stride.store(stride.read() / 2);
             }
 
-            if unit == 0 && valid[0] != 0 {
+            if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < $first_partial.len() {
                 $(
                     $partial[CUBE_POS as usize] = $value[0];
                 )+
@@ -11721,7 +11990,7 @@ macro_rules! define_tuple_reduce_partials_kernel {
                 stride.store(stride.read() / 2);
             }
 
-            if unit == 0 && valid[0] != 0 {
+            if unit == 0 && valid[0] != 0 && (CUBE_POS as usize) < $first_partial.len() {
                 $(
                     $partial[CUBE_POS as usize] = $value[0];
                 )+
@@ -11836,7 +12105,7 @@ pub(crate) fn count_if_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 {
+    if unit == 0 && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = counts[0];
     }
 }
@@ -11868,7 +12137,7 @@ pub(crate) fn sum_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 {
+    if unit == 0 && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = counts[0];
     }
 }
@@ -11918,7 +12187,7 @@ pub(crate) fn find_if_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 {
+    if unit == 0 && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = best_indices[0];
     }
 }
@@ -11952,7 +12221,7 @@ pub(crate) fn min_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 {
+    if unit == 0 && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = best_indices[0];
     }
 }
@@ -12003,7 +12272,7 @@ pub(crate) fn adjacent_find_expr_partials_kernel<
         stride.store(stride.read() / 2);
     }
 
-    if unit == 0 {
+    if unit == 0 && (CUBE_POS as usize) < partials.len() {
         partials[CUBE_POS as usize] = best_indices[0];
     }
 }

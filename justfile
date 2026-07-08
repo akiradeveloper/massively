@@ -9,4 +9,4 @@ test:
     cargo nextest run
 
 test-scale:
-    cargo nextest run -p oracle --test scale --run-ignored ignored-only --no-fail-fast
+    cargo nextest run -p massively --test oracle_scale --run-ignored ignored-only --no-fail-fast

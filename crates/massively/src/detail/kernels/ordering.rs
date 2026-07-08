@@ -2030,8 +2030,8 @@ pub(crate) fn radix_digit_histogram_u32_kernel(
     histograms: &mut [u32],
 ) {
     let local = UNIT_POS as usize;
-    if local < 16usize {
-        let blocks = histograms.len() / 16usize;
+    let blocks = histograms.len() / 16usize;
+    if local < 16usize && (CUBE_POS as usize) < blocks {
         let block_start = (CUBE_POS as usize) * 256usize;
         let block_end = block_start + 256usize;
         let count = RuntimeCell::<u32>::new(0u32);

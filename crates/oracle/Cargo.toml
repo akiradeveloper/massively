@@ -11,8 +11,3 @@ version = "0.1.0"
 name = "oracle"
 
 [dependencies]
-
-[dev-dependencies]
-cubecl.workspace = true
-massively = { path = "../massively" }
-proptest = "1"

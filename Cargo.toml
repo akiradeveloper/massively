@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "crates/massively",
-    "crates/oracle-simple",
     "crates/oracle",
     "crates/recipes",
 ]

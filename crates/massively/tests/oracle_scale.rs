@@ -4,6 +4,7 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::op as gpu_op;
 use massively::{Executor, MIndex, MIter, Zip1};
 use oracle::op as host_op;
+use oracle_ref as oracle;
 use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
 use std::fmt;
@@ -14,6 +15,7 @@ type ScaleExecutor = Executor<ScaleRuntime>;
 
 const CASES: u32 = 1;
 const SCALE_LEN: usize = 10_000_000;
+const PRIME_BLOCK_LEN: usize = 65_537 * 256;
 
 struct ScaleVec(Vec<u32>);
 
@@ -122,11 +124,20 @@ fn exec() -> ScaleExecutor {
     Executor::<ScaleRuntime>::new(WgpuDevice::DefaultDevice)
 }
 
-fn lazify<Input>(input: Input) -> massively::lazy::Identity<Input>
+fn lazify<Input>(
+    input: Input,
+) -> massively::lazy::Transform<
+    massively::lazy::Permute<Input, massively::lazy::Taken<massively::lazy::Counting>>,
+    massively::op::Identity,
+>
 where
     Input: MIter<ScaleRuntime>,
 {
-    massively::lazy::identity(input)
+    let len = input.len();
+    massively::lazy::transform(
+        massively::lazy::permute(input, massively::lazy::counting(0).take(len)),
+        massively::op::Identity,
+    )
 }
 
 fn mindex(value: usize) -> MIndex {
@@ -153,6 +164,36 @@ fn scale_vec() -> impl Strategy<Value = ScaleVec> {
     prop::collection::vec(any::<u32>(), SCALE_LEN..=SCALE_LEN)
         .prop_map(ScaleVec)
         .no_shrink()
+}
+
+#[test]
+#[ignore = "scale"]
+fn scale_prime_block_dispatch_guard() {
+    let exec = exec();
+    let input = (0..PRIME_BLOCK_LEN as u32).collect::<Vec<_>>();
+    let input_g = exec.to_device(&input).unwrap();
+
+    assert_eq!(
+        massively::reduce(&exec, lazify(Zip1(input_g.slice(..))), (0_u32,), MaxTuple).unwrap(),
+        ((PRIME_BLOCK_LEN - 1) as u32,)
+    );
+
+    assert_eq!(
+        massively::minmax_element(&exec, lazify(Zip1(input_g.slice(..))), LessU32).unwrap(),
+        Some((0, (PRIME_BLOCK_LEN - 1) as MIndex))
+    );
+
+    let output_g = exec.to_device(&vec![0_u32; input.len()]).unwrap();
+    massively::inclusive_scan(
+        &exec,
+        lazify(Zip1(input_g.slice(..))),
+        MaxTuple,
+        Zip1(output_g.slice_mut(..)),
+    )
+    .unwrap();
+    let output = exec.to_host(&output_g).unwrap();
+    assert_eq!(output[0], 0);
+    assert_eq!(output[PRIME_BLOCK_LEN - 1], (PRIME_BLOCK_LEN - 1) as u32);
 }
 
 fn aos(input: &[u32]) -> Vec<(u32,)> {

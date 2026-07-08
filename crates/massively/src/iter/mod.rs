@@ -38,6 +38,10 @@ pub struct Zip6<A, B, C, D, E, F>(pub A, pub B, pub C, pub D, pub E, pub F);
 #[derive(Clone, Copy, Debug)]
 pub struct Zip7<A, B, C, D, E, F, G>(pub A, pub B, pub C, pub D, pub E, pub F, pub G);
 
+/// Eight-column Zip container.
+#[derive(Clone, Copy, Debug)]
+pub struct Zip8<A, B, C, D, E, F, G, H>(pub A, pub B, pub C, pub D, pub E, pub F, pub G, pub H);
+
 impl<A> From<(A,)> for Zip1<A> {
     fn from(value: (A,)) -> Self {
         Self(value.0)
@@ -78,6 +82,14 @@ impl<A, B, C, D, E, F, G> From<(A, B, C, D, E, F, G)> for Zip7<A, B, C, D, E, F,
     fn from(value: (A, B, C, D, E, F, G)) -> Self {
         Self(
             value.0, value.1, value.2, value.3, value.4, value.5, value.6,
+        )
+    }
+}
+
+impl<A, B, C, D, E, F, G, H> From<(A, B, C, D, E, F, G, H)> for Zip8<A, B, C, D, E, F, G, H> {
+    fn from(value: (A, B, C, D, E, F, G, H)) -> Self {
+        Self(
+            value.0, value.1, value.2, value.3, value.4, value.5, value.6, value.7,
         )
     }
 }
@@ -327,6 +339,7 @@ impl_zip_slice_api!(Zip4<A: 0, B: 1, C: 2, D: 3>);
 impl_zip_slice_api!(Zip5<A: 0, B: 1, C: 2, D: 3, E: 4>);
 impl_zip_slice_api!(Zip6<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5>);
 impl_zip_slice_api!(Zip7<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6>);
+impl_zip_slice_api!(Zip8<A: 0, B: 1, C: 2, D: 3, E: 4, F: 5, G: 6, H: 7>);
 
 /// Allocated device storage that can be sliced back into algorithm views.
 pub trait MStorage<R: Runtime>: StorageFromInner<R>

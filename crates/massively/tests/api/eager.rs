@@ -151,6 +151,23 @@ fn composed_unary_op_reads_external_value_from_input() {
 }
 
 #[test]
+fn public_identity_can_force_lazy_transform_path() {
+    let exec = exec();
+    let input = exec.to_device(&[1_u32, 2, 3]).unwrap();
+
+    let output = exec.to_device(&[0_u32; 3]).unwrap();
+    transform(
+        &exec,
+        massively::lazy::transform(massively::Zip1(input.slice(..)), massively::op::Identity),
+        massively::op::Identity,
+        massively::Zip1(output.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
+}
+
+#[test]
 fn lazy_constant_materializes_single_column() {
     let exec = exec();
 

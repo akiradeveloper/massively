@@ -10,8 +10,8 @@ use crate::{
         control::{ScanByKeyControl, SegmentControl},
         device::{
             DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, KernelColumnBindings, S0,
-            S1, S2, S3, S4, S5, S6, ZipView1, ZipView2, ZipView3, ZipView4, ZipView5, ZipView6,
-            ZipView7,
+            S1, S2, S3, S4, S5, S6, S7, S8, ZipView1, ZipView2, ZipView3, ZipView4, ZipView5,
+            ZipView6, ZipView7,
         },
         dispatch::MItemDispatch,
         op,
@@ -383,10 +383,18 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "count_if is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
+            return Ok(0);
+        };
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let selected = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
+        mindex_from_usize(crate::detail::primitives::select::selected_count(
+            policy, &selected,
+        )?)
     }
 
     fn all_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
@@ -395,10 +403,12 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "all_of is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, true)? else {
+            return Ok(true);
+        };
+        Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
     }
 
     fn any_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
@@ -407,10 +417,12 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "any_of is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
+            return Ok(false);
+        };
+        Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_some())
     }
 
     fn none_of_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
@@ -419,10 +431,12 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "none_of is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
+            return Ok(true);
+        };
+        Ok(crate::detail::primitives::search::first_flag(policy, flags, len, len)?.is_none())
     }
 
     fn find_if_read<Pred>(
@@ -435,10 +449,12 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "find_if is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
+            return Ok(None);
+        };
+        crate::detail::primitives::search::first_flag(policy, flags, len, len)
     }
 
     fn is_partitioned_read<Pred>(self, policy: &CubePolicy<R>, pred: Pred) -> Result<bool, Error>
@@ -447,10 +463,20 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::PredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "is_partitioned is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        let len = self.len();
+        let Some(flags) = logical7_predicate_flags_read::<R, _, Pred>(&self, policy, false)? else {
+            return Ok(true);
+        };
+        let first_rejected =
+            crate::detail::primitives::search::first_unset_flag(policy, flags.clone(), len, len)?
+                .unwrap_or(mindex_from_usize(len)?);
+        let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+        let selected = crate::detail::primitives::select::selected_rank_from_flags(
+            policy, len, len_u32, flags,
+        )?;
+        let selected_count = crate::detail::primitives::select::selected_count(policy, &selected)?;
+        Ok(mindex_from_usize(selected_count)? == first_rejected)
     }
 
     fn copy_selected_read<Output>(
@@ -625,10 +651,8 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Pred: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, pred);
-        Err(Error::Launch {
-            message: "adjacent_find is not supported for this iterator shape".to_string(),
-        })
+        let _ = pred;
+        logical7_adjacent_find_read::<R, Self, Pred>(&self, policy)
     }
 
     fn min_element_read<Less>(
@@ -641,10 +665,7 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, _less);
-        Err(Error::Launch {
-            message: "min_element is not supported for this iterator shape".to_string(),
-        })
+        Ok(logical7_minmax_read::<R, Self, Less>(&self, policy)?.map(|pair| pair.0))
     }
 
     fn max_element_read<Less>(
@@ -657,10 +678,7 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, _less);
-        Err(Error::Launch {
-            message: "max_element is not supported for this iterator shape".to_string(),
-        })
+        Ok(logical7_minmax_read::<R, Self, Less>(&self, policy)?.map(|pair| pair.1))
     }
 
     fn minmax_element_read<Less>(
@@ -673,10 +691,7 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, _less);
-        Err(Error::Launch {
-            message: "minmax_element is not supported for this iterator shape".to_string(),
-        })
+        logical7_minmax_read::<R, Self, Less>(&self, policy)
     }
 
     fn is_sorted_read<Less>(self, policy: &CubePolicy<R>, less: Less) -> Result<bool, Error>
@@ -685,10 +700,8 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, less);
-        Err(Error::Launch {
-            message: "is_sorted is not supported for this iterator shape".to_string(),
-        })
+        let _ = less;
+        Ok(logical7_sorted_break_read::<R, Self, Less>(&self, policy)?.is_none())
     }
 
     fn is_sorted_until_read<Less>(
@@ -701,10 +714,11 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, less);
-        Err(Error::Launch {
-            message: "is_sorted_until is not supported for this iterator shape".to_string(),
-        })
+        let _ = less;
+        match logical7_sorted_break_read::<R, Self, Less>(&self, policy)? {
+            Some(index) => Ok(index + 1),
+            None => mindex_from_usize(self.len()),
+        }
     }
 
     fn lower_bound_many_read<Values, Less>(
@@ -814,10 +828,7 @@ pub trait KernelRead<R: Runtime>: Sized {
         Self: KernelReadBoundMany<R>,
         KeyEq: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = policy;
-        Err(Error::Launch {
-            message: "scan_by_key control is not supported for this iterator shape".to_string(),
-        })
+        logical7_scan_by_key_control_read::<R, Self, KeyEq>(&self, policy)
     }
 
     fn inclusive_scan_by_key_values_read<KeyEq, Op, Output>(
@@ -943,6 +954,8 @@ pub struct Env5<A, B, C, D, E>(std::marker::PhantomData<fn() -> (A, B, C, D, E)>
 pub struct Env6<A, B, C, D, E, F>(std::marker::PhantomData<fn() -> (A, B, C, D, E, F)>);
 #[doc(hidden)]
 pub struct Env7<A, B, C, D, E, F, G>(std::marker::PhantomData<fn() -> (A, B, C, D, E, F, G)>);
+#[doc(hidden)]
+pub struct Env8<A, B, C, D, E, F, G, H>(std::marker::PhantomData<fn() -> (A, B, C, D, E, F, G, H)>);
 
 #[doc(hidden)]
 pub trait EnvLeaf7 {
@@ -953,6 +966,7 @@ pub trait EnvLeaf7 {
     type Leaf4: MStorageElement;
     type Leaf5: MStorageElement;
     type Leaf6: MStorageElement;
+    type Leaf7: MStorageElement;
 }
 
 impl<A> EnvLeaf7 for Env1<A>
@@ -966,6 +980,7 @@ where
     type Leaf4 = A;
     type Leaf5 = A;
     type Leaf6 = A;
+    type Leaf7 = A;
 }
 
 impl<A, B> EnvLeaf7 for Env2<A, B>
@@ -980,6 +995,7 @@ where
     type Leaf4 = A;
     type Leaf5 = A;
     type Leaf6 = A;
+    type Leaf7 = A;
 }
 
 impl<A, B, C> EnvLeaf7 for Env3<A, B, C>
@@ -995,6 +1011,7 @@ where
     type Leaf4 = A;
     type Leaf5 = A;
     type Leaf6 = A;
+    type Leaf7 = A;
 }
 
 impl<A, B, C, D> EnvLeaf7 for Env4<A, B, C, D>
@@ -1011,6 +1028,7 @@ where
     type Leaf4 = A;
     type Leaf5 = A;
     type Leaf6 = A;
+    type Leaf7 = A;
 }
 
 impl<A, B, C, D, E> EnvLeaf7 for Env5<A, B, C, D, E>
@@ -1028,6 +1046,7 @@ where
     type Leaf4 = E;
     type Leaf5 = A;
     type Leaf6 = A;
+    type Leaf7 = A;
 }
 
 impl<A, B, C, D, E, F> EnvLeaf7 for Env6<A, B, C, D, E, F>
@@ -1046,6 +1065,7 @@ where
     type Leaf4 = E;
     type Leaf5 = F;
     type Leaf6 = A;
+    type Leaf7 = A;
 }
 
 impl<A, B, C, D, E, F, G> EnvLeaf7 for Env7<A, B, C, D, E, F, G>
@@ -1065,6 +1085,28 @@ where
     type Leaf4 = E;
     type Leaf5 = F;
     type Leaf6 = G;
+    type Leaf7 = A;
+}
+
+impl<A, B, C, D, E, F, G, H> EnvLeaf7 for Env8<A, B, C, D, E, F, G, H>
+where
+    A: MStorageElement,
+    B: MStorageElement,
+    C: MStorageElement,
+    D: MStorageElement,
+    E: MStorageElement,
+    F: MStorageElement,
+    G: MStorageElement,
+    H: MStorageElement,
+{
+    type Leaf0 = A;
+    type Leaf1 = B;
+    type Leaf2 = C;
+    type Leaf3 = D;
+    type Leaf4 = E;
+    type Leaf5 = F;
+    type Leaf6 = G;
+    type Leaf7 = H;
 }
 
 #[doc(hidden)]
@@ -1496,9 +1538,15 @@ impl_lazy_read_at!(
 );
 impl_lazy_read_at!(
     S6,
-    crate::detail::device::S7,
+    S7,
     crate::expr::ConstantSlot6<T>,
     crate::expr::CountingSlot6
+);
+impl_lazy_read_at!(
+    S7,
+    S8,
+    crate::expr::ConstantSlot7<T>,
+    crate::expr::CountingSlot7
 );
 
 macro_rules! impl_lazy_read_at_env {
@@ -1545,6 +1593,7 @@ impl_lazy_read_at_env!(impl <A, B, C> Env3<A, B, C> => Env4<A, B, C, T>, Env4<A,
 impl_lazy_read_at_env!(impl <A, B, C, D> Env4<A, B, C, D> => Env5<A, B, C, D, T>, Env5<A, B, C, D, crate::MIndex>, crate::expr::ConstantSlot4<T>, crate::expr::CountingSlot4);
 impl_lazy_read_at_env!(impl <A, B, C, D, E> Env5<A, B, C, D, E> => Env6<A, B, C, D, E, T>, Env6<A, B, C, D, E, crate::MIndex>, crate::expr::ConstantSlot5<T>, crate::expr::CountingSlot5);
 impl_lazy_read_at_env!(impl <A, B, C, D, E, F> Env6<A, B, C, D, E, F> => Env7<A, B, C, D, E, F, T>, Env7<A, B, C, D, E, F, crate::MIndex>, crate::expr::ConstantSlot6<T>, crate::expr::CountingSlot6);
+impl_lazy_read_at_env!(impl <A, B, C, D, E, F, G> Env7<A, B, C, D, E, F, G> => Env8<A, B, C, D, E, F, G, T>, Env8<A, B, C, D, E, F, G, crate::MIndex>, crate::expr::ConstantSlot7<T>, crate::expr::CountingSlot7);
 
 impl<R, Values, Indices, Start> KernelReadAt<R, Start> for GatherRead<Values, Indices>
 where
@@ -1635,6 +1684,7 @@ where
             <FinalEnv as EnvLeaf7>::Leaf4,
             <FinalEnv as EnvLeaf7>::Leaf5,
             <FinalEnv as EnvLeaf7>::Leaf6,
+            <FinalEnv as EnvLeaf7>::Leaf7,
         >,
 {
 }
@@ -1653,6 +1703,7 @@ where
             <FinalEnv as EnvLeaf7>::Leaf4,
             <FinalEnv as EnvLeaf7>::Leaf5,
             <FinalEnv as EnvLeaf7>::Leaf6,
+            <FinalEnv as EnvLeaf7>::Leaf7,
         >,
 {
 }
@@ -1687,6 +1738,9 @@ where
             <<Self as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
                 <Self as KernelRead<R>>::Item,
             >>::Leaf6,
+            <<Self as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+                <Self as KernelRead<R>>::Item,
+            >>::Leaf7,
         >,
     <<Self as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
         <Self as KernelRead<R>>::Item,
@@ -1709,6 +1763,9 @@ where
     <<Self as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
         <Self as KernelRead<R>>::Item,
     >>::Leaf6: MStorageElement,
+    <<Self as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+        <Self as KernelRead<R>>::Item,
+    >>::Leaf7: MStorageElement,
 {
 }
 
@@ -1740,6 +1797,9 @@ where
             <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
                 <Read as KernelRead<R>>::Item,
             >>::Leaf6,
+            <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+                <Read as KernelRead<R>>::Item,
+            >>::Leaf7,
         >,
     <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
         <Read as KernelRead<R>>::Item,
@@ -1762,6 +1822,9 @@ where
     <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
         <Read as KernelRead<R>>::Item,
     >>::Leaf6: MStorageElement,
+    <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+        <Read as KernelRead<R>>::Item,
+    >>::Leaf7: MStorageElement,
 {
 }
 
@@ -1777,6 +1840,7 @@ pub trait KernelReadBoundMany<R: Runtime>:
     type Leaf4: MStorageElement;
     type Leaf5: MStorageElement;
     type Leaf6: MStorageElement;
+    type Leaf7: MStorageElement;
     type ExprAt: crate::expr::LogicalDeviceExpr7<
             <Self as KernelRead<R>>::Item,
             Self::Leaf0,
@@ -1786,6 +1850,7 @@ pub trait KernelReadBoundMany<R: Runtime>:
             Self::Leaf4,
             Self::Leaf5,
             Self::Leaf6,
+            Self::Leaf7,
         >;
 
     fn lower_bound_many_logical<Values, Less>(
@@ -1825,6 +1890,7 @@ where
             <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4,
             <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5,
             <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6,
+            <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf7,
         >,
 {
     type Leaf0 = <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf0;
@@ -1834,6 +1900,7 @@ where
     type Leaf4 = <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf4;
     type Leaf5 = <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf5;
     type Leaf6 = <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf6;
+    type Leaf7 = <<Read as KernelReadAtEnv<R, Env0>>::NextEnv as EnvLeaf7>::Leaf7;
     type ExprAt = <Read as KernelReadAtEnv<R, Env0>>::ExprAt;
 
     fn lower_bound_many_logical<Values, Less>(
@@ -2009,6 +2076,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         Op,
     >(policy, bindings, len, op)?;
@@ -2043,6 +2111,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         Op,
     >(policy, bindings, len, op)?;
@@ -2069,6 +2138,7 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
         > + Send
         + Sync,
@@ -2094,6 +2164,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
     >>::run_selected_logical7(policy, bindings, selected_rank, count)?;
     let inner = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
@@ -2122,6 +2193,7 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             <Indices as KernelReadBoundMany<R>>::Leaf0,
             <Indices as KernelReadBoundMany<R>>::Leaf1,
@@ -2130,6 +2202,7 @@ where
             <Indices as KernelReadBoundMany<R>>::Leaf4,
             <Indices as KernelReadBoundMany<R>>::Leaf5,
             <Indices as KernelReadBoundMany<R>>::Leaf6,
+            <Indices as KernelReadBoundMany<R>>::Leaf7,
             <Indices as KernelReadBoundMany<R>>::ExprAt,
         > + Send
         + Sync,
@@ -2156,6 +2229,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         <Indices as KernelReadBoundMany<R>>::Leaf0,
         <Indices as KernelReadBoundMany<R>>::Leaf1,
@@ -2164,6 +2238,7 @@ where
         <Indices as KernelReadBoundMany<R>>::Leaf4,
         <Indices as KernelReadBoundMany<R>>::Leaf5,
         <Indices as KernelReadBoundMany<R>>::Leaf6,
+        <Indices as KernelReadBoundMany<R>>::Leaf7,
         <Indices as KernelReadBoundMany<R>>::ExprAt,
     >>::run_gather_logical7(policy, value_bindings, index_bindings, len)?;
     let inner = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
@@ -2192,6 +2267,7 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             <Indices as KernelReadBoundMany<R>>::Leaf0,
             <Indices as KernelReadBoundMany<R>>::Leaf1,
@@ -2200,6 +2276,7 @@ where
             <Indices as KernelReadBoundMany<R>>::Leaf4,
             <Indices as KernelReadBoundMany<R>>::Leaf5,
             <Indices as KernelReadBoundMany<R>>::Leaf6,
+            <Indices as KernelReadBoundMany<R>>::Leaf7,
             <Indices as KernelReadBoundMany<R>>::ExprAt,
         > + Send
         + Sync,
@@ -2227,6 +2304,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         <Indices as KernelReadBoundMany<R>>::Leaf0,
         <Indices as KernelReadBoundMany<R>>::Leaf1,
@@ -2235,6 +2313,7 @@ where
         <Indices as KernelReadBoundMany<R>>::Leaf4,
         <Indices as KernelReadBoundMany<R>>::Leaf5,
         <Indices as KernelReadBoundMany<R>>::Leaf6,
+        <Indices as KernelReadBoundMany<R>>::Leaf7,
         <Indices as KernelReadBoundMany<R>>::ExprAt,
     >>::run_gather_logical7(policy, value_bindings, index_bindings, len)?;
     let inner = crate::detail::MaterializeOutput::materialize_output(storage, policy)?;
@@ -2314,6 +2393,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         LogicalIdentity,
     >(policy, bindings, len, LogicalIdentity)
@@ -2429,6 +2509,9 @@ where
             <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
                 <Read as KernelRead<R>>::Item,
             >>::Leaf6,
+            <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+                <Read as KernelRead<R>>::Item,
+            >>::Leaf7,
         > + crate::expr::LogicalDevicePack7<
             <Read as KernelRead<R>>::Item,
             <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
@@ -2452,6 +2535,9 @@ where
             <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
                 <Read as KernelRead<R>>::Item,
             >>::Leaf6,
+            <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+                <Read as KernelRead<R>>::Item,
+            >>::Leaf7,
         > + crate::expr::LogicalHostPack7<
             <Read as KernelRead<R>>::Item,
             <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
@@ -2475,6 +2561,9 @@ where
             <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
                 <Read as KernelRead<R>>::Item,
             >>::Leaf6,
+            <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+                <Read as KernelRead<R>>::Item,
+            >>::Leaf7,
         >,
     <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
         <Read as KernelRead<R>>::Item,
@@ -2497,6 +2586,9 @@ where
     <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
         <Read as KernelRead<R>>::Item,
     >>::Leaf6: MStorageElement,
+    <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+        <Read as KernelRead<R>>::Item,
+    >>::Leaf7: MStorageElement,
     Op: op::ReductionOp<R, <Read as KernelRead<R>>::Item>,
 {
     let len = read.len();
@@ -2527,6 +2619,9 @@ where
         <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
             <Read as KernelRead<R>>::Item,
         >>::Leaf6,
+        <<Read as KernelReadAt<R, S0>>::ExprAt as crate::expr::LogicalDeviceExpr7Shape<
+            <Read as KernelRead<R>>::Item,
+        >>::Leaf7,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf0,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf1,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf2,
@@ -2534,6 +2629,7 @@ where
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf4,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf5,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf6,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf7,
         <Read as KernelReadAt<R, S0>>::ExprAt,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Pack,
         KernelOp<R, Op>,
@@ -2565,6 +2661,7 @@ where
         <Read as KernelReadBoundMany<R>>::Leaf4,
         <Read as KernelReadBoundMany<R>>::Leaf5,
         <Read as KernelReadBoundMany<R>>::Leaf6,
+        <Read as KernelReadBoundMany<R>>::Leaf7,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf0,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf1,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf2,
@@ -2572,6 +2669,7 @@ where
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf4,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf5,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf6,
+        <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Leaf7,
         <Read as KernelReadBoundMany<R>>::ExprAt,
         <<Read as KernelRead<R>>::Item as crate::expr::LogicalItemPack7>::Pack,
         KernelOp<R, Op>,
@@ -2651,7 +2749,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -2691,7 +2789,7 @@ where
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
     bindings.finish();
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let offsets = bindings.slot_offsets8_handle(client)?;
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -2699,6 +2797,7 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
+    let slot7 = bindings.slot_or_first(7);
     let block_size = 256_u32;
     let block_count = len.div_ceil(block_size as usize);
     let block_count_u32 =
@@ -2714,12 +2813,13 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Pred>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -2728,7 +2828,8 @@ where
             unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
             unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(invert_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
@@ -2761,7 +2862,7 @@ where
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
     bindings.finish();
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let offsets = bindings.slot_offsets8_handle(client)?;
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -2769,6 +2870,7 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
+    let slot7 = bindings.slot_or_first(7);
     let block_size = 256_u32;
     let block_count = len.div_ceil(block_size as usize);
     let block_count_u32 =
@@ -2784,12 +2886,13 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Pred>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -2798,7 +2901,8 @@ where
             unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
             unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(flag_handle.clone(), len) },
         );
@@ -2830,7 +2934,7 @@ where
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
     bindings.finish();
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let offsets = bindings.slot_offsets8_handle(client)?;
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -2838,6 +2942,7 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
+    let slot7 = bindings.slot_or_first(7);
     let block_size = 256_u32;
     let block_count = len.div_ceil(block_size as usize);
     let block_count_u32 =
@@ -2853,12 +2958,13 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -2867,7 +2973,8 @@ where
             unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
             unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(indices_handle.clone(), len) },
         );
@@ -2914,8 +3021,8 @@ where
     <Right as KernelReadAtEnv<R, Env0>>::stage_at_env(right, &mut right_bindings)?;
     right_bindings.finish();
 
-    let left_offsets = left_bindings.slot_offsets7_handle(client)?;
-    let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+    let left_offsets = left_bindings.slot_offsets8_handle(client)?;
+    let right_offsets = right_bindings.slot_offsets8_handle(client)?;
     let left_slot0 = left_bindings.slot_or_first(0);
     let left_slot1 = left_bindings.slot_or_first(1);
     let left_slot2 = left_bindings.slot_or_first(2);
@@ -2923,6 +3030,7 @@ where
     let left_slot4 = left_bindings.slot_or_first(4);
     let left_slot5 = left_bindings.slot_or_first(5);
     let left_slot6 = left_bindings.slot_or_first(6);
+    let left_slot7 = left_bindings.slot_or_first(7);
     let right_slot0 = right_bindings.slot_or_first(0);
     let right_slot1 = right_bindings.slot_or_first(1);
     let right_slot2 = right_bindings.slot_or_first(2);
@@ -2930,6 +3038,7 @@ where
     let right_slot4 = right_bindings.slot_or_first(4);
     let right_slot5 = right_bindings.slot_or_first(5);
     let right_slot6 = right_bindings.slot_or_first(6);
+    let right_slot7 = right_bindings.slot_or_first(7);
 
     let metadata = [
         u32::try_from(left_len).map_err(|_| Error::LengthTooLarge { len: left_len })?,
@@ -2952,6 +3061,7 @@ where
             <Left as KernelReadBoundMany<R>>::Leaf4,
             <Left as KernelReadBoundMany<R>>::Leaf5,
             <Left as KernelReadBoundMany<R>>::Leaf6,
+            <Left as KernelReadBoundMany<R>>::Leaf7,
             <Right as KernelReadBoundMany<R>>::Leaf0,
             <Right as KernelReadBoundMany<R>>::Leaf1,
             <Right as KernelReadBoundMany<R>>::Leaf2,
@@ -2959,13 +3069,14 @@ where
             <Right as KernelReadBoundMany<R>>::Leaf4,
             <Right as KernelReadBoundMany<R>>::Leaf5,
             <Right as KernelReadBoundMany<R>>::Leaf6,
+            <Right as KernelReadBoundMany<R>>::Leaf7,
             <Left as KernelReadBoundMany<R>>::ExprAt,
             <Right as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -2974,7 +3085,8 @@ where
             unsafe { BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1) },
             unsafe { BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1) },
             unsafe { BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(left_slot7.0.clone(), left_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
             unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
             unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
@@ -2982,7 +3094,8 @@ where
             unsafe { BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1) },
             unsafe { BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1) },
             unsafe { BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(right_slot7.0.clone(), right_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()) },
             unsafe { BufferArg::from_raw_parts(left_indices_handle.clone(), left_len) },
             unsafe { BufferArg::from_raw_parts(right_indices_handle.clone(), right_len) },
@@ -3024,8 +3137,8 @@ where
     <Sorted as KernelReadAtEnv<R, Env0>>::stage_at_env(sorted, &mut sorted_bindings)?;
     sorted_bindings.finish();
 
-    let candidate_offsets = candidate_bindings.slot_offsets7_handle(client)?;
-    let sorted_offsets = sorted_bindings.slot_offsets7_handle(client)?;
+    let candidate_offsets = candidate_bindings.slot_offsets8_handle(client)?;
+    let sorted_offsets = sorted_bindings.slot_offsets8_handle(client)?;
     let candidate_slot0 = candidate_bindings.slot_or_first(0);
     let candidate_slot1 = candidate_bindings.slot_or_first(1);
     let candidate_slot2 = candidate_bindings.slot_or_first(2);
@@ -3033,6 +3146,7 @@ where
     let candidate_slot4 = candidate_bindings.slot_or_first(4);
     let candidate_slot5 = candidate_bindings.slot_or_first(5);
     let candidate_slot6 = candidate_bindings.slot_or_first(6);
+    let candidate_slot7 = candidate_bindings.slot_or_first(7);
     let sorted_slot0 = sorted_bindings.slot_or_first(0);
     let sorted_slot1 = sorted_bindings.slot_or_first(1);
     let sorted_slot2 = sorted_bindings.slot_or_first(2);
@@ -3040,6 +3154,7 @@ where
     let sorted_slot4 = sorted_bindings.slot_or_first(4);
     let sorted_slot5 = sorted_bindings.slot_or_first(5);
     let sorted_slot6 = sorted_bindings.slot_or_first(6);
+    let sorted_slot7 = sorted_bindings.slot_or_first(7);
     let metadata = [
         u32::try_from(candidate_len).map_err(|_| Error::LengthTooLarge { len: candidate_len })?,
         u32::try_from(sorted_len).map_err(|_| Error::LengthTooLarge { len: sorted_len })?,
@@ -3059,6 +3174,7 @@ where
             <Candidate as KernelReadBoundMany<R>>::Leaf4,
             <Candidate as KernelReadBoundMany<R>>::Leaf5,
             <Candidate as KernelReadBoundMany<R>>::Leaf6,
+            <Candidate as KernelReadBoundMany<R>>::Leaf7,
             <Sorted as KernelReadBoundMany<R>>::Leaf0,
             <Sorted as KernelReadBoundMany<R>>::Leaf1,
             <Sorted as KernelReadBoundMany<R>>::Leaf2,
@@ -3066,6 +3182,7 @@ where
             <Sorted as KernelReadBoundMany<R>>::Leaf4,
             <Sorted as KernelReadBoundMany<R>>::Leaf5,
             <Sorted as KernelReadBoundMany<R>>::Leaf6,
+            <Sorted as KernelReadBoundMany<R>>::Leaf7,
             <Candidate as KernelReadBoundMany<R>>::ExprAt,
             <Sorted as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
@@ -3081,7 +3198,8 @@ where
             unsafe { BufferArg::from_raw_parts(candidate_slot4.0.clone(), candidate_slot4.1) },
             unsafe { BufferArg::from_raw_parts(candidate_slot5.0.clone(), candidate_slot5.1) },
             unsafe { BufferArg::from_raw_parts(candidate_slot6.0.clone(), candidate_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(candidate_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(candidate_slot7.0.clone(), candidate_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(candidate_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(sorted_slot0.0.clone(), sorted_slot0.1) },
             unsafe { BufferArg::from_raw_parts(sorted_slot1.0.clone(), sorted_slot1.1) },
             unsafe { BufferArg::from_raw_parts(sorted_slot2.0.clone(), sorted_slot2.1) },
@@ -3089,7 +3207,8 @@ where
             unsafe { BufferArg::from_raw_parts(sorted_slot4.0.clone(), sorted_slot4.1) },
             unsafe { BufferArg::from_raw_parts(sorted_slot5.0.clone(), sorted_slot5.1) },
             unsafe { BufferArg::from_raw_parts(sorted_slot6.0.clone(), sorted_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(sorted_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(sorted_slot7.0.clone(), sorted_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(sorted_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(metadata_handle.clone(), metadata.len()) },
             unsafe { BufferArg::from_raw_parts(flag_handle.clone(), candidate_len) },
         );
@@ -3213,7 +3332,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -3270,8 +3389,8 @@ where
     <Right as KernelReadAtEnv<R, Env0>>::stage_at_env(right, &mut right_bindings)?;
     right_bindings.finish();
 
-    let left_offsets = left_bindings.slot_offsets7_handle(client)?;
-    let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+    let left_offsets = left_bindings.slot_offsets8_handle(client)?;
+    let right_offsets = right_bindings.slot_offsets8_handle(client)?;
     let left_slot0 = left_bindings.slot_or_first(0);
     let left_slot1 = left_bindings.slot_or_first(1);
     let left_slot2 = left_bindings.slot_or_first(2);
@@ -3279,6 +3398,7 @@ where
     let left_slot4 = left_bindings.slot_or_first(4);
     let left_slot5 = left_bindings.slot_or_first(5);
     let left_slot6 = left_bindings.slot_or_first(6);
+    let left_slot7 = left_bindings.slot_or_first(7);
     let right_slot0 = right_bindings.slot_or_first(0);
     let right_slot1 = right_bindings.slot_or_first(1);
     let right_slot2 = right_bindings.slot_or_first(2);
@@ -3286,6 +3406,7 @@ where
     let right_slot4 = right_bindings.slot_or_first(4);
     let right_slot5 = right_bindings.slot_or_first(5);
     let right_slot6 = right_bindings.slot_or_first(6);
+    let right_slot7 = right_bindings.slot_or_first(7);
     let flags = client.empty(min_len * std::mem::size_of::<u32>());
     let block_size = 256_u32;
     let block_count = min_len.div_ceil(block_size as usize);
@@ -3302,6 +3423,7 @@ where
             <Left as KernelReadBoundMany<R>>::Leaf4,
             <Left as KernelReadBoundMany<R>>::Leaf5,
             <Left as KernelReadBoundMany<R>>::Leaf6,
+            <Left as KernelReadBoundMany<R>>::Leaf7,
             <Right as KernelReadBoundMany<R>>::Leaf0,
             <Right as KernelReadBoundMany<R>>::Leaf1,
             <Right as KernelReadBoundMany<R>>::Leaf2,
@@ -3309,13 +3431,14 @@ where
             <Right as KernelReadBoundMany<R>>::Leaf4,
             <Right as KernelReadBoundMany<R>>::Leaf5,
             <Right as KernelReadBoundMany<R>>::Leaf6,
+            <Right as KernelReadBoundMany<R>>::Leaf7,
             <Left as KernelReadBoundMany<R>>::ExprAt,
             <Right as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Eq>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -3324,7 +3447,8 @@ where
             unsafe { BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1) },
             unsafe { BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1) },
             unsafe { BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(left_slot7.0.clone(), left_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
             unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
             unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
@@ -3332,7 +3456,8 @@ where
             unsafe { BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1) },
             unsafe { BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1) },
             unsafe { BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(right_slot7.0.clone(), right_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(flags.clone(), min_len) },
         );
     }
@@ -3375,8 +3500,8 @@ where
     <Needles as KernelReadAtEnv<R, Env0>>::stage_at_env(needles, &mut needle_bindings)?;
     needle_bindings.finish();
 
-    let input_offsets = input_bindings.slot_offsets7_handle(client)?;
-    let needle_offsets = needle_bindings.slot_offsets7_handle(client)?;
+    let input_offsets = input_bindings.slot_offsets8_handle(client)?;
+    let needle_offsets = needle_bindings.slot_offsets8_handle(client)?;
     let input_slot0 = input_bindings.slot_or_first(0);
     let input_slot1 = input_bindings.slot_or_first(1);
     let input_slot2 = input_bindings.slot_or_first(2);
@@ -3384,6 +3509,7 @@ where
     let input_slot4 = input_bindings.slot_or_first(4);
     let input_slot5 = input_bindings.slot_or_first(5);
     let input_slot6 = input_bindings.slot_or_first(6);
+    let input_slot7 = input_bindings.slot_or_first(7);
     let needle_slot0 = needle_bindings.slot_or_first(0);
     let needle_slot1 = needle_bindings.slot_or_first(1);
     let needle_slot2 = needle_bindings.slot_or_first(2);
@@ -3391,6 +3517,7 @@ where
     let needle_slot4 = needle_bindings.slot_or_first(4);
     let needle_slot5 = needle_bindings.slot_or_first(5);
     let needle_slot6 = needle_bindings.slot_or_first(6);
+    let needle_slot7 = needle_bindings.slot_or_first(7);
     let flags = client.empty(input_len * std::mem::size_of::<u32>());
     let needle_len_u32 =
         u32::try_from(needle_len).map_err(|_| Error::LengthTooLarge { len: needle_len })?;
@@ -3410,6 +3537,7 @@ where
             <Input as KernelReadBoundMany<R>>::Leaf4,
             <Input as KernelReadBoundMany<R>>::Leaf5,
             <Input as KernelReadBoundMany<R>>::Leaf6,
+            <Input as KernelReadBoundMany<R>>::Leaf7,
             <Needles as KernelReadBoundMany<R>>::Leaf0,
             <Needles as KernelReadBoundMany<R>>::Leaf1,
             <Needles as KernelReadBoundMany<R>>::Leaf2,
@@ -3417,13 +3545,14 @@ where
             <Needles as KernelReadBoundMany<R>>::Leaf4,
             <Needles as KernelReadBoundMany<R>>::Leaf5,
             <Needles as KernelReadBoundMany<R>>::Leaf6,
+            <Needles as KernelReadBoundMany<R>>::Leaf7,
             <Input as KernelReadBoundMany<R>>::ExprAt,
             <Needles as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Eq>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(input_slot0.0.clone(), input_slot0.1) },
             unsafe { BufferArg::from_raw_parts(input_slot1.0.clone(), input_slot1.1) },
@@ -3432,7 +3561,8 @@ where
             unsafe { BufferArg::from_raw_parts(input_slot4.0.clone(), input_slot4.1) },
             unsafe { BufferArg::from_raw_parts(input_slot5.0.clone(), input_slot5.1) },
             unsafe { BufferArg::from_raw_parts(input_slot6.0.clone(), input_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(input_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(input_slot7.0.clone(), input_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(input_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(needle_slot0.0.clone(), needle_slot0.1) },
             unsafe { BufferArg::from_raw_parts(needle_slot1.0.clone(), needle_slot1.1) },
             unsafe { BufferArg::from_raw_parts(needle_slot2.0.clone(), needle_slot2.1) },
@@ -3440,7 +3570,8 @@ where
             unsafe { BufferArg::from_raw_parts(needle_slot4.0.clone(), needle_slot4.1) },
             unsafe { BufferArg::from_raw_parts(needle_slot5.0.clone(), needle_slot5.1) },
             unsafe { BufferArg::from_raw_parts(needle_slot6.0.clone(), needle_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(needle_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(needle_slot7.0.clone(), needle_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(needle_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(needle_len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(flags.clone(), input_len) },
         );
@@ -3476,8 +3607,8 @@ where
     <Right as KernelReadAtEnv<R, Env0>>::stage_at_env(right, &mut right_bindings)?;
     right_bindings.finish();
 
-    let left_offsets = left_bindings.slot_offsets7_handle(client)?;
-    let right_offsets = right_bindings.slot_offsets7_handle(client)?;
+    let left_offsets = left_bindings.slot_offsets8_handle(client)?;
+    let right_offsets = right_bindings.slot_offsets8_handle(client)?;
     let left_slot0 = left_bindings.slot_or_first(0);
     let left_slot1 = left_bindings.slot_or_first(1);
     let left_slot2 = left_bindings.slot_or_first(2);
@@ -3485,6 +3616,7 @@ where
     let left_slot4 = left_bindings.slot_or_first(4);
     let left_slot5 = left_bindings.slot_or_first(5);
     let left_slot6 = left_bindings.slot_or_first(6);
+    let left_slot7 = left_bindings.slot_or_first(7);
     let right_slot0 = right_bindings.slot_or_first(0);
     let right_slot1 = right_bindings.slot_or_first(1);
     let right_slot2 = right_bindings.slot_or_first(2);
@@ -3492,6 +3624,7 @@ where
     let right_slot4 = right_bindings.slot_or_first(4);
     let right_slot5 = right_bindings.slot_or_first(5);
     let right_slot6 = right_bindings.slot_or_first(6);
+    let right_slot7 = right_bindings.slot_or_first(7);
     let flags = client.empty(min_len * std::mem::size_of::<u32>());
     let block_size = 256_u32;
     let block_count = min_len.div_ceil(block_size as usize);
@@ -3508,6 +3641,7 @@ where
             <Left as KernelReadBoundMany<R>>::Leaf4,
             <Left as KernelReadBoundMany<R>>::Leaf5,
             <Left as KernelReadBoundMany<R>>::Leaf6,
+            <Left as KernelReadBoundMany<R>>::Leaf7,
             <Right as KernelReadBoundMany<R>>::Leaf0,
             <Right as KernelReadBoundMany<R>>::Leaf1,
             <Right as KernelReadBoundMany<R>>::Leaf2,
@@ -3515,13 +3649,14 @@ where
             <Right as KernelReadBoundMany<R>>::Leaf4,
             <Right as KernelReadBoundMany<R>>::Leaf5,
             <Right as KernelReadBoundMany<R>>::Leaf6,
+            <Right as KernelReadBoundMany<R>>::Leaf7,
             <Left as KernelReadBoundMany<R>>::ExprAt,
             <Right as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -3530,7 +3665,8 @@ where
             unsafe { BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1) },
             unsafe { BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1) },
             unsafe { BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(left_slot7.0.clone(), left_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
             unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
             unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
@@ -3538,7 +3674,8 @@ where
             unsafe { BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1) },
             unsafe { BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1) },
             unsafe { BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(right_slot7.0.clone(), right_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(flags.clone(), min_len) },
         );
     }
@@ -3564,6 +3701,7 @@ where
             <Left as KernelReadBoundMany<R>>::Leaf4,
             <Left as KernelReadBoundMany<R>>::Leaf5,
             <Left as KernelReadBoundMany<R>>::Leaf6,
+            <Left as KernelReadBoundMany<R>>::Leaf7,
             <Right as KernelReadBoundMany<R>>::Leaf0,
             <Right as KernelReadBoundMany<R>>::Leaf1,
             <Right as KernelReadBoundMany<R>>::Leaf2,
@@ -3571,6 +3709,7 @@ where
             <Right as KernelReadBoundMany<R>>::Leaf4,
             <Right as KernelReadBoundMany<R>>::Leaf5,
             <Right as KernelReadBoundMany<R>>::Leaf6,
+            <Right as KernelReadBoundMany<R>>::Leaf7,
             <Left as KernelReadBoundMany<R>>::ExprAt,
             <Right as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
@@ -3586,7 +3725,8 @@ where
             unsafe { BufferArg::from_raw_parts(left_slot4.0.clone(), left_slot4.1) },
             unsafe { BufferArg::from_raw_parts(left_slot5.0.clone(), left_slot5.1) },
             unsafe { BufferArg::from_raw_parts(left_slot6.0.clone(), left_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(left_slot7.0.clone(), left_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(left_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(right_slot0.0.clone(), right_slot0.1) },
             unsafe { BufferArg::from_raw_parts(right_slot1.0.clone(), right_slot1.1) },
             unsafe { BufferArg::from_raw_parts(right_slot2.0.clone(), right_slot2.1) },
@@ -3594,7 +3734,8 @@ where
             unsafe { BufferArg::from_raw_parts(right_slot4.0.clone(), right_slot4.1) },
             unsafe { BufferArg::from_raw_parts(right_slot5.0.clone(), right_slot5.1) },
             unsafe { BufferArg::from_raw_parts(right_slot6.0.clone(), right_slot6.1) },
-            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(right_slot7.0.clone(), right_slot7.1) },
+            unsafe { BufferArg::from_raw_parts(right_offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(index_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(output.clone(), 1) },
         );
@@ -3671,7 +3812,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -3705,7 +3846,7 @@ where
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
     bindings.finish();
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let offsets = bindings.slot_offsets8_handle(client)?;
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -3713,6 +3854,7 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
+    let slot7 = bindings.slot_or_first(7);
     let block_size = 256_u32;
     let block_count = flag_len.div_ceil(block_size as usize);
     let block_count_u32 =
@@ -3728,12 +3870,13 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Pred>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -3742,7 +3885,8 @@ where
             unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
             unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(flags.clone(), flag_len) },
         );
     }
@@ -3819,7 +3963,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -3853,7 +3997,7 @@ where
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
     bindings.finish();
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let offsets = bindings.slot_offsets8_handle(client)?;
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -3861,6 +4005,7 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
+    let slot7 = bindings.slot_or_first(7);
     let block_size = 256_u32;
     let block_count = flag_len.div_ceil(block_size as usize);
     let block_count_u32 =
@@ -3876,12 +4021,13 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -3890,7 +4036,8 @@ where
             unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
             unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(flags.clone(), flag_len) },
         );
     }
@@ -3970,7 +4117,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            crate::detail::launch::cube_count_1d(block_count_u32),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -4011,7 +4158,7 @@ where
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
     bindings.finish();
-    let offsets = bindings.slot_offsets7_handle(client)?;
+    let offsets = bindings.slot_offsets8_handle(client)?;
     let slot0 = bindings.slot_or_first(0);
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
@@ -4019,6 +4166,7 @@ where
     let slot4 = bindings.slot_or_first(4);
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
+    let slot7 = bindings.slot_or_first(7);
     let block_size = 256_u32;
     let mut current_count = len.div_ceil(block_size as usize);
     let mut current_count_u32 =
@@ -4036,6 +4184,7 @@ where
             <Read as KernelReadBoundMany<R>>::Leaf4,
             <Read as KernelReadBoundMany<R>>::Leaf5,
             <Read as KernelReadBoundMany<R>>::Leaf6,
+            <Read as KernelReadBoundMany<R>>::Leaf7,
             <Read as KernelReadBoundMany<R>>::ExprAt,
             KernelOp<R, Less>,
             R,
@@ -4050,7 +4199,8 @@ where
             unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
             unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-            unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+            unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+            unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
         );
@@ -4072,6 +4222,7 @@ where
                 <Read as KernelReadBoundMany<R>>::Leaf4,
                 <Read as KernelReadBoundMany<R>>::Leaf5,
                 <Read as KernelReadBoundMany<R>>::Leaf6,
+                <Read as KernelReadBoundMany<R>>::Leaf7,
                 <Read as KernelReadBoundMany<R>>::ExprAt,
                 KernelOp<R, Less>,
                 R,
@@ -4086,7 +4237,8 @@ where
                 unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
                 unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
                 unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-                unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+                unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+                unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
                 unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
                 unsafe { BufferArg::from_raw_parts(candidate_len_handle.clone(), 1) },
                 unsafe { BufferArg::from_raw_parts(next_handle.clone(), next_count * 2) },
@@ -4128,7 +4280,7 @@ where
         let mut bindings = KernelColumnBindings::empty(client);
         <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
         bindings.finish();
-        let offsets = bindings.slot_offsets7_handle(client)?;
+        let offsets = bindings.slot_offsets8_handle(client)?;
         let slot0 = bindings.slot_or_first(0);
         let slot1 = bindings.slot_or_first(1);
         let slot2 = bindings.slot_or_first(2);
@@ -4136,6 +4288,7 @@ where
         let slot4 = bindings.slot_or_first(4);
         let slot5 = bindings.slot_or_first(5);
         let slot6 = bindings.slot_or_first(6);
+        let slot7 = bindings.slot_or_first(7);
         let block_size = 256_u32;
         let block_count = len.div_ceil(block_size as usize);
         let block_count_u32 =
@@ -4150,12 +4303,13 @@ where
                 <Read as KernelReadBoundMany<R>>::Leaf4,
                 <Read as KernelReadBoundMany<R>>::Leaf5,
                 <Read as KernelReadBoundMany<R>>::Leaf6,
+                <Read as KernelReadBoundMany<R>>::Leaf7,
                 <Read as KernelReadBoundMany<R>>::ExprAt,
                 KernelOp<R, KeyEq>,
                 R,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(block_size),
                 unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
                 unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -4164,7 +4318,8 @@ where
                 unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
                 unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
                 unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
-                unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+                unsafe { BufferArg::from_raw_parts(slot7.0.clone(), slot7.1) },
+                unsafe { BufferArg::from_raw_parts(offsets.clone(), 8) },
                 unsafe { BufferArg::from_raw_parts(flags.clone(), len) },
             );
         }
@@ -4364,7 +4519,7 @@ where
                 R,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(block_size),
                 BufferArg::from_raw_parts(source0.0.clone(), source0.1),
                 BufferArg::from_raw_parts(source1.0.clone(), source1.1),
@@ -4405,7 +4560,7 @@ where
                 R,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(block_size),
                 BufferArg::from_raw_parts(source0.0.clone(), source0.1),
                 BufferArg::from_raw_parts(source1.0.clone(), source1.1),
@@ -4463,8 +4618,8 @@ where
     let mut value_bindings = KernelColumnBindings::empty(client);
     <Values as KernelReadAtEnv<R, Env0>>::stage_at_env(values, &mut value_bindings)?;
     value_bindings.finish();
-    let source_offsets = source_bindings.slot_offsets7_handle(client)?;
-    let value_offsets = value_bindings.slot_offsets7_handle(client)?;
+    let source_offsets = source_bindings.slot_offsets8_handle(client)?;
+    let value_offsets = value_bindings.slot_offsets8_handle(client)?;
     let source0 = source_bindings.slot_or_first(0);
     let source1 = source_bindings.slot_or_first(1);
     let source2 = source_bindings.slot_or_first(2);
@@ -4472,6 +4627,7 @@ where
     let source4 = source_bindings.slot_or_first(4);
     let source5 = source_bindings.slot_or_first(5);
     let source6 = source_bindings.slot_or_first(6);
+    let source7 = source_bindings.slot_or_first(7);
     let value0 = value_bindings.slot_or_first(0);
     let value1 = value_bindings.slot_or_first(1);
     let value2 = value_bindings.slot_or_first(2);
@@ -4479,6 +4635,7 @@ where
     let value4 = value_bindings.slot_or_first(4);
     let value5 = value_bindings.slot_or_first(5);
     let value6 = value_bindings.slot_or_first(6);
+    let value7 = value_bindings.slot_or_first(7);
     let block_size = 256_u32;
     let block_count = value_len.div_ceil(block_size as usize);
     let block_count_u32 =
@@ -4495,6 +4652,7 @@ where
                 <Source as KernelReadBoundMany<R>>::Leaf4,
                 <Source as KernelReadBoundMany<R>>::Leaf5,
                 <Source as KernelReadBoundMany<R>>::Leaf6,
+                <Source as KernelReadBoundMany<R>>::Leaf7,
                 <Values as KernelReadBoundMany<R>>::Leaf0,
                 <Values as KernelReadBoundMany<R>>::Leaf1,
                 <Values as KernelReadBoundMany<R>>::Leaf2,
@@ -4502,13 +4660,14 @@ where
                 <Values as KernelReadBoundMany<R>>::Leaf4,
                 <Values as KernelReadBoundMany<R>>::Leaf5,
                 <Values as KernelReadBoundMany<R>>::Leaf6,
+                <Values as KernelReadBoundMany<R>>::Leaf7,
                 <Source as KernelReadBoundMany<R>>::ExprAt,
                 <Values as KernelReadBoundMany<R>>::ExprAt,
                 KernelOp<R, Less>,
                 R,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(block_size),
                 BufferArg::from_raw_parts(source0.0.clone(), source0.1),
                 BufferArg::from_raw_parts(source1.0.clone(), source1.1),
@@ -4517,7 +4676,8 @@ where
                 BufferArg::from_raw_parts(source4.0.clone(), source4.1),
                 BufferArg::from_raw_parts(source5.0.clone(), source5.1),
                 BufferArg::from_raw_parts(source6.0.clone(), source6.1),
-                BufferArg::from_raw_parts(source_offsets.clone(), 7),
+                BufferArg::from_raw_parts(source7.0.clone(), source7.1),
+                BufferArg::from_raw_parts(source_offsets.clone(), 8),
                 BufferArg::from_raw_parts(value0.0.clone(), value0.1),
                 BufferArg::from_raw_parts(value1.0.clone(), value1.1),
                 BufferArg::from_raw_parts(value2.0.clone(), value2.1),
@@ -4525,7 +4685,8 @@ where
                 BufferArg::from_raw_parts(value4.0.clone(), value4.1),
                 BufferArg::from_raw_parts(value5.0.clone(), value5.1),
                 BufferArg::from_raw_parts(value6.0.clone(), value6.1),
-                BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                BufferArg::from_raw_parts(value7.0.clone(), value7.1),
+                BufferArg::from_raw_parts(value_offsets.clone(), 8),
                 BufferArg::from_raw_parts(source_len_handle.clone(), 1),
                 BufferArg::from_raw_parts(value_len_handle.clone(), 1),
                 BufferArg::from_raw_parts(output.clone(), value_len),
@@ -4540,6 +4701,7 @@ where
                 <Source as KernelReadBoundMany<R>>::Leaf4,
                 <Source as KernelReadBoundMany<R>>::Leaf5,
                 <Source as KernelReadBoundMany<R>>::Leaf6,
+                <Source as KernelReadBoundMany<R>>::Leaf7,
                 <Values as KernelReadBoundMany<R>>::Leaf0,
                 <Values as KernelReadBoundMany<R>>::Leaf1,
                 <Values as KernelReadBoundMany<R>>::Leaf2,
@@ -4547,13 +4709,14 @@ where
                 <Values as KernelReadBoundMany<R>>::Leaf4,
                 <Values as KernelReadBoundMany<R>>::Leaf5,
                 <Values as KernelReadBoundMany<R>>::Leaf6,
+                <Values as KernelReadBoundMany<R>>::Leaf7,
                 <Source as KernelReadBoundMany<R>>::ExprAt,
                 <Values as KernelReadBoundMany<R>>::ExprAt,
                 KernelOp<R, Less>,
                 R,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                crate::detail::launch::cube_count_1d(block_count_u32),
                 CubeDim::new_1d(block_size),
                 BufferArg::from_raw_parts(source0.0.clone(), source0.1),
                 BufferArg::from_raw_parts(source1.0.clone(), source1.1),
@@ -4562,7 +4725,8 @@ where
                 BufferArg::from_raw_parts(source4.0.clone(), source4.1),
                 BufferArg::from_raw_parts(source5.0.clone(), source5.1),
                 BufferArg::from_raw_parts(source6.0.clone(), source6.1),
-                BufferArg::from_raw_parts(source_offsets.clone(), 7),
+                BufferArg::from_raw_parts(source7.0.clone(), source7.1),
+                BufferArg::from_raw_parts(source_offsets.clone(), 8),
                 BufferArg::from_raw_parts(value0.0.clone(), value0.1),
                 BufferArg::from_raw_parts(value1.0.clone(), value1.1),
                 BufferArg::from_raw_parts(value2.0.clone(), value2.1),
@@ -4570,7 +4734,8 @@ where
                 BufferArg::from_raw_parts(value4.0.clone(), value4.1),
                 BufferArg::from_raw_parts(value5.0.clone(), value5.1),
                 BufferArg::from_raw_parts(value6.0.clone(), value6.1),
-                BufferArg::from_raw_parts(value_offsets.clone(), 7),
+                BufferArg::from_raw_parts(value7.0.clone(), value7.1),
+                BufferArg::from_raw_parts(value_offsets.clone(), 8),
                 BufferArg::from_raw_parts(source_len_handle.clone(), 1),
                 BufferArg::from_raw_parts(value_len_handle.clone(), 1),
                 BufferArg::from_raw_parts(output.clone(), value_len),
@@ -5444,6 +5609,7 @@ impl_column_read_at_env!(impl <A, B, C> Env3<A, B, C> => S3, Env4<A, B, C, T>);
 impl_column_read_at_env!(impl <A, B, C, D> Env4<A, B, C, D> => S4, Env5<A, B, C, D, T>);
 impl_column_read_at_env!(impl <A, B, C, D, E> Env5<A, B, C, D, E> => S5, Env6<A, B, C, D, E, T>);
 impl_column_read_at_env!(impl <A, B, C, D, E, F> Env6<A, B, C, D, E, F> => S6, Env7<A, B, C, D, E, F, T>);
+impl_column_read_at_env!(impl <A, B, C, D, E, F, G> Env7<A, B, C, D, E, F, G> => S7, Env8<A, B, C, D, E, F, G, T>);
 
 impl<R, T> KernelReadScanByKeyView<R> for ColumnRead<R, T>
 where
@@ -6825,6 +6991,16 @@ impl_kernel_read_zip!(ZipRead7<A: a, B: b, C: c, D: d, E: e, F: f, G: g> => (
     F::Item,
     G::Item
 ));
+impl_kernel_read_zip!(ZipRead8<A: a, B: b, C: c, D: d, E: e, F: f, G: g, H: h> => (
+    A::Item,
+    B::Item,
+    C::Item,
+    D::Item,
+    E::Item,
+    F::Item,
+    G::Item,
+    H::Item
+));
 
 impl<R, A, Start> KernelReadAt<R, Start> for ZipRead1<A>
 where
@@ -7826,6 +8002,52 @@ where
         self.e.stage_at_env(bindings)?;
         self.f.stage_at_env(bindings)?;
         self.g.stage_at_env(bindings)
+    }
+}
+
+impl<R, A, B, C, D, E, F, G, H, Env> KernelReadAtEnv<R, Env> for ZipRead8<A, B, C, D, E, F, G, H>
+where
+    R: Runtime,
+    A: KernelReadAtEnv<R, Env>,
+    B: KernelReadAtEnv<R, A::NextEnv>,
+    C: KernelReadAtEnv<R, B::NextEnv>,
+    D: KernelReadAtEnv<R, C::NextEnv>,
+    E: KernelReadAtEnv<R, D::NextEnv>,
+    F: KernelReadAtEnv<R, E::NextEnv>,
+    G: KernelReadAtEnv<R, F::NextEnv>,
+    H: KernelReadAtEnv<R, G::NextEnv>,
+{
+    type LogicalItem = (
+        A::LogicalItem,
+        B::LogicalItem,
+        C::LogicalItem,
+        D::LogicalItem,
+        E::LogicalItem,
+        F::LogicalItem,
+        G::LogicalItem,
+        H::LogicalItem,
+    );
+    type ExprAt = (
+        A::ExprAt,
+        B::ExprAt,
+        C::ExprAt,
+        D::ExprAt,
+        E::ExprAt,
+        F::ExprAt,
+        G::ExprAt,
+        H::ExprAt,
+    );
+    type NextEnv = H::NextEnv;
+
+    fn stage_at_env(&self, bindings: &mut KernelColumnBindings) -> Result<(), Error> {
+        self.a.stage_at_env(bindings)?;
+        self.b.stage_at_env(bindings)?;
+        self.c.stage_at_env(bindings)?;
+        self.d.stage_at_env(bindings)?;
+        self.e.stage_at_env(bindings)?;
+        self.f.stage_at_env(bindings)?;
+        self.g.stage_at_env(bindings)?;
+        self.h.stage_at_env(bindings)
     }
 }
 
@@ -9449,7 +9671,7 @@ macro_rules! wide_predicate_rank {
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    crate::detail::launch::cube_count_1d(block_count_u32),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts($a.source.handle.clone(), $a.source.len()),
                     BufferArg::from_raw_parts($b.source.handle.clone(), $b.source.len()),
