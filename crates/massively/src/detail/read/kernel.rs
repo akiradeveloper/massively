@@ -3047,9 +3047,7 @@ where
     ];
     let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
     let block_size = 256_u32;
-    let block_count = candidate_len.div_ceil(block_size as usize);
-    let block_count_u32 =
-        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+    let launch = crate::detail::launch::launch_1d(client, candidate_len, block_size)?;
 
     unsafe {
         crate::kernels::set_membership_logical7_flags_kernel::launch_unchecked::<
@@ -3074,7 +3072,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(candidate_slot0.0.clone(), candidate_slot0.1) },
             unsafe { BufferArg::from_raw_parts(candidate_slot1.0.clone(), candidate_slot1.1) },

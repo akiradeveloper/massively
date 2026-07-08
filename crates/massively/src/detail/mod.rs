@@ -8,6 +8,7 @@ pub(crate) mod dispatch;
 pub(crate) mod expr;
 pub(crate) mod impls;
 pub(crate) mod kernels;
+pub(crate) mod launch;
 pub(crate) mod op_adapter;
 pub(crate) mod policy;
 pub(crate) mod primitives;

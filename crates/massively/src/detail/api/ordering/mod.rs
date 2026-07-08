@@ -38,9 +38,7 @@ where
     let source_indices = client.empty(len * std::mem::size_of::<u32>());
 
     if len != 0 {
-        let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let left_len_u32 =
             u32::try_from(left.len()).map_err(|_| Error::LengthTooLarge { len: left.len() })?;
         let right_len_u32 =
@@ -69,7 +67,7 @@ where
                 Left::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
                 unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -123,9 +121,7 @@ where
     }
 
     let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let sorted_len_u32 =
         u32::try_from(sorted.len()).map_err(|_| Error::LengthTooLarge { len: sorted.len() })?;
     let candidate_len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
@@ -155,7 +151,7 @@ where
             Candidate::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe { BufferArg::from_raw_parts(candidate_slot0.0.clone(), candidate_slot0.1) },
             unsafe { BufferArg::from_raw_parts(candidate_slot1.0.clone(), candidate_slot1.1) },
@@ -233,9 +229,7 @@ where
     let client = policy.client();
     let flag = client.empty(len * std::mem::size_of::<u32>());
     if len != 0 {
-        let block_count = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let block_count_u32 =
-            u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let candidate_len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let sorted_len_u32 = u32::try_from(sorted_a.len()).map_err(|_| Error::LengthTooLarge {
             len: sorted_a.len(),
@@ -281,7 +275,7 @@ where
                 CandidateA::Runtime,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(ca0.0.clone(), ca0.1) },
                 unsafe { BufferArg::from_raw_parts(ca1.0.clone(), ca1.1) },
@@ -366,9 +360,7 @@ where
     let client = policy.client();
     let flag = client.empty(len * std::mem::size_of::<u32>());
     if len != 0 {
-        let block_count = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let block_count_u32 =
-            u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let candidate_len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let sorted_len_u32 = u32::try_from(sorted_a.len()).map_err(|_| Error::LengthTooLarge {
             len: sorted_a.len(),
@@ -429,7 +421,7 @@ where
                 CandidateA::Runtime,
             >(
                 client,
-                CubeCount::Static(block_count_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(ca0.0.clone(), ca0.1) },
                 unsafe { BufferArg::from_raw_parts(ca1.0.clone(), ca1.1) },
@@ -549,9 +541,8 @@ macro_rules! define_tuple_membership_expr_flags_with_policy {
             let client = policy.client();
             let flag = client.empty(len * std::mem::size_of::<u32>());
             if len != 0 {
-                let block_count = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-                let block_count_u32 = u32::try_from(block_count)
-                    .map_err(|_| Error::LengthTooLarge { len: block_count })?;
+                let launch =
+                    crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
                 let candidate_len_u32 =
                     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let sorted_len_u32 =
@@ -606,7 +597,7 @@ macro_rules! define_tuple_membership_expr_flags_with_policy {
                         $first_candidate_ty::Runtime,
                     >(
                         client,
-                        CubeCount::Static(block_count_u32, 1, 1),
+                        launch.cube_count(),
                         CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                         unsafe { BufferArg::from_raw_parts($first_candidate_slot0.0.clone(), $first_candidate_slot0.1) },
                         unsafe { BufferArg::from_raw_parts($first_candidate_slot1.0.clone(), $first_candidate_slot1.1) },
@@ -790,9 +781,7 @@ where
     let source_indices = client.empty(len * std::mem::size_of::<u32>());
 
     if len != 0 {
-        let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let left_len_u32 = u32::try_from(left_keys.len()).map_err(|_| Error::LengthTooLarge {
             len: left_keys.len(),
         })?;
@@ -823,7 +812,7 @@ where
                 LeftKey::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
                 unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -902,9 +891,7 @@ where
     let source_indices = client.empty(len * std::mem::size_of::<u32>());
 
     if len != 0 {
-        let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let left_len_u32 =
             u32::try_from(left_a.len()).map_err(|_| Error::LengthTooLarge { len: left_a.len() })?;
         let right_len_u32 = u32::try_from(right_a.len())
@@ -948,7 +935,7 @@ where
                 LeftA::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(la0.0.clone(), la0.1) },
                 unsafe { BufferArg::from_raw_parts(la1.0.clone(), la1.1) },
@@ -1059,9 +1046,7 @@ where
     let source_indices = client.empty(len * std::mem::size_of::<u32>());
 
     if len != 0 {
-        let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let left_len_u32 =
             u32::try_from(left_a.len()).map_err(|_| Error::LengthTooLarge { len: left_a.len() })?;
         let right_len_u32 = u32::try_from(right_a.len())
@@ -1120,7 +1105,7 @@ where
                 LeftA::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(la0.0.clone(), la0.1) },
                 unsafe { BufferArg::from_raw_parts(la1.0.clone(), la1.1) },
@@ -1206,9 +1191,7 @@ where
         let output_offset = client.create_from_slice(u32::as_bytes(&[0]));
         let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
         let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-        let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-        let num_blocks_u32 =
-            u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+        let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
         let left_bindings = left_values.stage(policy)?;
         let right_bindings = right_values.stage(policy)?;
         let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
@@ -1230,7 +1213,7 @@ where
                 LeftValue::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
                 unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },
@@ -1287,9 +1270,7 @@ where
     let output_offset = client.create_from_slice(u32::as_bytes(&[output_offset_u32]));
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let left_bindings = left_values.stage(policy)?;
     let right_bindings = right_values.stage(policy)?;
     let left_slot_offsets = left_bindings.slot_offsets_handle(client)?;
@@ -1311,7 +1292,7 @@ where
             LeftValue::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe { BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1) },
             unsafe { BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1) },

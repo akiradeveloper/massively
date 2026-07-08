@@ -74,3 +74,22 @@ fn set_union_accepts_borrowed_tuple_columns() {
         vec![10, 20, 30, 40]
     );
 }
+
+#[test]
+fn set_union_uses_sorted_multiset_semantics_for_duplicates() {
+    let exec = exec();
+    let left = exec.to_device(&[1_u32, 2, 2, 4]).unwrap();
+    let right = exec.to_device(&[2_u32, 2, 2, 3]).unwrap();
+    let out = exec.to_device(&[0_u32; 8]).unwrap();
+
+    let len = set_union(
+        &exec,
+        massively::Zip1(left.slice(..)),
+        massively::Zip1(right.slice(..)),
+        LessU32,
+        massively::Zip1(out.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out.slice(..len)).unwrap(), vec![1, 2, 2, 2, 3, 4]);
+}

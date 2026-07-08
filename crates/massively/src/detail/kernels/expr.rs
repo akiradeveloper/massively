@@ -9416,10 +9416,12 @@ pub(crate) fn set_membership_logical7_flags_kernel<
     let sorted_len = metadata[1] as usize;
     let keep_members = metadata[2] != 0u32;
     if global < candidate_len {
-        let member = RuntimeCell::<bool>::new(false);
-        let cursor = RuntimeCell::<usize>::new(0usize);
-        while cursor.read() < sorted_len {
-            let candidate_before_sorted = Less::apply(
+        let candidate_first = RuntimeCell::<usize>::new(0usize);
+        let candidate_count = RuntimeCell::<usize>::new(candidate_len);
+        while candidate_count.read() > 0usize {
+            let step = candidate_count.read() / 2usize;
+            let mid = candidate_first.read() + step;
+            if Less::apply(
                 CandidateExpr::eval7(
                     candidate_slot0,
                     candidate_slot1,
@@ -9429,31 +9431,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot5,
                     candidate_slot6,
                     candidate_slot_offsets,
-                    global,
-                ),
-                SortedExpr::eval7(
-                    sorted_slot0,
-                    sorted_slot1,
-                    sorted_slot2,
-                    sorted_slot3,
-                    sorted_slot4,
-                    sorted_slot5,
-                    sorted_slot6,
-                    sorted_slot_offsets,
-                    cursor.read(),
-                ),
-            );
-            let sorted_before_candidate = Less::apply(
-                SortedExpr::eval7(
-                    sorted_slot0,
-                    sorted_slot1,
-                    sorted_slot2,
-                    sorted_slot3,
-                    sorted_slot4,
-                    sorted_slot5,
-                    sorted_slot6,
-                    sorted_slot_offsets,
-                    cursor.read(),
+                    mid,
                 ),
                 CandidateExpr::eval7(
                     candidate_slot0,
@@ -9466,13 +9444,90 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot_offsets,
                     global,
                 ),
-            );
-            if !candidate_before_sorted && !sorted_before_candidate {
-                member.store(true);
+            ) {
+                candidate_first.store(mid + 1usize);
+                candidate_count.store(candidate_count.read() - step - 1usize);
+            } else {
+                candidate_count.store(step);
             }
-            cursor.store(cursor.read() + 1usize);
         }
-        flags[global] = if member.read() == keep_members {
+
+        let sorted_first = RuntimeCell::<usize>::new(0usize);
+        let sorted_count = RuntimeCell::<usize>::new(sorted_len);
+        while sorted_count.read() > 0usize {
+            let step = sorted_count.read() / 2usize;
+            let mid = sorted_first.read() + step;
+            if Less::apply(
+                SortedExpr::eval7(
+                    sorted_slot0,
+                    sorted_slot1,
+                    sorted_slot2,
+                    sorted_slot3,
+                    sorted_slot4,
+                    sorted_slot5,
+                    sorted_slot6,
+                    sorted_slot_offsets,
+                    mid,
+                ),
+                CandidateExpr::eval7(
+                    candidate_slot0,
+                    candidate_slot1,
+                    candidate_slot2,
+                    candidate_slot3,
+                    candidate_slot4,
+                    candidate_slot5,
+                    candidate_slot6,
+                    candidate_slot_offsets,
+                    global,
+                ),
+            ) {
+                sorted_first.store(mid + 1usize);
+                sorted_count.store(sorted_count.read() - step - 1usize);
+            } else {
+                sorted_count.store(step);
+            }
+        }
+
+        let sorted_after = RuntimeCell::<usize>::new(0usize);
+        let sorted_after_count = RuntimeCell::<usize>::new(sorted_len);
+        while sorted_after_count.read() > 0usize {
+            let step = sorted_after_count.read() / 2usize;
+            let mid = sorted_after.read() + step;
+            if !Less::apply(
+                CandidateExpr::eval7(
+                    candidate_slot0,
+                    candidate_slot1,
+                    candidate_slot2,
+                    candidate_slot3,
+                    candidate_slot4,
+                    candidate_slot5,
+                    candidate_slot6,
+                    candidate_slot_offsets,
+                    global,
+                ),
+                SortedExpr::eval7(
+                    sorted_slot0,
+                    sorted_slot1,
+                    sorted_slot2,
+                    sorted_slot3,
+                    sorted_slot4,
+                    sorted_slot5,
+                    sorted_slot6,
+                    sorted_slot_offsets,
+                    mid,
+                ),
+            ) {
+                sorted_after.store(mid + 1usize);
+                sorted_after_count.store(sorted_after_count.read() - step - 1usize);
+            } else {
+                sorted_after_count.store(step);
+            }
+        }
+
+        let rank = global - candidate_first.read();
+        let other_count = sorted_after.read() - sorted_first.read();
+        let keep = (keep_members && rank < other_count) || (!keep_members && rank >= other_count);
+        flags[global] = if keep {
             1u32
         } else {
             0u32

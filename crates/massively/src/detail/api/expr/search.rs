@@ -18,9 +18,9 @@ where
     }
 
     let client = policy.client();
-    let mut current_count = len.div_ceil(BLOCK_API_EXPR_SIZE as usize);
-    let mut current_count_u32 =
-        u32::try_from(current_count).map_err(|_| Error::LengthTooLarge { len: current_count })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_API_EXPR_SIZE)?;
+    let mut current_count = launch.logical_blocks;
+    let mut current_count_u32 = launch.logical_blocks_u32;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let mut current_handle = client.empty(current_count * 2 * std::mem::size_of::<u32>());
@@ -39,7 +39,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(current_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -52,9 +52,10 @@ where
     }
 
     while current_count > 1 {
-        let next_count = current_count.div_ceil(BLOCK_API_EXPR_SIZE as usize);
-        let next_count_u32 =
-            u32::try_from(next_count).map_err(|_| Error::LengthTooLarge { len: next_count })?;
+        let next_launch =
+            crate::detail::launch::launch_1d(client, current_count, BLOCK_API_EXPR_SIZE)?;
+        let next_count = next_launch.logical_blocks;
+        let next_count_u32 = next_launch.logical_blocks_u32;
         let candidate_len_handle = client.create_from_slice(u32::as_bytes(&[current_count_u32]));
         let next_handle = client.empty(next_count * 2 * std::mem::size_of::<u32>());
 
@@ -66,7 +67,7 @@ where
                 ExprSource::Runtime,
             >(
                 client,
-                CubeCount::Static(next_count_u32, 1, 1),
+                next_launch.cube_count(),
                 CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
                 unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
                 unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },

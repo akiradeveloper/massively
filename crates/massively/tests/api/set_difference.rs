@@ -62,3 +62,22 @@ fn set_difference_accepts_borrowed_tuple_columns() {
     assert_eq!(exec.to_host(&out_a.slice(..len)).unwrap(), vec![1.0, 4.0]);
     assert_eq!(exec.to_host(&out_b.slice(..len)).unwrap(), vec![10, 40]);
 }
+
+#[test]
+fn set_difference_uses_sorted_multiset_semantics_for_duplicates() {
+    let exec = exec();
+    let left = exec.to_device(&[1_u32, 2, 2, 2, 4]).unwrap();
+    let right = exec.to_device(&[2_u32, 2, 3]).unwrap();
+    let out = exec.to_device(&[0_u32; 5]).unwrap();
+
+    let len = set_difference(
+        &exec,
+        massively::Zip1(left.slice(..)),
+        massively::Zip1(right.slice(..)),
+        LessU32,
+        massively::Zip1(out.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out.slice(..len)).unwrap(), vec![1, 2, 4]);
+}

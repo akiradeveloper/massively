@@ -78,6 +78,35 @@ fn merge_by_key_accepts_generic_right_without_inner_equality_bound() {
 }
 
 #[test]
+fn merge_by_key_keeps_left_values_before_right_values_for_equal_keys() {
+    let exec = exec();
+    let left_keys = exec.to_device(&[1_u32, 2, 2, 4]).unwrap();
+    let left_values = exec.to_device(&[10_u32, 20, 21, 40]).unwrap();
+    let right_keys = exec.to_device(&[2_u32, 2, 3]).unwrap();
+    let right_values = exec.to_device(&[120_u32, 121, 30]).unwrap();
+    let out_keys = exec.to_device(&[0_u32; 7]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 7]).unwrap();
+
+    merge_by_key(
+        &exec,
+        massively::Zip1(left_keys.slice(..)),
+        massively::Zip1(left_values.slice(..)),
+        massively::Zip1(right_keys.slice(..)),
+        massively::Zip1(right_values.slice(..)),
+        LessU32,
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 2, 2, 2, 3, 4]);
+    assert_eq!(
+        exec.to_host(&out_values).unwrap(),
+        vec![10, 20, 21, 120, 121, 30, 40]
+    );
+}
+
+#[test]
 fn merge_by_key_accepts_tuple_values() {
     let exec = exec();
     let left_keys = exec.to_device(&[0_u32, 2, 2, 5]).unwrap();

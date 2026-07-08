@@ -281,6 +281,24 @@ impl BinaryPredicateOp<WgpuRuntime, (f32, u32, f32)> for MixedTuple3Less {
     }
 }
 
+pub(crate) struct FirstAscSecondDescU32;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (u32, u32)> for FirstAscSecondDescU32 {
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
+        lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 > rhs.1)
+    }
+}
+
+pub(crate) struct FirstOnlyLessU32;
+
+#[cubecl::cube]
+impl BinaryPredicateOp<WgpuRuntime, (u32, u32)> for FirstOnlyLessU32 {
+    fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
+        lhs.0 < rhs.0
+    }
+}
+
 pub(crate) struct MixedTuple3LexLess;
 
 #[cubecl::cube]

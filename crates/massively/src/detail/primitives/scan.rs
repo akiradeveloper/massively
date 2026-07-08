@@ -36,9 +36,8 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
 
     let output_handle = client.empty(len * std::mem::size_of::<u32>());
     let workspace = Workspace::from_client(client);
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_SCAN_SIZE)?;
+    let num_blocks = launch.logical_blocks;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_values = [len_u32];
     let len_handle = client.create_from_slice(u32::as_bytes(&len_values));
@@ -47,7 +46,7 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
     unsafe {
         u32_block_inclusive_scan_kernel::launch_unchecked::<R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(input_handle.clone(), len) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -62,7 +61,7 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
         unsafe {
             u32_add_block_prefix_kernel::launch_unchecked::<R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_handle.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -110,14 +109,12 @@ where
     let b_slot_offsets = b_bindings.slot_offsets_handle(client)?;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_SCAN_SIZE)?;
 
     unsafe {
         tuple2_adjacent_difference_expr_kernel::launch_unchecked::<A, B, ExprA, ExprB, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
@@ -187,9 +184,7 @@ where
     let c_slot_offsets = c_bindings.slot_offsets_handle(client)?;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_SCAN_SIZE)?;
 
     unsafe {
         tuple3_adjacent_difference_expr_kernel::launch_unchecked::<
@@ -203,7 +198,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
@@ -915,9 +910,8 @@ where
     let a_slot2 = a_bindings.slots.get(2).unwrap_or(a_slot0);
     let a_slot3 = a_bindings.slots.get(3).unwrap_or(a_slot0);
     let a_slot_offsets = a_bindings.slot_offsets_handle(client)?;
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_SCAN_SIZE)?;
+    let num_blocks = launch.logical_blocks;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let block_sums_a = workspace.alloc::<A>(num_blocks);
@@ -925,7 +919,7 @@ where
     unsafe {
         tuple1_device_inclusive_scan_expr_block_kernel::launch_unchecked::<A, ExprA, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(a_slot0.0.clone(), a_slot0.1) },
             unsafe { BufferArg::from_raw_parts(a_slot1.0.clone(), a_slot1.1) },
@@ -944,7 +938,7 @@ where
         unsafe {
             tuple1_scan_add_block_prefix_kernel::launch_unchecked::<A, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_a.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -995,9 +989,8 @@ where
 
     let output_a = client.empty(len * std::mem::size_of::<A>());
     let workspace = Workspace::new(policy);
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_SCAN_SIZE)?;
+    let num_blocks = launch.logical_blocks;
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let block_sums_a = workspace.alloc::<A>(num_blocks);
@@ -1005,7 +998,7 @@ where
     unsafe {
         tuple1_inclusive_scan_block_kernel::launch_unchecked::<A, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(input_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -1020,7 +1013,7 @@ where
         unsafe {
             tuple1_scan_add_block_prefix_kernel::launch_unchecked::<A, Op, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_SCAN_SIZE),
                 unsafe { BufferArg::from_raw_parts(block_prefixes_a.clone(), num_blocks) },
                 unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
@@ -1050,13 +1043,11 @@ where
 
     let output_a = client.empty(len * std::mem::size_of::<A>());
     let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
-    let num_blocks = len.div_ceil(BLOCK_SCAN_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_SCAN_SIZE)?;
     unsafe {
         tuple1_scan_make_exclusive_kernel::launch_unchecked::<A, Op, R>(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SCAN_SIZE),
             unsafe { BufferArg::from_raw_parts(inclusive_a.clone(), len) },
             unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },

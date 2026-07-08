@@ -119,6 +119,53 @@ fn sort_by_key_accepts_three_column_keys() {
 }
 
 #[test]
+fn sort_by_key_accepts_two_column_keys_with_mixed_directions() {
+    let exec = exec();
+    let k0 = exec.to_device(&[2_u32, 1, 1, 2, 1]).unwrap();
+    let k1 = exec.to_device(&[7_u32, 3, 9, 2, 5]).unwrap();
+    let values = exec.to_device(&[27_u32, 13, 19, 22, 15]).unwrap();
+    let out_k0 = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_k1 = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 5]).unwrap();
+
+    sort_by_key(
+        &exec,
+        massively::Zip2(k0.slice(..), k1.slice(..)),
+        massively::Zip1(values.slice(..)),
+        FirstAscSecondDescU32,
+        massively::Zip2(out_k0.slice_mut(..), out_k1.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_k0).unwrap(), vec![1, 1, 1, 2, 2]);
+    assert_eq!(exec.to_host(&out_k1).unwrap(), vec![9, 5, 3, 7, 2]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![19, 15, 13, 27, 22]);
+}
+
+#[test]
+fn sort_by_key_is_stable_for_equal_keys() {
+    let exec = exec();
+    let keys = exec.to_device(&[2_u32, 1, 2, 1, 2]).unwrap();
+    let values = exec.to_device(&[20_u32, 10, 21, 11, 22]).unwrap();
+    let out_keys = exec.to_device(&[0_u32; 5]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 5]).unwrap();
+
+    sort_by_key(
+        &exec,
+        massively::Zip1(keys.slice(..)),
+        massively::Zip1(values.slice(..)),
+        LessU32,
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 1, 2, 2, 2]);
+    assert_eq!(exec.to_host(&out_values).unwrap(), vec![10, 11, 20, 21, 22]);
+}
+
+#[test]
 fn sort_by_key_accepts_three_column_keys_and_tuple_values() {
     let exec = exec();
     let k0 = exec.to_device(&[1.0_f32, 1.0, 0.0, 1.0]).unwrap();

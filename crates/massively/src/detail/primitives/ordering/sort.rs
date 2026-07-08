@@ -26,13 +26,11 @@ where
 {
     input.validate()?;
     let len = input.len();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
     let client = policy.client();
     if len == 0 {
         return Ok(policy.empty_device_vec());
     }
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
 
     let workspace = Workspace::new(policy);
     let (scratch_a, scratch_b) = workspace.alloc_pair::<Source::Item>(len);
@@ -51,7 +49,7 @@ where
             Source::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe { BufferArg::from_raw_parts(bindings.input.clone(), bindings.input_len) },
             unsafe { BufferArg::from_raw_parts(bindings.rhs.clone(), bindings.rhs_len) },
@@ -74,7 +72,7 @@ where
         unsafe {
             merge_sort_pass_kernel::launch_unchecked::<Source::Item, Less, Source::Runtime>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(width_handle.clone(), 1) },
@@ -126,9 +124,7 @@ where
     }
 
     let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let workspace = Workspace::new(policy);
     let (scratch_keys_a, scratch_keys_b) = workspace.alloc_pair::<KeySource::Item>(len);
     let (scratch_values_a, scratch_values_b) = workspace.alloc_pair::<ValueSource::Item>(len);
@@ -159,7 +155,7 @@ where
             KeySource::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(key_bindings.input.clone(), key_bindings.input_len)
@@ -201,7 +197,7 @@ where
                 KeySource::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_key_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(input_value_handle.clone(), len) },
@@ -262,9 +258,7 @@ where
     }
 
     let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<Left::Item>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<Right::Item>(len);
@@ -301,7 +295,7 @@ where
             Left::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(first_bindings.input.clone(), first_bindings.input_len)
@@ -345,7 +339,7 @@ where
                 Left::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_first_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(input_second_handle.clone(), len) },
@@ -402,9 +396,7 @@ where
         ));
     }
 
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<A>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<B>(len);
@@ -424,7 +416,7 @@ where
         unsafe {
             merge_sort_tuple3_pass_kernel::launch_unchecked::<A, B, C, Less, R>(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_first_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(input_second_handle.clone(), len) },
@@ -501,9 +493,7 @@ where
     }
 
     let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<First::Item>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<Second::Item>(len);
@@ -553,7 +543,7 @@ where
             First::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(first_bindings.input.clone(), first_bindings.input_len)
@@ -610,7 +600,7 @@ where
                 First::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_first_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(input_second_handle.clone(), len) },
@@ -695,9 +685,7 @@ where
     }
 
     let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let workspace = Workspace::new(policy);
     let (scratch_first_a, scratch_first_b) = workspace.alloc_pair::<First::Item>(len);
     let (scratch_second_a, scratch_second_b) = workspace.alloc_pair::<Second::Item>(len);
@@ -760,7 +748,7 @@ where
             First::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe {
                 BufferArg::from_raw_parts(first_bindings.input.clone(), first_bindings.input_len)
@@ -830,7 +818,7 @@ where
                 First::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(input_first_handle.clone(), len) },
                 unsafe { BufferArg::from_raw_parts(input_second_handle.clone(), len) },
@@ -935,9 +923,7 @@ where
     }
 
     let client = policy.client();
-    let num_blocks = len.div_ceil(BLOCK_ORDERING_SIZE as usize);
-    let num_blocks_u32 =
-        u32::try_from(num_blocks).map_err(|_| Error::LengthTooLarge { len: num_blocks })?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
     let workspace = Workspace::new(policy);
     let (scratch_a, scratch_b) = workspace.alloc_pair::<u32>(len);
     let a_bindings = a.stage(policy)?;
@@ -1005,7 +991,7 @@ where
             A::Runtime,
         >(
             client,
-            CubeCount::Static(num_blocks_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_ORDERING_SIZE),
             unsafe { BufferArg::from_raw_parts(a0.0.clone(), a0.1) },
             unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
@@ -1075,7 +1061,7 @@ where
                 A::Runtime,
             >(
                 client,
-                CubeCount::Static(num_blocks_u32, 1, 1),
+                launch.cube_count(),
                 CubeDim::new_1d(BLOCK_ORDERING_SIZE),
                 unsafe { BufferArg::from_raw_parts(a0.0.clone(), a0.1) },
                 unsafe { BufferArg::from_raw_parts(a1.0.clone(), a1.1) },
