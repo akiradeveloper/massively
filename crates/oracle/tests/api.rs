@@ -386,7 +386,7 @@ impl host_op::BinaryPredicateOp<(u32, u32, u32)> for Less3 {
 }
 
 fn exec() -> ApiExecutor {
-    Executor::<ApiRuntime>::new(WgpuDevice::Cpu)
+    Executor::<ApiRuntime>::new(WgpuDevice::DefaultDevice)
 }
 
 fn gpu_lock() -> MutexGuard<'static, ()> {

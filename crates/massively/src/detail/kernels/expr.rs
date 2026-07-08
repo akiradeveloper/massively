@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::{
     detail::op::kernel::{BinaryOp, BinaryPredicateOp, PredicateOp, UnaryOp},
     expr::{
@@ -2565,6 +2567,583 @@ pub(crate) fn logical7_minmax_flags_kernel<
 }
 
 #[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_minmax_partials_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    len: &[u32],
+    partials: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let logical_len = len[0] as usize;
+    let partial_count = partials.len() / 2usize;
+    let mut min_indices = Shared::<[u32]>::new_slice(cube_dim);
+    let mut max_indices = Shared::<[u32]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let step = (CUBE_DIM as usize) * partial_count;
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let min_index = RuntimeCell::<usize>::new(0usize);
+    let max_index = RuntimeCell::<usize>::new(0usize);
+
+    while i.read() < logical_len {
+        if has_value.read() == 0u32 {
+            min_index.store(i.read());
+            max_index.store(i.read());
+            has_value.store(1u32);
+        } else {
+            let other_min = i.read();
+            let current_min = min_index.read();
+            let other_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    other_min,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_min,
+                ),
+            );
+            let current_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_min,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    other_min,
+                ),
+            );
+            if other_less || (!current_less && other_min < current_min) {
+                min_index.store(other_min);
+            }
+
+            let other_max = i.read();
+            let current_max = max_index.read();
+            let current_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_max,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    other_max,
+                ),
+            );
+            let other_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    other_max,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_max,
+                ),
+            );
+            if current_less || (!other_less && other_max < current_max) {
+                max_index.store(other_max);
+            }
+        }
+        i.store(i.read() + step);
+    }
+
+    min_indices[unit] = min_index.read() as u32;
+    max_indices[unit] = max_index.read() as u32;
+    valid[unit] = has_value.read();
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(cube_dim / 2usize);
+    while stride.read() > 0usize {
+        if unit < stride.read() && valid[unit + stride.read()] != 0u32 {
+            if valid[unit] == 0u32 {
+                min_indices[unit] = min_indices[unit + stride.read()];
+                max_indices[unit] = max_indices[unit + stride.read()];
+                valid[unit] = 1u32;
+            } else {
+                let other_min = min_indices[unit + stride.read()] as usize;
+                let current_min = min_indices[unit] as usize;
+                let other_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_min,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_min,
+                    ),
+                );
+                let current_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_min,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_min,
+                    ),
+                );
+                if other_less || (!current_less && other_min < current_min) {
+                    min_indices[unit] = other_min as u32;
+                }
+
+                let other_max = max_indices[unit + stride.read()] as usize;
+                let current_max = max_indices[unit] as usize;
+                let current_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_max,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_max,
+                    ),
+                );
+                let other_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_max,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_max,
+                    ),
+                );
+                if current_less || (!other_less && other_max < current_max) {
+                    max_indices[unit] = other_max as u32;
+                }
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() / 2usize);
+    }
+
+    if unit == 0usize && valid[0] != 0u32 {
+        let out = (CUBE_POS as usize) * 2usize;
+        partials[out] = min_indices[0];
+        partials[out + 1usize] = max_indices[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
+pub(crate) fn logical7_minmax_index_partials_kernel<
+    Input: CubeType + 'static + Send + Sync,
+    Leaf0: CubePrimitive,
+    Leaf1: CubePrimitive,
+    Leaf2: CubePrimitive,
+    Leaf3: CubePrimitive,
+    Leaf4: CubePrimitive,
+    Leaf5: CubePrimitive,
+    Leaf6: CubePrimitive,
+    Expr: LogicalDeviceExpr7<Input, Leaf0, Leaf1, Leaf2, Leaf3, Leaf4, Leaf5, Leaf6>,
+    Less: BinaryPredicateOp<Input>,
+>(
+    slot0: &[Leaf0],
+    slot1: &[Leaf1],
+    slot2: &[Leaf2],
+    slot3: &[Leaf3],
+    slot4: &[Leaf4],
+    slot5: &[Leaf5],
+    slot6: &[Leaf6],
+    slot_offsets: &[u32],
+    candidates: &[u32],
+    candidate_len: &[u32],
+    partials: &mut [u32],
+) {
+    let unit = UNIT_POS as usize;
+    let cube_dim = 256usize;
+    let logical_len = candidate_len[0] as usize;
+    let partial_count = partials.len() / 2usize;
+    let mut min_indices = Shared::<[u32]>::new_slice(cube_dim);
+    let mut max_indices = Shared::<[u32]>::new_slice(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+
+    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let step = (CUBE_DIM as usize) * partial_count;
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let min_index = RuntimeCell::<usize>::new(0usize);
+    let max_index = RuntimeCell::<usize>::new(0usize);
+
+    while i.read() < logical_len {
+        let candidate_min = candidates[i.read() * 2usize] as usize;
+        let candidate_max = candidates[i.read() * 2usize + 1usize] as usize;
+        if has_value.read() == 0u32 {
+            min_index.store(candidate_min);
+            max_index.store(candidate_max);
+            has_value.store(1u32);
+        } else {
+            let current_min = min_index.read();
+            let other_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    candidate_min,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_min,
+                ),
+            );
+            let current_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_min,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    candidate_min,
+                ),
+            );
+            if other_less || (!current_less && candidate_min < current_min) {
+                min_index.store(candidate_min);
+            }
+
+            let current_max = max_index.read();
+            let current_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_max,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    candidate_max,
+                ),
+            );
+            let other_less = Less::apply(
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    candidate_max,
+                ),
+                Expr::eval7(
+                    slot0,
+                    slot1,
+                    slot2,
+                    slot3,
+                    slot4,
+                    slot5,
+                    slot6,
+                    slot_offsets,
+                    current_max,
+                ),
+            );
+            if current_less || (!other_less && candidate_max < current_max) {
+                max_index.store(candidate_max);
+            }
+        }
+        i.store(i.read() + step);
+    }
+
+    min_indices[unit] = min_index.read() as u32;
+    max_indices[unit] = max_index.read() as u32;
+    valid[unit] = has_value.read();
+    sync_cube();
+
+    let stride = RuntimeCell::<usize>::new(cube_dim / 2usize);
+    while stride.read() > 0usize {
+        if unit < stride.read() && valid[unit + stride.read()] != 0u32 {
+            if valid[unit] == 0u32 {
+                min_indices[unit] = min_indices[unit + stride.read()];
+                max_indices[unit] = max_indices[unit + stride.read()];
+                valid[unit] = 1u32;
+            } else {
+                let other_min = min_indices[unit + stride.read()] as usize;
+                let current_min = min_indices[unit] as usize;
+                let other_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_min,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_min,
+                    ),
+                );
+                let current_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_min,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_min,
+                    ),
+                );
+                if other_less || (!current_less && other_min < current_min) {
+                    min_indices[unit] = other_min as u32;
+                }
+
+                let other_max = max_indices[unit + stride.read()] as usize;
+                let current_max = max_indices[unit] as usize;
+                let current_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_max,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_max,
+                    ),
+                );
+                let other_less = Less::apply(
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        other_max,
+                    ),
+                    Expr::eval7(
+                        slot0,
+                        slot1,
+                        slot2,
+                        slot3,
+                        slot4,
+                        slot5,
+                        slot6,
+                        slot_offsets,
+                        current_max,
+                    ),
+                );
+                if current_less || (!other_less && other_max < current_max) {
+                    max_indices[unit] = other_max as u32;
+                }
+            }
+        }
+        sync_cube();
+        stride.store(stride.read() / 2usize);
+    }
+
+    if unit == 0usize && valid[0] != 0u32 {
+        let out = (CUBE_POS as usize) * 2usize;
+        partials[out] = min_indices[0];
+        partials[out + 1usize] = max_indices[0];
+    }
+}
+
+#[cube(launch_unchecked, explicit_define)]
 pub(crate) fn logical7_lower_bound_many_kernel<
     Input: CubeType + 'static + Send + Sync,
     SourceLeaf0: CubePrimitive,
@@ -4985,8 +5564,10 @@ macro_rules! define_tuple_membership_device_expr_flags_kernel {
         ) {
             let unit = UNIT_POS as usize;
             let cube_dim = 256usize;
-            let global = (CUBE_POS as usize) * cube_dim + unit;
-            if global < flags.len() {
+            let global = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+            let stride = (CUBE_COUNT as usize) * cube_dim;
+            while global.read() < flags.len() {
+                let global_index = global.read();
                 let candidate_value = (
                     $first_expr::eval(
                         $first_candidate_slot0,
@@ -4994,7 +5575,7 @@ macro_rules! define_tuple_membership_device_expr_flags_kernel {
                         $first_candidate_slot2,
                         $first_candidate_slot3,
                         $first_candidate_offsets,
-                        global,
+                        global_index,
                     ),
                     $(
                         $expr::eval(
@@ -5003,7 +5584,7 @@ macro_rules! define_tuple_membership_device_expr_flags_kernel {
                             $candidate_slot2,
                             $candidate_slot3,
                             $candidate_offsets,
-                            global,
+                            global_index,
                         ),
                     )*
                 );
@@ -5107,15 +5688,16 @@ macro_rules! define_tuple_membership_device_expr_flags_kernel {
                     }
                 }
 
-                let rank = global - candidate_first.read();
+                let rank = global_index - candidate_first.read();
                 let other_count = sorted_after.read() - sorted_first.read();
                 if (keep_present[0] != 0u32 && rank < other_count)
                     || (keep_present[0] == 0u32 && rank >= other_count)
                 {
-                    flags[global] = 1u32;
+                    flags[global_index] = 1u32;
                 } else {
-                    flags[global] = 0u32;
+                    flags[global_index] = 0u32;
                 }
+                global.store(global_index + stride);
             }
         }
     };
@@ -7918,10 +8500,15 @@ pub(crate) fn compact_scatter_kernel<T: CubePrimitive>(
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
-    let global = (CUBE_POS as usize) * cube_dim + unit;
-    if global < flags.len() && flags[global] != 0u32 {
-        let position = positions[global];
-        output[(position - 1u32) as usize] = values[global];
+    let global = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let stride = (CUBE_COUNT as usize) * cube_dim;
+    while global.read() < flags.len() {
+        let global_index = global.read();
+        if flags[global_index] != 0u32 {
+            let position = positions[global_index];
+            output[(position - 1u32) as usize] = values[global_index];
+        }
+        global.store(global_index + stride);
     }
 }
 
@@ -7939,11 +8526,16 @@ pub(crate) fn compact_scatter_device_expr_kernel<T: CubePrimitive, Expr: DeviceG
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
-    let global = (CUBE_POS as usize) * cube_dim + unit;
-    if global < flags.len() && flags[global] != 0u32 {
-        let position = positions[global];
-        output[output_offset[0] as usize + (position - 1u32) as usize] =
-            Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global);
+    let global = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let stride = (CUBE_COUNT as usize) * cube_dim;
+    while global.read() < flags.len() {
+        let global_index = global.read();
+        if flags[global_index] != 0u32 {
+            let position = positions[global_index];
+            output[output_offset[0] as usize + (position - 1u32) as usize] =
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, global_index);
+        }
+        global.store(global_index + stride);
     }
 }
 
@@ -8063,6 +8655,7 @@ macro_rules! define_selected_logical7_to_tuple_kernel {
         $name:ident,
         ($( $out_ty:ident : $field:tt => $output:ident ),+)
     ) => {
+        #[allow(dead_code)]
         #[cube(launch_unchecked, explicit_define)]
         pub(crate) fn $name<
             Leaf0: CubePrimitive,
@@ -8143,6 +8736,7 @@ macro_rules! define_gather_logical7_to_tuple_kernel {
         $name:ident,
         ($( $out_ty:ident : $field:tt => $output:ident ),+)
     ) => {
+        #[allow(dead_code)]
         #[cube(launch_unchecked, explicit_define)]
         pub(crate) fn $name<
             Leaf0: CubePrimitive,
@@ -9411,11 +10005,13 @@ pub(crate) fn set_membership_logical7_flags_kernel<
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
-    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let global = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let stride = (CUBE_COUNT as usize) * cube_dim;
     let candidate_len = metadata[0] as usize;
     let sorted_len = metadata[1] as usize;
     let keep_members = metadata[2] != 0u32;
-    if global < candidate_len {
+    while global.read() < candidate_len {
+        let global_index = global.read();
         let candidate_first = RuntimeCell::<usize>::new(0usize);
         let candidate_count = RuntimeCell::<usize>::new(candidate_len);
         while candidate_count.read() > 0usize {
@@ -9442,7 +10038,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot5,
                     candidate_slot6,
                     candidate_slot_offsets,
-                    global,
+                    global_index,
                 ),
             ) {
                 candidate_first.store(mid + 1usize);
@@ -9478,7 +10074,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot5,
                     candidate_slot6,
                     candidate_slot_offsets,
-                    global,
+                    global_index,
                 ),
             ) {
                 sorted_first.store(mid + 1usize);
@@ -9503,7 +10099,7 @@ pub(crate) fn set_membership_logical7_flags_kernel<
                     candidate_slot5,
                     candidate_slot6,
                     candidate_slot_offsets,
-                    global,
+                    global_index,
                 ),
                 SortedExpr::eval7(
                     sorted_slot0,
@@ -9524,14 +10120,11 @@ pub(crate) fn set_membership_logical7_flags_kernel<
             }
         }
 
-        let rank = global - candidate_first.read();
+        let rank = global_index - candidate_first.read();
         let other_count = sorted_after.read() - sorted_first.read();
         let keep = (keep_members && rank < other_count) || (!keep_members && rank >= other_count);
-        flags[global] = if keep {
-            1u32
-        } else {
-            0u32
-        };
+        flags[global_index] = if keep { 1u32 } else { 0u32 };
+        global.store(global_index + stride);
     }
 }
 

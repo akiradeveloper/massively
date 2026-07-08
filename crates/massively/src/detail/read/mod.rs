@@ -52,8 +52,8 @@ pub(crate) use kernel::{
     ColumnRead, ConstantRead, CountingRead, GatherRead, ScanByKeyValueItem, SliceRead,
     TransformRead, ZipRead1, ZipRead2, ZipRead3, ZipRead4, ZipRead5, ZipRead6, ZipRead7,
     copy_selected_logical7_read, gather_logical7_read, gather_where_logical7_read,
-    logical7_predicate_flags_read, merge_by_key_logical7_indices_read,
-    set_membership_logical7_flags_read, sort_logical7_indices_read, unique_logical7_flags_read,
+    logical7_predicate_flags_read, materialize_logical7_read, set_membership_logical7_flags_read,
+    unique_logical7_flags_read,
 };
 pub(crate) use kernel::{Env0, KernelReadAtEnv, KernelStencilSelection};
 pub use kernel::{KernelRead, KernelReadBoundMany};

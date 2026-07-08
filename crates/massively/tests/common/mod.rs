@@ -14,7 +14,7 @@ pub(crate) use massively::{
 };
 
 pub(crate) fn exec() -> Executor<WgpuRuntime> {
-    Executor::<WgpuRuntime>::new(WgpuDevice::Cpu)
+    Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice)
 }
 
 pub(crate) struct Sum;

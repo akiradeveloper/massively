@@ -22,16 +22,19 @@ pub(crate) fn merge_path_device_expr_kernel<
     rhs_slot_offsets: &[u32],
     rhs_len: &[u32],
 ) {
-    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let out =
+        RuntimeCell::<usize>::new((CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize));
+    let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
     let lhs_logical_len = lhs_len[0] as usize;
     let rhs_logical_len = rhs_len[0] as usize;
-    if out < output.len() {
+    while out.read() < output.len() {
+        let out_index = out.read();
         let low_init = RuntimeCell::<usize>::new(0usize);
-        if out > rhs_logical_len {
-            low_init.store(out - rhs_logical_len);
+        if out_index > rhs_logical_len {
+            low_init.store(out_index - rhs_logical_len);
         }
 
-        let high_init = RuntimeCell::<usize>::new(out);
+        let high_init = RuntimeCell::<usize>::new(out_index);
         if high_init.read() > lhs_logical_len {
             high_init.store(lhs_logical_len);
         }
@@ -40,7 +43,7 @@ pub(crate) fn merge_path_device_expr_kernel<
         let high = RuntimeCell::<usize>::new(high_init.read());
         while low.read() < high.read() {
             let mid = (low.read() + high.read()) / 2usize;
-            let rhs_index = out - mid;
+            let rhs_index = out_index - mid;
             if mid < lhs_logical_len
                 && rhs_index > 0usize
                 && !Less::apply(
@@ -69,7 +72,7 @@ pub(crate) fn merge_path_device_expr_kernel<
         }
 
         let lhs_index = low.read();
-        let rhs_index = out - lhs_index;
+        let rhs_index = out_index - lhs_index;
         if lhs_index < lhs_logical_len {
             let lhs_value = LeftExpr::eval(
                 lhs_slot0,
@@ -80,7 +83,7 @@ pub(crate) fn merge_path_device_expr_kernel<
                 lhs_index,
             );
             if rhs_index >= rhs_logical_len {
-                output[out] = lhs_value;
+                output[out_index] = lhs_value;
             } else {
                 let rhs_value = RightExpr::eval(
                     rhs_slot0,
@@ -91,13 +94,13 @@ pub(crate) fn merge_path_device_expr_kernel<
                     rhs_index,
                 );
                 if !Less::apply(rhs_value, lhs_value) {
-                    output[out] = lhs_value;
+                    output[out_index] = lhs_value;
                 } else {
-                    output[out] = rhs_value;
+                    output[out_index] = rhs_value;
                 }
             }
         } else {
-            output[out] = RightExpr::eval(
+            output[out_index] = RightExpr::eval(
                 rhs_slot0,
                 rhs_slot1,
                 rhs_slot2,
@@ -106,6 +109,7 @@ pub(crate) fn merge_path_device_expr_kernel<
                 rhs_index,
             );
         }
+        out.store(out_index + stride);
     }
 }
 
@@ -131,16 +135,19 @@ pub(crate) fn merge_path_control_device_expr_kernel<
     source_sides: &mut [u32],
     source_indices: &mut [u32],
 ) {
-    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let out =
+        RuntimeCell::<usize>::new((CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize));
+    let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
     let lhs_logical_len = lhs_len[0] as usize;
     let rhs_logical_len = rhs_len[0] as usize;
-    if out < source_sides.len() {
+    while out.read() < source_sides.len() {
+        let out_index = out.read();
         let low_init = RuntimeCell::<usize>::new(0usize);
-        if out > rhs_logical_len {
-            low_init.store(out - rhs_logical_len);
+        if out_index > rhs_logical_len {
+            low_init.store(out_index - rhs_logical_len);
         }
 
-        let high_init = RuntimeCell::<usize>::new(out);
+        let high_init = RuntimeCell::<usize>::new(out_index);
         if high_init.read() > lhs_logical_len {
             high_init.store(lhs_logical_len);
         }
@@ -149,7 +156,7 @@ pub(crate) fn merge_path_control_device_expr_kernel<
         let high = RuntimeCell::<usize>::new(high_init.read());
         while low.read() < high.read() {
             let mid = (low.read() + high.read()) / 2usize;
-            let rhs_index = out - mid;
+            let rhs_index = out_index - mid;
             if mid < lhs_logical_len
                 && rhs_index > 0usize
                 && !Less::apply(
@@ -178,11 +185,11 @@ pub(crate) fn merge_path_control_device_expr_kernel<
         }
 
         let lhs_index = low.read();
-        let rhs_index = out - lhs_index;
+        let rhs_index = out_index - lhs_index;
         if lhs_index < lhs_logical_len {
             if rhs_index >= rhs_logical_len {
-                source_sides[out] = 0u32;
-                source_indices[out] = lhs_index as u32;
+                source_sides[out_index] = 0u32;
+                source_indices[out_index] = lhs_index as u32;
             } else {
                 let lhs_value = LeftExpr::eval(
                     lhs_slot0,
@@ -201,17 +208,18 @@ pub(crate) fn merge_path_control_device_expr_kernel<
                     rhs_index,
                 );
                 if !Less::apply(rhs_value, lhs_value) {
-                    source_sides[out] = 0u32;
-                    source_indices[out] = lhs_index as u32;
+                    source_sides[out_index] = 0u32;
+                    source_indices[out_index] = lhs_index as u32;
                 } else {
-                    source_sides[out] = 1u32;
-                    source_indices[out] = rhs_index as u32;
+                    source_sides[out_index] = 1u32;
+                    source_indices[out_index] = rhs_index as u32;
                 }
             }
         } else {
-            source_sides[out] = 1u32;
-            source_indices[out] = rhs_index as u32;
+            source_sides[out_index] = 1u32;
+            source_indices[out_index] = rhs_index as u32;
         }
+        out.store(out_index + stride);
     }
 }
 
@@ -238,16 +246,19 @@ pub(crate) fn merge_by_key_control_device_expr_kernel<
     source_sides: &mut [u32],
     source_indices: &mut [u32],
 ) {
-    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let out =
+        RuntimeCell::<usize>::new((CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize));
+    let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
     let lhs_logical_len = lhs_len[0] as usize;
     let rhs_logical_len = rhs_len[0] as usize;
-    if out < out_keys.len() {
+    while out.read() < out_keys.len() {
+        let out_index = out.read();
         let low_init = RuntimeCell::<usize>::new(0usize);
-        if out > rhs_logical_len {
-            low_init.store(out - rhs_logical_len);
+        if out_index > rhs_logical_len {
+            low_init.store(out_index - rhs_logical_len);
         }
 
-        let high_init = RuntimeCell::<usize>::new(out);
+        let high_init = RuntimeCell::<usize>::new(out_index);
         if high_init.read() > lhs_logical_len {
             high_init.store(lhs_logical_len);
         }
@@ -256,7 +267,7 @@ pub(crate) fn merge_by_key_control_device_expr_kernel<
         let high = RuntimeCell::<usize>::new(high_init.read());
         while low.read() < high.read() {
             let mid = (low.read() + high.read()) / 2usize;
-            let rhs_index = out - mid;
+            let rhs_index = out_index - mid;
             if mid < lhs_logical_len
                 && rhs_index > 0usize
                 && !Less::apply(
@@ -285,7 +296,7 @@ pub(crate) fn merge_by_key_control_device_expr_kernel<
         }
 
         let lhs_index = low.read();
-        let rhs_index = out - lhs_index;
+        let rhs_index = out_index - lhs_index;
         if lhs_index < lhs_logical_len {
             let lhs_key = LeftExpr::eval(
                 lhs_slot0,
@@ -296,9 +307,9 @@ pub(crate) fn merge_by_key_control_device_expr_kernel<
                 lhs_index,
             );
             if rhs_index >= rhs_logical_len {
-                out_keys[out] = lhs_key;
-                source_sides[out] = 0u32;
-                source_indices[out] = lhs_index as u32;
+                out_keys[out_index] = lhs_key;
+                source_sides[out_index] = 0u32;
+                source_indices[out_index] = lhs_index as u32;
             } else {
                 let rhs_key = RightExpr::eval(
                     rhs_slot0,
@@ -309,17 +320,17 @@ pub(crate) fn merge_by_key_control_device_expr_kernel<
                     rhs_index,
                 );
                 if !Less::apply(rhs_key, lhs_key) {
-                    out_keys[out] = lhs_key;
-                    source_sides[out] = 0u32;
-                    source_indices[out] = lhs_index as u32;
+                    out_keys[out_index] = lhs_key;
+                    source_sides[out_index] = 0u32;
+                    source_indices[out_index] = lhs_index as u32;
                 } else {
-                    out_keys[out] = rhs_key;
-                    source_sides[out] = 1u32;
-                    source_indices[out] = rhs_index as u32;
+                    out_keys[out_index] = rhs_key;
+                    source_sides[out_index] = 1u32;
+                    source_indices[out_index] = rhs_index as u32;
                 }
             }
         } else {
-            out_keys[out] = RightExpr::eval(
+            out_keys[out_index] = RightExpr::eval(
                 rhs_slot0,
                 rhs_slot1,
                 rhs_slot2,
@@ -327,9 +338,10 @@ pub(crate) fn merge_by_key_control_device_expr_kernel<
                 rhs_slot_offsets,
                 rhs_index,
             );
-            source_sides[out] = 1u32;
-            source_indices[out] = rhs_index as u32;
+            source_sides[out_index] = 1u32;
+            source_indices[out_index] = rhs_index as u32;
         }
+        out.store(out_index + stride);
     }
 }
 
@@ -370,16 +382,19 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
     source_sides: &mut [u32],
     source_indices: &mut [u32],
 ) {
-    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let out =
+        RuntimeCell::<usize>::new((CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize));
+    let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
     let lhs_logical_len = lhs_len[0] as usize;
     let rhs_logical_len = rhs_len[0] as usize;
-    if out < out_a.len() {
+    while out.read() < out_a.len() {
+        let out_index = out.read();
         let low_init = RuntimeCell::<usize>::new(0usize);
-        if out > rhs_logical_len {
-            low_init.store(out - rhs_logical_len);
+        if out_index > rhs_logical_len {
+            low_init.store(out_index - rhs_logical_len);
         }
 
-        let high_init = RuntimeCell::<usize>::new(out);
+        let high_init = RuntimeCell::<usize>::new(out_index);
         if high_init.read() > lhs_logical_len {
             high_init.store(lhs_logical_len);
         }
@@ -388,7 +403,7 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
         let high = RuntimeCell::<usize>::new(high_init.read());
         while low.read() < high.read() {
             let mid = (low.read() + high.read()) / 2usize;
-            let rhs_index = out - mid;
+            let rhs_index = out_index - mid;
             if mid < lhs_logical_len && rhs_index > 0usize {
                 let right_a = RightAExpr::eval(
                     rhs_a_slot0,
@@ -433,7 +448,7 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
         }
 
         let lhs_index = low.read();
-        let rhs_index = out - lhs_index;
+        let rhs_index = out_index - lhs_index;
         if lhs_index < lhs_logical_len {
             let left_a = LeftAExpr::eval(
                 lhs_a_slot0,
@@ -452,10 +467,10 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
                 lhs_index,
             );
             if rhs_index >= rhs_logical_len {
-                out_a[out] = left_a;
-                out_b[out] = left_b;
-                source_sides[out] = 0u32;
-                source_indices[out] = lhs_index as u32;
+                out_a[out_index] = left_a;
+                out_b[out_index] = left_b;
+                source_sides[out_index] = 0u32;
+                source_indices[out_index] = lhs_index as u32;
             } else {
                 let right_a = RightAExpr::eval(
                     rhs_a_slot0,
@@ -474,19 +489,19 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
                     rhs_index,
                 );
                 if !Less::apply((right_a, right_b), (left_a, left_b)) {
-                    out_a[out] = left_a;
-                    out_b[out] = left_b;
-                    source_sides[out] = 0u32;
-                    source_indices[out] = lhs_index as u32;
+                    out_a[out_index] = left_a;
+                    out_b[out_index] = left_b;
+                    source_sides[out_index] = 0u32;
+                    source_indices[out_index] = lhs_index as u32;
                 } else {
-                    out_a[out] = right_a;
-                    out_b[out] = right_b;
-                    source_sides[out] = 1u32;
-                    source_indices[out] = rhs_index as u32;
+                    out_a[out_index] = right_a;
+                    out_b[out_index] = right_b;
+                    source_sides[out_index] = 1u32;
+                    source_indices[out_index] = rhs_index as u32;
                 }
             }
         } else {
-            out_a[out] = RightAExpr::eval(
+            out_a[out_index] = RightAExpr::eval(
                 rhs_a_slot0,
                 rhs_a_slot1,
                 rhs_a_slot2,
@@ -494,7 +509,7 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
                 rhs_a_slot_offsets,
                 rhs_index,
             );
-            out_b[out] = RightBExpr::eval(
+            out_b[out_index] = RightBExpr::eval(
                 rhs_b_slot0,
                 rhs_b_slot1,
                 rhs_b_slot2,
@@ -502,9 +517,10 @@ pub(crate) fn merge_tuple2_by_key_control_device_expr_kernel<
                 rhs_b_slot_offsets,
                 rhs_index,
             );
-            source_sides[out] = 1u32;
-            source_indices[out] = rhs_index as u32;
+            source_sides[out_index] = 1u32;
+            source_indices[out_index] = rhs_index as u32;
         }
+        out.store(out_index + stride);
     }
 }
 
@@ -559,16 +575,19 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
     source_sides: &mut [u32],
     source_indices: &mut [u32],
 ) {
-    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
+    let out =
+        RuntimeCell::<usize>::new((CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize));
+    let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
     let lhs_logical_len = lhs_len[0] as usize;
     let rhs_logical_len = rhs_len[0] as usize;
-    if out < out_a.len() {
+    while out.read() < out_a.len() {
+        let out_index = out.read();
         let low_init = RuntimeCell::<usize>::new(0usize);
-        if out > rhs_logical_len {
-            low_init.store(out - rhs_logical_len);
+        if out_index > rhs_logical_len {
+            low_init.store(out_index - rhs_logical_len);
         }
 
-        let high_init = RuntimeCell::<usize>::new(out);
+        let high_init = RuntimeCell::<usize>::new(out_index);
         if high_init.read() > lhs_logical_len {
             high_init.store(lhs_logical_len);
         }
@@ -577,7 +596,7 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
         let high = RuntimeCell::<usize>::new(high_init.read());
         while low.read() < high.read() {
             let mid = (low.read() + high.read()) / 2usize;
-            let rhs_index = out - mid;
+            let rhs_index = out_index - mid;
             if mid < lhs_logical_len && rhs_index > 0usize {
                 let right_a = RightAExpr::eval(
                     rhs_a_slot0,
@@ -638,7 +657,7 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
         }
 
         let lhs_index = low.read();
-        let rhs_index = out - lhs_index;
+        let rhs_index = out_index - lhs_index;
         if lhs_index < lhs_logical_len {
             let left_a = LeftAExpr::eval(
                 lhs_a_slot0,
@@ -665,11 +684,11 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
                 lhs_index,
             );
             if rhs_index >= rhs_logical_len {
-                out_a[out] = left_a;
-                out_b[out] = left_b;
-                out_c[out] = left_c;
-                source_sides[out] = 0u32;
-                source_indices[out] = lhs_index as u32;
+                out_a[out_index] = left_a;
+                out_b[out_index] = left_b;
+                out_c[out_index] = left_c;
+                source_sides[out_index] = 0u32;
+                source_indices[out_index] = lhs_index as u32;
             } else {
                 let right_a = RightAExpr::eval(
                     rhs_a_slot0,
@@ -696,21 +715,21 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
                     rhs_index,
                 );
                 if !Less::apply((right_a, right_b, right_c), (left_a, left_b, left_c)) {
-                    out_a[out] = left_a;
-                    out_b[out] = left_b;
-                    out_c[out] = left_c;
-                    source_sides[out] = 0u32;
-                    source_indices[out] = lhs_index as u32;
+                    out_a[out_index] = left_a;
+                    out_b[out_index] = left_b;
+                    out_c[out_index] = left_c;
+                    source_sides[out_index] = 0u32;
+                    source_indices[out_index] = lhs_index as u32;
                 } else {
-                    out_a[out] = right_a;
-                    out_b[out] = right_b;
-                    out_c[out] = right_c;
-                    source_sides[out] = 1u32;
-                    source_indices[out] = rhs_index as u32;
+                    out_a[out_index] = right_a;
+                    out_b[out_index] = right_b;
+                    out_c[out_index] = right_c;
+                    source_sides[out_index] = 1u32;
+                    source_indices[out_index] = rhs_index as u32;
                 }
             }
         } else {
-            out_a[out] = RightAExpr::eval(
+            out_a[out_index] = RightAExpr::eval(
                 rhs_a_slot0,
                 rhs_a_slot1,
                 rhs_a_slot2,
@@ -718,7 +737,7 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
                 rhs_a_slot_offsets,
                 rhs_index,
             );
-            out_b[out] = RightBExpr::eval(
+            out_b[out_index] = RightBExpr::eval(
                 rhs_b_slot0,
                 rhs_b_slot1,
                 rhs_b_slot2,
@@ -726,7 +745,7 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
                 rhs_b_slot_offsets,
                 rhs_index,
             );
-            out_c[out] = RightCExpr::eval(
+            out_c[out_index] = RightCExpr::eval(
                 rhs_c_slot0,
                 rhs_c_slot1,
                 rhs_c_slot2,
@@ -734,9 +753,10 @@ pub(crate) fn merge_tuple3_by_key_control_device_expr_kernel<
                 rhs_c_slot_offsets,
                 rhs_index,
             );
-            source_sides[out] = 1u32;
-            source_indices[out] = rhs_index as u32;
+            source_sides[out_index] = 1u32;
+            source_indices[out_index] = rhs_index as u32;
         }
+        out.store(out_index + stride);
     }
 }
 
@@ -762,11 +782,14 @@ pub(crate) fn merge_by_key_values_from_control_device_expr_kernel<
     output_offset: &[u32],
     out_values: &mut [T],
 ) {
-    let out = (CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize);
-    if out < len[0] as usize {
-        let index = source_indices[out] as usize;
-        if source_sides[out] == 0u32 {
-            out_values[output_offset[0] as usize + out] = LeftExpr::eval(
+    let out =
+        RuntimeCell::<usize>::new((CUBE_POS as usize) * (CUBE_DIM as usize) + (UNIT_POS as usize));
+    let stride = (CUBE_COUNT as usize) * (CUBE_DIM as usize);
+    while out.read() < len[0] as usize {
+        let out_index = out.read();
+        let index = source_indices[out_index] as usize;
+        if source_sides[out_index] == 0u32 {
+            out_values[output_offset[0] as usize + out_index] = LeftExpr::eval(
                 lhs_slot0,
                 lhs_slot1,
                 lhs_slot2,
@@ -775,7 +798,7 @@ pub(crate) fn merge_by_key_values_from_control_device_expr_kernel<
                 index,
             );
         } else {
-            out_values[output_offset[0] as usize + out] = RightExpr::eval(
+            out_values[output_offset[0] as usize + out_index] = RightExpr::eval(
                 rhs_slot0,
                 rhs_slot1,
                 rhs_slot2,
@@ -784,6 +807,7 @@ pub(crate) fn merge_by_key_values_from_control_device_expr_kernel<
                 index,
             );
         }
+        out.store(out_index + stride);
     }
 }
 

@@ -522,6 +522,7 @@ macro_rules! adjacent_logical7_auto_arity {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! inclusive_scan_logical7_into_output {
     (
         $kernel:ident,
@@ -605,6 +606,7 @@ macro_rules! inclusive_scan_logical7_into_output {
     }};
 }
 
+#[allow(unused_macros)]
 macro_rules! exclusive_scan_logical7_into_output {
     (
         $kernel:ident,
@@ -696,6 +698,7 @@ macro_rules! exclusive_scan_logical7_into_output {
     }};
 }
 
+#[allow(unused_macros)]
 macro_rules! inclusive_scan_logical7_auto_arity {
     ($policy:expr, $input:expr, $output:expr; A: $a:ident) => {
         inclusive_scan_logical7_into_output!(inclusive_scan_logical7_to_tuple1_kernel, $policy, $input, $output; A: $a => 0)
@@ -720,6 +723,7 @@ macro_rules! inclusive_scan_logical7_auto_arity {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! exclusive_scan_logical7_auto_arity {
     ($policy:expr, $input:expr, $init:expr, $output:expr; A: $a:ident) => {
         exclusive_scan_logical7_into_output!(exclusive_scan_logical7_to_tuple1_kernel, $policy, $input, $init, $output; A: $a: init_a => 0)
@@ -866,6 +870,7 @@ macro_rules! reduce_by_key_logical7_auto_arity {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! merge_logical7_into_output {
     (
         $kernel:ident,
@@ -929,9 +934,7 @@ macro_rules! merge_logical7_into_output {
             let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
             let len = left_len + right_len;
             let block_size = 256_u32;
-            let block_count = len.div_ceil(block_size as usize);
-            let block_count_u32 =
-                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            let launch = crate::detail::launch::launch_1d(client, len, block_size)?;
             unsafe {
                 crate::kernels::$kernel::launch_unchecked::<
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
@@ -955,7 +958,7 @@ macro_rules! merge_logical7_into_output {
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    launch.cube_count(),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(left_slot0.0.clone(), left_slot0.1),
                     BufferArg::from_raw_parts(left_slot1.0.clone(), left_slot1.1),
@@ -984,6 +987,7 @@ macro_rules! merge_logical7_into_output {
     }};
 }
 
+#[allow(unused_macros)]
 macro_rules! merge_logical7_auto_arity {
     ($policy:expr, $left:expr, $right:expr, $output:expr; A: $a:ident) => {
         merge_logical7_into_output!(merge_logical7_to_tuple1_kernel, $policy, $left, $right, $output; A: $a => 0)
@@ -1075,9 +1079,7 @@ macro_rules! set_union_logical7_into_output {
             let metadata_handle = client.create_from_slice(u32::as_bytes(&metadata));
             let len = left_len + right_len;
             let block_size = 256_u32;
-            let block_count = len.div_ceil(block_size as usize);
-            let block_count_u32 =
-                u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+            let launch = crate::detail::launch::launch_1d(client, len, block_size)?;
             unsafe {
                 crate::kernels::$kernel::launch_unchecked::<
                     <Left as crate::detail::read::KernelReadBoundMany<R>>::Leaf0,
@@ -1101,7 +1103,7 @@ macro_rules! set_union_logical7_into_output {
                     R,
                 >(
                     client,
-                    CubeCount::Static(block_count_u32, 1, 1),
+                    launch.cube_count(),
                     CubeDim::new_1d(block_size),
                     BufferArg::from_raw_parts(right_only.flag.clone(), right_only.len),
                     BufferArg::from_raw_parts(right_only.position.clone(), right_only.len),
@@ -3358,6 +3360,85 @@ macro_rules! impl_mitem_tuple {
                 mindex_from_usize(matching_count)
             }
 
+            fn sort_from_read<Read, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _less: Less,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let input = crate::detail::read::materialize_logical7_read(input, policy)?;
+                let input = wide_view_from_inner_tuple!(input; $( $var ),+);
+                let input = zip_view_from_tuple!(input; $( $var ),+);
+                let inner = crate::detail::sort(policy, input, tuple_set_less!(Less; $( $var ),+))?;
+                output.write_from_inner(policy, inner)
+            }
+
+            fn sort_by_key_keys_from_read<Read, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                keys: Read,
+                _less: Less,
+                output: Output,
+            ) -> Result<crate::detail::DeviceVec<R, MIndex>, Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let keys = crate::detail::read::materialize_logical7_read(keys, policy)?;
+                let keys = wide_view_from_inner_tuple!(keys; $( $var ),+);
+                let (inner, indices) =
+                    <Self as MAlloc<R>>::sort_by_key_control_from_view(policy, keys, _less)?;
+                output.write_from_inner(policy, inner)?;
+                Ok(indices)
+            }
+
+            fn merge_by_key_keys_from_read<Left, Right, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                _less: Less,
+                output: Output,
+            ) -> Result<crate::detail::control::MergeByKeyControl, Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let left = crate::detail::read::materialize_logical7_read(left, policy)?;
+                let right = crate::detail::read::materialize_logical7_read(right, policy)?;
+                let left = wide_view_from_inner_tuple!(left; $( $var ),+);
+                let right = wide_view_from_inner_tuple!(right; $( $var ),+);
+                let (inner, control) =
+                    <Self as MAlloc<R>>::merge_by_key_control_from_views(policy, left, right, _less)?;
+                output.write_from_inner(policy, inner)?;
+                Ok(control)
+            }
+
+            fn merge_by_key_values_from_read<Left, Right, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                control: &crate::detail::control::MergeByKeyControl,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let left = crate::detail::read::materialize_logical7_read(left, policy)?;
+                let right = crate::detail::read::materialize_logical7_read(right, policy)?;
+                let left = wide_view_from_inner_tuple!(left; $( $var ),+);
+                let right = wide_view_from_inner_tuple!(right; $( $var ),+);
+                <Self as MAlloc<R>>::merge_by_key_values_from_views(policy, left, right, control, output)
+            }
+
             fn adjacent_difference_from_read<Read, Op, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 input: Read,
@@ -3386,10 +3467,11 @@ macro_rules! impl_mitem_tuple {
                 Op: op::ReductionOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                inclusive_scan_logical7_auto_arity!(
-                    policy, input, output;
-                    $( $ty: $var ),+
-                )
+                let input = crate::detail::read::materialize_logical7_read(input, policy)?;
+                let input = scan_input_from_tuple!(input; $( $var ),+);
+                let inner =
+                    crate::detail::inclusive_scan(policy, input, KernelOp::<R, Op>::new())?;
+                output.write_from_inner(policy, inner)
             }
 
             fn exclusive_scan_from_read<Read, Op, Output>(
@@ -3404,10 +3486,11 @@ macro_rules! impl_mitem_tuple {
                 Op: op::ReductionOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                exclusive_scan_logical7_auto_arity!(
-                    policy, input, init, output;
-                    $( $ty: $var ),+
-                )
+                let input = crate::detail::read::materialize_logical7_read(input, policy)?;
+                let input = scan_input_from_tuple!(input; $( $var ),+);
+                let inner =
+                    crate::detail::exclusive_scan(policy, input, init, KernelOp::<R, Op>::new())?;
+                output.write_from_inner(policy, inner)
             }
 
             fn merge_from_read<Left, Right, Less, Output>(
@@ -3423,10 +3506,12 @@ macro_rules! impl_mitem_tuple {
                 Less: op::BinaryPredicateOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                merge_logical7_auto_arity!(
-                    policy, left, right, output;
-                    $( $ty: $var ),+
-                )
+                let left_inner = crate::detail::read::materialize_logical7_read(left, policy)?;
+                let right_inner = crate::detail::read::materialize_logical7_read(right, policy)?;
+                let left = zip_view_from_tuple!(left_inner; $( $var ),+);
+                let right = zip_view_from_tuple!(right_inner; $( $var ),+);
+                let inner = crate::detail::merge(policy, left, right, tuple_set_less!(Less; $( $var ),+))?;
+                output.write_from_inner(policy, inner)
             }
 
             fn set_union_from_read<Left, Right, Less, Output>(
@@ -3443,10 +3528,15 @@ macro_rules! impl_mitem_tuple {
                 Less: op::BinaryPredicateOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                set_union_logical7_auto_arity!(
-                    policy, left, right, right_only, output;
-                    $( $ty: $var ),+
-                )
+                let _ = right_only;
+                let left_inner = crate::detail::read::materialize_logical7_read(left, policy)?;
+                let right_inner = crate::detail::read::materialize_logical7_read(right, policy)?;
+                let left = zip_view_from_tuple!(left_inner; $( $var ),+);
+                let right = zip_view_from_tuple!(right_inner; $( $var ),+);
+                let inner = crate::detail::set_union(policy, left, right, tuple_set_less!(Less; $( $var ),+))?;
+                let len = mindex_from_usize(inner.0.len())?;
+                output.write_prefix_from_inner(policy, inner)?;
+                Ok(len)
             }
         }
     };
@@ -4536,6 +4626,41 @@ macro_rules! impl_wide_mitem_tuple {
                 mindex_from_usize(matching_count)
             }
 
+            fn sort_from_read<Read, Less, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                input: Read,
+                _less: Less,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Read: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Less: op::BinaryPredicateOp<R, Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let input = crate::detail::read::materialize_logical7_read(input, policy)?;
+                let inner = wide_sort_from_tuple!(policy, input; $( $var ),+)?;
+                output.write_from_inner(policy, inner)
+            }
+
+            fn merge_by_key_values_from_read<Left, Right, Output>(
+                policy: &crate::detail::CubePolicy<R>,
+                left: Left,
+                right: Right,
+                control: &crate::detail::control::MergeByKeyControl,
+                output: Output,
+            ) -> Result<(), Error>
+            where
+                Left: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Right: crate::detail::read::KernelReadBoundMany<R, Item = Self>,
+                Output: MIterMut<R, Item = Self>,
+            {
+                let left = crate::detail::read::materialize_logical7_read(left, policy)?;
+                let right = crate::detail::read::materialize_logical7_read(right, policy)?;
+                let left = wide_view_from_inner_tuple!(left; $( $var ),+);
+                let right = wide_view_from_inner_tuple!(right; $( $var ),+);
+                <Self as MAlloc<R>>::merge_by_key_values_from_views(policy, left, right, control, output)
+            }
+
             fn adjacent_difference_from_read<Read, Op, Output>(
                 policy: &crate::detail::CubePolicy<R>,
                 input: Read,
@@ -4564,10 +4689,10 @@ macro_rules! impl_wide_mitem_tuple {
                 Op: op::ReductionOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                inclusive_scan_logical7_auto_arity!(
-                    policy, input, output;
-                    $( $ty: $var ),+
-                )
+                let input = crate::detail::read::materialize_logical7_read(input, policy)?;
+                let input = wide_view_from_inner_tuple!(input; $( $var ),+);
+                let inner = wide_inclusive_scan_from_tuple!(policy, input; $( $var ),+)?;
+                output.write_from_inner(policy, inner)
             }
 
             fn exclusive_scan_from_read<Read, Op, Output>(
@@ -4582,10 +4707,10 @@ macro_rules! impl_wide_mitem_tuple {
                 Op: op::ReductionOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                exclusive_scan_logical7_auto_arity!(
-                    policy, input, init, output;
-                    $( $ty: $var ),+
-                )
+                let input = crate::detail::read::materialize_logical7_read(input, policy)?;
+                let input = wide_view_from_inner_tuple!(input; $( $var ),+);
+                let inner = wide_exclusive_scan_from_tuple!(policy, input, init; $( $var ),+)?;
+                output.write_from_inner(policy, inner)
             }
 
             fn merge_from_read<Left, Right, Less, Output>(
@@ -4601,10 +4726,10 @@ macro_rules! impl_wide_mitem_tuple {
                 Less: op::BinaryPredicateOp<R, Self>,
                 Output: MIterMut<R, Item = Self>,
             {
-                merge_logical7_auto_arity!(
-                    policy, left, right, output;
-                    $( $ty: $var ),+
-                )
+                let left_inner = crate::detail::read::materialize_logical7_read(left, policy)?;
+                let right_inner = crate::detail::read::materialize_logical7_read(right, policy)?;
+                let inner = wide_merge_from_tuple!(policy, left_inner, right_inner; $( $var ),+)?;
+                output.write_from_inner(policy, inner)
             }
 
             fn set_union_from_read<Left, Right, Less, Output>(

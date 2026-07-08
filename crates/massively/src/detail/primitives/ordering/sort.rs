@@ -1,6 +1,6 @@
 use crate::{
     detail::op::kernel::BinaryPredicateOp,
-    device::{DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0},
+    device::{DeviceColumnView, DeviceVec, KernelColumn, KernelColumnAt, ReadOnlyKernelColumn, S0},
     error::Error,
     expr::DeviceGpuExpr,
     index::MIndex,
@@ -12,6 +12,8 @@ use crate::{
 use cubecl::prelude::*;
 
 use super::BLOCK_ORDERING_SIZE;
+
+const LARGE_SORT_RUN_LEN: usize = 78_125;
 
 pub(crate) fn sort_input_with_policy<Source, Less>(
     policy: &CubePolicy<Source::Runtime>,
@@ -29,6 +31,14 @@ where
     let client = policy.client();
     if len == 0 {
         return Ok(policy.empty_device_vec());
+    }
+    if len > LARGE_SORT_RUN_LEN {
+        let materialized =
+            crate::detail::apply::MaterializePayloadApply::collect_expr(policy, input)?;
+        return sort_materialized_in_runs::<Source::Runtime, Source::Item, Less>(
+            policy,
+            &materialized,
+        );
     }
     let launch = crate::detail::launch::launch_1d(client, len, BLOCK_ORDERING_SIZE)?;
 
@@ -91,6 +101,72 @@ where
     }
 
     Ok(DeviceVec::from_handle(policy.id(), input_handle, len))
+}
+
+fn sort_materialized_in_runs<R, T, Less>(
+    policy: &CubePolicy<R>,
+    input: &DeviceVec<R, T>,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+    Less: BinaryPredicateOp<T>,
+{
+    let len = input.len();
+    if len <= LARGE_SORT_RUN_LEN {
+        let view = DeviceColumnView::from_column(input);
+        return sort_input_with_policy(policy, &view, GpuOp::<Less>::new());
+    }
+
+    let mut runs = Vec::new();
+    let mut start = 0usize;
+    while start < len {
+        let run_len = (len - start).min(LARGE_SORT_RUN_LEN);
+        let view = DeviceColumnView::from_slice(input, start, run_len);
+        runs.push(sort_input_with_policy(policy, &view, GpuOp::<Less>::new())?);
+        start += run_len;
+    }
+    sync_client(policy)?;
+
+    merge_sorted_runs::<R, T, Less>(policy, runs)
+}
+
+fn merge_sorted_runs<R, T, Less>(
+    policy: &CubePolicy<R>,
+    mut runs: Vec<DeviceVec<R, T>>,
+) -> Result<DeviceVec<R, T>, Error>
+where
+    R: Runtime,
+    T: CubePrimitive + CubeElement,
+    Less: BinaryPredicateOp<T>,
+{
+    while runs.len() > 1 {
+        let mut next = Vec::with_capacity(runs.len().div_ceil(2));
+        let mut iter = runs.into_iter();
+        while let Some(left) = iter.next() {
+            let Some(right) = iter.next() else {
+                next.push(left);
+                break;
+            };
+            let left = DeviceColumnView::from_column(&left);
+            let right = DeviceColumnView::from_column(&right);
+            next.push(crate::detail::apply::MergeExprApply::apply_expr::<
+                DeviceColumnView<R, T>,
+                DeviceColumnView<R, T>,
+                Less,
+            >(policy, &left, &right)?);
+        }
+        sync_client(policy)?;
+        runs = next;
+    }
+
+    Ok(runs.pop().unwrap_or_else(|| policy.empty_device_vec()))
+}
+
+fn sync_client<R: Runtime>(policy: &CubePolicy<R>) -> Result<(), Error> {
+    futures_lite::future::block_on(policy.client().sync()).map_err(|err| Error::Launch {
+        message: err.to_string(),
+    })
 }
 
 pub(crate) fn sort_by_key_input_with_policy<KeySource, ValueSource, Less>(

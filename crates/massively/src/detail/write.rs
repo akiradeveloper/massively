@@ -146,6 +146,81 @@ pub trait MItemWriteDispatch<R: Runtime>: Sized {
         })
     }
 
+    fn sort_from_read<Read, Less, Output>(
+        policy: &crate::detail::CubePolicy<R>,
+        input: Read,
+        less: Less,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MAlloc<R>,
+        Read: KernelReadBoundMany<R, Item = Self>,
+        Less: op::BinaryPredicateOp<R, Self>,
+        Output: MIterMut<R, Item = Self>,
+    {
+        let _ = ();
+        Err(Error::Launch {
+            message: "sort is not supported for this item write shape".to_string(),
+        })
+    }
+
+    fn sort_by_key_keys_from_read<Read, Less, Output>(
+        policy: &crate::detail::CubePolicy<R>,
+        keys: Read,
+        less: Less,
+        output: Output,
+    ) -> Result<crate::detail::device::DeviceVec<R, MIndex>, Error>
+    where
+        Self: MAlloc<R>,
+        Read: KernelReadBoundMany<R, Item = Self>,
+        Less: op::BinaryPredicateOp<R, Self>,
+        Output: MIterMut<R, Item = Self>,
+    {
+        let _ = ();
+        Err(Error::Launch {
+            message: "sort_by_key keys are not supported for this item write shape".to_string(),
+        })
+    }
+
+    fn merge_by_key_keys_from_read<Left, Right, Less, Output>(
+        policy: &crate::detail::CubePolicy<R>,
+        left: Left,
+        right: Right,
+        less: Less,
+        output: Output,
+    ) -> Result<crate::detail::control::MergeByKeyControl, Error>
+    where
+        Self: MAlloc<R>,
+        Left: KernelReadBoundMany<R, Item = Self>,
+        Right: KernelReadBoundMany<R, Item = Self>,
+        Less: op::BinaryPredicateOp<R, Self>,
+        Output: MIterMut<R, Item = Self>,
+    {
+        let _ = ();
+        Err(Error::Launch {
+            message: "merge_by_key keys are not supported for this item write shape".to_string(),
+        })
+    }
+
+    fn merge_by_key_values_from_read<Left, Right, Output>(
+        policy: &crate::detail::CubePolicy<R>,
+        left: Left,
+        right: Right,
+        control: &crate::detail::control::MergeByKeyControl,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        Self: MAlloc<R>,
+        Left: KernelReadBoundMany<R, Item = Self>,
+        Right: KernelReadBoundMany<R, Item = Self>,
+        Output: MIterMut<R, Item = Self>,
+    {
+        let _ = ();
+        Err(Error::Launch {
+            message: "merge_by_key values are not supported for this item write shape".to_string(),
+        })
+    }
+
     fn adjacent_difference_from_read<Read, Op, Output>(
         policy: &crate::detail::CubePolicy<R>,
         input: Read,

@@ -1,6 +1,5 @@
 use crate::error::Error;
 use cubecl::prelude::*;
-use cubecl::server::CubeCountSelection;
 
 #[allow(dead_code)]
 pub(crate) const MAX_1D_WORKGROUPS: u32 = 65_535;
@@ -37,14 +36,13 @@ pub(crate) fn launch_1d<R: Runtime>(
 }
 
 pub(crate) fn launch_blocks_1d<R: Runtime>(
-    client: &ComputeClient<R>,
+    _client: &ComputeClient<R>,
     logical_blocks: usize,
 ) -> Result<Launch1D, Error> {
-    let logical_blocks_u32 =
-        u32::try_from(logical_blocks).map_err(|_| Error::LengthTooLarge { len: logical_blocks })?;
-    let selection = CubeCountSelection::new(client, logical_blocks_u32);
-    let cube_count = selection.cube_count();
-    let (x, y, z) = cube_count_xyz(cube_count);
+    let logical_blocks_u32 = u32::try_from(logical_blocks).map_err(|_| Error::LengthTooLarge {
+        len: logical_blocks,
+    })?;
+    let (x, y, z) = split_1d_blocks(logical_blocks_u32);
     let launch_blocks = x.saturating_mul(y).saturating_mul(z);
     Ok(Launch1D {
         logical_blocks,
@@ -56,9 +54,36 @@ pub(crate) fn launch_blocks_1d<R: Runtime>(
     })
 }
 
-fn cube_count_xyz(cube_count: CubeCount) -> (u32, u32, u32) {
-    match cube_count {
-        CubeCount::Static(x, y, z) => (x, y, z),
-        CubeCount::Dynamic(_) => unreachable!("CubeCountSelection::new returns a static count"),
+fn split_1d_blocks(logical_blocks: u32) -> (u32, u32, u32) {
+    if logical_blocks <= MAX_1D_WORKGROUPS {
+        return (logical_blocks, 1, 1);
+    }
+
+    let x = MAX_1D_WORKGROUPS;
+    let y_blocks = logical_blocks.div_ceil(x);
+    if y_blocks <= MAX_1D_WORKGROUPS {
+        return (x, y_blocks, 1);
+    }
+
+    let z = y_blocks.div_ceil(MAX_1D_WORKGROUPS);
+    (x, MAX_1D_WORKGROUPS, z)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn split_1d_blocks_keeps_x_within_wgpu_limit() {
+        assert_eq!(split_1d_blocks(65_535), (65_535, 1, 1));
+        assert_eq!(split_1d_blocks(65_536), (65_535, 2, 1));
+        assert_eq!(split_1d_blocks(78_125), (65_535, 2, 1));
+    }
+
+    #[test]
+    fn split_1d_blocks_covers_large_logical_block_counts() {
+        assert_eq!(split_1d_blocks(65_535 * 65_535), (65_535, 65_535, 1));
+        assert_eq!(split_1d_blocks(65_535 * 65_535 + 1), (65_535, 65_535, 2));
+        assert_eq!(split_1d_blocks(u32::MAX), (65_535, 65_535, 2));
     }
 }

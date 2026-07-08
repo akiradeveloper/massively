@@ -11,11 +11,6 @@ pub(crate) use crate::detail::control::{MaskControl, SelectedRankControl, SplitR
 
 const BLOCK_SELECT_SIZE: u32 = 256;
 
-fn select_block_count(len: usize) -> Result<u32, Error> {
-    let block_count = len.div_ceil(BLOCK_SELECT_SIZE as usize);
-    u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })
-}
-
 pub(crate) fn selected_rank_from_flags<R>(
     policy: &CubePolicy<R>,
     len: usize,
@@ -163,11 +158,11 @@ where
     let control_len = control.len;
     let output_handle = client.empty(count * std::mem::size_of::<T>());
 
-    let block_count_u32 = select_block_count(control.len)?;
+    let launch = crate::detail::launch::launch_1d(client, control.len, BLOCK_SELECT_SIZE)?;
     unsafe {
         compact_scatter_kernel::launch_unchecked::<T, R>(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_SELECT_SIZE),
             unsafe { BufferArg::from_raw_parts(control.flag.clone(), control_len) },
             unsafe { BufferArg::from_raw_parts(control.position.clone(), control_len) },

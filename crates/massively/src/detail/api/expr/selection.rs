@@ -135,7 +135,7 @@ where
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
     let output_offset = offset_handle(client, 0)?;
-    let block_count_u32 = api_expr_block_count(selected_rank.len)?;
+    let launch = crate::detail::launch::launch_1d(client, selected_rank.len, BLOCK_API_EXPR_SIZE)?;
 
     unsafe {
         compact_scatter_device_expr_kernel::launch_unchecked::<
@@ -144,7 +144,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len) },
             unsafe { BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len) },
@@ -194,7 +194,7 @@ where
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
     let output_offset = offset_handle(client, output.offset)?;
-    let block_count_u32 = api_expr_block_count(selected_rank.len)?;
+    let launch = crate::detail::launch::launch_1d(client, selected_rank.len, BLOCK_API_EXPR_SIZE)?;
 
     unsafe {
         compact_scatter_device_expr_kernel::launch_unchecked::<
@@ -203,7 +203,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(selected_rank.flag.clone(), selected_rank.len) },
             unsafe { BufferArg::from_raw_parts(selected_rank.position.clone(), selected_rank.len) },

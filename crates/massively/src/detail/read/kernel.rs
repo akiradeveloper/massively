@@ -634,14 +634,14 @@ pub trait KernelRead<R: Runtime>: Sized {
     fn min_element_read<Less>(
         self,
         policy: &CubePolicy<R>,
-        less: Less,
+        _less: Less,
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, less);
+        let _ = (policy, _less);
         Err(Error::Launch {
             message: "min_element is not supported for this iterator shape".to_string(),
         })
@@ -650,14 +650,14 @@ pub trait KernelRead<R: Runtime>: Sized {
     fn max_element_read<Less>(
         self,
         policy: &CubePolicy<R>,
-        less: Less,
+        _less: Less,
     ) -> Result<Option<crate::MIndex>, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, less);
+        let _ = (policy, _less);
         Err(Error::Launch {
             message: "max_element is not supported for this iterator shape".to_string(),
         })
@@ -666,14 +666,14 @@ pub trait KernelRead<R: Runtime>: Sized {
     fn minmax_element_read<Less>(
         self,
         policy: &CubePolicy<R>,
-        less: Less,
+        _less: Less,
     ) -> Result<Option<(crate::MIndex, crate::MIndex)>, Error>
     where
         Self::Item: MItem<R>,
         Self: KernelReadBoundMany<R>,
         Less: op::BinaryPredicateOp<R, Self::Item>,
     {
-        let _ = (policy, less);
+        let _ = (policy, _less);
         Err(Error::Launch {
             message: "minmax_element is not supported for this iterator shape".to_string(),
         })
@@ -4007,8 +4007,6 @@ where
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let client = policy.client();
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
-    let min_flags = client.empty(len * std::mem::size_of::<u32>());
-    let max_flags = client.empty(len * std::mem::size_of::<u32>());
 
     let mut bindings = KernelColumnBindings::empty(client);
     <Read as KernelReadAtEnv<R, Env0>>::stage_at_env(read, &mut bindings)?;
@@ -4022,12 +4020,14 @@ where
     let slot5 = bindings.slot_or_first(5);
     let slot6 = bindings.slot_or_first(6);
     let block_size = 256_u32;
-    let block_count = len.div_ceil(block_size as usize);
-    let block_count_u32 =
-        u32::try_from(block_count).map_err(|_| Error::LengthTooLarge { len: block_count })?;
+    let mut current_count = len.div_ceil(block_size as usize);
+    let mut current_count_u32 =
+        u32::try_from(current_count).map_err(|_| Error::LengthTooLarge { len: current_count })?;
+    let mut current_handle = client.empty(current_count * 2 * std::mem::size_of::<u32>());
+    let launch = crate::detail::launch::launch_1d(client, len, block_size)?;
 
     unsafe {
-        crate::kernels::logical7_minmax_flags_kernel::launch_unchecked::<
+        crate::kernels::logical7_minmax_partials_kernel::launch_unchecked::<
             <Read as KernelRead<R>>::Item,
             <Read as KernelReadBoundMany<R>>::Leaf0,
             <Read as KernelReadBoundMany<R>>::Leaf1,
@@ -4041,7 +4041,7 @@ where
             R,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(block_size),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -4052,16 +4052,60 @@ where
             unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
             unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
-            unsafe { BufferArg::from_raw_parts(min_flags.clone(), len) },
-            unsafe { BufferArg::from_raw_parts(max_flags.clone(), len) },
+            unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
         );
     }
 
-    let min = crate::detail::primitives::search::first_flag(policy, min_flags, len, len)?
-        .expect("non-empty min flags must contain one minimum");
-    let max = crate::detail::primitives::search::first_flag(policy, max_flags, len, len)?
-        .expect("non-empty max flags must contain one maximum");
-    Ok(Some((min, max)))
+    while current_count > 1 {
+        let next_count = current_count.div_ceil(block_size as usize);
+        let candidate_len_handle = client.create_from_slice(u32::as_bytes(&[current_count_u32]));
+        let next_handle = client.empty(next_count * 2 * std::mem::size_of::<u32>());
+        let launch = crate::detail::launch::launch_1d(client, current_count, block_size)?;
+
+        unsafe {
+            crate::kernels::logical7_minmax_index_partials_kernel::launch_unchecked::<
+                <Read as KernelRead<R>>::Item,
+                <Read as KernelReadBoundMany<R>>::Leaf0,
+                <Read as KernelReadBoundMany<R>>::Leaf1,
+                <Read as KernelReadBoundMany<R>>::Leaf2,
+                <Read as KernelReadBoundMany<R>>::Leaf3,
+                <Read as KernelReadBoundMany<R>>::Leaf4,
+                <Read as KernelReadBoundMany<R>>::Leaf5,
+                <Read as KernelReadBoundMany<R>>::Leaf6,
+                <Read as KernelReadBoundMany<R>>::ExprAt,
+                KernelOp<R, Less>,
+                R,
+            >(
+                client,
+                launch.cube_count(),
+                CubeDim::new_1d(block_size),
+                unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
+                unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
+                unsafe { BufferArg::from_raw_parts(slot2.0.clone(), slot2.1) },
+                unsafe { BufferArg::from_raw_parts(slot3.0.clone(), slot3.1) },
+                unsafe { BufferArg::from_raw_parts(slot4.0.clone(), slot4.1) },
+                unsafe { BufferArg::from_raw_parts(slot5.0.clone(), slot5.1) },
+                unsafe { BufferArg::from_raw_parts(slot6.0.clone(), slot6.1) },
+                unsafe { BufferArg::from_raw_parts(offsets.clone(), 7) },
+                unsafe { BufferArg::from_raw_parts(current_handle.clone(), current_count * 2) },
+                unsafe { BufferArg::from_raw_parts(candidate_len_handle.clone(), 1) },
+                unsafe { BufferArg::from_raw_parts(next_handle.clone(), next_count * 2) },
+            );
+        }
+
+        current_handle = next_handle;
+        current_count = next_count;
+        current_count_u32 = u32::try_from(current_count)
+            .map_err(|_| Error::LengthTooLarge { len: current_count })?;
+    }
+
+    let bytes = client
+        .read_one(current_handle)
+        .map_err(|err| Error::Launch {
+            message: format!("{err:?}"),
+        })?;
+    let indices = u32::from_bytes(&bytes);
+    Ok(Some((indices[0], indices[1])))
 }
 
 fn logical7_scan_by_key_control_read<R, Read, KeyEq>(
@@ -4913,6 +4957,104 @@ trait KernelReadSearchView<R: Runtime>: KernelRead<R> {
     type View;
 
     fn into_search_view(self) -> Self::View;
+}
+
+trait SliceSearchView {
+    fn slice_search_view(self, start: usize, len: usize) -> Self;
+}
+
+impl<R, T> SliceSearchView for DeviceColumnView<R, T>
+where
+    R: Runtime,
+{
+    fn slice_search_view(mut self, start: usize, len: usize) -> Self {
+        self.offset += start;
+        self.len = len;
+        self
+    }
+}
+
+impl<R, T> SliceSearchView for (DeviceColumnView<R, T>,)
+where
+    R: Runtime,
+{
+    fn slice_search_view(self, start: usize, len: usize) -> Self {
+        (self.0.slice_search_view(start, len),)
+    }
+}
+
+impl<Source> SliceSearchView for ZipView1<Source>
+where
+    Source: SliceSearchView,
+{
+    fn slice_search_view(self, start: usize, len: usize) -> Self {
+        ZipView1 {
+            source: self.source.slice_search_view(start, len),
+        }
+    }
+}
+
+impl<Left, Right> SliceSearchView for ZipView2<Left, Right>
+where
+    Left: SliceSearchView,
+    Right: SliceSearchView,
+{
+    fn slice_search_view(self, start: usize, len: usize) -> Self {
+        ZipView2 {
+            left: self.left.slice_search_view(start, len),
+            right: self.right.slice_search_view(start, len),
+        }
+    }
+}
+
+impl<First, Second, Third> SliceSearchView for ZipView3<First, Second, Third>
+where
+    First: SliceSearchView,
+    Second: SliceSearchView,
+    Third: SliceSearchView,
+{
+    fn slice_search_view(self, start: usize, len: usize) -> Self {
+        ZipView3 {
+            first: self.first.slice_search_view(start, len),
+            second: self.second.slice_search_view(start, len),
+            third: self.third.slice_search_view(start, len),
+        }
+    }
+}
+
+macro_rules! impl_slice_search_view {
+    ($name:ident < $( $ty:ident : $field:ident ),+ >) => {
+        impl<$( $ty, )+> SliceSearchView for $name<$( $ty ),+>
+        where
+            $( $ty: SliceSearchView, )+
+        {
+            fn slice_search_view(self, start: usize, len: usize) -> Self {
+                $name {
+                    $( $field: self.$field.slice_search_view(start, len), )+
+                }
+            }
+        }
+    };
+}
+
+impl_slice_search_view!(ZipView4<A: a, B: b, C: c, D: d>);
+impl_slice_search_view!(ZipView5<A: a, B: b, C: c, D: d, E: e>);
+impl_slice_search_view!(ZipView6<A: a, B: b, C: c, D: d, E: e, F: f>);
+impl_slice_search_view!(ZipView7<A: a, B: b, C: c, D: d, E: e, F: f, G: g>);
+
+impl<R, Read> KernelReadSearchView<R> for SliceRead<Read>
+where
+    R: Runtime,
+    Read: KernelReadSearchView<R>,
+    Read::View: SliceSearchView,
+{
+    type View = Read::View;
+
+    fn into_search_view(self) -> Self::View {
+        self.read
+            .into_search_view()
+            .slice_search_view(self.start, self.len)
+    }
 }
 
 /// Leaf read expression for one physical device column.

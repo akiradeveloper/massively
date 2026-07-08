@@ -41,7 +41,7 @@ impl Runtime {
 
     pub fn exec(self) -> Executor<WgpuRuntime> {
         match self {
-            Self::Gpu => Executor::<WgpuRuntime>::new(WgpuDevice::IntegratedGpu(0)),
+            Self::Gpu => Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice),
         }
     }
 }

@@ -1173,18 +1173,15 @@ pub trait MIter<R: Runtime>: Sized {
         output: Output,
     ) -> Result<(), Error>
     where
-        Self::Item: MAlloc<R>,
+        Self::Item: MAlloc<R> + crate::detail::write::MItemWriteDispatch<R>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         Output: MIterMut<R, Item = Self::Item>,
     {
         let source = self.lower_read(policy)?;
         crate::detail::read::KernelRead::validate(&source)?;
-        let indices =
-            crate::detail::read::sort_logical7_indices_read::<R, _, Less>(&source, policy)?;
-        let indices = crate::detail::read::ColumnRead::new(
-            crate::detail::device::DeviceColumnView::from_column(&indices),
-        );
-        crate::detail::read::KernelRead::gather_read(source, policy, indices, output)
+        <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::sort_from_read(
+            policy, source, _less, output,
+        )
     }
 
     #[doc(hidden)]
@@ -1197,7 +1194,7 @@ pub trait MIter<R: Runtime>: Sized {
         out_v: ValueOutput,
     ) -> Result<(), Error>
     where
-        Self::Item: MAlloc<R>,
+        Self::Item: MAlloc<R> + crate::detail::write::MItemWriteDispatch<R>,
         Values: MIter<R, Item = ValueOutput::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         KeyOutput: MIterMut<R, Item = Self::Item>,
@@ -1212,14 +1209,13 @@ pub trait MIter<R: Runtime>: Sized {
             crate::detail::read::KernelRead::len(&keys),
             crate::detail::read::KernelRead::len(&values),
         )?;
-        let indices = crate::detail::read::sort_logical7_indices_read::<R, _, Less>(&keys, policy)?;
-        let key_indices = crate::detail::read::ColumnRead::new(
-            crate::detail::device::DeviceColumnView::from_column(&indices),
-        );
+        let indices =
+            <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::sort_by_key_keys_from_read(
+                policy, keys, _less, out_k,
+            )?;
         let value_indices = crate::detail::read::ColumnRead::new(
             crate::detail::device::DeviceColumnView::from_column(&indices),
         );
-        crate::detail::read::KernelRead::gather_read(keys, policy, key_indices, out_k)?;
         crate::detail::read::KernelRead::gather_read(values, policy, value_indices, out_v)
     }
 
@@ -1258,14 +1254,14 @@ pub trait MIter<R: Runtime>: Sized {
         out_v: ValueOutput,
     ) -> Result<(), Error>
     where
-        Self::Item: MAlloc<R>,
+        Self::Item: MAlloc<R> + crate::detail::write::MItemWriteDispatch<R>,
         LeftValues: MIter<R, Item = ValueOutput::Item>,
         RightKeys: MIter<R, Item = Self::Item>,
         RightValues: MIter<R, Item = LeftValues::Item>,
         Less: crate::op::BinaryPredicateOp<R, Self::Item>,
         KeyOutput: MIterMut<R, Item = Self::Item>,
         ValueOutput: MIterMut<R>,
-        ValueOutput::Item: MAlloc<R>,
+        ValueOutput::Item: MAlloc<R> + crate::detail::write::MItemWriteDispatch<R>,
     {
         let left_keys = self.lower_read(policy)?;
         let right_keys = right_keys.lower_read(policy)?;
@@ -1283,38 +1279,19 @@ pub trait MIter<R: Runtime>: Sized {
             crate::detail::read::KernelRead::len(&right_keys),
             crate::detail::read::KernelRead::len(&right_values),
         )?;
-        let left_len = crate::detail::read::KernelRead::len(&left_keys);
-        let right_len = crate::detail::read::KernelRead::len(&right_keys);
-        let output_len = crate::index::mindex_from_usize(left_len + right_len)?;
-        let (left_indices, right_indices) =
-            crate::detail::read::merge_by_key_logical7_indices_read::<R, _, _, Less>(
-                &left_keys,
-                &right_keys,
-                policy,
-            )?;
-        <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::merge_from_read::<
-            _,
-            _,
-            Less,
-            _,
-        >(policy, left_keys, right_keys, _less, out_k)?;
-        let left_indices = crate::detail::read::ColumnRead::new(
-            crate::detail::device::DeviceColumnView::from_column(&left_indices),
-        );
-        let right_indices = crate::detail::read::ColumnRead::new(
-            crate::detail::device::DeviceColumnView::from_column(&right_indices),
-        );
-        crate::detail::read::KernelRead::scatter_read(
+        let control =
+            <Self::Item as crate::detail::write::MItemWriteDispatch<R>>::merge_by_key_keys_from_read::<
+                _,
+                _,
+                Less,
+                _,
+            >(policy, left_keys, right_keys, _less, out_k)?;
+        <ValueOutput::Item as crate::detail::write::MItemWriteDispatch<R>>::merge_by_key_values_from_read(
+            policy,
             left_values,
-            policy,
-            left_indices,
-            out_v.slice_mut(0..output_len),
-        )?;
-        crate::detail::read::KernelRead::scatter_read(
             right_values,
-            policy,
-            right_indices,
-            out_v.slice_mut(0..output_len),
+            &control,
+            out_v,
         )
     }
 

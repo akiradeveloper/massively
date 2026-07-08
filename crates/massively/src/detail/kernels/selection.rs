@@ -1143,17 +1143,19 @@ pub(crate) fn sorted_membership_device_expr_flags_kernel<
 ) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
-    let global = (CUBE_POS as usize) * cube_dim + unit;
+    let global = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
+    let stride = (CUBE_COUNT as usize) * cube_dim;
     let candidate_logical_len = candidate_len[0] as usize;
     let sorted_logical_len = sorted_len[0] as usize;
-    if global < candidate_logical_len {
+    while global.read() < candidate_logical_len {
+        let global_index = global.read();
         let value = RuntimeCell::<T>::new(CandidateExpr::eval(
             candidate_slot0,
             candidate_slot1,
             candidate_slot2,
             candidate_slot3,
             candidate_slot_offsets,
-            global,
+            global_index,
         ));
         let candidate_first = RuntimeCell::<usize>::new(0usize);
         let candidate_count = RuntimeCell::<usize>::new(candidate_logical_len);
@@ -1227,15 +1229,16 @@ pub(crate) fn sorted_membership_device_expr_flags_kernel<
             }
         }
 
-        let rank = global - candidate_first.read();
+        let rank = global_index - candidate_first.read();
         let other_count = sorted_after.read() - sorted_first.read();
         if (keep_present[0] != 0u32 && rank < other_count)
             || (keep_present[0] == 0u32 && rank >= other_count)
         {
-            flags[global] = 1u32;
+            flags[global_index] = 1u32;
         } else {
-            flags[global] = 0u32;
+            flags[global_index] = 0u32;
         }
+        global.store(global_index + stride);
     }
 }
 
@@ -1280,10 +1283,18 @@ pub(crate) fn minmax_element_partials_kernel<T: CubePrimitive, Less: BinaryPredi
             max_index.store(i.read());
             has_value.store(1u32);
         } else {
-            if Less::apply(input[i.read()], input[min_index.read()]) {
+            let current_min = min_index.read();
+            let other_min = i.read();
+            let other_less = Less::apply(input[other_min], input[current_min]);
+            let current_less = Less::apply(input[current_min], input[other_min]);
+            if other_less || (!current_less && other_min < current_min) {
                 min_index.store(i.read());
             }
-            if Less::apply(input[max_index.read()], input[i.read()]) {
+            let current_max = max_index.read();
+            let other_max = i.read();
+            let current_less = Less::apply(input[current_max], input[other_max]);
+            let other_less = Less::apply(input[other_max], input[current_max]);
+            if current_less || (!other_less && other_max < current_max) {
                 max_index.store(i.read());
             }
         }
@@ -1305,13 +1316,17 @@ pub(crate) fn minmax_element_partials_kernel<T: CubePrimitive, Less: BinaryPredi
             } else {
                 let other_min = min_indices[unit + stride.read()] as usize;
                 let current_min = min_indices[unit] as usize;
-                if Less::apply(input[other_min], input[current_min]) {
+                let other_less = Less::apply(input[other_min], input[current_min]);
+                let current_less = Less::apply(input[current_min], input[other_min]);
+                if other_less || (!current_less && other_min < current_min) {
                     min_indices[unit] = other_min as u32;
                 }
 
                 let other_max = max_indices[unit + stride.read()] as usize;
                 let current_max = max_indices[unit] as usize;
-                if Less::apply(input[current_max], input[other_max]) {
+                let current_less = Less::apply(input[current_max], input[other_max]);
+                let other_less = Less::apply(input[other_max], input[current_max]);
+                if current_less || (!other_less && other_max < current_max) {
                     max_indices[unit] = other_max as u32;
                 }
             }
@@ -1356,10 +1371,16 @@ pub(crate) fn minmax_index_partials_kernel<T: CubePrimitive, Less: BinaryPredica
             max_index.store(candidate_max);
             has_value.store(1u32);
         } else {
-            if Less::apply(input[candidate_min], input[min_index.read()]) {
+            let current_min = min_index.read();
+            let other_less = Less::apply(input[candidate_min], input[current_min]);
+            let current_less = Less::apply(input[current_min], input[candidate_min]);
+            if other_less || (!current_less && candidate_min < current_min) {
                 min_index.store(candidate_min);
             }
-            if Less::apply(input[max_index.read()], input[candidate_max]) {
+            let current_max = max_index.read();
+            let current_less = Less::apply(input[current_max], input[candidate_max]);
+            let other_less = Less::apply(input[candidate_max], input[current_max]);
+            if current_less || (!other_less && candidate_max < current_max) {
                 max_index.store(candidate_max);
             }
         }
@@ -1381,13 +1402,17 @@ pub(crate) fn minmax_index_partials_kernel<T: CubePrimitive, Less: BinaryPredica
             } else {
                 let other_min = min_indices[unit + stride.read()] as usize;
                 let current_min = min_indices[unit] as usize;
-                if Less::apply(input[other_min], input[current_min]) {
+                let other_less = Less::apply(input[other_min], input[current_min]);
+                let current_less = Less::apply(input[current_min], input[other_min]);
+                if other_less || (!current_less && other_min < current_min) {
                     min_indices[unit] = other_min as u32;
                 }
 
                 let other_max = max_indices[unit + stride.read()] as usize;
                 let current_max = max_indices[unit] as usize;
-                if Less::apply(input[current_max], input[other_max]) {
+                let current_less = Less::apply(input[current_max], input[other_max]);
+                let other_less = Less::apply(input[other_max], input[current_max]);
+                if current_less || (!other_less && other_max < current_max) {
                     max_indices[unit] = other_max as u32;
                 }
             }
@@ -1437,16 +1462,30 @@ pub(crate) fn minmax_element_device_expr_partials_kernel<
             max_index.store(i.read());
             has_value.store(1u32);
         } else {
-            if Less::apply(
+            let current_min = min_index.read();
+            let other_min = i.read();
+            let other_less = Less::apply(
                 Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, i.read()),
-                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, min_index.read()),
-            ) {
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
+            );
+            let current_less = Less::apply(
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, i.read()),
+            );
+            if other_less || (!current_less && other_min < current_min) {
                 min_index.store(i.read());
             }
-            if Less::apply(
-                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, max_index.read()),
+            let current_max = max_index.read();
+            let other_max = i.read();
+            let current_less = Less::apply(
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
                 Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, i.read()),
-            ) {
+            );
+            let other_less = Less::apply(
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, i.read()),
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
+            );
+            if current_less || (!other_less && other_max < current_max) {
                 max_index.store(i.read());
             }
         }
@@ -1468,19 +1507,29 @@ pub(crate) fn minmax_element_device_expr_partials_kernel<
             } else {
                 let other_min = min_indices[unit + stride.read()] as usize;
                 let current_min = min_indices[unit] as usize;
-                if Less::apply(
+                let other_less = Less::apply(
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_min),
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
-                ) {
+                );
+                let current_less = Less::apply(
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_min),
+                );
+                if other_less || (!current_less && other_min < current_min) {
                     min_indices[unit] = other_min as u32;
                 }
 
                 let other_max = max_indices[unit + stride.read()] as usize;
                 let current_max = max_indices[unit] as usize;
-                if Less::apply(
+                let current_less = Less::apply(
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_max),
-                ) {
+                );
+                let other_less = Less::apply(
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_max),
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
+                );
+                if current_less || (!other_less && other_max < current_max) {
                     max_indices[unit] = other_max as u32;
                 }
             }
@@ -1533,16 +1582,28 @@ pub(crate) fn minmax_index_device_expr_partials_kernel<
             max_index.store(candidate_max);
             has_value.store(1u32);
         } else {
-            if Less::apply(
+            let current_min = min_index.read();
+            let other_less = Less::apply(
                 Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, candidate_min),
-                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, min_index.read()),
-            ) {
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
+            );
+            let current_less = Less::apply(
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, candidate_min),
+            );
+            if other_less || (!current_less && candidate_min < current_min) {
                 min_index.store(candidate_min);
             }
-            if Less::apply(
-                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, max_index.read()),
+            let current_max = max_index.read();
+            let current_less = Less::apply(
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
                 Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, candidate_max),
-            ) {
+            );
+            let other_less = Less::apply(
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, candidate_max),
+                Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
+            );
+            if current_less || (!other_less && candidate_max < current_max) {
                 max_index.store(candidate_max);
             }
         }
@@ -1564,19 +1625,29 @@ pub(crate) fn minmax_index_device_expr_partials_kernel<
             } else {
                 let other_min = min_indices[unit + stride.read()] as usize;
                 let current_min = min_indices[unit] as usize;
-                if Less::apply(
+                let other_less = Less::apply(
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_min),
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
-                ) {
+                );
+                let current_less = Less::apply(
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_min),
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_min),
+                );
+                if other_less || (!current_less && other_min < current_min) {
                     min_indices[unit] = other_min as u32;
                 }
 
                 let other_max = max_indices[unit + stride.read()] as usize;
                 let current_max = max_indices[unit] as usize;
-                if Less::apply(
+                let current_less = Less::apply(
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
                     Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_max),
-                ) {
+                );
+                let other_less = Less::apply(
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, other_max),
+                    Expr::eval(slot0, slot1, slot2, slot3, slot_offsets, current_max),
+                );
+                if current_less || (!other_less && other_max < current_max) {
                     max_indices[unit] = other_max as u32;
                 }
             }

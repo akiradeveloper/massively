@@ -25,7 +25,7 @@ where
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
-    let block_count_u32 = api_expr_block_count(len)?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_API_EXPR_SIZE)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let slot_offsets = bindings.slot_offsets_handle(client)?;
 
@@ -36,7 +36,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
@@ -76,7 +76,7 @@ where
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
-    let block_count_u32 = api_expr_block_count(len)?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_API_EXPR_SIZE)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let slot_offsets = bindings.slot_offsets_handle(client)?;
     let output_offset = offset_handle(client, output.offset)?;
@@ -88,7 +88,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },
             unsafe { BufferArg::from_raw_parts(slot1.0.clone(), slot1.1) },
@@ -128,7 +128,7 @@ where
     let slot1 = bindings.slots.get(1).unwrap_or(slot0);
     let slot2 = bindings.slots.get(2).unwrap_or(slot0);
     let slot3 = bindings.slots.get(3).unwrap_or(slot0);
-    let block_count_u32 = api_expr_block_count(len)?;
+    let launch = crate::detail::launch::launch_1d(client, len, BLOCK_API_EXPR_SIZE)?;
     let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
     let slot_offsets = bindings.slot_offsets_handle(client)?;
 
@@ -139,7 +139,7 @@ where
             ExprSource::Runtime,
         >(
             client,
-            CubeCount::Static(block_count_u32, 1, 1),
+            launch.cube_count(),
             CubeDim::new_1d(BLOCK_API_EXPR_SIZE),
             unsafe { BufferArg::from_raw_parts(output_handle.clone(), len) },
             unsafe { BufferArg::from_raw_parts(slot0.0.clone(), slot0.1) },

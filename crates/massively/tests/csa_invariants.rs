@@ -1544,6 +1544,29 @@ fn set_algorithms_use_membership_control_and_selected_payload_apply() {
 }
 
 #[test]
+fn large_sensitive_ordering_paths_use_launch_helper() {
+    let ordering = read("src/detail/api/ordering/mod.rs");
+    let sort = read("src/detail/primitives/ordering/sort.rs");
+    let read_kernel = read("src/detail/read/kernel.rs");
+
+    assert!(
+        !ordering.contains("CubeCount::Static(")
+            && ordering.matches("crate::detail::launch::launch_1d").count() >= 8,
+        "ordering control, merge, and set paths should route launches through large-safe launch_1d"
+    );
+    assert!(
+        !sort.contains("CubeCount::Static(")
+            && sort.matches("crate::detail::launch::launch_1d").count() >= 7,
+        "sort and sort_by_key primitives should route launches through large-safe launch_1d"
+    );
+    assert!(
+        read_kernel.contains("set_membership_logical7_flags_read")
+            && read_kernel.contains("crate::detail::launch::launch_1d(client, candidate_len"),
+        "wide logical set membership should use large-safe launch_1d"
+    );
+}
+
+#[test]
 fn predicate_queries_use_query_apply() {
     let selection = read("src/detail/read/selection.rs");
     let payload = read("src/detail/apply/query.rs");

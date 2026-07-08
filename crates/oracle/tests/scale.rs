@@ -180,11 +180,17 @@ fn permutation_from(input: &[u32]) -> Vec<u32> {
 
 fn assert_vec_eq(actual: &[u32], expected: &[u32]) -> Result<(), TestCaseError> {
     if actual.len() != expected.len() {
-        return Err(TestCaseError::fail("length mismatch"));
+        return Err(TestCaseError::fail(format!(
+            "length mismatch: actual_len={} expected_len={}",
+            actual.len(),
+            expected.len()
+        )));
     }
-    for (_index, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
+    for (index, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
         if actual != expected {
-            return Err(TestCaseError::fail("value mismatch"));
+            return Err(TestCaseError::fail(format!(
+                "value mismatch: index={index} actual={actual} expected={expected}"
+            )));
         }
     }
     Ok(())
@@ -192,11 +198,18 @@ fn assert_vec_eq(actual: &[u32], expected: &[u32]) -> Result<(), TestCaseError> 
 
 fn assert_aos_eq(actual: &[u32], expected: &[(u32,)]) -> Result<(), TestCaseError> {
     if actual.len() != expected.len() {
-        return Err(TestCaseError::fail("length mismatch"));
+        return Err(TestCaseError::fail(format!(
+            "length mismatch: actual_len={} expected_len={}",
+            actual.len(),
+            expected.len()
+        )));
     }
-    for (_index, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
+    for (index, (actual, expected)) in actual.iter().zip(expected.iter()).enumerate() {
         if *actual != expected.0 {
-            return Err(TestCaseError::fail("value mismatch"));
+            return Err(TestCaseError::fail(format!(
+                "value mismatch: index={index} actual={} expected={}",
+                *actual, expected.0
+            )));
         }
     }
     Ok(())
@@ -204,12 +217,14 @@ fn assert_aos_eq(actual: &[u32], expected: &[(u32,)]) -> Result<(), TestCaseErro
 
 fn assert_eq_silent<T>(actual: T, expected: T) -> Result<(), TestCaseError>
 where
-    T: PartialEq,
+    T: PartialEq + fmt::Debug,
 {
     if actual == expected {
         Ok(())
     } else {
-        Err(TestCaseError::fail("value mismatch"))
+        Err(TestCaseError::fail(format!(
+            "value mismatch: actual={actual:?} expected={expected:?}"
+        )))
     }
 }
 
@@ -251,7 +266,10 @@ scale_test!(scale_map, input, {
     )
     .unwrap();
 
-    assert_aos_eq(&exec.to_host(&output_g).unwrap(), &oracle::map(&host_input, Identity))?;
+    assert_aos_eq(
+        &exec.to_host(&output_g).unwrap(),
+        &oracle::map(&host_input, Identity),
+    )?;
 });
 
 scale_test!(scale_transform, input, {
@@ -320,7 +338,10 @@ scale_test!(scale_inclusive_scan, input, {
     )
     .unwrap();
 
-    assert_aos_eq(&exec.to_host(&output_g).unwrap(), &oracle::inclusive_scan(&host_input, MaxTuple))?;
+    assert_aos_eq(
+        &exec.to_host(&output_g).unwrap(),
+        &oracle::inclusive_scan(&host_input, MaxTuple),
+    )?;
 });
 
 scale_test!(scale_exclusive_scan, input, {
@@ -691,7 +712,10 @@ scale_test!(scale_reverse, input, {
     )
     .unwrap();
 
-    assert_aos_eq(&exec.to_host(&output_g).unwrap(), &oracle::reverse(&host_input))?;
+    assert_aos_eq(
+        &exec.to_host(&output_g).unwrap(),
+        &oracle::reverse(&host_input),
+    )?;
 });
 
 scale_test!(scale_sort, input, {
@@ -708,7 +732,10 @@ scale_test!(scale_sort, input, {
     )
     .unwrap();
 
-    assert_aos_eq(&exec.to_host(&output_g).unwrap(), &oracle::sort(&host_input, LessU32))?;
+    assert_aos_eq(
+        &exec.to_host(&output_g).unwrap(),
+        &oracle::sort(&host_input, LessU32),
+    )?;
 });
 
 scale_test2!(scale_merge, left, right, {
@@ -1058,7 +1085,10 @@ scale_test2!(scale_reduce_by_key, keys, values, {
         oracle::reduce_by_key(&key_tuples, &value_tuples, EqTuple, (0_u32,), MaxTuple);
 
     assert_aos_eq(&exec.to_host(&out_keys_g.slice(..len)).unwrap(), &host_keys)?;
-    assert_aos_eq(&exec.to_host(&out_values_g.slice(..len)).unwrap(), &host_values)?;
+    assert_aos_eq(
+        &exec.to_host(&out_values_g.slice(..len)).unwrap(),
+        &host_values,
+    )?;
 });
 
 scale_test2!(scale_unique_by_key, keys, values, {
@@ -1082,7 +1112,10 @@ scale_test2!(scale_unique_by_key, keys, values, {
     let (host_keys, host_values) = oracle::unique_by_key(&key_tuples, &value_tuples, EqTuple);
 
     assert_aos_eq(&exec.to_host(&out_keys_g.slice(..len)).unwrap(), &host_keys)?;
-    assert_aos_eq(&exec.to_host(&out_values_g.slice(..len)).unwrap(), &host_values)?;
+    assert_aos_eq(
+        &exec.to_host(&out_values_g.slice(..len)).unwrap(),
+        &host_values,
+    )?;
 });
 
 scale_test2!(scale_merge_by_key, keys, values, {
