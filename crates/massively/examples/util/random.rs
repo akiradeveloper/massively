@@ -30,13 +30,13 @@ fn main() -> Result<(), massively::Error> {
 
     transform(
         &exec,
-        random::uniform_u32(8, 10, 20, 42)?,
+        random::uniform_u32(10, 20, 42)?.take(8),
         IdentityU32,
         Zip1(uniform.slice_mut(..)),
     )?;
     transform(
         &exec,
-        random::normal_f32(8, 0.0, 1.0, 42),
+        random::normal_f32(0.0, 1.0, 42).take(8),
         IdentityF32,
         Zip1(normal.slice_mut(..)),
     )?;

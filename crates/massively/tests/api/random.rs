@@ -83,15 +83,21 @@ fn uniform_u32_is_deterministic_and_bounded() {
 
     let first = materialize_u32(
         &exec,
-        massively::util::random::uniform_u32(64, 10, 20, 123).unwrap(),
+        massively::util::random::uniform_u32(10, 20, 123)
+            .unwrap()
+            .take(64),
     );
     let second = materialize_u32(
         &exec,
-        massively::util::random::uniform_u32(64, 10, 20, 123).unwrap(),
+        massively::util::random::uniform_u32(10, 20, 123)
+            .unwrap()
+            .take(64),
     );
     let different_seed = materialize_u32(
         &exec,
-        massively::util::random::uniform_u32(64, 10, 20, 124).unwrap(),
+        massively::util::random::uniform_u32(10, 20, 124)
+            .unwrap()
+            .take(64),
     );
 
     assert_eq!(first.len(), 64);
@@ -106,11 +112,15 @@ fn uniform_u64_is_deterministic_and_bounded() {
 
     let values = materialize_u64(
         &exec,
-        massively::util::random::uniform_u64(32, 1_000, 2_000, 777).unwrap(),
+        massively::util::random::uniform_u64(1_000, 2_000, 777)
+            .unwrap()
+            .take(32),
     );
     let again = materialize_u64(
         &exec,
-        massively::util::random::uniform_u64(32, 1_000, 2_000, 777).unwrap(),
+        massively::util::random::uniform_u64(1_000, 2_000, 777)
+            .unwrap()
+            .take(32),
     );
 
     assert_eq!(values.len(), 32);
@@ -124,11 +134,15 @@ fn uniform_f32_is_deterministic_and_bounded() {
 
     let values = materialize_f32(
         &exec,
-        massively::util::random::uniform_f32(40, -2.5, 7.5, 1234).unwrap(),
+        massively::util::random::uniform_f32(-2.5, 7.5, 1234)
+            .unwrap()
+            .take(40),
     );
     let again = materialize_f32(
         &exec,
-        massively::util::random::uniform_f32(40, -2.5, 7.5, 1234).unwrap(),
+        massively::util::random::uniform_f32(-2.5, 7.5, 1234)
+            .unwrap()
+            .take(40),
     );
 
     assert_eq!(values.len(), 40);
@@ -142,11 +156,15 @@ fn uniform_f64_is_deterministic_and_bounded() {
 
     let values = materialize_f64(
         &exec,
-        massively::util::random::uniform_f64(40, -10.0, -3.0, 4321).unwrap(),
+        massively::util::random::uniform_f64(-10.0, -3.0, 4321)
+            .unwrap()
+            .take(40),
     );
     let again = materialize_f64(
         &exec,
-        massively::util::random::uniform_f64(40, -10.0, -3.0, 4321).unwrap(),
+        massively::util::random::uniform_f64(-10.0, -3.0, 4321)
+            .unwrap()
+            .take(40),
     );
 
     assert_eq!(values.len(), 40);
@@ -158,8 +176,14 @@ fn uniform_f64_is_deterministic_and_bounded() {
 fn normal_f32_is_deterministic_and_finite() {
     let exec = exec();
 
-    let values = materialize_f32(&exec, massively::util::random::normal_f32(48, 2.0, 0.5, 99));
-    let again = materialize_f32(&exec, massively::util::random::normal_f32(48, 2.0, 0.5, 99));
+    let values = materialize_f32(
+        &exec,
+        massively::util::random::normal_f32(2.0, 0.5, 99).take(48),
+    );
+    let again = materialize_f32(
+        &exec,
+        massively::util::random::normal_f32(2.0, 0.5, 99).take(48),
+    );
 
     assert_eq!(values.len(), 48);
     assert!(values.iter().all(|value| value.is_finite()));
@@ -170,8 +194,14 @@ fn normal_f32_is_deterministic_and_finite() {
 fn normal_f64_is_deterministic_and_finite() {
     let exec = exec();
 
-    let values = materialize_f64(&exec, massively::util::random::normal_f64(48, 2.0, 0.5, 99));
-    let again = materialize_f64(&exec, massively::util::random::normal_f64(48, 2.0, 0.5, 99));
+    let values = materialize_f64(
+        &exec,
+        massively::util::random::normal_f64(2.0, 0.5, 99).take(48),
+    );
+    let again = materialize_f64(
+        &exec,
+        massively::util::random::normal_f64(2.0, 0.5, 99).take(48),
+    );
 
     assert_eq!(values.len(), 48);
     assert!(values.iter().all(|value| value.is_finite()));
@@ -180,10 +210,10 @@ fn normal_f64_is_deterministic_and_finite() {
 
 #[test]
 fn random_rejects_invalid_uniform_range() {
-    assert!(massively::util::random::uniform_u32::<WgpuRuntime>(8, 5, 4, 1).is_err());
-    assert!(massively::util::random::uniform_u64::<WgpuRuntime>(8, 9, 4, 1).is_err());
-    assert!(massively::util::random::uniform_f32::<WgpuRuntime>(8, 1.0, 0.0, 1).is_err());
-    assert!(massively::util::random::uniform_f64::<WgpuRuntime>(8, 1.0, 0.0, 1).is_err());
+    assert!(massively::util::random::uniform_u32(5, 4, 1).is_err());
+    assert!(massively::util::random::uniform_u64(9, 4, 1).is_err());
+    assert!(massively::util::random::uniform_f32(1.0, 0.0, 1).is_err());
+    assert!(massively::util::random::uniform_f64(1.0, 0.0, 1).is_err());
 }
 
 #[test]
@@ -192,19 +222,27 @@ fn uniform_accepts_singleton_range() {
 
     let u32_values = materialize_u32(
         &exec,
-        massively::util::random::uniform_u32(8, 4, 4, 1).unwrap(),
+        massively::util::random::uniform_u32(4, 4, 1)
+            .unwrap()
+            .take(8),
     );
     let u64_values = materialize_u64(
         &exec,
-        massively::util::random::uniform_u64(8, 9, 9, 1).unwrap(),
+        massively::util::random::uniform_u64(9, 9, 1)
+            .unwrap()
+            .take(8),
     );
     let f32_values = materialize_f32(
         &exec,
-        massively::util::random::uniform_f32(8, 1.5, 1.5, 1).unwrap(),
+        massively::util::random::uniform_f32(1.5, 1.5, 1)
+            .unwrap()
+            .take(8),
     );
     let f64_values = materialize_f64(
         &exec,
-        massively::util::random::uniform_f64(8, -2.5, -2.5, 1).unwrap(),
+        massively::util::random::uniform_f64(-2.5, -2.5, 1)
+            .unwrap()
+            .take(8),
     );
 
     assert_eq!(u32_values, vec![4_u32; 8]);
