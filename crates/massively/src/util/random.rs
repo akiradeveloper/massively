@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{Error, MIndex, MIter, Zip4, lazy};
+use crate::{Error, MIndex, MIter, lazy};
 
 fn validate_inclusive_range<T>(min: T, max: T) -> Result<(), Error>
 where
@@ -18,134 +18,213 @@ where
 }
 
 /// Creates a lazy stream of deterministic uniformly distributed `u32` values in `[min, max]`.
-pub fn uniform_u32<R>(
-    n: MIndex,
-    min: u32,
-    max: u32,
-    seed: u64,
-) -> Result<impl MIter<R, Item = u32>, Error>
-where
-    R: Runtime,
-{
+pub fn uniform_u32(min: u32, max: u32, seed: u64) -> Result<UniformU32, Error> {
     validate_inclusive_range(min, max)?;
-    Ok(lazy::transform(
-        Zip4(
-            lazy::counting(0).take(n),
-            lazy::constant(min).take(n),
-            lazy::constant(max).take(n),
-            lazy::constant(seed).take(n),
-        ),
-        UniformU32,
-    ))
+    Ok(UniformU32 { min, max, seed })
 }
 
 /// Creates a lazy stream of deterministic uniformly distributed `u64` values in `[min, max]`.
-pub fn uniform_u64<R>(
-    n: MIndex,
-    min: u64,
-    max: u64,
-    seed: u64,
-) -> Result<impl MIter<R, Item = u64>, Error>
-where
-    R: Runtime,
-{
+pub fn uniform_u64(min: u64, max: u64, seed: u64) -> Result<UniformU64, Error> {
     validate_inclusive_range(min, max)?;
-    Ok(lazy::transform(
-        Zip4(
-            lazy::counting(0).take(n),
-            lazy::constant(min).take(n),
-            lazy::constant(max).take(n),
-            lazy::constant(seed).take(n),
-        ),
-        UniformU64,
-    ))
+    Ok(UniformU64 { min, max, seed })
 }
 
 /// Creates a lazy stream of deterministic uniformly distributed `f32` values in `[min, max]`.
-pub fn uniform_f32<R>(
-    n: MIndex,
-    min: f32,
-    max: f32,
-    seed: u64,
-) -> Result<impl MIter<R, Item = f32>, Error>
-where
-    R: Runtime,
-{
+pub fn uniform_f32(min: f32, max: f32, seed: u64) -> Result<UniformF32, Error> {
     validate_inclusive_range(min, max)?;
-    Ok(lazy::transform(
-        Zip4(
-            lazy::counting(0).take(n),
-            lazy::constant(min).take(n),
-            lazy::constant(max).take(n),
-            lazy::constant(seed).take(n),
-        ),
-        UniformF32,
-    ))
+    Ok(UniformF32 { min, max, seed })
 }
 
 /// Creates a lazy stream of deterministic uniformly distributed `f64` values in `[min, max]`.
-pub fn uniform_f64<R>(
-    n: MIndex,
-    min: f64,
-    max: f64,
-    seed: u64,
-) -> Result<impl MIter<R, Item = f64>, Error>
-where
-    R: Runtime,
-{
+pub fn uniform_f64(min: f64, max: f64, seed: u64) -> Result<UniformF64, Error> {
     validate_inclusive_range(min, max)?;
-    Ok(lazy::transform(
-        Zip4(
-            lazy::counting(0).take(n),
-            lazy::constant(min).take(n),
-            lazy::constant(max).take(n),
-            lazy::constant(seed).take(n),
-        ),
-        UniformF64,
-    ))
+    Ok(UniformF64 { min, max, seed })
 }
 
 /// Creates a lazy stream of deterministic approximately normally distributed `f32` values.
-pub fn normal_f32<R>(n: MIndex, mean: f32, stddev: f32, seed: u64) -> impl MIter<R, Item = f32>
-where
-    R: Runtime,
-{
-    lazy::transform(
-        Zip4(
-            lazy::counting(0).take(n),
-            lazy::constant(mean).take(n),
-            lazy::constant(stddev).take(n),
-            lazy::constant(seed).take(n),
-        ),
-        NormalF32,
-    )
+pub fn normal_f32(mean: f32, stddev: f32, seed: u64) -> NormalF32 {
+    NormalF32 { mean, stddev, seed }
 }
 
 /// Creates a lazy stream of deterministic approximately normally distributed `f64` values.
-pub fn normal_f64<R>(n: MIndex, mean: f64, stddev: f64, seed: u64) -> impl MIter<R, Item = f64>
+pub fn normal_f64(mean: f64, stddev: f64, seed: u64) -> NormalF64 {
+    NormalF64 { mean, stddev, seed }
+}
+
+/// Infinite random stream for `uniform_u32`.
+#[derive(Clone, Copy, Debug)]
+pub struct UniformU32 {
+    min: u32,
+    max: u32,
+    seed: u64,
+}
+
+/// Infinite random stream for `uniform_u64`.
+#[derive(Clone, Copy, Debug)]
+pub struct UniformU64 {
+    min: u64,
+    max: u64,
+    seed: u64,
+}
+
+/// Infinite random stream for `uniform_f32`.
+#[derive(Clone, Copy, Debug)]
+pub struct UniformF32 {
+    min: f32,
+    max: f32,
+    seed: u64,
+}
+
+/// Infinite random stream for `uniform_f64`.
+#[derive(Clone, Copy, Debug)]
+pub struct UniformF64 {
+    min: f64,
+    max: f64,
+    seed: u64,
+}
+
+/// Infinite random stream for `normal_f32`.
+#[derive(Clone, Copy, Debug)]
+pub struct NormalF32 {
+    mean: f32,
+    stddev: f32,
+    seed: u64,
+}
+
+/// Infinite random stream for `normal_f64`.
+#[derive(Clone, Copy, Debug)]
+pub struct NormalF64 {
+    mean: f64,
+    stddev: f64,
+    seed: u64,
+}
+
+macro_rules! impl_take {
+    ($( $stream:ident ),+ $(,)?) => {
+        $(
+            impl $stream {
+                /// Turns this lazy stream into a finite read-only iterator.
+                pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+                    lazy::Taken::new(self, len)
+                }
+            }
+        )+
+    };
+}
+
+impl_take!(
+    UniformU32, UniformU64, UniformF32, UniformF64, NormalF32, NormalF64
+);
+
+#[doc(hidden)]
+pub struct UniformU32Op;
+#[doc(hidden)]
+pub struct UniformU64Op;
+#[doc(hidden)]
+pub struct UniformF32Op;
+#[doc(hidden)]
+pub struct UniformF64Op;
+#[doc(hidden)]
+pub struct NormalF32Op;
+#[doc(hidden)]
+pub struct NormalF64Op;
+
+fn counting_read<R>(
+    len: MIndex,
+    policy: &crate::detail::CubePolicy<R>,
+) -> crate::detail::read::CountingRead
 where
     R: Runtime,
 {
-    lazy::transform(
-        Zip4(
-            lazy::counting(0).take(n),
-            lazy::constant(mean).take(n),
-            lazy::constant(stddev).take(n),
-            lazy::constant(seed).take(n),
-        ),
-        NormalF64,
-    )
+    let handle = policy.client().create_from_slice(MIndex::as_bytes(&[0]));
+    crate::detail::read::CountingRead::new(handle, len as usize)
 }
 
-struct UniformU32;
-struct UniformU64;
-struct UniformF32;
-struct UniformF64;
-struct NormalF32;
-struct NormalF64;
+macro_rules! impl_random_miter {
+    ($stream:ident { $a:ident, $b:ident } => $op:ident, $item:ty) => {
+        impl<R> MIter<R> for lazy::Taken<$stream>
+        where
+            R: Runtime,
+            $item: lazy::ConstantItem<R>,
+            u64: lazy::ConstantItem<R>,
+            crate::detail::read::ZipRead4<
+                crate::detail::read::CountingRead,
+                <$item as lazy::ConstantItem<R>>::Read,
+                <$item as lazy::ConstantItem<R>>::Read,
+                <u64 as lazy::ConstantItem<R>>::Read,
+            >: crate::detail::read::KernelReadBoundMany<R, Item = (MIndex, $item, $item, u64)>,
+            crate::detail::read::TransformRead<
+                crate::detail::read::ZipRead4<
+                    crate::detail::read::CountingRead,
+                    <$item as lazy::ConstantItem<R>>::Read,
+                    <$item as lazy::ConstantItem<R>>::Read,
+                    <u64 as lazy::ConstantItem<R>>::Read,
+                >,
+                $op,
+            >: crate::detail::read::KernelReadBoundMany<R, Item = $item>,
+        {
+            type Item = $item;
+            type Inner = ();
+            type Read = crate::detail::read::TransformRead<
+                crate::detail::read::ZipRead4<
+                    crate::detail::read::CountingRead,
+                    <$item as lazy::ConstantItem<R>>::Read,
+                    <$item as lazy::ConstantItem<R>>::Read,
+                    <u64 as lazy::ConstantItem<R>>::Read,
+                >,
+                $op,
+            >;
+
+            fn len(&self) -> MIndex {
+                self.len
+            }
+
+            fn into_inner(self) -> Self::Inner {
+                unreachable!("lazy random MIter has no storage inner")
+            }
+
+            fn lower_read_ref(
+                &self,
+                policy: &crate::detail::CubePolicy<R>,
+            ) -> Result<Self::Read, Error> {
+                let len = self.len;
+                let input = crate::detail::read::ZipRead4::new(
+                    counting_read::<R>(len, policy),
+                    <$item as lazy::ConstantItem<R>>::lower_constant_read(
+                        self.expr.$a,
+                        len,
+                        policy,
+                    )?,
+                    <$item as lazy::ConstantItem<R>>::lower_constant_read(
+                        self.expr.$b,
+                        len,
+                        policy,
+                    )?,
+                    <u64 as lazy::ConstantItem<R>>::lower_constant_read(
+                        self.expr.seed,
+                        len,
+                        policy,
+                    )?,
+                );
+                Ok(crate::detail::read::TransformRead::new(input))
+            }
+
+            fn validate_executor(&self, _exec: &crate::runtime::Executor<R>) -> Result<(), Error> {
+                Ok(())
+            }
+        }
+    };
+}
+
+impl_random_miter!(UniformU32 { min, max } => UniformU32Op, u32);
+impl_random_miter!(UniformU64 { min, max } => UniformU64Op, u64);
+impl_random_miter!(UniformF32 { min, max } => UniformF32Op, f32);
+impl_random_miter!(UniformF64 { min, max } => UniformF64Op, f64);
+impl_random_miter!(NormalF32 { mean, stddev } => NormalF32Op, f32);
+impl_random_miter!(NormalF64 { mean, stddev } => NormalF64Op, f64);
 
 #[cube]
-impl<R> crate::op::UnaryOp<R, (MIndex, u32, u32, u64)> for UniformU32
+impl<R> crate::op::UnaryOp<R, (MIndex, u32, u32, u64)> for UniformU32Op
 where
     R: Runtime,
 {
@@ -157,7 +236,7 @@ where
 }
 
 #[cube]
-impl<R> crate::op::UnaryOp<R, (MIndex, u64, u64, u64)> for UniformU64
+impl<R> crate::op::UnaryOp<R, (MIndex, u64, u64, u64)> for UniformU64Op
 where
     R: Runtime,
 {
@@ -169,7 +248,7 @@ where
 }
 
 #[cube]
-impl<R> crate::op::UnaryOp<R, (MIndex, f32, f32, u64)> for UniformF32
+impl<R> crate::op::UnaryOp<R, (MIndex, f32, f32, u64)> for UniformF32Op
 where
     R: Runtime,
 {
@@ -181,7 +260,7 @@ where
 }
 
 #[cube]
-impl<R> crate::op::UnaryOp<R, (MIndex, f64, f64, u64)> for UniformF64
+impl<R> crate::op::UnaryOp<R, (MIndex, f64, f64, u64)> for UniformF64Op
 where
     R: Runtime,
 {
@@ -193,7 +272,7 @@ where
 }
 
 #[cube]
-impl<R> crate::op::UnaryOp<R, (MIndex, f32, f32, u64)> for NormalF32
+impl<R> crate::op::UnaryOp<R, (MIndex, f32, f32, u64)> for NormalF32Op
 where
     R: Runtime,
 {
@@ -205,7 +284,7 @@ where
 }
 
 #[cube]
-impl<R> crate::op::UnaryOp<R, (MIndex, f64, f64, u64)> for NormalF64
+impl<R> crate::op::UnaryOp<R, (MIndex, f64, f64, u64)> for NormalF64Op
 where
     R: Runtime,
 {

@@ -102,6 +102,13 @@ fn lazy_constant_is_a_finite_miter_after_take() {
     assert_miter_item::<WgpuRuntime, LazyConstant, u32>();
 }
 
+#[test]
+fn lazy_random_uniform_f32_is_a_finite_miter_after_take() {
+    type UniformF32 = massively::lazy::Taken<massively::util::random::UniformF32>;
+
+    assert_miter_item::<WgpuRuntime, UniformF32, f32>();
+}
+
 struct AddOne;
 
 #[cubecl::cube]

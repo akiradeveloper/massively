@@ -17,7 +17,7 @@ pub struct Constant<T> {
 impl<T> Constant<T> {
     /// Turns this lazy stream into a finite read-only iterator.
     pub fn take(self, len: MIndex) -> Taken<Self> {
-        Taken { expr: self, len }
+        Taken::new(self, len)
     }
 }
 
@@ -30,15 +30,21 @@ pub struct Counting {
 impl Counting {
     /// Turns this lazy stream into a finite read-only iterator.
     pub fn take(self, len: MIndex) -> Taken<Self> {
-        Taken { expr: self, len }
+        Taken::new(self, len)
     }
 }
 
 /// Finite lazy read-only iterator.
 #[derive(Debug)]
 pub struct Taken<Expr> {
-    expr: Expr,
-    len: MIndex,
+    pub(crate) expr: Expr,
+    pub(crate) len: MIndex,
+}
+
+impl<Expr> Taken<Expr> {
+    pub(crate) fn new(expr: Expr, len: MIndex) -> Self {
+        Self { expr, len }
+    }
 }
 
 /// Lazy permuted read-only iterator.

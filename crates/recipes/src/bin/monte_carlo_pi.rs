@@ -63,13 +63,13 @@ where
     let y = exec.full(samples, 0_u32)?;
     transform(
         exec,
-        random::uniform_u32(samples, 0, SCALE, 0x1234_5678)?,
+        random::uniform_u32(0, SCALE, 0x1234_5678)?.take(samples),
         MaterializeU32,
         Zip1(x.slice_mut(..)),
     )?;
     transform(
         exec,
-        random::uniform_u32(samples, 0, SCALE, 0x8765_4321)?,
+        random::uniform_u32(0, SCALE, 0x8765_4321)?.take(samples),
         MaterializeU32,
         Zip1(y.slice_mut(..)),
     )?;
