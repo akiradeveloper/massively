@@ -805,9 +805,6 @@ pub(crate) fn logical3_reduce_expr_partials_kernel<
     slot2: &[LeafC],
     slot_offsets: &[u32],
     len: &[u32],
-    init_a: &[LeafA],
-    init_b: &[LeafB],
-    init_c: &[LeafC],
     partial_a: &mut [LeafA],
     partial_b: &mut [LeafB],
     partial_c: &mut [LeafC],
@@ -820,42 +817,17 @@ pub(crate) fn logical3_reduce_expr_partials_kernel<
     let mut values_c = Shared::<[LeafC]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
-    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-    let step = (CUBE_DIM as usize) * partial_a.len();
-    let has_value = RuntimeCell::<u32>::new(0u32);
-    let mut acc_a = init_a[0];
-    let mut acc_b = init_b[0];
-    let mut acc_c = init_c[0];
-
-    while i.read() < logical_len {
-        let value = Expr::eval3(slot0, slot1, slot2, slot_offsets, i.read());
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < logical_len {
+        let value = Expr::eval3(slot0, slot1, slot2, slot_offsets, global);
         let value = Pack::unpack(value);
-        if has_value.read() != 0 {
-            let next = Op::apply(
-                Pack::pack(acc_a, acc_b, acc_c),
-                Pack::pack(value.0, value.1, value.2),
-            );
-            let next = Pack::unpack(next);
-            acc_a = next.0;
-            acc_b = next.1;
-            acc_c = next.2;
-        } else {
-            acc_a = value.0;
-            acc_b = value.1;
-            acc_c = value.2;
-            has_value.store(1u32);
-        }
-        if step >= logical_len - i.read() {
-            i.store(logical_len);
-        } else {
-            i.store(i.read() + step);
-        }
+        values_a[unit] = value.0;
+        values_b[unit] = value.1;
+        values_c[unit] = value.2;
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
     }
-
-    values_a[unit] = acc_a;
-    values_b[unit] = acc_b;
-    values_c[unit] = acc_c;
-    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
     let stride = RuntimeCell::<usize>::new(cube_dim / 2);
@@ -917,40 +889,15 @@ pub(crate) fn logical3_reduce_partials_kernel<
     let mut values_c = Shared::<[LeafC]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
-    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-    let step = (CUBE_DIM as usize) * partial_a.len();
-    let has_value = RuntimeCell::<u32>::new(0u32);
-    let acc_a = RuntimeCell::<LeafA>::new(input_a[0]);
-    let acc_b = RuntimeCell::<LeafB>::new(input_b[0]);
-    let acc_c = RuntimeCell::<LeafC>::new(input_c[0]);
-
-    while i.read() < logical_len {
-        if has_value.read() != 0 {
-            let value = Pack::pack(input_a[i.read()], input_b[i.read()], input_c[i.read()]);
-            let next = Op::apply(Pack::pack(acc_a.read(), acc_b.read(), acc_c.read()), value);
-            let next = Pack::unpack(next);
-            acc_a.store(next.0);
-            acc_b.store(next.1);
-            acc_c.store(next.2);
-        } else {
-            let value = Pack::pack(input_a[i.read()], input_b[i.read()], input_c[i.read()]);
-            let value = Pack::unpack(value);
-            acc_a.store(value.0);
-            acc_b.store(value.1);
-            acc_c.store(value.2);
-            has_value.store(1u32);
-        }
-        if step >= logical_len - i.read() {
-            i.store(logical_len);
-        } else {
-            i.store(i.read() + step);
-        }
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < logical_len {
+        values_a[unit] = input_a[global];
+        values_b[unit] = input_b[global];
+        values_c[unit] = input_c[global];
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
     }
-
-    values_a[unit] = acc_a.read();
-    values_b[unit] = acc_b.read();
-    values_c[unit] = acc_c.read();
-    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
     let stride = RuntimeCell::<usize>::new(cube_dim / 2);
@@ -1064,14 +1011,6 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     slot7: &[ExprLeaf7],
     slot_offsets: &[u32],
     len: &[u32],
-    init0: &[Leaf0],
-    init1: &[Leaf1],
-    init2: &[Leaf2],
-    init3: &[Leaf3],
-    init4: &[Leaf4],
-    init5: &[Leaf5],
-    init6: &[Leaf6],
-    init7: &[Leaf7],
     partial0: &mut [Leaf0],
     partial1: &mut [Leaf1],
     partial2: &mut [Leaf2],
@@ -1094,19 +1033,8 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     let mut values7 = Shared::<[Leaf7]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
-    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-    let step = (CUBE_DIM as usize) * partial0.len();
-    let has_value = RuntimeCell::<u32>::new(0u32);
-    let mut acc0 = init0[0];
-    let mut acc1 = init1[0];
-    let mut acc2 = init2[0];
-    let mut acc3 = init3[0];
-    let mut acc4 = init4[0];
-    let mut acc5 = init5[0];
-    let mut acc6 = init6[0];
-    let mut acc7 = init7[0];
-
-    while i.read() < logical_len {
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < logical_len {
         let value = Expr::eval7(
             slot0,
             slot1,
@@ -1117,52 +1045,21 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
             slot6,
             slot7,
             slot_offsets,
-            i.read(),
+            global,
         );
         let value = Pack::unpack(value);
-        if has_value.read() != 0 {
-            let next = Op::apply(
-                Pack::pack(acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7),
-                Pack::pack(
-                    value.0, value.1, value.2, value.3, value.4, value.5, value.6, value.7,
-                ),
-            );
-            let next = Pack::unpack(next);
-            acc0 = next.0;
-            acc1 = next.1;
-            acc2 = next.2;
-            acc3 = next.3;
-            acc4 = next.4;
-            acc5 = next.5;
-            acc6 = next.6;
-            acc7 = next.7;
-        } else {
-            acc0 = value.0;
-            acc1 = value.1;
-            acc2 = value.2;
-            acc3 = value.3;
-            acc4 = value.4;
-            acc5 = value.5;
-            acc6 = value.6;
-            acc7 = value.7;
-            has_value.store(1u32);
-        }
-        if step >= logical_len - i.read() {
-            i.store(logical_len);
-        } else {
-            i.store(i.read() + step);
-        }
+        values0[unit] = value.0;
+        values1[unit] = value.1;
+        values2[unit] = value.2;
+        values3[unit] = value.3;
+        values4[unit] = value.4;
+        values5[unit] = value.5;
+        values6[unit] = value.6;
+        values7[unit] = value.7;
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
     }
-
-    values0[unit] = acc0;
-    values1[unit] = acc1;
-    values2[unit] = acc2;
-    values3[unit] = acc3;
-    values4[unit] = acc4;
-    values5[unit] = acc5;
-    values6[unit] = acc6;
-    values7[unit] = acc7;
-    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
     let stride = RuntimeCell::<usize>::new(cube_dim / 2);
@@ -1276,79 +1173,20 @@ pub(crate) fn logical7_reduce_partials_kernel<
     let mut values7 = Shared::<[Leaf7]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
-    let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-    let step = (CUBE_DIM as usize) * partial0.len();
-    let has_value = RuntimeCell::<u32>::new(0u32);
-    let acc0 = RuntimeCell::<Leaf0>::new(input0[0]);
-    let acc1 = RuntimeCell::<Leaf1>::new(input1[0]);
-    let acc2 = RuntimeCell::<Leaf2>::new(input2[0]);
-    let acc3 = RuntimeCell::<Leaf3>::new(input3[0]);
-    let acc4 = RuntimeCell::<Leaf4>::new(input4[0]);
-    let acc5 = RuntimeCell::<Leaf5>::new(input5[0]);
-    let acc6 = RuntimeCell::<Leaf6>::new(input6[0]);
-    let acc7 = RuntimeCell::<Leaf7>::new(input7[0]);
-
-    while i.read() < logical_len {
-        if has_value.read() != 0 {
-            let value = Pack::pack(
-                input0[i.read()],
-                input1[i.read()],
-                input2[i.read()],
-                input3[i.read()],
-                input4[i.read()],
-                input5[i.read()],
-                input6[i.read()],
-                input7[i.read()],
-            );
-            let next = Op::apply(
-                Pack::pack(
-                    acc0.read(),
-                    acc1.read(),
-                    acc2.read(),
-                    acc3.read(),
-                    acc4.read(),
-                    acc5.read(),
-                    acc6.read(),
-                    acc7.read(),
-                ),
-                value,
-            );
-            let next = Pack::unpack(next);
-            acc0.store(next.0);
-            acc1.store(next.1);
-            acc2.store(next.2);
-            acc3.store(next.3);
-            acc4.store(next.4);
-            acc5.store(next.5);
-            acc6.store(next.6);
-            acc7.store(next.7);
-        } else {
-            acc0.store(input0[i.read()]);
-            acc1.store(input1[i.read()]);
-            acc2.store(input2[i.read()]);
-            acc3.store(input3[i.read()]);
-            acc4.store(input4[i.read()]);
-            acc5.store(input5[i.read()]);
-            acc6.store(input6[i.read()]);
-            acc7.store(input7[i.read()]);
-            has_value.store(1u32);
-        }
-        if step >= logical_len - i.read() {
-            i.store(logical_len);
-        } else {
-            i.store(i.read() + step);
-        }
+    let global = (CUBE_POS as usize) * cube_dim + unit;
+    if global < logical_len {
+        values0[unit] = input0[global];
+        values1[unit] = input1[global];
+        values2[unit] = input2[global];
+        values3[unit] = input3[global];
+        values4[unit] = input4[global];
+        values5[unit] = input5[global];
+        values6[unit] = input6[global];
+        values7[unit] = input7[global];
+        valid[unit] = 1u32;
+    } else {
+        valid[unit] = 0u32;
     }
-
-    values0[unit] = acc0.read();
-    values1[unit] = acc1.read();
-    values2[unit] = acc2.read();
-    values3[unit] = acc3.read();
-    values4[unit] = acc4.read();
-    values5[unit] = acc5.read();
-    values6[unit] = acc6.read();
-    values7[unit] = acc7.read();
-    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
     let stride = RuntimeCell::<usize>::new(cube_dim / 2);
