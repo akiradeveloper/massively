@@ -805,6 +805,9 @@ pub(crate) fn logical3_reduce_expr_partials_kernel<
     slot2: &[LeafC],
     slot_offsets: &[u32],
     len: &[u32],
+    init_a: &[LeafA],
+    init_b: &[LeafB],
+    init_c: &[LeafC],
     partial_a: &mut [LeafA],
     partial_b: &mut [LeafB],
     partial_c: &mut [LeafC],
@@ -819,28 +822,40 @@ pub(crate) fn logical3_reduce_expr_partials_kernel<
 
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partial_a.len();
-    valid[unit] = 0u32;
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let mut acc_a = init_a[0];
+    let mut acc_b = init_b[0];
+    let mut acc_c = init_c[0];
 
     while i.read() < logical_len {
         let value = Expr::eval3(slot0, slot1, slot2, slot_offsets, i.read());
         let value = Pack::unpack(value);
-        if valid[unit] != 0 {
+        if has_value.read() != 0 {
             let next = Op::apply(
-                Pack::pack(values_a[unit], values_b[unit], values_c[unit]),
+                Pack::pack(acc_a, acc_b, acc_c),
                 Pack::pack(value.0, value.1, value.2),
             );
             let next = Pack::unpack(next);
-            values_a[unit] = next.0;
-            values_b[unit] = next.1;
-            values_c[unit] = next.2;
+            acc_a = next.0;
+            acc_b = next.1;
+            acc_c = next.2;
         } else {
-            values_a[unit] = value.0;
-            values_b[unit] = value.1;
-            values_c[unit] = value.2;
-            valid[unit] = 1u32;
+            acc_a = value.0;
+            acc_b = value.1;
+            acc_c = value.2;
+            has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
+
+    values_a[unit] = acc_a;
+    values_b[unit] = acc_b;
+    values_c[unit] = acc_c;
+    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
     let stride = RuntimeCell::<usize>::new(cube_dim / 2);
@@ -925,7 +940,11 @@ pub(crate) fn logical3_reduce_partials_kernel<
             acc_c.store(value.2);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values_a[unit] = acc_a.read();
@@ -1045,6 +1064,14 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
     slot7: &[ExprLeaf7],
     slot_offsets: &[u32],
     len: &[u32],
+    init0: &[Leaf0],
+    init1: &[Leaf1],
+    init2: &[Leaf2],
+    init3: &[Leaf3],
+    init4: &[Leaf4],
+    init5: &[Leaf5],
+    init6: &[Leaf6],
+    init7: &[Leaf7],
     partial0: &mut [Leaf0],
     partial1: &mut [Leaf1],
     partial2: &mut [Leaf2],
@@ -1069,7 +1096,15 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
 
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partial0.len();
-    valid[unit] = 0u32;
+    let has_value = RuntimeCell::<u32>::new(0u32);
+    let mut acc0 = init0[0];
+    let mut acc1 = init1[0];
+    let mut acc2 = init2[0];
+    let mut acc3 = init3[0];
+    let mut acc4 = init4[0];
+    let mut acc5 = init5[0];
+    let mut acc6 = init6[0];
+    let mut acc7 = init7[0];
 
     while i.read() < logical_len {
         let value = Expr::eval7(
@@ -1085,44 +1120,49 @@ pub(crate) fn logical7_reduce_expr_partials_kernel<
             i.read(),
         );
         let value = Pack::unpack(value);
-        if valid[unit] != 0 {
+        if has_value.read() != 0 {
             let next = Op::apply(
-                Pack::pack(
-                    values0[unit],
-                    values1[unit],
-                    values2[unit],
-                    values3[unit],
-                    values4[unit],
-                    values5[unit],
-                    values6[unit],
-                    values7[unit],
-                ),
+                Pack::pack(acc0, acc1, acc2, acc3, acc4, acc5, acc6, acc7),
                 Pack::pack(
                     value.0, value.1, value.2, value.3, value.4, value.5, value.6, value.7,
                 ),
             );
             let next = Pack::unpack(next);
-            values0[unit] = next.0;
-            values1[unit] = next.1;
-            values2[unit] = next.2;
-            values3[unit] = next.3;
-            values4[unit] = next.4;
-            values5[unit] = next.5;
-            values6[unit] = next.6;
-            values7[unit] = next.7;
+            acc0 = next.0;
+            acc1 = next.1;
+            acc2 = next.2;
+            acc3 = next.3;
+            acc4 = next.4;
+            acc5 = next.5;
+            acc6 = next.6;
+            acc7 = next.7;
         } else {
-            values0[unit] = value.0;
-            values1[unit] = value.1;
-            values2[unit] = value.2;
-            values3[unit] = value.3;
-            values4[unit] = value.4;
-            values5[unit] = value.5;
-            values6[unit] = value.6;
-            values7[unit] = value.7;
-            valid[unit] = 1u32;
+            acc0 = value.0;
+            acc1 = value.1;
+            acc2 = value.2;
+            acc3 = value.3;
+            acc4 = value.4;
+            acc5 = value.5;
+            acc6 = value.6;
+            acc7 = value.7;
+            has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
+
+    values0[unit] = acc0;
+    values1[unit] = acc1;
+    values2[unit] = acc2;
+    values3[unit] = acc3;
+    values4[unit] = acc4;
+    values5[unit] = acc5;
+    values6[unit] = acc6;
+    values7[unit] = acc7;
+    valid[unit] = if has_value.read() != 0 { 1u32 } else { 0u32 };
     sync_cube();
 
     let stride = RuntimeCell::<usize>::new(cube_dim / 2);
@@ -1293,7 +1333,11 @@ pub(crate) fn logical7_reduce_partials_kernel<
             acc7.store(input7[i.read()]);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values0[unit] = acc0.read();
@@ -2799,7 +2843,11 @@ pub(crate) fn logical7_minmax_partials_kernel<
                 max_index.store(other_max);
             }
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     min_indices[unit] = min_index.read() as u32;
@@ -3106,7 +3154,11 @@ pub(crate) fn logical7_minmax_index_partials_kernel<
                 max_index.store(candidate_max);
             }
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     min_indices[unit] = min_index.read() as u32;
@@ -6081,7 +6133,11 @@ macro_rules! define_tuple_minmax_device_expr_kernels {
                         max_index.store(i.read());
                     }
                 }
-                i.store(i.read() + step);
+                if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
             }
 
             min_indices[unit] = min_index.read() as u32;
@@ -6296,7 +6352,11 @@ macro_rules! define_tuple_minmax_device_expr_kernels {
                         max_index.store(candidate_max);
                     }
                 }
-                i.store(i.read() + step);
+                if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
             }
 
             min_indices[unit] = min_index.read() as u32;
@@ -11267,7 +11327,11 @@ pub(crate) fn reduce_expr_partials_kernel<T: CubePrimitive, Expr: GpuExpr<T>, Op
             acc.store(value);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values[unit] = acc.read();
@@ -11330,6 +11394,8 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
     b_slot3: &[B],
     b_slot_offsets: &[u32],
     len: &[u32],
+    init_a: &[A],
+    init_b: &[B],
     partial_a: &mut [A],
     partial_b: &mut [B],
 ) {
@@ -11343,22 +11409,8 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partial_a.len();
     let has_value = RuntimeCell::<u32>::new(0u32);
-    let acc_a = RuntimeCell::<A>::new(ExprA::eval(
-        a_slot0,
-        a_slot1,
-        a_slot2,
-        a_slot3,
-        a_slot_offsets,
-        0,
-    ));
-    let acc_b = RuntimeCell::<B>::new(ExprB::eval(
-        b_slot0,
-        b_slot1,
-        b_slot2,
-        b_slot3,
-        b_slot_offsets,
-        0,
-    ));
+    let acc_a = RuntimeCell::<A>::new(init_a[0]);
+    let acc_b = RuntimeCell::<B>::new(init_b[0]);
 
     while i.read() < logical_len {
         let value = (
@@ -11374,7 +11426,11 @@ pub(crate) fn tuple2_device_reduce_expr_partials_kernel<
             acc_b.store(value.1);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values_a[unit] = acc_a.read();
@@ -11451,7 +11507,11 @@ pub(crate) fn tuple2_reduce_partials_kernel<
             acc_b.store(value.1);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values_a[unit] = acc_a.read();
@@ -11538,6 +11598,9 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
     c_slot3: &[C],
     c_slot_offsets: &[u32],
     len: &[u32],
+    init_a: &[A],
+    init_b: &[B],
+    init_c: &[C],
     partial_a: &mut [A],
     partial_b: &mut [B],
     partial_c: &mut [C],
@@ -11553,30 +11616,9 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partial_a.len();
     let has_value = RuntimeCell::<u32>::new(0u32);
-    let acc_a = RuntimeCell::<A>::new(ExprA::eval(
-        a_slot0,
-        a_slot1,
-        a_slot2,
-        a_slot3,
-        a_slot_offsets,
-        0,
-    ));
-    let acc_b = RuntimeCell::<B>::new(ExprB::eval(
-        b_slot0,
-        b_slot1,
-        b_slot2,
-        b_slot3,
-        b_slot_offsets,
-        0,
-    ));
-    let acc_c = RuntimeCell::<C>::new(ExprC::eval(
-        c_slot0,
-        c_slot1,
-        c_slot2,
-        c_slot3,
-        c_slot_offsets,
-        0,
-    ));
+    let acc_a = RuntimeCell::<A>::new(init_a[0]);
+    let acc_b = RuntimeCell::<B>::new(init_b[0]);
+    let acc_c = RuntimeCell::<C>::new(init_c[0]);
 
     while i.read() < logical_len {
         let value = (
@@ -11595,7 +11637,11 @@ pub(crate) fn tuple3_device_reduce_expr_partials_kernel<
             acc_c.store(value.2);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values_a[unit] = acc_a.read();
@@ -11684,7 +11730,11 @@ pub(crate) fn tuple3_reduce_partials_kernel<
             acc_c.store(value.2);
             has_value.store(1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     values_a[unit] = acc_a.read();
@@ -11762,7 +11812,7 @@ macro_rules! define_tuple_reduce_device_expr_partials_kernel {
     (
         $fn_name:ident,
         $first_partial:ident,
-        ($( $ty:ident : $expr:ident : $slot0:ident : $slot1:ident : $slot2:ident : $slot3:ident : $offsets:ident : $partial:ident : $value:ident : $acc:ident : $field:tt ),+)
+        ($( $ty:ident : $expr:ident : $slot0:ident : $slot1:ident : $slot2:ident : $slot3:ident : $offsets:ident : $init:ident : $partial:ident : $value:ident : $acc:ident : $field:tt ),+)
     ) => {
         #[cube(launch_unchecked, explicit_define)]
         pub(crate) fn $fn_name<
@@ -11778,6 +11828,7 @@ macro_rules! define_tuple_reduce_device_expr_partials_kernel {
                 $offsets: &[u32],
             )+
             len: &[u32],
+            $( $init: &[$ty], )+
             $( $partial: &mut [$ty], )+
         ) {
             let unit = UNIT_POS as usize;
@@ -11792,14 +11843,7 @@ macro_rules! define_tuple_reduce_device_expr_partials_kernel {
             let step = (CUBE_DIM as usize) * $first_partial.len();
             let has_value = RuntimeCell::<u32>::new(0u32);
             $(
-                let $acc = RuntimeCell::<$ty>::new($expr::eval(
-                    $slot0,
-                    $slot1,
-                    $slot2,
-                    $slot3,
-                    $offsets,
-                    0,
-                ));
+                let $acc = RuntimeCell::<$ty>::new($init[0]);
             )+
 
             while i.read() < logical_len {
@@ -11819,7 +11863,11 @@ macro_rules! define_tuple_reduce_device_expr_partials_kernel {
                     )+
                     has_value.store(1u32);
                 }
-                i.store(i.read() + step);
+                if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
             }
 
             $(
@@ -11906,7 +11954,11 @@ macro_rules! define_tuple_reduce_partials_kernel {
                     )+
                     has_value.store(1u32);
                 }
-                i.store(i.read() + step);
+                if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
             }
 
             $(
@@ -11978,13 +12030,13 @@ define_tuple_reduce_device_expr_partials_kernel!(
     tuple7_device_reduce_expr_partials_kernel,
     partial_a,
     (
-        A: ExprA: a_slot0: a_slot1: a_slot2: a_slot3: a_offsets: partial_a: values_a: acc_a: 0,
-        B: ExprB: b_slot0: b_slot1: b_slot2: b_slot3: b_offsets: partial_b: values_b: acc_b: 1,
-        C: ExprC: c_slot0: c_slot1: c_slot2: c_slot3: c_offsets: partial_c: values_c: acc_c: 2,
-        D: ExprD: d_slot0: d_slot1: d_slot2: d_slot3: d_offsets: partial_d: values_d: acc_d: 3,
-        E: ExprE: e_slot0: e_slot1: e_slot2: e_slot3: e_offsets: partial_e: values_e: acc_e: 4,
-        F: ExprF: f_slot0: f_slot1: f_slot2: f_slot3: f_offsets: partial_f: values_f: acc_f: 5,
-        G: ExprG: g_slot0: g_slot1: g_slot2: g_slot3: g_offsets: partial_g: values_g: acc_g: 6
+        A: ExprA: a_slot0: a_slot1: a_slot2: a_slot3: a_offsets: init_a: partial_a: values_a: acc_a: 0,
+        B: ExprB: b_slot0: b_slot1: b_slot2: b_slot3: b_offsets: init_b: partial_b: values_b: acc_b: 1,
+        C: ExprC: c_slot0: c_slot1: c_slot2: c_slot3: c_offsets: init_c: partial_c: values_c: acc_c: 2,
+        D: ExprD: d_slot0: d_slot1: d_slot2: d_slot3: d_offsets: init_d: partial_d: values_d: acc_d: 3,
+        E: ExprE: e_slot0: e_slot1: e_slot2: e_slot3: e_offsets: init_e: partial_e: values_e: acc_e: 4,
+        F: ExprF: f_slot0: f_slot1: f_slot2: f_slot3: f_offsets: init_f: partial_f: values_f: acc_f: 5,
+        G: ExprG: g_slot0: g_slot1: g_slot2: g_slot3: g_offsets: init_g: partial_g: values_g: acc_g: 6
     )
 );
 
@@ -12041,7 +12093,11 @@ pub(crate) fn count_if_expr_partials_kernel<
         if Pred::apply(Expr::eval(input, indices, rhs, rhs_indices, i.read())) {
             count.store(count.read() + 1u32);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     counts[unit] = count.read();
@@ -12065,15 +12121,20 @@ pub(crate) fn count_if_expr_partials_kernel<
 pub(crate) fn sum_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
+    let logical_len = input.len();
     let mut counts = Shared::<[u32]>::new_slice(cube_dim);
 
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partials.len();
     let count = RuntimeCell::<u32>::new(0u32);
 
-    while i.read() < input.len() {
+    while i.read() < logical_len {
         count.store(count.read() + input[i.read()]);
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     counts[unit] = count.read();
@@ -12123,7 +12184,11 @@ pub(crate) fn find_if_expr_partials_kernel<
                 best.store(i.read() as u32);
             }
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     best_indices[unit] = best.read();
@@ -12147,17 +12212,22 @@ pub(crate) fn find_if_expr_partials_kernel<
 pub(crate) fn min_u32_partials_kernel(input: &[u32], partials: &mut [u32]) {
     let unit = UNIT_POS as usize;
     let cube_dim = 256usize;
+    let logical_len = input.len();
     let mut best_indices = Shared::<[u32]>::new_slice(cube_dim);
 
     let i = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
     let step = (CUBE_DIM as usize) * partials.len();
     let best = RuntimeCell::<u32>::new(input[0]);
 
-    while i.read() < input.len() {
+    while i.read() < logical_len {
         if input[i.read()] < best.read() {
             best.store(input[i.read()]);
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     best_indices[unit] = best.read();
@@ -12208,7 +12278,11 @@ pub(crate) fn adjacent_find_expr_partials_kernel<
                 best.store(i.read() as u32);
             }
         }
-        i.store(i.read() + step);
+        if step >= logical_len - i.read() {
+            i.store(logical_len);
+        } else {
+            i.store(i.read() + step);
+        }
     }
 
     best_indices[unit] = best.read();

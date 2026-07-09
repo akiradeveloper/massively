@@ -65,6 +65,10 @@ where
     let slot1 = bindings.slot_or_first(1);
     let slot2 = bindings.slot_or_first(2);
     let offsets = bindings.slot_offsets_handle(client)?;
+    let (init_leaf_a, init_leaf_b, init_leaf_c) = Pack::leaves_host(init);
+    let init_a = client.create_from_slice(LeafA::as_bytes(&[init_leaf_a]));
+    let init_b = client.create_from_slice(LeafB::as_bytes(&[init_leaf_b]));
+    let init_c = client.create_from_slice(LeafC::as_bytes(&[init_leaf_c]));
 
     unsafe {
         logical3_reduce_expr_partials_kernel::launch_unchecked::<
@@ -85,6 +89,9 @@ where
             BufferArg::from_raw_parts(slot2.0.clone(), slot2.1),
             BufferArg::from_raw_parts(offsets.clone(), 4),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(init_a.clone(), 1),
+            BufferArg::from_raw_parts(init_b.clone(), 1),
+            BufferArg::from_raw_parts(init_c.clone(), 1),
             BufferArg::from_raw_parts(partial_a.clone(), partial_len),
             BufferArg::from_raw_parts(partial_b.clone(), partial_len),
             BufferArg::from_raw_parts(partial_c.clone(), partial_len),
@@ -133,10 +140,6 @@ where
         current_len = next_len;
     }
 
-    let (init_a, init_b, init_c) = Pack::leaves_host(init);
-    let init_a = client.create_from_slice(LeafA::as_bytes(&[init_a]));
-    let init_b = client.create_from_slice(LeafB::as_bytes(&[init_b]));
-    let init_c = client.create_from_slice(LeafC::as_bytes(&[init_c]));
     let output_a = client.empty(std::mem::size_of::<LeafA>());
     let output_b = client.empty(std::mem::size_of::<LeafB>());
     let output_c = client.empty(std::mem::size_of::<LeafC>());
@@ -267,6 +270,24 @@ where
     let slot6 = bindings.slot_or_first(6);
     let slot7 = bindings.slot_or_first(7);
     let offsets = bindings.slot_offsets8_handle(client)?;
+    let (
+        init_leaf0,
+        init_leaf1,
+        init_leaf2,
+        init_leaf3,
+        init_leaf4,
+        init_leaf5,
+        init_leaf6,
+        init_leaf7,
+    ) = Pack::leaves_host(init);
+    let init0 = client.create_from_slice(Leaf0::as_bytes(&[init_leaf0]));
+    let init1 = client.create_from_slice(Leaf1::as_bytes(&[init_leaf1]));
+    let init2 = client.create_from_slice(Leaf2::as_bytes(&[init_leaf2]));
+    let init3 = client.create_from_slice(Leaf3::as_bytes(&[init_leaf3]));
+    let init4 = client.create_from_slice(Leaf4::as_bytes(&[init_leaf4]));
+    let init5 = client.create_from_slice(Leaf5::as_bytes(&[init_leaf5]));
+    let init6 = client.create_from_slice(Leaf6::as_bytes(&[init_leaf6]));
+    let init7 = client.create_from_slice(Leaf7::as_bytes(&[init_leaf7]));
 
     unsafe {
         logical7_reduce_expr_partials_kernel::launch_unchecked::<
@@ -305,6 +326,14 @@ where
             BufferArg::from_raw_parts(slot7.0.clone(), slot7.1),
             BufferArg::from_raw_parts(offsets.clone(), 8),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(init0.clone(), 1),
+            BufferArg::from_raw_parts(init1.clone(), 1),
+            BufferArg::from_raw_parts(init2.clone(), 1),
+            BufferArg::from_raw_parts(init3.clone(), 1),
+            BufferArg::from_raw_parts(init4.clone(), 1),
+            BufferArg::from_raw_parts(init5.clone(), 1),
+            BufferArg::from_raw_parts(init6.clone(), 1),
+            BufferArg::from_raw_parts(init7.clone(), 1),
             BufferArg::from_raw_parts(partial0.clone(), partial_len),
             BufferArg::from_raw_parts(partial1.clone(), partial_len),
             BufferArg::from_raw_parts(partial2.clone(), partial_len),
@@ -388,15 +417,6 @@ where
         current_len = next_len;
     }
 
-    let (init0, init1, init2, init3, init4, init5, init6, init7) = Pack::leaves_host(init);
-    let init0 = client.create_from_slice(Leaf0::as_bytes(&[init0]));
-    let init1 = client.create_from_slice(Leaf1::as_bytes(&[init1]));
-    let init2 = client.create_from_slice(Leaf2::as_bytes(&[init2]));
-    let init3 = client.create_from_slice(Leaf3::as_bytes(&[init3]));
-    let init4 = client.create_from_slice(Leaf4::as_bytes(&[init4]));
-    let init5 = client.create_from_slice(Leaf5::as_bytes(&[init5]));
-    let init6 = client.create_from_slice(Leaf6::as_bytes(&[init6]));
-    let init7 = client.create_from_slice(Leaf7::as_bytes(&[init7]));
     let output0 = client.empty(std::mem::size_of::<Leaf0>());
     let output1 = client.empty(std::mem::size_of::<Leaf1>());
     let output2 = client.empty(std::mem::size_of::<Leaf2>());
@@ -538,6 +558,8 @@ where
     let b3 = b.slots.get(3).unwrap_or(b0);
     let a_offsets = a.slot_offsets_handle(client)?;
     let b_offsets = b.slot_offsets_handle(client)?;
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
 
     unsafe {
         tuple2_device_reduce_expr_partials_kernel::launch_unchecked::<A, B, ExprA, ExprB, Op, R>(
@@ -555,6 +577,8 @@ where
             unsafe { BufferArg::from_raw_parts(b3.0.clone(), b3.1) },
             unsafe { BufferArg::from_raw_parts(b_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_b.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(partial_a.clone(), partial_len) },
             unsafe { BufferArg::from_raw_parts(partial_b.clone(), partial_len) },
         );
@@ -589,8 +613,6 @@ where
         current_len = next_len;
     }
 
-    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
-    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
     let output_a = client.empty(std::mem::size_of::<A>());
     let output_b = client.empty(std::mem::size_of::<B>());
     unsafe {
@@ -657,6 +679,9 @@ where
     let a_offsets = a.slot_offsets_handle(client)?;
     let b_offsets = b.slot_offsets_handle(client)?;
     let c_offsets = c.slot_offsets_handle(client)?;
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
+    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
 
     unsafe {
         tuple3_device_reduce_expr_partials_kernel::launch_unchecked::<
@@ -688,6 +713,9 @@ where
             unsafe { BufferArg::from_raw_parts(c3.0.clone(), c3.1) },
             unsafe { BufferArg::from_raw_parts(c_offsets.clone(), 4) },
             unsafe { BufferArg::from_raw_parts(len_handle.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_a.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_b.clone(), 1) },
+            unsafe { BufferArg::from_raw_parts(init_c.clone(), 1) },
             unsafe { BufferArg::from_raw_parts(partial_a.clone(), partial_len) },
             unsafe { BufferArg::from_raw_parts(partial_b.clone(), partial_len) },
             unsafe { BufferArg::from_raw_parts(partial_c.clone(), partial_len) },
@@ -728,9 +756,6 @@ where
         current_len = next_len;
     }
 
-    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
-    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
-    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
     let output_a = client.empty(std::mem::size_of::<A>());
     let output_b = client.empty(std::mem::size_of::<B>());
     let output_c = client.empty(std::mem::size_of::<C>());
@@ -859,6 +884,13 @@ where
     let g1 = g.slot_or_first(1);
     let g2 = g.slot_or_first(2);
     let g3 = g.slot_or_first(3);
+    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
+    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
+    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
+    let init_d = client.create_from_slice(D::as_bytes(&[init.3]));
+    let init_e = client.create_from_slice(E::as_bytes(&[init.4]));
+    let init_f = client.create_from_slice(F::as_bytes(&[init.5]));
+    let init_g = client.create_from_slice(G::as_bytes(&[init.6]));
 
     unsafe {
         tuple7_device_reduce_expr_partials_kernel::launch_unchecked::<
@@ -918,6 +950,13 @@ where
             BufferArg::from_raw_parts(g3.0.clone(), g3.1),
             BufferArg::from_raw_parts(g_offsets.clone(), 4),
             BufferArg::from_raw_parts(len_handle.clone(), 1),
+            BufferArg::from_raw_parts(init_a.clone(), 1),
+            BufferArg::from_raw_parts(init_b.clone(), 1),
+            BufferArg::from_raw_parts(init_c.clone(), 1),
+            BufferArg::from_raw_parts(init_d.clone(), 1),
+            BufferArg::from_raw_parts(init_e.clone(), 1),
+            BufferArg::from_raw_parts(init_f.clone(), 1),
+            BufferArg::from_raw_parts(init_g.clone(), 1),
             BufferArg::from_raw_parts(partial_a.clone(), partial_len),
             BufferArg::from_raw_parts(partial_b.clone(), partial_len),
             BufferArg::from_raw_parts(partial_c.clone(), partial_len),
@@ -982,13 +1021,6 @@ where
         current_len = next_len;
     }
 
-    let init_a = client.create_from_slice(A::as_bytes(&[init.0]));
-    let init_b = client.create_from_slice(B::as_bytes(&[init.1]));
-    let init_c = client.create_from_slice(C::as_bytes(&[init.2]));
-    let init_d = client.create_from_slice(D::as_bytes(&[init.3]));
-    let init_e = client.create_from_slice(E::as_bytes(&[init.4]));
-    let init_f = client.create_from_slice(F::as_bytes(&[init.5]));
-    let init_g = client.create_from_slice(G::as_bytes(&[init.6]));
     let output_a = client.empty(std::mem::size_of::<A>());
     let output_b = client.empty(std::mem::size_of::<B>());
     let output_c = client.empty(std::mem::size_of::<C>());

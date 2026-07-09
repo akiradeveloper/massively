@@ -133,6 +133,92 @@ fn reduce_accepts_lazy_tuple_transform_to_scalar() {
 }
 
 #[test]
+fn reduce_accepts_large_lazy_tuple_transform_to_scalar() {
+    let exec = exec();
+    let len = 100_000;
+    let hits = massively::lazy::transform(
+        massively::Zip2(
+            massively::lazy::constant(0.5_f32).take(len),
+            massively::lazy::constant(0.5_f32).take(len),
+        ),
+        DetectHitScalar,
+    );
+    assert_eq!(
+        reduce(&exec, hits, 0_u32, CountHitScalar).unwrap(),
+        len as u32
+    );
+}
+
+#[test]
+fn reduce_accepts_random_lazy_tuple_transform_to_scalar() {
+    let exec = exec();
+    let len = 100_000;
+    let hits = massively::lazy::transform(
+        massively::Zip2(
+            massively::util::random::uniform_f32(0.0, 1.0, 0)
+                .unwrap()
+                .take(len),
+            massively::util::random::uniform_f32(0.0, 1.0, 1)
+                .unwrap()
+                .take(len),
+        ),
+        DetectHitScalar,
+    );
+    let count = reduce(&exec, hits, 0_u32, CountHitScalar).unwrap();
+    let pi = (count as f64 / len as f64) * 4.0;
+    assert!((3.0..3.3).contains(&pi), "pi={pi}, count={count}");
+}
+
+#[test]
+fn reduce_estimates_pi_from_lazy_random_transform() {
+    let exec = exec();
+    let n = 4;
+    let m = 100_000;
+    let mut sum_pi = 0.0;
+
+    for i in 0..n {
+        let seed = i as u64 * 2;
+        let x = massively::util::random::uniform_f32(0.0, 1.0, seed)
+            .unwrap()
+            .take(m);
+        let y = massively::util::random::uniform_f32(0.0, 1.0, seed + 1)
+            .unwrap()
+            .take(m);
+        let hits = massively::lazy::transform(massively::Zip2(x, y), DetectHitScalar);
+        let count = reduce(&exec, hits, 0_u32, CountHitScalar).unwrap();
+        sum_pi += (count as f64 / m as f64) * 4.0;
+    }
+
+    let pi = sum_pi / n as f64;
+    assert!((3.0..3.3).contains(&pi), "pi={pi}");
+}
+
+#[test]
+#[ignore = "4G-scale regression test; run explicitly on a GPU-capable machine"]
+fn reduce_estimates_pi_from_lazy_random_transform_4g() {
+    let exec = exec();
+    let n = 1;
+    let m = 4_000_000_000_u32;
+    let mut sum_pi = 0.0;
+
+    for i in 0..n {
+        let seed = i as u64 * 2;
+        let x = massively::util::random::uniform_f32(0.0, 1.0, seed)
+            .unwrap()
+            .take(m);
+        let y = massively::util::random::uniform_f32(0.0, 1.0, seed + 1)
+            .unwrap()
+            .take(m);
+        let hits = massively::lazy::transform(massively::Zip2(x, y), DetectHitScalar);
+        let count = reduce(&exec, hits, 0_u32, CountHitScalar).unwrap();
+        sum_pi += (count as f64 / m as f64) * 4.0;
+    }
+
+    let pi = sum_pi / n as f64;
+    assert!((3.10..3.18).contains(&pi), "pi={pi}");
+}
+
+#[test]
 fn reduce_accepts_lazy_tuple1_transform_to_scalar() {
     let exec = exec();
     let hits = massively::lazy::transform(
