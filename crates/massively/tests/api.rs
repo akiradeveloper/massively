@@ -41,6 +41,8 @@ mod is_partitioned;
 mod is_sorted;
 #[path = "api/is_sorted_until.rs"]
 mod is_sorted_until;
+#[path = "api/lazy_transform_consumers.rs"]
+mod lazy_transform_consumers;
 #[path = "api/lexicographical_compare.rs"]
 mod lexicographical_compare;
 #[path = "api/lower_bound.rs"]

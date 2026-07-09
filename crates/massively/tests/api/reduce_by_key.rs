@@ -1,5 +1,26 @@
 use crate::common::*;
 
+struct TuplePairToOne;
+struct TuplePairToKey;
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32, u32)> for TuplePairToOne {
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32)) -> (u32,) {
+        (input.0 + input.1,)
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<WgpuRuntime, (u32, u32)> for TuplePairToKey {
+    type Output = (u32,);
+
+    fn apply(input: (u32, u32)) -> (u32,) {
+        (input.0 + input.1,)
+    }
+}
+
 fn count_reduced_values_after_allocated_slice<Values, Op, Pred>(
     exec: &massively::Executor<WgpuRuntime>,
     keys: massively::Zip1<massively::DeviceSlice<'_, WgpuRuntime, u32>>,
@@ -29,6 +50,63 @@ where
     )
     .unwrap();
     count_if(exec, out_values.slice(..len), pred).unwrap()
+}
+
+#[test]
+fn reduce_by_key_accepts_lazy_tuple_transform_values() {
+    let exec = exec();
+    let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
+    let a = exec.to_device(&[1_u32, 2, 10, 20]).unwrap();
+    let b = exec.to_device(&[3_u32, 4, 30, 40]).unwrap();
+    let out_keys = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 4]).unwrap();
+
+    let values =
+        massively::lazy::transform(massively::Zip2(a.slice(..), b.slice(..)), TuplePairToOne);
+    let len = reduce_by_key(
+        &exec,
+        massively::Zip1(keys.slice(..)),
+        values,
+        EqualU32,
+        (0_u32,),
+        Sum,
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 1]);
+    assert_eq!(
+        exec.to_host(&out_values.slice(..len)).unwrap(),
+        vec![10, 100]
+    );
+}
+
+#[test]
+fn reduce_by_key_accepts_lazy_tuple_transform_keys() {
+    let exec = exec();
+    let k0 = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
+    let k1 = exec.to_device(&[0_u32, 0, 0, 0]).unwrap();
+    let values = exec.to_device(&[1_u32, 2, 10, 20]).unwrap();
+    let out_keys = exec.to_device(&[0_u32; 4]).unwrap();
+    let out_values = exec.to_device(&[0_u32; 4]).unwrap();
+
+    let keys =
+        massively::lazy::transform(massively::Zip2(k0.slice(..), k1.slice(..)), TuplePairToKey);
+    let len = reduce_by_key(
+        &exec,
+        keys,
+        massively::Zip1(values.slice(..)),
+        EqualU32,
+        (0_u32,),
+        Sum,
+        massively::Zip1(out_keys.slice_mut(..)),
+        massively::Zip1(out_values.slice_mut(..)),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&out_keys.slice(..len)).unwrap(), vec![0, 1]);
+    assert_eq!(exec.to_host(&out_values.slice(..len)).unwrap(), vec![3, 30]);
 }
 
 #[test]
