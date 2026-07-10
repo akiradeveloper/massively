@@ -1,108 +1,69 @@
-use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SIZES, ascending_u32, iter_gpu, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::op::BinaryPredicateOp;
-use massively::{Executor, Zip1, lower_bound, upper_bound};
+use massively::{BinaryPredicateOp, lower_bound, upper_bound};
 
 struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<WgpuRuntime, (u32,)> for Less {
-    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
-        lhs.0 < rhs.0
+impl BinaryPredicateOp<u32> for Less {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
-fn query_u32(len: usize) -> Vec<u32> {
+fn queries(len: usize) -> Vec<u32> {
     (0..len)
         .map(|index| ((index * 1_103_515_245 + 12_345) % (len.max(1) * 2)) as u32)
         .collect()
 }
 
-fn check_search(exec: &Executor<WgpuRuntime>) {
-    let input = exec.to_device(&[0_u32, 0, 2, 2, 2]).unwrap();
-    let values = exec.to_device(&[0_u32, 1, 2]).unwrap();
-    let lower = exec.to_device(&[0_u32; 3]).unwrap();
-    lower_bound(
-        exec,
-        Zip1(input.slice(..)),
-        Zip1(values.slice(..)),
-        Less,
-        lower.slice_mut(..),
-    )
-    .unwrap();
-    assert_eq!(exec.to_host(&lower).unwrap(), vec![0, 2, 2]);
-    let upper = exec.to_device(&[0_u32; 3]).unwrap();
-    upper_bound(
-        exec,
-        Zip1(input.slice(..)),
-        Zip1(values.slice(..)),
-        Less,
-        upper.slice_mut(..),
-    )
-    .unwrap();
-    assert_eq!(exec.to_host(&upper).unwrap(), vec![2, 2, 5]);
-}
-
 fn bench_search(c: &mut Criterion) {
-    let mut lower_group = c.benchmark_group("lower_bound");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-        check_search(&exec);
-
-        for &len in SIZES {
-            let input = exec.to_device(&ascending_u32(len)).unwrap();
-            let values = exec.to_device(&query_u32(len)).unwrap();
-            let output = exec.to_device(&vec![0_u32; len]).unwrap();
-            sync(&exec);
-            lower_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                iter_gpu(b, || {
-                    lower_bound(
-                        &exec,
-                        Zip1(black_box(input.slice(..))),
-                        Zip1(black_box(values.slice(..))),
-                        Less,
-                        black_box(output.slice_mut(..)),
-                    )
-                    .unwrap();
-                    sync(&exec);
-                    black_box(&output)
-                })
-            });
-        }
+    let exec = common::exec();
+    let mut lower = c.benchmark_group("lower_bound");
+    for &len in common::SIZES {
+        let source = exec.to_device(&(0..len).map(|index| index as u32).collect::<Vec<_>>());
+        let values = exec.to_device(&queries(len));
+        let output = exec.alloc::<u32>(len);
+        lower.bench_function(BenchmarkId::new("gpu", len), |b| {
+            b.iter(|| {
+                lower_bound(
+                    &exec,
+                    black_box(source.slice(..)),
+                    black_box(values.slice(..)),
+                    Less,
+                    black_box(output.slice_mut(..)),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+                black_box(&output);
+            })
+        });
     }
-    lower_group.finish();
+    lower.finish();
 
-    let mut upper_group = c.benchmark_group("upper_bound");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-        check_search(&exec);
-
-        for &len in SIZES {
-            let input = exec.to_device(&ascending_u32(len)).unwrap();
-            let values = exec.to_device(&query_u32(len)).unwrap();
-            let output = exec.to_device(&vec![0_u32; len]).unwrap();
-            sync(&exec);
-            upper_group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                iter_gpu(b, || {
-                    upper_bound(
-                        &exec,
-                        Zip1(black_box(input.slice(..))),
-                        Zip1(black_box(values.slice(..))),
-                        Less,
-                        black_box(output.slice_mut(..)),
-                    )
-                    .unwrap();
-                    sync(&exec);
-                    black_box(&output)
-                })
-            });
-        }
+    let mut upper = c.benchmark_group("upper_bound");
+    for &len in common::SIZES {
+        let source = exec.to_device(&(0..len).map(|index| index as u32).collect::<Vec<_>>());
+        let values = exec.to_device(&queries(len));
+        let output = exec.alloc::<u32>(len);
+        upper.bench_function(BenchmarkId::new("gpu", len), |b| {
+            b.iter(|| {
+                upper_bound(
+                    &exec,
+                    black_box(source.slice(..)),
+                    black_box(values.slice(..)),
+                    Less,
+                    black_box(output.slice_mut(..)),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+                black_box(&output);
+            })
+        });
     }
-    upper_group.finish();
+    upper.finish();
 }
 
 criterion_group! {

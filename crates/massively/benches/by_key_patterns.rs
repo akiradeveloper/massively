@@ -1,178 +1,117 @@
-use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SIZES, dense_f32, iter_gpu, run_keys, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::op::{BinaryPredicateOp, ReductionOp};
-use massively::{Executor, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key};
+use massively::{
+    BinaryPredicateOp, ReductionOp, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key,
+};
 
+struct Equal;
 struct Sum;
 
 #[cubecl::cube]
-impl ReductionOp<WgpuRuntime, (f32,)> for Sum {
-    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
-        (lhs.0 + rhs.0,)
+impl BinaryPredicateOp<u32> for Equal {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
     }
 }
-
-struct KeyEq;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<WgpuRuntime, (u32,)> for KeyEq {
-    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
-        lhs.0 == rhs.0
+impl ReductionOp<f32> for Sum {
+    fn apply(lhs: f32, rhs: f32) -> f32 {
+        lhs + rhs
     }
 }
 
-fn key_patterns(len: usize) -> Vec<(&'static str, Vec<u32>)> {
-    vec![
-        ("run1", run_keys(len, 1)),
-        ("run8", run_keys(len, 8)),
-        ("run128", run_keys(len, 128)),
-        ("all", run_keys(len, len)),
+fn key_patterns(len: usize) -> [(String, Vec<u32>); 4] {
+    [
+        ("run1".into(), common::run_keys(len, 1)),
+        ("run8".into(), common::run_keys(len, 8)),
+        ("run128".into(), common::run_keys(len, 128)),
+        ("all".into(), common::run_keys(len, len)),
     ]
 }
 
-fn check_by_key(exec: &Executor<WgpuRuntime>) {
-    let keys = exec.to_device(&[0_u32, 0, 1, 1]).unwrap();
-    let values = exec.to_device(&[1.0_f32, 2.0, 10.0, 20.0]).unwrap();
-
-    let inclusive = exec.to_device(&[0.0_f32; 4]).unwrap();
-    inclusive_scan_by_key(
-        exec,
-        massively::Zip1(keys.slice(..)),
-        massively::Zip1(values.slice(..)),
-        KeyEq,
-        Sum,
-        massively::Zip1(inclusive.slice_mut(..)),
-    )
-    .unwrap();
-    assert_eq!(
-        exec.to_host(&inclusive).unwrap(),
-        vec![1.0, 3.0, 10.0, 30.0]
-    );
-
-    let exclusive = exec.to_device(&[0.0_f32; 4]).unwrap();
-    exclusive_scan_by_key(
-        exec,
-        massively::Zip1(keys.slice(..)),
-        massively::Zip1(values.slice(..)),
-        KeyEq,
-        (0.0,),
-        Sum,
-        massively::Zip1(exclusive.slice_mut(..)),
-    )
-    .unwrap();
-    assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0.0, 1.0, 0.0, 10.0]);
-}
-
 fn bench_by_key_patterns(c: &mut Criterion) {
-    let mut inclusive_group = c.benchmark_group("inclusive_scan_by_key_patterns");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-        check_by_key(&exec);
-
-        for &len in SIZES {
-            let values = exec.to_device(&dense_f32(len)).unwrap();
-            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
-            for (pattern, host_keys) in key_patterns(len) {
-                let keys = exec.to_device(&host_keys).unwrap();
-                sync(&exec);
-                inclusive_group.bench_function(
-                    BenchmarkId::new(format!("{}-{pattern}", backend.name()), len),
-                    |b| {
-                        iter_gpu(b, || {
-                            inclusive_scan_by_key(
-                                &exec,
-                                massively::Zip1(black_box(keys.slice(..))),
-                                massively::Zip1(black_box(values.slice(..))),
-                                KeyEq,
-                                Sum,
-                                massively::Zip1(black_box(output.slice_mut(..))),
-                            )
-                            .unwrap();
-                            sync(&exec);
-                            black_box(&output)
-                        })
-                    },
-                );
-            }
+    let exec = common::exec();
+    let mut inclusive = c.benchmark_group("inclusive_scan_by_key_patterns");
+    for &len in common::SIZES {
+        let values = exec.to_device(&common::dense_f32(len));
+        let output = exec.alloc::<f32>(len);
+        for (pattern, host_keys) in key_patterns(len) {
+            let keys = exec.to_device(&host_keys);
+            inclusive.bench_function(BenchmarkId::new(pattern, len), |b| {
+                b.iter(|| {
+                    inclusive_scan_by_key(
+                        &exec,
+                        black_box(keys.slice(..)),
+                        black_box(values.slice(..)),
+                        Equal,
+                        Sum,
+                        black_box(output.slice_mut(..)),
+                    )
+                    .unwrap();
+                    exec.sync().unwrap();
+                    black_box(&output);
+                })
+            });
         }
     }
-    inclusive_group.finish();
+    inclusive.finish();
 
-    let mut exclusive_group = c.benchmark_group("exclusive_scan_by_key_patterns");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-        check_by_key(&exec);
-
-        for &len in SIZES {
-            let values = exec.to_device(&dense_f32(len)).unwrap();
-            let output = exec.to_device(&vec![0.0_f32; len]).unwrap();
-            for (pattern, host_keys) in key_patterns(len) {
-                let keys = exec.to_device(&host_keys).unwrap();
-                sync(&exec);
-                exclusive_group.bench_function(
-                    BenchmarkId::new(format!("{}-{pattern}", backend.name()), len),
-                    |b| {
-                        iter_gpu(b, || {
-                            exclusive_scan_by_key(
-                                &exec,
-                                massively::Zip1(black_box(keys.slice(..))),
-                                massively::Zip1(black_box(values.slice(..))),
-                                KeyEq,
-                                (0.0,),
-                                Sum,
-                                massively::Zip1(black_box(output.slice_mut(..))),
-                            )
-                            .unwrap();
-                            sync(&exec);
-                            black_box(&output)
-                        })
-                    },
-                );
-            }
+    let mut exclusive = c.benchmark_group("exclusive_scan_by_key_patterns");
+    for &len in common::SIZES {
+        let values = exec.to_device(&common::dense_f32(len));
+        let output = exec.alloc::<f32>(len);
+        for (pattern, host_keys) in key_patterns(len) {
+            let keys = exec.to_device(&host_keys);
+            exclusive.bench_function(BenchmarkId::new(pattern, len), |b| {
+                b.iter(|| {
+                    exclusive_scan_by_key(
+                        &exec,
+                        black_box(keys.slice(..)),
+                        black_box(values.slice(..)),
+                        Equal,
+                        0.0,
+                        Sum,
+                        black_box(output.slice_mut(..)),
+                    )
+                    .unwrap();
+                    exec.sync().unwrap();
+                    black_box(&output);
+                })
+            });
         }
     }
-    exclusive_group.finish();
+    exclusive.finish();
 
-    let mut reduce_group = c.benchmark_group("reduce_by_key_patterns");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-        check_by_key(&exec);
-
-        for &len in SIZES {
-            let values = exec.to_device(&dense_f32(len)).unwrap();
-            let out_keys = exec.to_device(&vec![0_u32; len]).unwrap();
-            let out_values = exec.to_device(&vec![0.0_f32; len]).unwrap();
-            for (pattern, host_keys) in key_patterns(len) {
-                let keys = exec.to_device(&host_keys).unwrap();
-                sync(&exec);
-                reduce_group.bench_function(
-                    BenchmarkId::new(format!("{}-{pattern}", backend.name()), len),
-                    |b| {
-                        iter_gpu(b, || {
-                            let len = reduce_by_key(
-                                &exec,
-                                massively::Zip1(black_box(keys.slice(..))),
-                                massively::Zip1(black_box(values.slice(..))),
-                                KeyEq,
-                                (0.0,),
-                                Sum,
-                                massively::Zip1(black_box(out_keys.slice_mut(..))),
-                                massively::Zip1(black_box(out_values.slice_mut(..))),
-                            )
-                            .unwrap();
-                            sync(&exec);
-                            black_box((len, &out_keys, &out_values))
-                        })
-                    },
-                );
-            }
+    let mut reduce = c.benchmark_group("reduce_by_key_patterns");
+    for &len in common::SIZES {
+        let values = exec.to_device(&common::dense_f32(len));
+        let out_keys = exec.alloc::<u32>(len);
+        let out_values = exec.alloc::<f32>(len);
+        for (pattern, host_keys) in key_patterns(len) {
+            let keys = exec.to_device(&host_keys);
+            reduce.bench_function(BenchmarkId::new(pattern, len), |b| {
+                b.iter(|| {
+                    let output_len = reduce_by_key(
+                        &exec,
+                        black_box(keys.slice(..)),
+                        black_box(values.slice(..)),
+                        Equal,
+                        0.0,
+                        Sum,
+                        black_box(out_keys.slice_mut(..)),
+                        black_box(out_values.slice_mut(..)),
+                    )
+                    .unwrap();
+                    exec.sync().unwrap();
+                    black_box((output_len, &out_keys, &out_values));
+                })
+            });
         }
     }
-    reduce_group.finish();
+    reduce.finish();
 }
 
 criterion_group! {

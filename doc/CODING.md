@@ -41,10 +41,10 @@ Algorithms should be written in their simplest form.
 ### Avoid Arity Explosion
 
 Some APIs take multiple parameters, such as keys and values. Suppose these are
-`Param1` and `Param2`. If `Param1` is `Zip2` and `Param2` is `Zip3`, and the
-implementation has to know about the `Zip2 x Zip3` combination directly, the
-number of implementation cases grows multiplicatively. We call this "arity
-explosion."
+`Param1` and `Param2`. If `Param1` is a two-leaf `Zip<A, B>` and `Param2` is a
+three-leaf `Zip<Zip<C, D>, E>`, and the implementation has to know about that
+two-by-three combination directly, the number of implementation cases grows
+multiplicatively. We call this "arity explosion."
 
 An implementation that suffers from arity explosion cannot scale to more key or
 value columns, and compile times will also grow explosively.

@@ -1,58 +1,80 @@
 //! Multi-platform GPU parallel algorithms for Rust.
-#![allow(private_interfaces)]
 //!
-//! `massively` is a Thrust-inspired algorithm layer on top of CubeCL.
+//! Massively provides Thrust-style algorithms on top of CubeCL. Host/device transfers are
+//! explicit, algorithm outputs are preallocated, and lazy expressions can be fused into the
+//! consuming GPU kernel.
 //!
-//! The crate is organized around three public layers:
+//! # Quick start
 //!
-//! - [`runtime`] prepares a CubeCL runtime from a device, owns host/device
-//!   transfers, and manages device memory such as [`DeviceVec`],
-//!   [`DeviceSlice`], and [`DeviceSliceMut`].
-//! - [`iter`] provides Zip inputs and massively iterator traits.
-//! - [`value`] provides massively item traits.
-//! - [`op`] provides CubeCL-backed operation traits.
-//! - [`algorithm`] provides parallel algorithms such as [`transform`],
-//!   [`reduce`], and [`sort`].
-//! - [`util`] provides helper facilities such as GPU-side random columns.
+//! ```
+//! use cubecl::prelude::*;
+//! use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+//! use massively::{Executor, UnaryOp, transform};
 //!
-//! User-defined operations are written as CubeCL cube traits. Low-level CubeCL
-//! launch and storage details remain internal implementation details.
+//! struct Double;
+//!
+//! #[cubecl::cube]
+//! impl UnaryOp<u32> for Double {
+//!     type Output = u32;
+//!
+//!     fn apply(value: u32) -> u32 {
+//!         value * 2
+//!     }
+//! }
+//!
+//! let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+//! let input = exec.to_device(&[1_u32, 2, 3, 4]);
+//! let output = exec.alloc::<u32>(input.len());
+//!
+//! transform(&exec, input.slice(..), Double, output.slice_mut(..)).unwrap();
+//!
+//! assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 6, 8]);
+//! ```
+//!
+//! # Core concepts
+//!
+//! - [`Executor`] owns the GPU runtime client and provides allocation and transfer methods.
+//! - [`DeviceVec`], [`DeviceSlice`], and [`DeviceSliceMut`] are the owning and borrowed device
+//!   containers used at API boundaries.
+//! - [`MIter`] and [`MIterMut`] are the public iterator capabilities accepted by algorithms.
+//! - [`zip2`] through [`zip7`] combine columns; [`tuple2`] through [`tuple7`] construct their
+//!   corresponding item values.
+//! - [`lazy`] provides allocation-free sources and adapters.
+//! - [`op`] contains reusable GPU operations such as [`op::Identity`].
 
-pub mod algorithm;
-mod detail;
-mod error;
-mod index;
-pub mod iter;
-pub mod lazy;
-pub mod op;
-pub mod runtime;
-pub mod util;
-pub mod value;
+mod api;
+mod core;
 
-pub use algorithm::{
-    adjacent_difference, adjacent_find, all_of, any_of, copy_where, count_if, equal,
-    exclusive_scan, exclusive_scan_by_key, fill, find_first_of, find_if, gather, gather_where,
-    inclusive_scan, inclusive_scan_by_key, is_partitioned, is_sorted, is_sorted_until,
-    lexicographical_compare, lower_bound, max_element, merge, merge_by_key, min_element,
-    minmax_element, mismatch, none_of, partition, reduce, reduce_by_key, remove_where,
-    replace_where, reverse, scatter, scatter_where, set_difference, set_intersection, set_union,
-    sort, sort_by_key, transform, transform_where, unique, unique_by_key, upper_bound,
+// Crate-private compatibility aliases keep the kernel core independent from
+// the public module layout. They are not part of the external API.
+pub(crate) use core::allocation::{MAlloc, MStorage};
+pub(crate) use core::arity::{A1, A2, A3, A4, A5, A6, A7, A8};
+pub(crate) use core::read::{
+    Column, Constant, Counting, Permute, ReadExpression, ReverseCounting, Taken, Transform,
 };
-pub use error::Error;
-pub use index::MIndex;
-pub use iter::{MIter, MIterMut, MStorage, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7, Zip8};
-pub use runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
-pub use value::{MAlloc, MItem, MStorageElement};
+pub(crate) use core::reduce::Dispatch;
+pub(crate) use core::storage::{S1, S2, S3, S4, S5, S6, S7, StorageLayout};
+pub(crate) use core::transform::materialize;
+pub(crate) use core::value::MStorageElement;
+pub(crate) use core::{
+    allocation, arity, eval, indexed, launch, masked, merge, ordering, output, predicate, read,
+    reduce, scan, search, segmented, selection, storage, transform, value,
+};
 
-/// Common facade traits and types.
-///
-/// Algorithm functions are intentionally not included; call them through the
-/// `massively::` namespace.
+pub use api::algorithm::*;
+pub use api::iter::{MIter, MIterMut, WriteFrom, Zip, zip2, zip3, zip4, zip5, zip6, zip7};
+pub use api::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
+pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
+pub use api::tuple::{
+    Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, flatten3, flatten4, flatten5, flatten6,
+    flatten7, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7,
+};
+pub use api::{Error, MIndex, lazy, op, util};
+/// Common public data and operation types. Algorithms remain at crate root.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,
-        MStorage, MStorageElement, Zip1, Zip2, Zip3, Zip4, Zip5, Zip6, Zip7, Zip8,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIndex, MIter, MIterMut, Tuple2, Tuple3,
+        Tuple4, Tuple5, Tuple6, Tuple7, Zip, flatten3, flatten4, flatten5, flatten6, flatten7,
+        tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, zip2, zip3, zip4, zip5, zip6, zip7,
     };
 }
-
-pub(crate) use detail::{device, expr, kernels, policy, primitives};

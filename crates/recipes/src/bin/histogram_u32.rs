@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip1, reduce_by_key, sort};
+use massively::{DeviceVec, Executor, MIndex, reduce_by_key, sort};
 
 struct Output<B: cubecl::prelude::Runtime> {
     category_id: DeviceVec<B, u32>,
@@ -27,25 +27,25 @@ where
     B: cubecl::prelude::Runtime,
 {
     let len = category_id.len() as usize;
-    let sorted = exec.to_device(&vec![0_u32; len])?;
+    let sorted = exec.to_device(&vec![0_u32; len]);
     sort(
-        exec,
-        Zip1(category_id.slice(..)),
+        &exec,
+        category_id.slice(..),
         common::LessU32,
-        Zip1(sorted.slice_mut(..)),
+        sorted.slice_mut(..),
     )?;
     let ones = exec.full(sorted.len(), 1_u32)?;
-    let category_id = exec.to_device(&vec![0_u32; len])?;
-    let count = exec.to_device(&vec![0_u32; len])?;
+    let category_id = exec.to_device(&vec![0_u32; len]);
+    let count = exec.to_device(&vec![0_u32; len]);
     let len = reduce_by_key(
-        exec,
-        Zip1(sorted.slice(..)),
-        Zip1(ones.slice(..)),
+        &exec,
+        sorted.slice(..),
+        ones.slice(..),
         common::EqualU32,
-        (0_u32,),
+        0_u32,
         common::SumU32,
-        Zip1(category_id.slice_mut(..)),
-        Zip1(count.slice_mut(..)),
+        category_id.slice_mut(..),
+        count.slice_mut(..),
     )?;
     Ok(Output {
         category_id,
@@ -56,13 +56,13 @@ where
 
 fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
-    let output = solve(&exec, exec.to_device(&[2, 1, 2, 3, 1, 2])?)?;
+    let output = solve(&exec, exec.to_device(&[2, 1, 2, 3, 1, 2]))?;
     assert_eq!(
-        exec.to_host(&output.category_id.slice(..output.len))?,
+        exec.to_host(&output.category_id.slice(..output.len as usize))?,
         vec![1, 2, 3]
     );
     assert_eq!(
-        exec.to_host(&output.count.slice(..output.len))?,
+        exec.to_host(&output.count.slice(..output.len as usize))?,
         vec![2, 3, 1]
     );
     Ok(())

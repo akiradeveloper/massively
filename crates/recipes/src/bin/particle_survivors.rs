@@ -15,35 +15,33 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, Zip3, remove_where, transform};
+use massively::{DeviceVec, Executor, lazy, remove_where, transform, zip3};
 
 struct AdvanceParticle;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (f32, f32, f32)> for AdvanceParticle
-where
-    B: cubecl::prelude::Runtime,
-{
-    type Output = (f32, f32, f32);
+impl UnaryOp<((f32, f32), f32)> for AdvanceParticle {
+    type Output = ((f32, f32), f32);
 
-    fn apply(input: (f32, f32, f32)) -> (f32, f32, f32) {
-        let x = input.0 + input.2;
-        let y = input.1 + 0.5;
-        (x, y, input.2)
+    fn apply(input: ((f32, f32), f32)) -> ((f32, f32), f32) {
+        let x = input.0.0 + input.1;
+        let y = input.0.1 + 0.5;
+        ((x, y), input.1)
     }
 }
 
 struct OutsideParticleBox;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (f32, f32, f32)> for OutsideParticleBox
-where
-    B: cubecl::prelude::Runtime,
-{
-    type Output = bool;
+impl UnaryOp<((f32, f32), f32)> for OutsideParticleBox {
+    type Output = u32;
 
-    fn apply(input: (f32, f32, f32)) -> bool {
-        input.0 < 0.0 || input.0 > 10.0 || input.1 < 0.0 || input.1 > 10.0
+    fn apply(input: ((f32, f32), f32)) -> u32 {
+        if input.0.0 < 0.0 || input.0.0 > 10.0 || input.0.1 < 0.0 || input.0.1 > 10.0 {
+            1u32
+        } else {
+            0u32
+        }
     }
 }
 
@@ -66,10 +64,10 @@ where
     let next_y = exec.full(y.len(), 0.0_f32)?;
     let next_vx = exec.full(vx.len(), 0.0_f32)?;
     transform(
-        exec,
-        Zip3(x.slice(..), y.slice(..), vx.slice(..)),
+        &exec,
+        zip3(x.slice(..), y.slice(..), vx.slice(..)),
         AdvanceParticle,
-        Zip3(
+        zip3(
             next_x.slice_mut(..),
             next_y.slice_mut(..),
             next_vx.slice_mut(..),
@@ -79,18 +77,18 @@ where
     let y = exec.full(next_y.len(), 0.0_f32)?;
     let vx = exec.full(next_vx.len(), 0.0_f32)?;
     let len = remove_where(
-        exec,
-        Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
-        massively::lazy::transform(
-            Zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
+        &exec,
+        zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
+        lazy::transform(
+            zip3(next_x.slice(..), next_y.slice(..), next_vx.slice(..)),
             OutsideParticleBox,
         ),
-        Zip3(x.slice_mut(..), y.slice_mut(..), vx.slice_mut(..)),
+        zip3(x.slice_mut(..), y.slice_mut(..), vx.slice_mut(..)),
     )?;
     Ok(Output {
-        x: exec.to_device(&exec.to_host(&x.slice(..len))?)?,
-        y: exec.to_device(&exec.to_host(&y.slice(..len))?)?,
-        vx: exec.to_device(&exec.to_host(&vx.slice(..len))?)?,
+        x: exec.to_device(&exec.to_host(&x.slice(..len as usize))?),
+        y: exec.to_device(&exec.to_host(&y.slice(..len as usize))?),
+        vx: exec.to_device(&exec.to_host(&vx.slice(..len as usize))?),
     })
 }
 
@@ -98,9 +96,9 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[0.0, 9.5, 4.0])?,
-        exec.to_device(&[0.0, 9.8, 1.0])?,
-        exec.to_device(&[1.0, 1.0, -2.0])?,
+        exec.to_device(&[0.0, 9.5, 4.0]),
+        exec.to_device(&[0.0, 9.8, 1.0]),
+        exec.to_device(&[1.0, 1.0, -2.0]),
     )?;
     assert_eq!(exec.to_host(&output.x)?, vec![1.0, 2.0]);
     assert_eq!(exec.to_host(&output.y)?, vec![0.5, 1.5]);

@@ -5,9 +5,10 @@ Runnable LeetCode-style recipes for `massively`.
 Each binary starts with a problem statement, implements a `solve` function, and
 uses `main` only to run a small sample case with assertions.
 
-Recipes use CubeCL runtimes directly through `Executor<R>`. `monte_carlo_pi`
-also demonstrates `massively::util::random` by generating the sample
-coordinates on the GPU.
+Recipes use CubeCL runtimes directly through `Executor<R>`, device slices, and
+the public `zip2` through `zip7` helpers. `monte_carlo_pi` uploads deterministic
+host-generated sample coordinates before performing its map/reduce computation
+on the GPU.
 
 Run one recipe:
 

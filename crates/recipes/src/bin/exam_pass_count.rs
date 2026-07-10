@@ -14,17 +14,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::PredicateOp;
-use massively::{DeviceVec, Executor, MIndex, Zip1, count_if};
+use massively::{DeviceVec, Executor, MIndex, count_if};
 
 struct PassingScore;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (u32,)> for PassingScore
-where
-    B: cubecl::prelude::Runtime,
-{
-    fn apply(input: (u32,)) -> bool {
-        input.0 >= 60_u32
+impl PredicateOp<u32> for PassingScore {
+    fn apply(input: u32) -> bool {
+        input >= 60_u32
     }
 }
 
@@ -32,12 +29,12 @@ fn solve<B>(exec: &Executor<B>, score: DeviceVec<B, u32>) -> common::Result<MInd
 where
     B: cubecl::prelude::Runtime,
 {
-    count_if(exec, Zip1(score.slice(..)), PassingScore)
+    count_if(&exec, score.slice(..), PassingScore)
 }
 
 fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
-    let count = solve(&exec, exec.to_device(&[95, 40, 60, 59, 80])?)?;
+    let count = solve(&exec, exec.to_device(&[95, 40, 60, 59, 80]))?;
     assert_eq!(count, 3);
     Ok(())
 }

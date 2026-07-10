@@ -1,0 +1,251 @@
+use cubecl::prelude::Runtime;
+
+use crate::{Error, Executor, MIndex, MIter, MIterMut, PredicateOp, UnaryOp, WriteFrom};
+
+/// Copies rows whose stencil is nonzero.
+///
+/// The return value is the number of items written at the beginning of `output`.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, copy_where};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let input = exec.to_device(&[10_u32, 20, 30, 40]);
+/// let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
+/// let output = exec.alloc::<u32>(input.len());
+///
+/// let len = copy_where(
+///     &exec,
+///     input.slice(..),
+///     stencil.slice(..),
+///     output.slice_mut(..),
+/// )
+/// .unwrap();
+///
+/// assert_eq!(len, 2);
+/// assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![10, 30]);
+/// ```
+pub fn copy_where<R, Input, Stencil, Output>(
+    exec: &Executor<R>,
+    input: Input,
+    stencil: Stencil,
+    output: Output,
+) -> Result<MIndex, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Stencil: MIter<R, Item = MIndex>,
+    Output: MIterMut<R>,
+    Output::Item: WriteFrom<Input::Item>,
+{
+    let stencil = stencil.materialize_u32(exec)?;
+    input.select_with_flags(exec, stencil.column(), false, output)
+}
+
+/// Copies rows whose stencil is zero.
+///
+/// The return value is the number of items written at the beginning of `output`.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, remove_where};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let input = exec.to_device(&[10_u32, 20, 30, 40]);
+/// let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
+/// let output = exec.alloc::<u32>(input.len());
+///
+/// let len = remove_where(
+///     &exec,
+///     input.slice(..),
+///     stencil.slice(..),
+///     output.slice_mut(..),
+/// )
+/// .unwrap();
+///
+/// assert_eq!(len, 2);
+/// assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![20, 40]);
+/// ```
+pub fn remove_where<R, Input, Stencil, Output>(
+    exec: &Executor<R>,
+    input: Input,
+    stencil: Stencil,
+    output: Output,
+) -> Result<MIndex, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Stencil: MIter<R, Item = MIndex>,
+    Output: MIterMut<R>,
+    Output::Item: WriteFrom<Input::Item>,
+{
+    let stencil = stencil.materialize_u32(exec)?;
+    input.select_with_flags(exec, stencil.column(), true, output)
+}
+
+/// Stably partitions passing items before failing items.
+///
+/// The return value is the boundary between the two partitions.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::prelude::*;
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, PredicateOp, partition};
+///
+/// struct Even;
+///
+/// #[cubecl::cube]
+/// impl PredicateOp<u32> for Even {
+///     fn apply(value: u32) -> bool {
+///         value % 2 == 0
+///     }
+/// }
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let input = exec.to_device(&[1_u32, 2, 3, 4]);
+/// let output = exec.alloc::<u32>(input.len());
+///
+/// let boundary = partition(&exec, input.slice(..), Even, output.slice_mut(..)).unwrap();
+///
+/// assert_eq!(boundary, 2);
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 1, 3]);
+/// ```
+pub fn partition<R, Input, Output, Pred>(
+    exec: &Executor<R>,
+    input: Input,
+    pred: Pred,
+    output: Output,
+) -> Result<MIndex, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Output: MIterMut<R>,
+    Output::Item: WriteFrom<Input::Item>,
+    Pred: PredicateOp<Input::Item>,
+{
+    input.partition_with(exec, pred, output)
+}
+
+/// Fills every output item with one value.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, fill};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let output = exec.alloc::<u32>(4);
+///
+/// fill(&exec, 7, output.slice_mut(..)).unwrap();
+///
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7, 7]);
+/// ```
+pub fn fill<R, Output>(exec: &Executor<R>, value: Output::Item, output: Output) -> Result<(), Error>
+where
+    R: Runtime,
+    Output: MIterMut<R>,
+{
+    output.fill_with(exec, value)
+}
+
+/// Replaces output items whose stencil is nonzero.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, replace_where};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let stencil = exec.to_device(&[0_u32, 1, 0, 1]);
+/// let output = exec.to_device(&[10_u32, 20, 30, 40]);
+///
+/// replace_where(
+///     &exec,
+///     99,
+///     stencil.slice(..),
+///     output.slice_mut(..),
+/// )
+/// .unwrap();
+///
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 99, 30, 99]);
+/// ```
+pub fn replace_where<R, Stencil, Output>(
+    exec: &Executor<R>,
+    value: Output::Item,
+    stencil: Stencil,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Stencil: MIter<R, Item = MIndex>,
+    Output: MIterMut<R>,
+{
+    let stencil = stencil.materialize_u32(exec)?;
+    output.replace_with_flags(exec, value, stencil.column())
+}
+
+/// Applies an operation where the stencil is nonzero.
+///
+/// A zero stencil leaves the corresponding output item unchanged.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::prelude::*;
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, UnaryOp, transform_where};
+///
+/// struct AddOne;
+///
+/// #[cubecl::cube]
+/// impl UnaryOp<u32> for AddOne {
+///     type Output = u32;
+///
+///     fn apply(value: u32) -> u32 {
+///         value + 1
+///     }
+/// }
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let input = exec.to_device(&[1_u32, 2, 3]);
+/// let stencil = exec.to_device(&[1_u32, 0, 1]);
+/// let output = exec.to_device(&[100_u32, 100, 100]);
+///
+/// transform_where(
+///     &exec,
+///     input.slice(..),
+///     AddOne,
+///     stencil.slice(..),
+///     output.slice_mut(..),
+/// )
+/// .unwrap();
+///
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 100, 4]);
+/// ```
+pub fn transform_where<R, Input, Stencil, Output, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+    stencil: Stencil,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Stencil: MIter<R, Item = MIndex>,
+    Output: MIterMut<R>,
+    Op: UnaryOp<Input::Item>,
+    Output::Item: WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
+{
+    let stencil = stencil.materialize_u32(exec)?;
+    input.transform_where_with(exec, op, stencil.column(), output)
+}

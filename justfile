@@ -5,8 +5,13 @@ doc:
 bench:
     cargo bench -p massively
 
-test:
+test-api:
+    cargo doc -p massively --no-deps
+    bash scripts/check-public-api.sh
+
+test: test-api
     cargo nextest run
+    cargo test -p massively --doc
 
 test-scale:
-    cargo nextest run -p massively --test oracle_scale --run-ignored ignored-only --no-fail-fast
+    cargo nextest run -p massively --test oracle_scale --no-fail-fast

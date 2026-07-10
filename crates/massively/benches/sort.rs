@@ -1,67 +1,44 @@
-use cubecl::wgpu::WgpuRuntime;
 mod common;
 
-use common::{Runtime, SORT_SIZES, descending_f32, iter_gpu, shuffled_u32, sync};
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::op::BinaryPredicateOp;
-use massively::{Executor, sort_by_key};
+use massively::{BinaryPredicateOp, sort_by_key};
 
 struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<WgpuRuntime, (u32,)> for Less {
-    fn apply(lhs: (u32,), rhs: (u32,)) -> bool {
-        lhs.0 < rhs.0
+impl BinaryPredicateOp<u32> for Less {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
     }
 }
 
-fn check_sort_by_key(exec: &Executor<WgpuRuntime>) {
-    let keys = exec.to_device(&[2_u32, 0, 1]).unwrap();
-    let values = exec.to_device(&[20.0_f32, 0.0, 10.0]).unwrap();
-    let out_keys = exec.to_device(&[0_u32; 3]).unwrap();
-    let out_values = exec.to_device(&[0.0_f32; 3]).unwrap();
-    sort_by_key(
-        &exec,
-        massively::Zip1(keys.slice(..)),
-        massively::Zip1(values.slice(..)),
-        Less,
-        massively::Zip1(out_keys.slice_mut(..)),
-        massively::Zip1(out_values.slice_mut(..)),
-    )
-    .unwrap();
-    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![0, 1, 2]);
-    assert_eq!(exec.to_host(&out_values).unwrap(), vec![0.0, 10.0, 20.0]);
-}
-
-fn bench_sort(c: &mut Criterion) {
+fn bench_sort_by_key(c: &mut Criterion) {
+    let exec = common::exec();
     let mut group = c.benchmark_group("sort_by_key");
-    for backend in Runtime::available() {
-        let exec = backend.exec();
-        check_sort_by_key(&exec);
 
-        for &len in SORT_SIZES {
-            let keys = exec.to_device(&shuffled_u32(len)).unwrap();
-            let values = exec.to_device(&descending_f32(len)).unwrap();
-            let out_keys = exec.to_device(&vec![0_u32; len]).unwrap();
-            let out_values = exec.to_device(&vec![0.0_f32; len]).unwrap();
-            sync(&exec);
-            group.bench_function(BenchmarkId::new(backend.name(), len), |b| {
-                iter_gpu(b, || {
-                    sort_by_key(
-                        &exec,
-                        massively::Zip1(black_box(keys.slice(..))),
-                        massively::Zip1(black_box(values.slice(..))),
-                        Less,
-                        massively::Zip1(black_box(out_keys.slice_mut(..))),
-                        massively::Zip1(black_box(out_values.slice_mut(..))),
-                    )
-                    .unwrap();
-                    sync(&exec);
-                    black_box((&out_keys, &out_values))
-                })
-            });
-        }
+    for &len in common::SORT_SIZES {
+        let keys = exec.to_device(&common::shuffled_u32(len));
+        let values = exec.to_device(&common::dense_f32(len));
+        let out_keys = exec.alloc::<u32>(len);
+        let out_values = exec.alloc::<f32>(len);
+        exec.sync().unwrap();
+
+        group.bench_function(BenchmarkId::new("gpu", len), |b| {
+            b.iter(|| {
+                sort_by_key(
+                    &exec,
+                    black_box(keys.slice(..)),
+                    black_box(values.slice(..)),
+                    Less,
+                    black_box(out_keys.slice_mut(..)),
+                    black_box(out_values.slice_mut(..)),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+                black_box((&out_keys, &out_values));
+            })
+        });
     }
     group.finish();
 }
@@ -69,6 +46,6 @@ fn bench_sort(c: &mut Criterion) {
 criterion_group! {
     name = benches;
     config = common::criterion();
-    targets = bench_sort
+    targets = bench_sort_by_key
 }
 criterion_main!(benches);

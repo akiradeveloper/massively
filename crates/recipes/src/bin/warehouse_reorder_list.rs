@@ -17,25 +17,22 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{DeviceVec, Executor, Zip1, Zip2, copy_where, reverse, sort_by_key, transform};
+use massively::{DeviceVec, Executor, copy_where, reverse, sort_by_key, transform, zip2};
 
 struct InventoryUrgency;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32, u32)> for InventoryUrgency
-where
-    B: cubecl::prelude::Runtime,
-{
-    type Output = (u32,);
+impl UnaryOp<(u32, u32)> for InventoryUrgency {
+    type Output = u32;
 
-    fn apply(input: (u32, u32)) -> (u32,) {
+    fn apply(input: (u32, u32)) -> u32 {
         let stock = input.0;
         let daily_sales = input.1;
         let target = daily_sales * 3_u32;
         if target > stock {
-            (target - stock,)
+            target - stock
         } else {
-            (0_u32,)
+            0_u32
         }
     }
 }
@@ -56,37 +53,33 @@ where
 {
     let urgency = exec.full(stock.len(), 0_u32)?;
     transform(
-        exec,
-        Zip2(stock.slice(..), daily_sales.slice(..)),
+        &exec,
+        zip2(stock.slice(..), daily_sales.slice(..)),
         InventoryUrgency,
-        Zip1(urgency.slice_mut(..)),
+        urgency.slice_mut(..),
     )?;
     let filtered_sku = exec.full(sku.len(), 0_u32)?;
     let filtered_urgency = exec.full(urgency.len(), 0_u32)?;
     let len = copy_where(
-        exec,
-        Zip2(sku.slice(..), urgency.slice(..)),
-        massively::lazy::transform(urgency.slice(..), common::U32Flag),
-        Zip2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
+        &exec,
+        zip2(sku.slice(..), urgency.slice(..)),
+        urgency.slice(..),
+        zip2(filtered_sku.slice_mut(..), filtered_urgency.slice_mut(..)),
     )?;
-    let sorted_urgency = exec.full(len, 0_u32)?;
-    let sorted_sku = exec.full(len, 0_u32)?;
+    let sorted_urgency = exec.full(len as usize, 0_u32)?;
+    let sorted_sku = exec.full(len as usize, 0_u32)?;
     sort_by_key(
-        exec,
-        Zip1(filtered_urgency.slice(..len)),
-        Zip1(filtered_sku.slice(..len)),
+        &exec,
+        filtered_urgency.slice(..len as usize),
+        filtered_sku.slice(..len as usize),
         common::LessU32,
-        Zip1(sorted_urgency.slice_mut(..)),
-        Zip1(sorted_sku.slice_mut(..)),
+        sorted_urgency.slice_mut(..),
+        sorted_sku.slice_mut(..),
     )?;
-    let urgency = exec.full(len, 0_u32)?;
-    let sku = exec.full(len, 0_u32)?;
-    reverse(
-        exec,
-        Zip1(sorted_urgency.slice(..)),
-        Zip1(urgency.slice_mut(..)),
-    )?;
-    reverse(exec, Zip1(sorted_sku.slice(..)), Zip1(sku.slice_mut(..)))?;
+    let urgency = exec.full(len as usize, 0_u32)?;
+    let sku = exec.full(len as usize, 0_u32)?;
+    reverse(&exec, sorted_urgency.slice(..), urgency.slice_mut(..))?;
+    reverse(&exec, sorted_sku.slice(..), sku.slice_mut(..))?;
     Ok(Output { sku, urgency })
 }
 
@@ -94,9 +87,9 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[100, 200, 300, 400])?,
-        exec.to_device(&[10, 2, 50, 1])?,
-        exec.to_device(&[3, 2, 10, 4])?,
+        exec.to_device(&[100, 200, 300, 400]),
+        exec.to_device(&[10, 2, 50, 1]),
+        exec.to_device(&[3, 2, 10, 4]),
     )?;
     assert_eq!(exec.to_host(&output.sku)?, vec![400, 200]);
     assert_eq!(exec.to_host(&output.urgency)?, vec![11, 4]);

@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip2, scatter};
+use massively::{DeviceVec, Executor, MIndex, scatter, zip2};
 
 struct Output<B: cubecl::prelude::Runtime> {
     item_id: DeviceVec<B, u32>,
@@ -31,13 +31,13 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let ranked_item_id = exec.full(len, 0_u32)?;
-    let ranked_score = exec.full(len, 0.0_f32)?;
+    let ranked_item_id = exec.full(len as usize, 0_u32)?;
+    let ranked_score = exec.full(len as usize, 0.0_f32)?;
     scatter(
-        exec,
-        Zip2(item_id.slice(..), score.slice(..)),
+        &exec,
+        zip2(item_id.slice(..), score.slice(..)),
         rank_index.slice(..),
-        Zip2(ranked_item_id.slice_mut(..), ranked_score.slice_mut(..)),
+        zip2(ranked_item_id.slice_mut(..), ranked_score.slice_mut(..)),
     )?;
     Ok(Output {
         item_id: ranked_item_id,
@@ -49,9 +49,9 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[10, 20, 30])?,
-        exec.to_device(&[1.5, 9.0, 3.0])?,
-        exec.to_device(&[2, 0, 1])?,
+        exec.to_device(&[10, 20, 30]),
+        exec.to_device(&[1.5, 9.0, 3.0]),
+        exec.to_device(&[2, 0, 1]),
         4,
     )?;
     assert_eq!(exec.to_host(&output.item_id)?, vec![20, 30, 10, 0]);
