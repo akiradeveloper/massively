@@ -5,6 +5,8 @@ mod iter;
 mod lazy;
 #[path = "api/random.rs"]
 mod random;
+#[path = "api/reduce.rs"]
+mod reduce;
 #[path = "api/runtime.rs"]
 mod runtime;
 #[path = "api/tuple.rs"]

@@ -8,6 +8,7 @@ use crate::{
     Permute, ReadExpression, ReverseCounting, S1, S2, S3, S4, S5, S6, S7, StorageLayout, Taken,
     Transform, Zip,
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    launch::cube_count_1d,
     op::UnaryOp,
     read::{
         BindSlots, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression, TakenSource,
@@ -21,7 +22,6 @@ use crate::{
 };
 
 const BLOCK_SIZE: u32 = 256;
-const MAX_FIRST_PASS_BLOCKS: usize = 256;
 
 /// Associative binary operation used by reduction.
 ///
@@ -377,23 +377,14 @@ macro_rules! define_reduce_eval_storage1_kernel {
             let logical_len = len[0] as usize;
             let mut values = Shared::<[Item]>::new_slice(cube_dim);
             let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            let index = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-            let step = (CUBE_DIM as usize) * partials.len();
-            let has_value = RuntimeCell::<u32>::new(0);
-            let acc = RuntimeCell::<Item>::new(Expr::$method($( $slot, )+ offsets, 0));
+            let index = (CUBE_POS as usize) * cube_dim + unit;
 
-            while index.read() < logical_len {
-                let value = Expr::$method($( $slot, )+ offsets, index.read());
-                if has_value.read() != 0 {
-                    acc.store(Op::apply(acc.read(), value));
-                } else {
-                    acc.store(value);
-                    has_value.store(1);
-                }
-                index.store(index.read() + step);
+            if index < logical_len {
+                values[unit] = Expr::$method($( $slot, )+ offsets, index);
+                valid[unit] = 1;
+            } else {
+                valid[unit] = 0;
             }
-            values[unit] = acc.read();
-            valid[unit] = has_value.read();
             sync_cube();
 
             reduce_shared::<Item, Op>(unit, cube_dim, &mut values, &mut valid);
@@ -513,32 +504,17 @@ macro_rules! define_multi_reduce_eval_kernel {
             let mut $first_shared = Shared::<[$first_out]>::new_slice(cube_dim);
             $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )*
             let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            let index = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-            let step = (CUBE_DIM as usize) * $first_partial.len();
-            let has_value = RuntimeCell::<u32>::new(0u32);
+            let index = (CUBE_POS as usize) * cube_dim + unit;
 
-            Layout::decompose(Expr::$method($( $slot, )+ read_offsets, 0)).store(
-                &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-            );
-            while index.read() < logical_len {
-                if has_value.read() != 0u32 {
-                    let value = Expr::$method($( $slot, )+ read_offsets, index.read());
-                    let current = Layout::recompose(Leaves::load(
-                        &$first_shared, $( &$shared, )* zero_offsets, unit,
-                    ));
-                    Layout::decompose(Op::apply(current, value)).store(
-                        &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                    );
-                } else {
-                    let value = Expr::$method($( $slot, )+ read_offsets, index.read());
-                    Layout::decompose(value).store(
-                        &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                    );
-                    has_value.store(1u32);
-                }
-                index.store(index.read() + step);
+            if index < logical_len {
+                let value = Expr::$method($( $slot, )+ read_offsets, index);
+                Layout::decompose(value).store(
+                    &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
+                );
+                valid[unit] = 1u32;
+            } else {
+                valid[unit] = 0u32;
             }
-            valid[unit] = has_value.read();
             sync_cube();
 
             let stride = RuntimeCell::<usize>::new(cube_dim / 2usize);
@@ -624,36 +600,19 @@ macro_rules! define_storage_reduce_kernel {
             let mut $first_shared = Shared::<[$first_out]>::new_slice(cube_dim);
             $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )*
             let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            let index = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-            let step = (CUBE_DIM as usize) * $first_partial.len();
-            let has_value = RuntimeCell::<u32>::new(0u32);
+            let index = (CUBE_POS as usize) * cube_dim + unit;
 
-            Leaves::load($first_input, $( $input, )* zero_offsets, 0).store(
-                &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-            );
-            while index.read() < logical_len {
-                if has_value.read() != 0u32 {
-                    let value = Layout::recompose(Leaves::load(
-                        $first_input, $( $input, )* zero_offsets, index.read(),
-                    ));
-                    let current = Layout::recompose(Leaves::load(
-                        &$first_shared, $( &$shared, )* zero_offsets, unit,
-                    ));
-                    Layout::decompose(Op::apply(current, value)).store(
-                        &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                    );
-                } else {
-                    let value = Layout::recompose(Leaves::load(
-                        $first_input, $( $input, )* zero_offsets, index.read(),
-                    ));
-                    Layout::decompose(value).store(
-                        &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                    );
-                    has_value.store(1u32);
-                }
-                index.store(index.read() + step);
+            if index < logical_len {
+                let value = Layout::recompose(Leaves::load(
+                    $first_input, $( $input, )* zero_offsets, index,
+                ));
+                Layout::decompose(value).store(
+                    &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
+                );
+                valid[unit] = 1u32;
+            } else {
+                valid[unit] = 0u32;
             }
-            valid[unit] = has_value.read();
             sync_cube();
 
             let stride = RuntimeCell::<usize>::new(cube_dim / 2usize);
@@ -772,23 +731,14 @@ fn reduce_storage1_partials_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
     let logical_len = len[0] as usize;
     let mut values = Shared::<[Item]>::new_slice(cube_dim);
     let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-    let index = RuntimeCell::<usize>::new((CUBE_POS as usize) * cube_dim + unit);
-    let step = (CUBE_DIM as usize) * partials.len();
-    let has_value = RuntimeCell::<u32>::new(0);
-    let acc = RuntimeCell::<Item>::new(input[0]);
+    let index = (CUBE_POS as usize) * cube_dim + unit;
 
-    while index.read() < logical_len {
-        let value = input[index.read()];
-        if has_value.read() != 0 {
-            acc.store(Op::apply(acc.read(), value));
-        } else {
-            acc.store(value);
-            has_value.store(1);
-        }
-        index.store(index.read() + step);
+    if index < logical_len {
+        values[unit] = input[index];
+        valid[unit] = 1;
+    } else {
+        valid[unit] = 0;
     }
-    values[unit] = acc.read();
-    valid[unit] = has_value.read();
     sync_cube();
 
     reduce_shared::<Item, Op>(unit, cube_dim, &mut values, &mut valid);
@@ -809,8 +759,7 @@ fn reduce_storage1_finalize_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
 }
 
 fn pass_block_count(len: usize) -> usize {
-    len.div_ceil(BLOCK_SIZE as usize)
-        .clamp(1, MAX_FIRST_PASS_BLOCKS)
+    len.div_ceil(BLOCK_SIZE as usize).max(1)
 }
 
 fn checked_u32(len: usize) -> Result<u32, Error> {
@@ -836,7 +785,7 @@ where
         unsafe {
             reduce_storage1_partials_kernel::launch_unchecked::<Item, Op, R>(
                 client,
-                CubeCount::Static(checked_u32(next_len)?, 1, 1),
+                cube_count_1d(next_len)?,
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(current, current_len),
                 BufferArg::from_raw_parts(len, 1),
@@ -908,7 +857,7 @@ where
                 R,
             >(
                 exec.client(),
-                CubeCount::Static(checked_u32(blocks)?, 1, 1),
+                cube_count_1d(blocks)?,
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(bindings.slots[0].0.clone(), bindings.slots[0].1),
                 BufferArg::from_raw_parts(offsets, 1),
@@ -960,7 +909,7 @@ where
                 R,
             >(
                 exec.client(),
-                CubeCount::Static(checked_u32(blocks)?, 1, 1),
+                cube_count_1d(blocks)?,
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(bindings.slots[0].0.clone(), bindings.slots[0].1),
                 BufferArg::from_raw_parts(bindings.slots[1].0.clone(), bindings.slots[1].1),
@@ -1015,7 +964,7 @@ where
                 R,
             >(
                 exec.client(),
-                CubeCount::Static(checked_u32(blocks)?, 1, 1),
+                cube_count_1d(blocks)?,
                 CubeDim::new_1d(BLOCK_SIZE),
                 BufferArg::from_raw_parts(bindings.slots[0].0.clone(), bindings.slots[0].1),
                 BufferArg::from_raw_parts(bindings.slots[1].0.clone(), bindings.slots[1].1),
@@ -1062,7 +1011,7 @@ macro_rules! impl_reduce_storage1_dispatch {
                 unsafe {
                     $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
                         exec.client(),
-                        CubeCount::Static(checked_u32(blocks)?, 1, 1),
+                        cube_count_1d(blocks)?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(bindings.slots[$index].0.clone(), bindings.slots[$index].1), )+
                         BufferArg::from_raw_parts(offsets, bindings.offsets.len()),
@@ -1232,7 +1181,7 @@ macro_rules! impl_multi_reduce_dispatch {
                         R,
                     >(
                         client,
-                        CubeCount::Static(checked_u32(blocks)?, 1, 1),
+                        cube_count_1d(blocks)?,
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(bindings.slots[$read_index].0.clone(), bindings.slots[$read_index].1), )+
                         BufferArg::from_raw_parts(offsets, bindings.offsets.len()),
@@ -1257,7 +1206,7 @@ macro_rules! impl_multi_reduce_dispatch {
                             R,
                         >(
                             client,
-                            CubeCount::Static(checked_u32(next_len)?, 1, 1),
+                            cube_count_1d(next_len)?,
                             CubeDim::new_1d(BLOCK_SIZE),
                             $( BufferArg::from_raw_parts($current.clone(), current_len), )+
                             BufferArg::from_raw_parts(current_len_handle, 1),
