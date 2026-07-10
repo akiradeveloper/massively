@@ -16,13 +16,13 @@ use crate::{
     storage::{
         Decompose, Last, LoadLeaves2, LoadLeaves3, LoadLeaves4, LoadLeaves5, LoadLeaves6,
         LoadLeaves7, LoadMutLeaves2, LoadMutLeaves3, LoadMutLeaves4, LoadMutLeaves5,
-        LoadMutLeaves6, LoadMutLeaves7, More, Recompose, SelectStoreLeaves2,
-        SelectStoreLeaves2Expand, SelectStoreLeaves3, SelectStoreLeaves3Expand, SelectStoreLeaves4,
-        SelectStoreLeaves4Expand, SelectStoreLeaves5, SelectStoreLeaves5Expand, SelectStoreLeaves6,
-        SelectStoreLeaves6Expand, SelectStoreLeaves7, SelectStoreLeaves7Expand, StoreLeaves2,
-        StoreLeaves2Expand, StoreLeaves3, StoreLeaves3Expand, StoreLeaves4, StoreLeaves4Expand,
-        StoreLeaves5, StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand, StoreLeaves7,
-        StoreLeaves7Expand,
+        LoadMutLeaves6, LoadMutLeaves7, More, MutableLeaves, PlaneShuffleLeaves, Recompose,
+        SelectStoreLeaves2, SelectStoreLeaves2Expand, SelectStoreLeaves3, SelectStoreLeaves3Expand,
+        SelectStoreLeaves4, SelectStoreLeaves4Expand, SelectStoreLeaves5, SelectStoreLeaves5Expand,
+        SelectStoreLeaves6, SelectStoreLeaves6Expand, SelectStoreLeaves7, SelectStoreLeaves7Expand,
+        StoreLeaves2, StoreLeaves2Expand, StoreLeaves3, StoreLeaves3Expand, StoreLeaves4,
+        StoreLeaves4Expand, StoreLeaves5, StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand,
+        StoreLeaves7, StoreLeaves7Expand,
     },
     transform::{MaterializeDispatch, materialize},
 };
@@ -40,33 +40,63 @@ fn u32_block_inclusive_scan_kernel(
     let cube_dim = BLOCK_SIZE as usize;
     let global = (CUBE_POS as usize) * cube_dim + unit;
     let logical_len = len[0] as usize;
-    let mut values = Shared::<[u32]>::new_slice(cube_dim);
-    values[unit] = if global < logical_len {
+    let value = RuntimeCell::<u32>::new(if global < logical_len {
         input[global]
     } else {
         0u32
-    };
+    });
+    let valid = RuntimeCell::<u32>::new(if global < logical_len { 1u32 } else { 0u32 });
+
+    let offset = RuntimeCell::<u32>::new(1u32);
+    while offset.read() < PLANE_DIM {
+        let left = plane_shuffle_up(value.read(), offset.read());
+        let left_valid = plane_shuffle_up(valid.read(), offset.read());
+        if UNIT_POS_PLANE >= offset.read() && left_valid != 0u32 {
+            value.store(left + value.read());
+            valid.store(1u32);
+        }
+        offset.store(offset.read() * 2u32);
+    }
+
+    let mut plane_values = Shared::<[u32]>::new_slice(cube_dim);
+    let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+    if UNIT_POS_PLANE + 1u32 == PLANE_DIM {
+        plane_values[PLANE_POS as usize] = value.read();
+        plane_valid[PLANE_POS as usize] = valid.read();
+    }
     sync_cube();
 
-    let stride = RuntimeCell::<usize>::new(1usize);
-    while stride.read() < cube_dim {
-        let addend = RuntimeCell::<u32>::new(0u32);
-        if unit >= stride.read() {
-            addend.store(values[unit - stride.read()]);
+    if unit == 0usize {
+        let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+        let prefix = RuntimeCell::<u32>::new(plane_values[0]);
+        let prefix_valid = RuntimeCell::<u32>::new(plane_valid[0]);
+        let plane = RuntimeCell::<u32>::new(1u32);
+        while plane.read() < plane_count {
+            let index = plane.read() as usize;
+            if plane_valid[index] != 0u32 {
+                if prefix_valid.read() != 0u32 {
+                    prefix.store(prefix.read() + plane_values[index]);
+                } else {
+                    prefix.store(plane_values[index]);
+                    prefix_valid.store(1u32);
+                }
+            }
+            plane_values[index] = prefix.read();
+            plane.store(plane.read() + 1u32);
         }
-        sync_cube();
-        if unit >= stride.read() {
-            values[unit] += addend.read();
-        }
-        sync_cube();
-        stride.store(stride.read() * 2usize);
+    }
+    sync_cube();
+
+    if PLANE_POS > 0u32 && valid.read() != 0u32 {
+        value.store(plane_values[PLANE_POS as usize - 1usize] + value.read());
     }
 
     if global < logical_len {
-        output[global] = values[unit];
+        output[global] = value.read();
     }
-    if unit == cube_dim - 1usize {
-        block_sums[CUBE_POS as usize] = values[unit];
+    if unit == 0usize {
+        let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+        block_sums[CUBE_POS as usize] = plane_values[plane_count as usize - 1usize];
     }
 }
 
@@ -83,13 +113,6 @@ fn u32_add_block_prefix_kernel(block_prefixes: &[u32], len: &[u32], output: &mut
 fn copy_last_kernel(input: &[u32], output: &mut [u32]) {
     if ABSOLUTE_POS == 0 {
         output[0] = input[input.len() - 1usize];
-    }
-}
-
-#[cubecl::cube(launch_unchecked)]
-fn copy_first_kernel(input: &[u32], output: &mut [u32]) {
-    if ABSOLUTE_POS == 0 {
-        output[0] = input[0];
     }
 }
 
@@ -114,47 +137,71 @@ macro_rules! define_scalar_scan_kernel {
             let cube_dim = BLOCK_SIZE as usize;
             let global = block * cube_dim + unit;
             let logical_len = len[0] as usize;
-            let mut values = Shared::<[Item]>::new_slice(cube_dim);
-            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            values[unit] = Expr::$method($( $slot, )+ read_offsets, 0);
-            valid[unit] = 0u32;
-            if global < logical_len {
-                values[unit] = Expr::$method($( $slot, )+ read_offsets, global);
-                valid[unit] = 1u32;
+            let safe_global = if global < logical_len { global } else { 0usize };
+            let value = RuntimeCell::<Item>::new(
+                Expr::$method($( $slot, )+ read_offsets, safe_global),
+            );
+            let valid = RuntimeCell::<u32>::new(
+                if global < logical_len { 1u32 } else { 0u32 },
+            );
+
+            let offset = RuntimeCell::<u32>::new(1u32);
+            while offset.read() < PLANE_DIM {
+                let left = plane_shuffle_up(value.read(), offset.read());
+                let left_valid = plane_shuffle_up(valid.read(), offset.read());
+                if UNIT_POS_PLANE >= offset.read() && left_valid != 0u32 {
+                    if valid.read() != 0u32 {
+                        value.store(Op::apply(left, value.read()));
+                    } else {
+                        value.store(left);
+                        valid.store(1u32);
+                    }
+                }
+                offset.store(offset.read() * 2u32);
+            }
+
+            let mut plane_values = Shared::<[Item]>::new_slice(cube_dim);
+            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+            if UNIT_POS_PLANE + 1u32 == PLANE_DIM {
+                plane_values[PLANE_POS as usize] = value.read();
+                plane_valid[PLANE_POS as usize] = valid.read();
             }
             sync_cube();
 
-            let stride = RuntimeCell::<usize>::new(1usize);
-            while stride.read() < cube_dim {
-                let left = RuntimeCell::<Item>::new(values[unit]);
-                let left_valid = RuntimeCell::<u32>::new(0u32);
-                if unit >= stride.read() {
-                    left.store(values[unit - stride.read()]);
-                    left_valid.store(valid[unit - stride.read()]);
-                }
-                sync_cube();
-                if left_valid.read() != 0u32 {
-                    if valid[unit] != 0u32 {
-                        values[unit] = Op::apply(left.read(), values[unit]);
-                    } else {
-                        values[unit] = left.read();
-                        valid[unit] = 1u32;
+            if unit == 0usize {
+                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                let prefix = RuntimeCell::<Item>::new(plane_values[0]);
+                let prefix_valid = RuntimeCell::<u32>::new(plane_valid[0]);
+                let plane = RuntimeCell::<u32>::new(1u32);
+                while plane.read() < plane_count {
+                    let index = plane.read() as usize;
+                    if plane_valid[index] != 0u32 {
+                        if prefix_valid.read() != 0u32 {
+                            prefix.store(Op::apply(prefix.read(), plane_values[index]));
+                        } else {
+                            prefix.store(plane_values[index]);
+                            prefix_valid.store(1u32);
+                        }
                     }
+                    plane_values[index] = prefix.read();
+                    plane.store(plane.read() + 1u32);
                 }
-                sync_cube();
-                stride.store(stride.read() * 2usize);
+            }
+            sync_cube();
+
+            if PLANE_POS > 0u32 && valid.read() != 0u32 {
+                value.store(Op::apply(
+                    plane_values[PLANE_POS as usize - 1usize],
+                    value.read(),
+                ));
             }
 
             if global < logical_len {
-                output[output_offset[0] as usize + global] = values[unit];
+                output[output_offset[0] as usize + global] = value.read();
             }
             if unit == 0usize {
-                let block_start = block * cube_dim;
-                if block_start < logical_len {
-                    let remaining = logical_len - block_start;
-                    let last = if remaining < cube_dim { remaining - 1usize } else { cube_dim - 1usize };
-                    block_sums[block] = values[last];
-                }
+                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                block_sums[block] = plane_values[plane_count as usize - 1usize];
             }
         }
     };
@@ -183,7 +230,9 @@ macro_rules! define_multi_scan_kernel {
             Leaves: CubeType + Send + Sync + 'static
                 + $load_trait<$( $out_ty ),+>
                 + $store_trait<$( $out_ty ),+>
-                + $select_trait<$( $out_ty ),+>,
+                + $select_trait<$( $out_ty ),+>
+                + MutableLeaves
+                + PlaneShuffleLeaves,
             Expr: $eval<Item, $( $leaf ),+>,
             Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
             Op: ReductionOp<Item>,
@@ -204,49 +253,104 @@ macro_rules! define_multi_scan_kernel {
             $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )+
             let mut valid = Shared::<[u32]>::new_slice(cube_dim);
 
-            let initial = Layout::decompose(Expr::$method($( $slot, )+ read_offsets, 0));
-            initial.store($( &mut $shared, )+ zero_offsets, unit);
-            valid[unit] = 0u32;
-            if global < logical_len {
-                let item = Layout::decompose(Expr::$method($( $slot, )+ read_offsets, global));
-                item.store($( &mut $shared, )+ zero_offsets, unit);
-                valid[unit] = 1u32;
+            let safe_global = if global < logical_len { global } else { 0usize };
+            let cells = <Leaves as MutableLeaves>::into_cells(Layout::decompose(
+                Expr::$method($( $slot, )+ read_offsets, safe_global),
+            ));
+            let is_valid = RuntimeCell::<u32>::new(
+                if global < logical_len { 1u32 } else { 0u32 },
+            );
+
+            let offset = RuntimeCell::<u32>::new(1u32);
+            while offset.read() < PLANE_DIM {
+                let left_cells = <Leaves as MutableLeaves>::into_cells(
+                    Leaves::shuffle_leaves_up(
+                        <Leaves as MutableLeaves>::read(&cells),
+                        offset.read(),
+                    ),
+                );
+                let left_valid = plane_shuffle_up(is_valid.read(), offset.read());
+                if UNIT_POS_PLANE >= offset.read() && left_valid != 0u32 {
+                    if is_valid.read() != 0u32 {
+                        let combined = Layout::decompose(Op::apply(
+                            Layout::recompose(<Leaves as MutableLeaves>::read(&left_cells)),
+                            Layout::recompose(<Leaves as MutableLeaves>::read(&cells)),
+                        ));
+                        <Leaves as MutableLeaves>::store(&cells, combined);
+                    } else {
+                        <Leaves as MutableLeaves>::store(
+                            &cells,
+                            <Leaves as MutableLeaves>::read(&left_cells),
+                        );
+                        is_valid.store(1u32);
+                    }
+                }
+                offset.store(offset.read() * 2u32);
+            }
+
+            if UNIT_POS_PLANE + 1u32 == PLANE_DIM {
+                <Leaves as MutableLeaves>::read(&cells).store(
+                    $( &mut $shared, )+ zero_offsets, PLANE_POS as usize,
+                );
+                valid[PLANE_POS as usize] = is_valid.read();
             }
             sync_cube();
 
-            let stride = RuntimeCell::<usize>::new(1usize);
-            while stride.read() < cube_dim {
-                let current = Layout::recompose(Leaves::load(
-                    $( &$shared, )+ zero_offsets, unit,
+            if unit == 0usize {
+                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                let plane_cells = <Leaves as MutableLeaves>::into_cells(Leaves::load(
+                    $( &$shared, )+ zero_offsets, 0usize,
                 ));
-                let left_index = if unit >= stride.read() { unit - stride.read() } else { unit };
-                let left = Layout::recompose(Leaves::load(
-                    $( &$shared, )+ zero_offsets, left_index,
-                ));
-                let left_valid = if unit >= stride.read() { valid[left_index] } else { 0u32 };
-                let combined = Layout::decompose(Op::apply(left, current));
-                sync_cube();
-                combined.select_store(
-                    left_valid, $( $shared[unit], )+ $( &mut $shared, )+ zero_offsets, unit,
+                let plane_is_valid = RuntimeCell::<u32>::new(valid[0]);
+                let plane = RuntimeCell::<u32>::new(1u32);
+                while plane.read() < plane_count {
+                    let index = plane.read() as usize;
+                    if valid[index] != 0u32 {
+                        if plane_is_valid.read() != 0u32 {
+                            let combined = Layout::decompose(Op::apply(
+                                Layout::recompose(<Leaves as MutableLeaves>::read(&plane_cells)),
+                                Layout::recompose(Leaves::load(
+                                    $( &$shared, )+ zero_offsets, index,
+                                )),
+                            ));
+                            <Leaves as MutableLeaves>::store(&plane_cells, combined);
+                        } else {
+                            <Leaves as MutableLeaves>::store(
+                                &plane_cells,
+                                Leaves::load($( &$shared, )+ zero_offsets, index),
+                            );
+                            plane_is_valid.store(1u32);
+                        }
+                    }
+                    <Leaves as MutableLeaves>::read(&plane_cells).store(
+                        $( &mut $shared, )+ zero_offsets, index,
+                    );
+                    plane.store(plane.read() + 1u32);
+                }
+            }
+            sync_cube();
+
+            if PLANE_POS > 0u32 && is_valid.read() != 0u32 {
+                let prefix = Leaves::load(
+                    $( &$shared, )+ zero_offsets, PLANE_POS as usize - 1usize,
                 );
-                sync_cube();
-                stride.store(stride.read() * 2usize);
+                let combined = Layout::decompose(Op::apply(
+                    Layout::recompose(prefix),
+                    Layout::recompose(<Leaves as MutableLeaves>::read(&cells)),
+                ));
+                <Leaves as MutableLeaves>::store(&cells, combined);
             }
 
             if global < logical_len {
-                Leaves::load($( &$shared, )+ zero_offsets, unit).store(
+                <Leaves as MutableLeaves>::read(&cells).store(
                     $( $output, )+ output_offsets, global,
                 );
             }
             if unit == 0usize {
-                let block_start = block * cube_dim;
-                if block_start < logical_len {
-                    let remaining = logical_len - block_start;
-                    let last = if remaining < cube_dim { remaining - 1usize } else { cube_dim - 1usize };
-                    Leaves::load($( &$shared, )+ zero_offsets, last).store(
-                        $( $block_sum, )+ zero_offsets, block,
-                    );
-                }
+                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                Leaves::load(
+                    $( &$shared, )+ zero_offsets, plane_count as usize - 1usize,
+                ).store($( $block_sum, )+ zero_offsets, block);
             }
         }
     };
@@ -957,26 +1061,6 @@ pub(crate) fn last_u32<R: Runtime>(
         );
     }
     Ok(exec.to_host(&output)?[0])
-}
-
-pub(crate) fn first_u32<R: Runtime>(
-    exec: &Executor<R>,
-    input: &DeviceVec<R, u32>,
-) -> Result<Option<u32>, Error> {
-    if input.is_empty() {
-        return Ok(None);
-    }
-    let output = exec.alloc::<u32>(1);
-    unsafe {
-        copy_first_kernel::launch_unchecked::<R>(
-            exec.client(),
-            CubeCount::Static(1, 1, 1),
-            CubeDim::new_1d(1),
-            BufferArg::from_raw_parts(input.handle.clone(), input.len()),
-            BufferArg::from_raw_parts(output.handle.clone(), 1),
-        );
-    }
-    Ok(Some(exec.to_host(&output)?[0]))
 }
 
 #[cfg(test)]

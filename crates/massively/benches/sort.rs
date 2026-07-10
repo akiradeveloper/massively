@@ -41,6 +41,41 @@ fn bench_sort_by_key(c: &mut Criterion) {
         });
     }
     group.finish();
+
+    let len = common::SORT_PATTERN_SIZE;
+    let patterns = [
+        ("shuffled", common::shuffled_u32(len)),
+        ("sorted", (0..len as u32).collect()),
+        ("reverse", common::reverse_indices(len)),
+        ("equal", vec![7_u32; len]),
+        (
+            "low_cardinality",
+            (0..len).map(|index| (index % 32) as u32).collect(),
+        ),
+    ];
+    let mut pattern_group = c.benchmark_group("sort_by_key_patterns");
+    for (name, input) in patterns {
+        let keys = exec.to_device(&input);
+        let values = exec.to_device(&common::dense_f32(len));
+        let out_keys = exec.alloc::<u32>(len);
+        let out_values = exec.alloc::<f32>(len);
+        pattern_group.bench_function(name, |b| {
+            b.iter(|| {
+                sort_by_key(
+                    &exec,
+                    black_box(keys.slice(..)),
+                    black_box(values.slice(..)),
+                    Less,
+                    black_box(out_keys.slice_mut(..)),
+                    black_box(out_values.slice_mut(..)),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+                black_box((&out_keys, &out_values));
+            })
+        });
+    }
+    pattern_group.finish();
 }
 
 criterion_group! {

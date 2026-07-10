@@ -1068,30 +1068,29 @@ where
         ValueOutput::Item: crate::WriteFrom<Values::Item>,
     {
         let keys = <Self::Read as private::AnyRead<R>>::normalize(self.lower_read(), exec)?;
-        let values = <Values::Read as private::AnyRead<R>>::normalize(values.lower_read(), exec)?;
         let key_len = crate::MStorage::len(&keys)?;
-        let value_len = crate::MStorage::len(&values)?;
+        let value_len = values.len()? as usize;
         if key_len != value_len {
             return Err(Error::LengthMismatch {
                 left: key_len,
                 right: value_len,
             });
         }
-        let permutation = <<Self::Item as MItem<R>>::Kernel as private::KernelItem<
+        let ordering = <<Self::Item as MItem<R>>::Kernel as private::KernelItem<
             R,
             Self::Item,
-        >>::sort_control(exec, &keys, less)?;
-        private::KernelWrite::gather_storage(
+        >>::sort_ordering(exec, keys, less)?;
+        private::KernelWrite::materialize_storage(
             key_output.lower_write_from::<Self::Item>(),
             exec,
-            &keys,
-            permutation.column(),
+            &ordering.sorted_keys,
         )?;
-        private::KernelWrite::gather_storage(
-            value_output.lower_write_from::<Values::Item>(),
+        values.indexed_with(
             exec,
-            &values,
-            permutation.column(),
+            ordering.control.permutation().column(),
+            None,
+            false,
+            value_output,
         )
     }
 
@@ -1162,22 +1161,23 @@ where
             R,
             Self::Item,
         >>::segment_heads(exec, &keys, equal)?;
-        let tails = crate::core::by_key::segment_tails(exec, &heads)?;
         let reduced = <<Values::Item as MItem<R>>::Kernel as private::KernelItem<
             R,
             Values::Item,
         >>::segmented(exec, &values, &heads, Some(init), op, 2)?;
-        let key_count = private::KernelWrite::select_storage(
+        let head_control = crate::core::selection::SelectionControl::from_flags(exec, heads)?;
+        let tail_control = crate::core::by_key::tail_control_from_heads(exec, &head_control)?;
+        let key_count = private::KernelWrite::select_storage_control(
             key_output.lower_write_from::<Self::Item>(),
             exec,
             &keys,
-            heads,
+            &head_control,
         )?;
-        let value_count = private::KernelWrite::select_storage(
+        let value_count = private::KernelWrite::select_storage_control(
             value_output.lower_write_from::<Values::Item>(),
             exec,
             &reduced,
-            tails,
+            &tail_control,
         )?;
         debug_assert_eq!(key_count, value_count);
         Ok(key_count)
@@ -1213,17 +1213,18 @@ where
             R,
             Self::Item,
         >>::segment_heads(exec, &keys, equal)?;
-        let key_count = private::KernelWrite::select_storage(
+        let control = crate::core::selection::SelectionControl::from_flags(exec, heads)?;
+        let key_count = private::KernelWrite::select_storage_control(
             key_output.lower_write_from::<Self::Item>(),
             exec,
             &keys,
-            heads.clone(),
+            &control,
         )?;
-        let value_count = private::KernelWrite::select_storage(
+        let value_count = private::KernelWrite::select_storage_control(
             value_output.lower_write_from::<Values::Item>(),
             exec,
             &values,
-            heads,
+            &control,
         )?;
         debug_assert_eq!(key_count, value_count);
         Ok(key_count)

@@ -1,0 +1,480 @@
+//! Index-sideband reductions over arbitrary read expressions.
+
+use core::mem::size_of;
+
+use cubecl::prelude::*;
+
+use crate::{
+    A1, A2, A3, A4, A5, A6, A7, A8, Dispatch, Error, Executor, MStorageElement, ReadExpression,
+    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    launch::cube_count_1d,
+    read::{BindSlots, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression},
+    reduce::{StageRead, StagedBindings},
+};
+
+const BLOCK_SIZE: u32 = 256;
+const ITEMS_PER_UNIT: usize = 256;
+const TILE_SIZE: usize = BLOCK_SIZE as usize * ITEMS_PER_UNIT;
+
+/// Chooses one of two indexed semantic values.
+#[doc(hidden)]
+#[cubecl::cube]
+pub trait ArgReductionOp<Item: CubeType>: 'static + Send + Sync {
+    /// Returns whether the right candidate wins. The caller presents candidates
+    /// in ascending original-index order, so operators can implement stable
+    /// first/last tie breaking with one comparison.
+    fn rhs_wins(lhs: Item, rhs: Item) -> bool;
+}
+
+macro_rules! define_arg_reduce_kernel {
+    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$slot:ident ),+]) => {
+        #[cubecl::cube(launch_unchecked, explicit_define)]
+        fn $name<
+            Item: CubeType + Send + Sync + 'static,
+            $( $leaf: CubePrimitive, )+
+            Expr: $eval<Item, $( $leaf ),+>,
+            Op: ArgReductionOp<Item>,
+        >(
+            $( $slot: &[$leaf], )+
+            offsets: &[u32],
+            len: &[u32],
+            partials: &mut [u32],
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = BLOCK_SIZE as usize;
+            let logical_len = len[0] as usize;
+            let tile_start = CUBE_POS as usize * TILE_SIZE;
+            let first_index = tile_start + unit;
+            let safe_index = if first_index < logical_len {
+                first_index
+            } else {
+                logical_len - 1usize
+            };
+            let accumulator = RuntimeCell::<u32>::new(safe_index as u32);
+            let valid = RuntimeCell::<u32>::new(
+                if first_index < logical_len { 1u32 } else { 0u32 },
+            );
+
+            if tile_start + TILE_SIZE <= logical_len {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let rhs_index = first_index + item * cube_dim;
+                    let lhs_index = accumulator.read() as usize;
+                    if Op::rhs_wins(
+                        Expr::$method($( $slot, )+ offsets, lhs_index),
+                        Expr::$method($( $slot, )+ offsets, rhs_index),
+                    ) {
+                        accumulator.store(rhs_index as u32);
+                    }
+                }
+            } else {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let rhs_index = first_index + item * cube_dim;
+                    if rhs_index < logical_len {
+                        if valid.read() != 0u32 {
+                            let lhs_index = accumulator.read() as usize;
+                            if Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, lhs_index),
+                                Expr::$method($( $slot, )+ offsets, rhs_index),
+                            ) {
+                                accumulator.store(rhs_index as u32);
+                            }
+                        } else {
+                            accumulator.store(rhs_index as u32);
+                            valid.store(1u32);
+                        }
+                    }
+                }
+            }
+
+            let offset = RuntimeCell::<u32>::new(PLANE_DIM / 2u32);
+            while offset.read() > 0u32 {
+                let rhs_index = plane_shuffle_down(accumulator.read(), offset.read());
+                let rhs_valid = plane_shuffle_down(valid.read(), offset.read());
+                if UNIT_POS_PLANE < offset.read() && rhs_valid != 0u32 {
+                    if valid.read() != 0u32 {
+                        let lhs_index = accumulator.read();
+                        if lhs_index < rhs_index {
+                            if Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            ) {
+                                accumulator.store(rhs_index);
+                            }
+                        } else if !Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                                Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                            ) {
+                            accumulator.store(rhs_index);
+                        }
+                    } else {
+                        accumulator.store(rhs_index);
+                        valid.store(1u32);
+                    }
+                }
+                offset.store(offset.read() / 2u32);
+            }
+
+            let mut plane_indices = Shared::<[u32]>::new_slice(cube_dim);
+            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+            if UNIT_POS_PLANE == 0u32 {
+                plane_indices[PLANE_POS as usize] = accumulator.read();
+                plane_valid[PLANE_POS as usize] = valid.read();
+            }
+            sync_cube();
+
+            if PLANE_POS == 0u32 {
+                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                let source = if UNIT_POS_PLANE < plane_count {
+                    UNIT_POS_PLANE as usize
+                } else {
+                    0usize
+                };
+                accumulator.store(plane_indices[source]);
+                valid.store(if UNIT_POS_PLANE < plane_count {
+                    plane_valid[source]
+                } else {
+                    0u32
+                });
+                let plane_cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+                while plane_cursor.read() < plane_count {
+                    let source = plane_cursor.read() as usize;
+                    if valid.read() != 0u32 && plane_valid[source] != 0u32 {
+                        let lhs_index = accumulator.read();
+                        let rhs_index = plane_indices[source];
+                        if lhs_index < rhs_index {
+                            if Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            ) {
+                                accumulator.store(rhs_index);
+                            }
+                        } else if !Op::rhs_wins(
+                            Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                        ) {
+                            accumulator.store(rhs_index);
+                        }
+                    }
+                    plane_cursor.store(plane_cursor.read() + PLANE_DIM);
+                }
+                let plane_offset = RuntimeCell::<u32>::new(PLANE_DIM / 2u32);
+                while plane_offset.read() > 0u32 {
+                    let rhs_index = plane_shuffle_down(accumulator.read(), plane_offset.read());
+                    let rhs_valid = plane_shuffle_down(valid.read(), plane_offset.read());
+                    if UNIT_POS_PLANE < plane_offset.read() && rhs_valid != 0u32 {
+                        if valid.read() != 0u32 {
+                            let lhs_index = accumulator.read();
+                            if lhs_index < rhs_index {
+                                if Op::rhs_wins(
+                                    Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                                ) {
+                                    accumulator.store(rhs_index);
+                                }
+                            } else if !Op::rhs_wins(
+                                    Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                ) {
+                                accumulator.store(rhs_index);
+                            }
+                        } else {
+                            accumulator.store(rhs_index);
+                            valid.store(1u32);
+                        }
+                    }
+                    plane_offset.store(plane_offset.read() / 2u32);
+                }
+                if UNIT_POS_PLANE == 0u32 {
+                    partials[CUBE_POS as usize] = accumulator.read();
+                }
+            }
+        }
+    };
+}
+
+macro_rules! define_arg_partial_kernel {
+    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$slot:ident ),+]) => {
+        #[cubecl::cube(launch_unchecked, explicit_define)]
+        fn $name<
+            Item: CubeType + Send + Sync + 'static,
+            $( $leaf: CubePrimitive, )+
+            Expr: $eval<Item, $( $leaf ),+>,
+            Op: ArgReductionOp<Item>,
+        >(
+            $( $slot: &[$leaf], )+
+            offsets: &[u32],
+            input: &[u32],
+            len: &[u32],
+            partials: &mut [u32],
+        ) {
+            let unit = UNIT_POS as usize;
+            let cube_dim = BLOCK_SIZE as usize;
+            let logical_len = len[0] as usize;
+            let tile_start = CUBE_POS as usize * TILE_SIZE;
+            let first_position = tile_start + unit;
+            let safe_position = if first_position < logical_len {
+                first_position
+            } else {
+                logical_len - 1usize
+            };
+            let accumulator = RuntimeCell::<u32>::new(input[safe_position]);
+            let valid = RuntimeCell::<u32>::new(
+                if first_position < logical_len { 1u32 } else { 0u32 },
+            );
+
+            for item in 1usize..ITEMS_PER_UNIT {
+                let rhs_position = first_position + item * cube_dim;
+                if rhs_position < logical_len {
+                    let lhs_index = accumulator.read();
+                    let rhs_index = input[rhs_position];
+                    if lhs_index < rhs_index {
+                        if Op::rhs_wins(
+                            Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                            Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                        ) {
+                            accumulator.store(rhs_index);
+                        }
+                    } else if !Op::rhs_wins(
+                            Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                        ) {
+                        accumulator.store(rhs_index);
+                    }
+                }
+            }
+
+            let offset = RuntimeCell::<u32>::new(PLANE_DIM / 2u32);
+            while offset.read() > 0u32 {
+                let rhs_index = plane_shuffle_down(accumulator.read(), offset.read());
+                let rhs_valid = plane_shuffle_down(valid.read(), offset.read());
+                if UNIT_POS_PLANE < offset.read() && rhs_valid != 0u32 {
+                    if valid.read() != 0u32 {
+                        let lhs_index = accumulator.read();
+                        if lhs_index < rhs_index {
+                            if Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            ) {
+                                accumulator.store(rhs_index);
+                            }
+                        } else if !Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                                Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                            ) {
+                            accumulator.store(rhs_index);
+                        }
+                    } else {
+                        accumulator.store(rhs_index);
+                        valid.store(1u32);
+                    }
+                }
+                offset.store(offset.read() / 2u32);
+            }
+
+            let mut plane_indices = Shared::<[u32]>::new_slice(cube_dim);
+            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+            if UNIT_POS_PLANE == 0u32 {
+                plane_indices[PLANE_POS as usize] = accumulator.read();
+                plane_valid[PLANE_POS as usize] = valid.read();
+            }
+            sync_cube();
+
+            if PLANE_POS == 0u32 {
+                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                let source = if UNIT_POS_PLANE < plane_count {
+                    UNIT_POS_PLANE as usize
+                } else {
+                    0usize
+                };
+                accumulator.store(plane_indices[source]);
+                valid.store(if UNIT_POS_PLANE < plane_count {
+                    plane_valid[source]
+                } else {
+                    0u32
+                });
+                let plane_cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+                while plane_cursor.read() < plane_count {
+                    let source = plane_cursor.read() as usize;
+                    if valid.read() != 0u32 && plane_valid[source] != 0u32 {
+                        let lhs_index = accumulator.read();
+                        let rhs_index = plane_indices[source];
+                        if lhs_index < rhs_index {
+                            if Op::rhs_wins(
+                                Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            ) {
+                                accumulator.store(rhs_index);
+                            }
+                        } else if !Op::rhs_wins(
+                            Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                            Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                        ) {
+                            accumulator.store(rhs_index);
+                        }
+                    }
+                    plane_cursor.store(plane_cursor.read() + PLANE_DIM);
+                }
+                let plane_offset = RuntimeCell::<u32>::new(PLANE_DIM / 2u32);
+                while plane_offset.read() > 0u32 {
+                    let rhs_index = plane_shuffle_down(accumulator.read(), plane_offset.read());
+                    let rhs_valid = plane_shuffle_down(valid.read(), plane_offset.read());
+                    if UNIT_POS_PLANE < plane_offset.read() && rhs_valid != 0u32 {
+                        if valid.read() != 0u32 {
+                            let lhs_index = accumulator.read();
+                            if lhs_index < rhs_index {
+                                if Op::rhs_wins(
+                                    Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                                ) {
+                                    accumulator.store(rhs_index);
+                                }
+                            } else if !Op::rhs_wins(
+                                    Expr::$method($( $slot, )+ offsets, rhs_index as usize),
+                                    Expr::$method($( $slot, )+ offsets, lhs_index as usize),
+                                ) {
+                                accumulator.store(rhs_index);
+                            }
+                        } else {
+                            accumulator.store(rhs_index);
+                            valid.store(1u32);
+                        }
+                    }
+                    plane_offset.store(plane_offset.read() / 2u32);
+                }
+                if UNIT_POS_PLANE == 0u32 {
+                    partials[CUBE_POS as usize] = accumulator.read();
+                }
+            }
+        }
+    };
+}
+
+define_arg_reduce_kernel!(arg_reduce_a1,Eval1,eval1; [L0:slot0]);
+define_arg_reduce_kernel!(arg_reduce_a2,Eval2,eval2; [L0:slot0,L1:slot1]);
+define_arg_reduce_kernel!(arg_reduce_a3,Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]);
+define_arg_reduce_kernel!(arg_reduce_a4,Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]);
+define_arg_reduce_kernel!(arg_reduce_a5,Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]);
+define_arg_reduce_kernel!(arg_reduce_a6,Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]);
+define_arg_reduce_kernel!(arg_reduce_a7,Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]);
+define_arg_reduce_kernel!(arg_reduce_a8,Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]);
+
+define_arg_partial_kernel!(arg_partial_a1,Eval1,eval1; [L0:slot0]);
+define_arg_partial_kernel!(arg_partial_a2,Eval2,eval2; [L0:slot0,L1:slot1]);
+define_arg_partial_kernel!(arg_partial_a3,Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]);
+define_arg_partial_kernel!(arg_partial_a4,Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]);
+define_arg_partial_kernel!(arg_partial_a5,Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]);
+define_arg_partial_kernel!(arg_partial_a6,Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]);
+define_arg_partial_kernel!(arg_partial_a7,Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]);
+define_arg_partial_kernel!(arg_partial_a8,Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]);
+
+/// Arity dispatch for an index-sideband reduction.
+#[doc(hidden)]
+pub trait ArgReduceDispatch<R: Runtime, Input, Op, Slots> {
+    fn execute(exec: &Executor<R>, input: &Input) -> Result<Option<u32>, Error>;
+}
+
+fn block_count(len: usize) -> usize {
+    len.div_ceil(TILE_SIZE).max(1)
+}
+
+macro_rules! impl_arg_reduce_dispatch {
+    ($arity:ty,$eval:ident,$first:ident,$partial:ident,$env:ty; [$( $leaf:ident:$index:literal ),+]) => {
+        impl<R, Input, Item, Op, $( $leaf ),+> ArgReduceDispatch<R, Input, Op, $env>
+            for Dispatch<$arity, crate::S1>
+        where
+            R: Runtime,
+            Item: CubeType + Send + Sync + 'static,
+            Op: ArgReductionOp<Item>,
+            $( $leaf: MStorageElement, )+
+            Input: ReadExpression<Item = Item, ReadArity = $arity>
+                + BindSlots<Env0, NextEnv = $env>
+                + LowerReadExpression<Slots = $env>
+                + StageRead<R, Env0>,
+            Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
+        {
+            fn execute(exec: &Executor<R>, input: &Input) -> Result<Option<u32>, Error> {
+                let len = input.logical_len()?;
+                if len == 0 {
+                    return Ok(None);
+                }
+                let client = exec.client();
+                let mut bindings = StagedBindings::new();
+                input.stage_at(client, exec.id(), &mut bindings)?;
+                let offsets = client.create_from_slice(u32::as_bytes(&bindings.offsets));
+                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
+                let blocks = block_count(len);
+                let mut current = client.empty(blocks * size_of::<u32>());
+                unsafe {
+                    $first::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
+                        client,
+                        cube_count_1d(blocks)?,
+                        CubeDim::new_1d(BLOCK_SIZE),
+                        $( BufferArg::from_raw_parts(bindings.slots[$index].0.clone(), bindings.slots[$index].1), )+
+                        BufferArg::from_raw_parts(offsets.clone(), bindings.offsets.len()),
+                        BufferArg::from_raw_parts(len_handle, 1),
+                        BufferArg::from_raw_parts(current.clone(), blocks),
+                    );
+                }
+
+                let mut current_len = blocks;
+                while current_len > 1 {
+                    let next_len = block_count(current_len);
+                    let next = client.empty(next_len * size_of::<u32>());
+                    let current_len_u32 = u32::try_from(current_len)
+                        .map_err(|_| Error::LengthTooLarge { len: current_len })?;
+                    let current_len_handle =
+                        client.create_from_slice(u32::as_bytes(&[current_len_u32]));
+                    unsafe {
+                        $partial::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
+                            client,
+                            cube_count_1d(next_len)?,
+                            CubeDim::new_1d(BLOCK_SIZE),
+                            $( BufferArg::from_raw_parts(bindings.slots[$index].0.clone(), bindings.slots[$index].1), )+
+                            BufferArg::from_raw_parts(offsets.clone(), bindings.offsets.len()),
+                            BufferArg::from_raw_parts(current, current_len),
+                            BufferArg::from_raw_parts(current_len_handle, 1),
+                            BufferArg::from_raw_parts(next.clone(), next_len),
+                        );
+                    }
+                    current = next;
+                    current_len = next_len;
+                }
+
+                let bytes = client.read_one(current).map_err(|err| Error::Launch {
+                    message: format!("{err:?}"),
+                })?;
+                Ok(Some(u32::from_bytes(&bytes)[0]))
+            }
+        }
+    };
+}
+
+impl_arg_reduce_dispatch!(A1,Eval1,arg_reduce_a1,arg_partial_a1,Env1<L0>; [L0:0]);
+impl_arg_reduce_dispatch!(A2,Eval2,arg_reduce_a2,arg_partial_a2,Env2<L0,L1>; [L0:0,L1:1]);
+impl_arg_reduce_dispatch!(A3,Eval3,arg_reduce_a3,arg_partial_a3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]);
+impl_arg_reduce_dispatch!(A4,Eval4,arg_reduce_a4,arg_partial_a4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]);
+impl_arg_reduce_dispatch!(A5,Eval5,arg_reduce_a5,arg_partial_a5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]);
+impl_arg_reduce_dispatch!(A6,Eval6,arg_reduce_a6,arg_partial_a6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
+impl_arg_reduce_dispatch!(A7,Eval7,arg_reduce_a7,arg_partial_a7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
+impl_arg_reduce_dispatch!(A8,Eval8,arg_reduce_a8,arg_partial_a8,Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7]);
+
+/// Returns the selected input index, or `None` for an empty input.
+pub(crate) fn arg_reduce<R, Input, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    _op: Op,
+) -> Result<Option<u32>, Error>
+where
+    R: Runtime,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Op: ArgReductionOp<Input::Item>,
+    Dispatch<Input::ReadArity, crate::S1>: ArgReduceDispatch<R, Input, Op, Input::Slots>,
+{
+    <Dispatch<Input::ReadArity, crate::S1> as ArgReduceDispatch<
+        R,
+        Input,
+        Op,
+        Input::Slots,
+    >>::execute(exec, &input)
+}

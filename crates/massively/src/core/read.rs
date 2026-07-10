@@ -8,11 +8,12 @@ use crate::{
     Zip,
     arity::{A1, A2, A3, A4, A5, A6, A7, A8, AddArity, ReadArity},
     eval::{
-        AdjacentExpr, Broadcast, Count, DeviceExpr, Direct, Eval1, Eval2, Eval3, Eval4, Eval5,
-        Eval6, Eval7, Eval8, PermuteExpr, ReassociateExpr, ReverseCount, Slot0, Slot1, Slot2,
-        Slot3, Slot4, Slot5, Slot6, Slot7, TransformExpr, ZipExpr,
+        AdjacentExpr, AdjacentIndexedTransformExpr, Broadcast, Count, DeviceExpr, Direct, Eval1,
+        Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, IndexedTransformExpr, PermuteExpr,
+        ReassociateExpr, ReverseCount, Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7,
+        TransformExpr, ZipExpr,
     },
-    op::UnaryOp,
+    op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     storage::{StorageLayout, WriteFrom},
     value::MStorageElement,
@@ -205,6 +206,22 @@ pub struct Transform<Input, Op> {
     _op: PhantomData<fn() -> Op>,
 }
 
+/// A lazy transform that also receives the logical input index.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct IndexedTransform<Input, Op> {
+    pub input: Input,
+    _op: PhantomData<fn() -> Op>,
+}
+
+/// A lazy adjacent transform that also receives the current logical index.
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct AdjacentIndexedTransform<Input, Op> {
+    pub input: Input,
+    _op: PhantomData<fn() -> Op>,
+}
+
 /// A lazy adjacent reduction expression.
 #[doc(hidden)]
 #[derive(Debug)]
@@ -223,6 +240,28 @@ impl<Input: Clone, Op> Clone for Transform<Input, Op> {
 }
 
 impl<Input: Copy, Op> Copy for Transform<Input, Op> {}
+
+impl<Input: Clone, Op> Clone for IndexedTransform<Input, Op> {
+    fn clone(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            _op: PhantomData,
+        }
+    }
+}
+
+impl<Input: Copy, Op> Copy for IndexedTransform<Input, Op> {}
+
+impl<Input: Clone, Op> Clone for AdjacentIndexedTransform<Input, Op> {
+    fn clone(&self) -> Self {
+        Self {
+            input: self.input.clone(),
+            _op: PhantomData,
+        }
+    }
+}
+
+impl<Input: Copy, Op> Copy for AdjacentIndexedTransform<Input, Op> {}
 
 impl<Input: Clone, Op> Clone for Adjacent<Input, Op> {
     fn clone(&self) -> Self {
@@ -245,6 +284,24 @@ impl<Input, Op> Adjacent<Input, Op> {
 }
 
 impl<Input, Op> Transform<Input, Op> {
+    pub fn new(input: Input, _op: Op) -> Self {
+        Self {
+            input,
+            _op: PhantomData,
+        }
+    }
+}
+
+impl<Input, Op> IndexedTransform<Input, Op> {
+    pub fn new(input: Input, _op: Op) -> Self {
+        Self {
+            input,
+            _op: PhantomData,
+        }
+    }
+}
+
+impl<Input, Op> AdjacentIndexedTransform<Input, Op> {
     pub fn new(input: Input, _op: Op) -> Self {
         Self {
             input,
@@ -365,6 +422,24 @@ impl<Input, Op> ReadExpression for Transform<Input, Op>
 where
     Input: ReadExpression,
     Op: UnaryOp<Input::Item>,
+{
+    type Item = Op::Output;
+    type ReadArity = Input::ReadArity;
+}
+
+impl<Input, Op> ReadExpression for IndexedTransform<Input, Op>
+where
+    Input: ReadExpression,
+    Op: IndexedUnaryOp<Input::Item>,
+{
+    type Item = Op::Output;
+    type ReadArity = Input::ReadArity;
+}
+
+impl<Input, Op> ReadExpression for AdjacentIndexedTransform<Input, Op>
+where
+    Input: ReadExpression,
+    Op: IndexedBinaryOp<Input::Item>,
 {
     type Item = Op::Output;
     type ReadArity = Input::ReadArity;
@@ -502,6 +577,32 @@ where
     }
 }
 
+impl<Input, Op> SliceExpression for IndexedTransform<Input, Op>
+where
+    Input: ReadExpression + SliceExpression,
+    Op: IndexedUnaryOp<Input::Item>,
+{
+    fn slice_expression(&self, start: usize, len: usize) -> Self {
+        Self {
+            input: self.input.slice_expression(start, len),
+            _op: PhantomData,
+        }
+    }
+}
+
+impl<Input, Op> SliceExpression for AdjacentIndexedTransform<Input, Op>
+where
+    Input: ReadExpression + SliceExpression,
+    Op: IndexedBinaryOp<Input::Item>,
+{
+    fn slice_expression(&self, start: usize, len: usize) -> Self {
+        Self {
+            input: self.input.slice_expression(start, len),
+            _op: PhantomData,
+        }
+    }
+}
+
 impl<Values, Indices> SliceExpression for Permute<Values, Indices>
 where
     Values: ReadExpression + Clone,
@@ -631,6 +732,24 @@ where
     Op: UnaryOp<Input::Item>,
 {
     type Expr = TransformExpr<Input::Expr, Input::Item, Op>;
+    type NextEnv = Input::NextEnv;
+}
+
+impl<Input, Op, Env> BindSlots<Env> for IndexedTransform<Input, Op>
+where
+    Input: ReadExpression + BindSlots<Env>,
+    Op: IndexedUnaryOp<Input::Item>,
+{
+    type Expr = IndexedTransformExpr<Input::Expr, Input::Item, Op>;
+    type NextEnv = Input::NextEnv;
+}
+
+impl<Input, Op, Env> BindSlots<Env> for AdjacentIndexedTransform<Input, Op>
+where
+    Input: ReadExpression + BindSlots<Env>,
+    Op: IndexedBinaryOp<Input::Item>,
+{
+    type Expr = AdjacentIndexedTransformExpr<Input::Expr, Input::Item, Op>;
     type NextEnv = Input::NextEnv;
 }
 

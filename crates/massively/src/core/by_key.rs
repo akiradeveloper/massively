@@ -3,12 +3,10 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Column, Counting, DeviceVec, Error, Executor, MAlloc, MStorage, ReadExpression,
+    Counting, DeviceVec, Error, Executor, MAlloc, MStorage, ReadExpression,
     allocation::{NormalizeInput, singleton},
     indexed::GatherInput,
-    ordering::{
-        AdjacentFlagInput, BinaryPredicateOp, SortControlInput, UniqueHead, unique_head_flags,
-    },
+    ordering::{AdjacentFlagInput, BinaryPredicateOp, UniqueHead, unique_head_flags},
     segmented::SegmentedStorage,
     selection::{CopySelected, FillOutput, SelectionControl},
     storage::WriteFrom,
@@ -16,47 +14,40 @@ use crate::{
 
 const BLOCK_SIZE: u32 = 256;
 
-#[cubecl::cube(launch_unchecked, explicit_define)]
-fn tail_flags_kernel(heads: &[u32], len: &[u32], tails: &mut [u32]) {
-    let index = ABSOLUTE_POS as usize;
-    if index < len[0] as usize {
-        tails[index] = if index + 1usize == len[0] as usize || heads[index + 1usize] != 0u32 {
-            1u32
+#[cubecl::cube(launch_unchecked)]
+fn tail_indices_kernel(head_indices: &[u32], source_len: &[u32], tails: &mut [u32]) {
+    let rank = ABSOLUTE_POS as usize;
+    if rank < head_indices.len() {
+        tails[rank] = if rank + 1usize < head_indices.len() {
+            head_indices[rank + 1usize] - 1u32
         } else {
-            0u32
+            source_len[0] - 1u32
         };
     }
 }
 
-fn tail_flags<R: Runtime>(
+pub(crate) fn tail_control_from_heads<R: Runtime>(
     exec: &Executor<R>,
-    heads: &DeviceVec<R, u32>,
-) -> Result<DeviceVec<R, u32>, Error> {
-    let len = heads.len();
-    let tails = exec.alloc::<u32>(len);
-    if len == 0 {
-        return Ok(tails);
+    heads: &SelectionControl<R>,
+) -> Result<SelectionControl<R>, Error> {
+    let count = heads.count();
+    let tails = exec.alloc::<u32>(count as usize);
+    if count != 0u32 {
+        let len =
+            u32::try_from(heads.len()).map_err(|_| Error::LengthTooLarge { len: heads.len() })?;
+        let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
+        unsafe {
+            tail_indices_kernel::launch_unchecked::<R>(
+                exec.client(),
+                crate::launch::cube_count_1d((count as usize).div_ceil(BLOCK_SIZE as usize))?,
+                CubeDim::new_1d(BLOCK_SIZE),
+                BufferArg::from_raw_parts(heads.indices().handle.clone(), heads.indices().len()),
+                BufferArg::from_raw_parts(len_handle, 1),
+                BufferArg::from_raw_parts(tails.handle.clone(), tails.len()),
+            );
+        }
     }
-    let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
-    unsafe {
-        tail_flags_kernel::launch_unchecked::<R>(
-            exec.client(),
-            crate::launch::cube_count_1d(len.div_ceil(BLOCK_SIZE as usize))?,
-            CubeDim::new_1d(BLOCK_SIZE),
-            BufferArg::from_raw_parts(heads.handle.clone(), len),
-            BufferArg::from_raw_parts(len_handle, 1),
-            BufferArg::from_raw_parts(tails.handle.clone(), len),
-        );
-    }
-    Ok(tails)
-}
-
-pub(crate) fn segment_tails<R: Runtime>(
-    exec: &Executor<R>,
-    heads: &DeviceVec<R, u32>,
-) -> Result<DeviceVec<R, u32>, Error> {
-    tail_flags(exec, heads)
+    Ok(SelectionControl::from_indices(heads.len(), tails, count))
 }
 
 /// Key-only phase producing segment head flags.
@@ -205,67 +196,6 @@ where
     keys.segment_heads(exec)
 }
 
-/// Key phase for stable key/value sorting.
-#[doc(hidden)]
-pub trait SortByKeyKeys<R: Runtime, Less, KeyOutput>: NormalizeInput<R> {
-    fn sort_key_control(
-        self,
-        exec: &Executor<R>,
-        output: KeyOutput,
-    ) -> Result<(DeviceVec<R, u32>, usize), Error>;
-}
-
-impl<R, Keys, Less, KeyOutput> SortByKeyKeys<R, Less, KeyOutput> for Keys
-where
-    R: Runtime,
-    Keys: NormalizeInput<R>,
-    Keys::Storage: MStorage<R>,
-    Keys::SemanticRead: SortControlInput<R, Less>,
-    <Keys::Storage as MStorage<R>>::Read: GatherInput<R, Column<u32>, KeyOutput>,
-{
-    fn sort_key_control(
-        self,
-        exec: &Executor<R>,
-        output: KeyOutput,
-    ) -> Result<(DeviceVec<R, u32>, usize), Error> {
-        let storage = self.normalize(exec)?;
-        let len = storage.len()?;
-        let permutation = Keys::semantic_read(&storage).sort_control(exec)?;
-        storage.read().gather(exec, permutation.column(), output)?;
-        Ok((permutation, len))
-    }
-}
-
-/// Stably sorts keys and applies the same ordering to values.
-pub(crate) fn sort_by_key<R, Keys, Values, Less, KeyOutput, ValueOutput>(
-    exec: &Executor<R>,
-    keys: Keys,
-    values: Values,
-    _less: Less,
-    key_output: KeyOutput,
-    value_output: ValueOutput,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Keys: SortByKeyKeys<R, Less, KeyOutput>,
-    Values: NormalizeInput<R>,
-    Values::Storage: MStorage<R>,
-    <Values::Storage as MStorage<R>>::Read: GatherInput<R, Column<u32>, ValueOutput>,
-{
-    let (permutation, key_len) = keys.sort_key_control(exec, key_output)?;
-    let value_storage = values.normalize(exec)?;
-    let value_len = value_storage.len()?;
-    if key_len != value_len {
-        return Err(Error::LengthMismatch {
-            left: key_len,
-            right: value_len,
-        });
-    }
-    value_storage
-        .read()
-        .gather(exec, permutation.column(), value_output)
-}
-
 /// Inclusive segmented scan over values grouped by adjacent equal keys.
 pub(crate) fn inclusive_scan_by_key<R, Keys, Values, Equal, Op, Output>(
     exec: &Executor<R>,
@@ -329,10 +259,9 @@ where
     <Values::Storage as MStorage<R>>::Read: CopySelected<R, ValueOutput>,
 {
     let heads = keys.clone().segment_heads(exec)?;
-    let tails = tail_flags(exec, &heads)?;
     let reduced = values.reduced_storage(exec, &heads, init)?;
     let head_control = SelectionControl::from_flags(exec, heads)?;
-    let tail_control = SelectionControl::from_flags(exec, tails)?;
+    let tail_control = tail_control_from_heads(exec, &head_control)?;
     let key_count = keys.copy_selected(exec, &head_control, key_output)?;
     let value_count = reduced
         .read()

@@ -678,13 +678,13 @@ macro_rules! define_arity_module {
             use super::*;
             proptest! {
                 #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
-                #[test] fn arity_1(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 1, seed); }
-                #[test] fn arity_2(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 2, seed); }
-                #[test] fn arity_3(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 3, seed); }
-                #[test] fn arity_4(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 4, seed); }
-                #[test] fn arity_5(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 5, seed); }
-                #[test] fn arity_6(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 6, seed); }
-                #[test] fn arity_7(seed in prop::collection::vec(0u32..100, 0..MAX_LEN)) { value_case!($case, 7, seed); }
+                #[test] fn arity_1(seed in oracle_vec(0u32..100)) { value_case!($case, 1, seed); }
+                #[test] fn arity_2(seed in oracle_vec(0u32..100)) { value_case!($case, 2, seed); }
+                #[test] fn arity_3(seed in oracle_vec(0u32..100)) { value_case!($case, 3, seed); }
+                #[test] fn arity_4(seed in oracle_vec(0u32..100)) { value_case!($case, 4, seed); }
+                #[test] fn arity_5(seed in oracle_vec(0u32..100)) { value_case!($case, 5, seed); }
+                #[test] fn arity_6(seed in oracle_vec(0u32..100)) { value_case!($case, 6, seed); }
+                #[test] fn arity_7(seed in oracle_vec(0u32..100)) { value_case!($case, 7, seed); }
             }
         }
     };
@@ -811,7 +811,7 @@ macro_rules! define_by_key_product_module {
                     proptest! {
                         #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
                         #[test]
-                        fn $name(pairs in prop::collection::vec((0u32..32, 0u32..100), 0..MAX_LEN)) {
+                        fn $name(pairs in oracle_vec((0u32..32, 0u32..100))) {
                             by_key_case!($case, $keys, $values, pairs);
                         }
                     }

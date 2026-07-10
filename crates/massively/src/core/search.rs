@@ -7,7 +7,6 @@ use cubecl::prelude::*;
 use crate::{
     A1, A2, A3, A4, A5, A6, A7, DeviceVec, Error, Executor, MStorageElement, ReadExpression,
     StorageLayout,
-    allocation::NormalizeInput,
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7},
     ordering::BinaryPredicateOp,
     read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression},
@@ -15,16 +14,6 @@ use crate::{
 };
 
 const BLOCK_SIZE: u32 = 256;
-
-struct CodeNonZero;
-
-#[cubecl::cube]
-impl crate::UnaryOp<u32> for CodeNonZero {
-    type Output = u32;
-    fn apply(input: u32) -> u32 {
-        if input != 0u32 { 1u32 } else { 0u32 }
-    }
-}
 
 #[cubecl::cube]
 trait PairCodeOp<Item: CubeType>: 'static + Send + Sync {
@@ -83,6 +72,7 @@ macro_rules! define_pair_code_kernel {
             right_offsets: &[u32],
             len: &[u32],
             codes: &mut [u32],
+            best: &[Atomic<u32>],
         ) {
             let index = ABSOLUTE_POS as usize;
             if index < len[0] as usize {
@@ -92,6 +82,9 @@ macro_rules! define_pair_code_kernel {
                     Left::$method($( $left_slot, )+ left_offsets, index),
                     Right::$method($( $right_slot, )+ right_offsets, index),
                 );
+                if codes[index] != 0u32 {
+                    best[0].fetch_min(index as u32);
+                }
             }
         }
     };
@@ -240,7 +233,7 @@ where
         exec: &Executor<R>,
         left: &Left,
         right: &Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error>;
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
 }
 
 macro_rules! impl_pair_code_dispatch {
@@ -266,13 +259,13 @@ macro_rules! impl_pair_code_dispatch {
                 exec: &Executor<R>,
                 left: &Left,
                 right: &Right,
-            ) -> Result<(DeviceVec<R, u32>, usize, usize), Error> {
+            ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
                 let left_len = left.logical_len()?;
                 let right_len = right.logical_len()?;
                 let len = left_len.min(right_len);
                 let codes = exec.alloc::<u32>(len);
                 if len == 0 {
-                    return Ok((codes, left_len, right_len));
+                    return Ok((codes, None, left_len, right_len));
                 }
                 let mut left_bindings = StagedBindings::new();
                 let mut right_bindings = StagedBindings::new();
@@ -282,6 +275,7 @@ macro_rules! impl_pair_code_dispatch {
                 let right_offsets = exec.client().create_from_slice(u32::as_bytes(&right_bindings.offsets));
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+                let best = exec.to_device(&[len_u32]);
                 unsafe {
                     $kernel::launch_unchecked::<Item, $( $leaf, )+ Left::DeviceExpr, Right::DeviceExpr, Op, R>(
                         exec.client(),
@@ -293,9 +287,11 @@ macro_rules! impl_pair_code_dispatch {
                         BufferArg::from_raw_parts(right_offsets, right_bindings.offsets.len()),
                         BufferArg::from_raw_parts(len_handle, 1),
                         BufferArg::from_raw_parts(codes.handle.clone(), codes.len()),
+                        BufferArg::from_raw_parts(best.handle.clone(), best.len()),
                     );
                 }
-                Ok((codes, left_len, right_len))
+                let index = exec.to_host(&best)?[0];
+                Ok((codes, (index < len_u32).then_some(index), left_len, right_len))
             }
         }
     };
@@ -452,52 +448,39 @@ impl_range_query_dispatch!(crate::S5,A5,Eval5,find_first_of_s5,bound_s5,Env5<L0,
 impl_range_query_dispatch!(crate::S6,A6,Eval6,find_first_of_s6,bound_s6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
 impl_range_query_dispatch!(crate::S7,A7,Eval7,find_first_of_s7,bound_s7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
 
-trait PairCodeInput<R: Runtime, Right, Op>: NormalizeInput<R> {
+trait PairCodeInput<R: Runtime, Right, Op>: ReadExpression {
     fn pair_codes(
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error>;
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
 }
 
 /// Internal public-API capability for `find_first_of`.
 #[doc(hidden)]
-pub trait FindFirstOfInput<R: Runtime, Needles, Equal>: NormalizeInput<R> {
+pub trait FindFirstOfInput<R: Runtime, Needles, Equal>: ReadExpression {
     fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<Option<u32>, Error>;
 }
 
 impl<R, Source, Needles, Equal> FindFirstOfInput<R, Needles, Equal> for Source
 where
     R: Runtime,
-    Source: NormalizeInput<R>,
+    Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Source::Item: StorageLayout,
-    Needles: NormalizeInput<R> + ReadExpression<Item = Source::Item>,
-    Source::SemanticRead: LowerReadExpression,
-    Needles::SemanticRead: LowerReadExpression,
-    PairDispatch<<Source::Item as StorageLayout>::StorageArity>: FindFirstDispatch<
-            R,
-            Source::SemanticRead,
-            Needles::SemanticRead,
-            Source::Item,
-            <Source::SemanticRead as LowerReadExpression>::Slots,
-            <Needles::SemanticRead as LowerReadExpression>::Slots,
-            Equal,
-        >,
+    Needles: ReadExpression<Item = Source::Item> + LowerReadExpression + StageRead<R, Env0>,
+    PairDispatch<<Source::Item as StorageLayout>::StorageArity>:
+        FindFirstDispatch<R, Source, Needles, Source::Item, Source::Slots, Needles::Slots, Equal>,
 {
     fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<Option<u32>, Error> {
-        let source = self.normalize(exec)?;
-        let needles = needles.normalize(exec)?;
-        let source_read = Source::semantic_read(&source);
-        let needle_read = Needles::semantic_read(&needles);
         <PairDispatch<<Source::Item as StorageLayout>::StorageArity> as FindFirstDispatch<
             R,
-            Source::SemanticRead,
-            Needles::SemanticRead,
+            Source,
+            Needles,
             Source::Item,
-            <Source::SemanticRead as LowerReadExpression>::Slots,
-            <Needles::SemanticRead as LowerReadExpression>::Slots,
+            Source::Slots,
+            Needles::Slots,
             Equal,
-        >>::run(exec, &source_read, &needle_read)
+        >>::run(exec, &self, &needles)
     }
 }
 
@@ -517,7 +500,7 @@ where
 
 /// Internal public-API capability for batched sorted bounds.
 #[doc(hidden)]
-pub trait SortedBoundsInput<R: Runtime, Values, Less>: NormalizeInput<R> {
+pub trait SortedBoundsInput<R: Runtime, Values, Less>: ReadExpression {
     fn lower_bounds(self, exec: &Executor<R>, values: Values) -> Result<DeviceVec<R, u32>, Error>;
     fn upper_bounds(self, exec: &Executor<R>, values: Values) -> Result<DeviceVec<R, u32>, Error>;
 }
@@ -525,59 +508,49 @@ pub trait SortedBoundsInput<R: Runtime, Values, Less>: NormalizeInput<R> {
 impl<R, Source, Values, Less> SortedBoundsInput<R, Values, Less> for Source
 where
     R: Runtime,
-    Source: NormalizeInput<R>,
+    Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Source::Item: StorageLayout,
-    Values: NormalizeInput<R> + ReadExpression<Item = Source::Item>,
-    Source::SemanticRead: LowerReadExpression,
-    Values::SemanticRead: LowerReadExpression,
+    Values: ReadExpression<Item = Source::Item> + LowerReadExpression + StageRead<R, Env0>,
     PairDispatch<<Source::Item as StorageLayout>::StorageArity>: BoundDispatch<
             R,
-            Source::SemanticRead,
-            Values::SemanticRead,
+            Source,
+            Values,
             Source::Item,
-            <Source::SemanticRead as LowerReadExpression>::Slots,
-            <Values::SemanticRead as LowerReadExpression>::Slots,
+            Source::Slots,
+            Values::Slots,
             LowerBound<Less>,
         > + BoundDispatch<
             R,
-            Source::SemanticRead,
-            Values::SemanticRead,
+            Source,
+            Values,
             Source::Item,
-            <Source::SemanticRead as LowerReadExpression>::Slots,
-            <Values::SemanticRead as LowerReadExpression>::Slots,
+            Source::Slots,
+            Values::Slots,
             UpperBound<Less>,
         >,
 {
     fn lower_bounds(self, exec: &Executor<R>, values: Values) -> Result<DeviceVec<R, u32>, Error> {
-        let source = self.normalize(exec)?;
-        let values = values.normalize(exec)?;
-        let source_read = Source::semantic_read(&source);
-        let value_read = Values::semantic_read(&values);
         <PairDispatch<<Source::Item as StorageLayout>::StorageArity> as BoundDispatch<
             R,
-            Source::SemanticRead,
-            Values::SemanticRead,
+            Source,
+            Values,
             Source::Item,
-            <Source::SemanticRead as LowerReadExpression>::Slots,
-            <Values::SemanticRead as LowerReadExpression>::Slots,
+            Source::Slots,
+            Values::Slots,
             LowerBound<Less>,
-        >>::run(exec, &source_read, &value_read)
+        >>::run(exec, &self, &values)
     }
 
     fn upper_bounds(self, exec: &Executor<R>, values: Values) -> Result<DeviceVec<R, u32>, Error> {
-        let source = self.normalize(exec)?;
-        let values = values.normalize(exec)?;
-        let source_read = Source::semantic_read(&source);
-        let value_read = Values::semantic_read(&values);
         <PairDispatch<<Source::Item as StorageLayout>::StorageArity> as BoundDispatch<
             R,
-            Source::SemanticRead,
-            Values::SemanticRead,
+            Source,
+            Values,
             Source::Item,
-            <Source::SemanticRead as LowerReadExpression>::Slots,
-            <Values::SemanticRead as LowerReadExpression>::Slots,
+            Source::Slots,
+            Values::Slots,
             UpperBound<Less>,
-        >>::run(exec, &source_read, &value_read)
+        >>::run(exec, &self, &values)
     }
 }
 
@@ -642,55 +615,27 @@ where
 impl<R, Left, Right, Op> PairCodeInput<R, Right, Op> for Left
 where
     R: Runtime,
-    Left: NormalizeInput<R>,
+    Left: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Left::Item: StorageLayout,
-    Right: NormalizeInput<R> + ReadExpression<Item = Left::Item>,
-    PairDispatch<<Left::Item as StorageLayout>::StorageArity>: PairCodeDispatch<
-            R,
-            Left::SemanticRead,
-            Right::SemanticRead,
-            Left::Item,
-            <Left::SemanticRead as LowerReadExpression>::Slots,
-            <Right::SemanticRead as LowerReadExpression>::Slots,
-            Op,
-        >,
-    Left::SemanticRead: LowerReadExpression,
-    Right::SemanticRead: LowerReadExpression,
+    Right: ReadExpression<Item = Left::Item> + LowerReadExpression + StageRead<R, Env0>,
+    PairDispatch<<Left::Item as StorageLayout>::StorageArity>:
+        PairCodeDispatch<R, Left, Right, Left::Item, Left::Slots, Right::Slots, Op>,
 {
     fn pair_codes(
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error> {
-        let left = self.normalize(exec)?;
-        let right = right.normalize(exec)?;
-        let left_read = Left::semantic_read(&left);
-        let right_read = Right::semantic_read(&right);
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
         <PairDispatch<<Left::Item as StorageLayout>::StorageArity> as PairCodeDispatch<
             R,
-            Left::SemanticRead,
-            Right::SemanticRead,
+            Left,
+            Right,
             Left::Item,
-            <Left::SemanticRead as LowerReadExpression>::Slots,
-            <Right::SemanticRead as LowerReadExpression>::Slots,
+            Left::Slots,
+            Right::Slots,
             Op,
-        >>::run(exec, &left_read, &right_read)
+        >>::run(exec, &self, &right)
     }
-}
-
-fn first_nonzero<R: Runtime>(
-    exec: &Executor<R>,
-    codes: DeviceVec<R, u32>,
-) -> Result<Option<(u32, u32)>, Error> {
-    let flags = exec.alloc::<u32>(codes.len());
-    crate::transform::transform(exec, codes.column(), CodeNonZero, flags.slice_mut(..))?;
-    let control = crate::selection::SelectionControl::from_flags(exec, flags)?;
-    let Some(index) = control.first_index(exec)? else {
-        return Ok(None);
-    };
-    // Read only the selected code; the index itself remains a device control.
-    let code = exec.to_host(&codes.slice(index as usize..index as usize + 1))?[0];
-    Ok(Some((index, code)))
 }
 
 /// Internal capability hiding normalized pair-code dispatch for equality.
@@ -700,7 +645,7 @@ pub trait EqualityInput<R: Runtime, Right, Equal>: ReadExpression + Sized {
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error>;
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
 }
 
 impl<R, Left, Right, Equal> EqualityInput<R, Right, Equal> for Left
@@ -712,7 +657,7 @@ where
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error> {
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
         self.pair_codes(exec, right)
     }
 }
@@ -728,8 +673,8 @@ where
     R: Runtime,
     Left: EqualityInput<R, Right, Equal>,
 {
-    let (codes, left_len, right_len) = left.mismatch_control(exec, right)?;
-    Ok(left_len == right_len && first_nonzero(exec, codes)?.is_none())
+    let (_codes, mismatch, left_len, right_len) = left.mismatch_control(exec, right)?;
+    Ok(left_len == right_len && mismatch.is_none())
 }
 
 /// Returns the first mismatch, including the shared end when lengths differ.
@@ -743,8 +688,8 @@ where
     R: Runtime,
     Left: EqualityInput<R, Right, Equal>,
 {
-    let (codes, left_len, right_len) = left.mismatch_control(exec, right)?;
-    if let Some((index, _)) = first_nonzero(exec, codes)? {
+    let (_codes, mismatch, left_len, right_len) = left.mismatch_control(exec, right)?;
+    if let Some(index) = mismatch {
         Ok(Some(index))
     } else if left_len != right_len {
         Ok(Some(left_len.min(right_len) as u32))
@@ -760,7 +705,7 @@ pub trait LexicographicalInput<R: Runtime, Right, Less>: ReadExpression + Sized 
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error>;
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error>;
 }
 
 impl<R, Left, Right, Less> LexicographicalInput<R, Right, Less> for Left
@@ -772,7 +717,7 @@ where
         self,
         exec: &Executor<R>,
         right: Right,
-    ) -> Result<(DeviceVec<R, u32>, usize, usize), Error> {
+    ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
         self.pair_codes(exec, right)
     }
 }
@@ -788,10 +733,9 @@ where
     R: Runtime,
     Left: LexicographicalInput<R, Right, Less>,
 {
-    let (codes, left_len, right_len) = left.lexicographical_codes(exec, right)?;
-    Ok(match first_nonzero(exec, codes)? {
-        Some((_, 1)) => true,
-        Some(_) => false,
+    let (codes, mismatch, left_len, right_len) = left.lexicographical_codes(exec, right)?;
+    Ok(match mismatch {
+        Some(index) => exec.to_host(&codes.slice(index as usize..index as usize + 1))?[0] == 1u32,
         None => left_len < right_len,
     })
 }
@@ -799,7 +743,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, Zip};
+    use crate::{Counting, MStorage, Permute, Zip, allocation::NormalizeInput, read::Reassociate};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
@@ -847,7 +791,7 @@ mod tests {
     }
 
     #[test]
-    fn pair_queries_normalize_two_eval8_inputs_before_storage7_comparison() {
+    fn pair_queries_compare_two_normalized_storage7_inputs() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let left0 = exec.to_device(&[1_u32, 2, 3]);
         let right0 = exec.to_device(&[1_u32, 4, 3]);
@@ -900,12 +844,17 @@ mod tests {
             )
         };
 
-        assert!(!equal(&exec, make_left(), make_right(), EqualSeven).unwrap());
+        let left = make_left().normalize(&exec).unwrap();
+        let right = make_right().normalize(&exec).unwrap();
+        let left_read = || Reassociate::<_, Seven>::new(left.read());
+        let right_read = || Reassociate::<_, Seven>::new(right.read());
+
+        assert!(!equal(&exec, left_read(), right_read(), EqualSeven).unwrap());
         assert_eq!(
-            mismatch(&exec, make_left(), make_right(), EqualSeven).unwrap(),
+            mismatch(&exec, left_read(), right_read(), EqualSeven).unwrap(),
             Some(1)
         );
-        assert!(lexicographical_compare(&exec, make_left(), make_right(), LessSeven).unwrap());
+        assert!(lexicographical_compare(&exec, left_read(), right_read(), LessSeven).unwrap());
     }
 
     #[test]
@@ -951,7 +900,7 @@ mod tests {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let left = exec.to_device(&[93_u32]);
         let right = exec.to_device(&[43_u32]);
-        let (codes, _, _) =
+        let (codes, _, _, _) =
             <_ as PairCodeInput<WgpuRuntime, _, LexicographicalCode<LessU32>>>::pair_codes(
                 left.column(),
                 &exec,

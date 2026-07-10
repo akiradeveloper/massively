@@ -3,12 +3,67 @@ use std::time::Duration;
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, ReductionOp, UnaryOp, lazy, reduce, zip2};
+use massively::{Executor, ReductionOp, UnaryOp, lazy, reduce, zip2, zip3, zip4, zip5};
 
 const LEN: u32 = 4_000_000_000;
+const X_KEY: u32 = seed_key(0);
+const Y_KEY: u32 = seed_key(1);
+
+type FourU32 = (((u32, u32), u32), u32);
+type RandomArgs = (((u32, f32), f32), u32);
+type RuntimeKeyArgs = ((u32, u32), u32);
+type RuntimeRangeArgs = ((((u32, u32), u32), f32), f32);
 
 struct Sum;
 struct DetectHit;
+struct FourMix;
+struct PairXor;
+struct PcgPairHash;
+struct PcgPairUnitCompare;
+struct PcgPairCircle;
+struct PcgPairCircleRuntime;
+struct PcgPairCircleRuntimeRange;
+struct UniformFromArgs;
+
+const fn pcg_hash32_host(input: u32) -> u32 {
+    let state = input.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
+    let word = ((state >> ((state >> 28) + 4)) ^ state).wrapping_mul(277_803_737);
+    (word >> 22) ^ word
+}
+
+const fn seed_key(seed: u64) -> u32 {
+    let low = seed as u32;
+    let high = (seed >> 32) as u32;
+    pcg_hash32_host(low ^ pcg_hash32_host(high))
+}
+
+#[cubecl::cube]
+fn pcg_hash32(input: u32) -> u32 {
+    let state = input * 747_796_405u32 + 2_891_336_453u32;
+    let word = ((state >> ((state >> 28u32) + 4u32)) ^ state) * 277_803_737u32;
+    (word >> 22u32) ^ word
+}
+
+#[cubecl::cube]
+fn random_u32_at(key: u32, index: u32) -> u32 {
+    pcg_hash32(index ^ key)
+}
+
+#[cubecl::cube]
+fn unit_f32(key: u32, index: u32) -> f32 {
+    ((random_u32_at(key, index) >> 8u32) as f32) * 0.00000005960464832810486063f32
+}
+
+#[cubecl::cube]
+fn uniform_f32(min: f32, max: f32, key: u32, index: u32) -> f32 {
+    min + unit_f32(key, index) * (max - min)
+}
+
+#[cubecl::cube]
+fn circle_hit(x: f32, y: f32) -> u32 {
+    let d2 = x * x + y * y;
+    if d2 <= 1.0 { 1u32 } else { 0u32 }
+}
 
 #[cubecl::cube]
 impl ReductionOp<u32> for Sum {
@@ -27,19 +82,196 @@ impl UnaryOp<(f32, f32)> for DetectHit {
     }
 }
 
+#[cubecl::cube]
+impl UnaryOp<FourU32> for FourMix {
+    type Output = u32;
+
+    fn apply(input: FourU32) -> u32 {
+        input.0.0.0 ^ input.0.0.1 ^ input.0.1 ^ input.1
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for PairXor {
+    type Output = u32;
+
+    fn apply(input: (u32, u32)) -> u32 {
+        input.0 ^ input.1
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<u32> for PcgPairHash {
+    type Output = u32;
+
+    fn apply(index: u32) -> u32 {
+        random_u32_at(X_KEY, index) ^ random_u32_at(Y_KEY, index)
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<u32> for PcgPairUnitCompare {
+    type Output = u32;
+
+    fn apply(index: u32) -> u32 {
+        let x = unit_f32(X_KEY, index);
+        let y = unit_f32(Y_KEY, index);
+        if x <= y { 1u32 } else { 0u32 }
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<u32> for PcgPairCircle {
+    type Output = u32;
+
+    fn apply(index: u32) -> u32 {
+        circle_hit(unit_f32(X_KEY, index), unit_f32(Y_KEY, index))
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<RuntimeKeyArgs> for PcgPairCircleRuntime {
+    type Output = u32;
+
+    fn apply(input: RuntimeKeyArgs) -> u32 {
+        circle_hit(unit_f32(input.0.1, input.0.0), unit_f32(input.1, input.0.0))
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<RuntimeRangeArgs> for PcgPairCircleRuntimeRange {
+    type Output = u32;
+
+    fn apply(input: RuntimeRangeArgs) -> u32 {
+        let index = input.0.0.0.0;
+        let x_key = input.0.0.0.1;
+        let y_key = input.0.0.1;
+        let min = input.0.1;
+        let max = input.1;
+        circle_hit(
+            uniform_f32(min, max, x_key, index),
+            uniform_f32(min, max, y_key, index),
+        )
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<RandomArgs> for UniformFromArgs {
+    type Output = f32;
+
+    fn apply(input: RandomArgs) -> f32 {
+        uniform_f32(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+fn assert_pi(count: u32) {
+    let pi = count as f64 * 4.0 / LEN as f64;
+    assert!((3.10..3.18).contains(&black_box(pi)), "pi={pi}");
+}
+
 fn bench_reduce_4g(c: &mut Criterion) {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 
     let mut group = c.benchmark_group("reduce_4g");
     group.sample_size(10);
-    group.warm_up_time(Duration::from_millis(100));
-    group.measurement_time(Duration::from_secs(4));
+    group.warm_up_time(Duration::from_secs(1));
+    group.measurement_time(Duration::from_secs(6));
     group.throughput(Throughput::Elements(LEN as u64));
     group.bench_function("constant_u32", |b| {
         b.iter(|| {
             let input = lazy::constant(black_box(1_u32)).take(LEN);
             let result = reduce(&exec, input, 0_u32, Sum).unwrap();
             assert_eq!(black_box(result), LEN);
+        })
+    });
+    group.bench_function("diag_a8_parameter_mix", |b| {
+        b.iter(|| {
+            let left = zip4(
+                lazy::counting(black_box(0)).take(LEN),
+                lazy::constant(black_box(0x1357_9bdf)).take(LEN),
+                lazy::constant(black_box(0x2468_ace0)).take(LEN),
+                lazy::constant(black_box(0xfdb9_7531)).take(LEN),
+            );
+            let right = zip4(
+                lazy::counting(black_box(1)).take(LEN),
+                lazy::constant(black_box(0x0f0f_0f0f)).take(LEN),
+                lazy::constant(black_box(0xf0f0_f0f0)).take(LEN),
+                lazy::constant(black_box(0x55aa_aa55)).take(LEN),
+            );
+            let left = lazy::transform(left, FourMix);
+            let right = lazy::transform(right, FourMix);
+            let result = reduce(
+                &exec,
+                lazy::transform(zip2(left, right), PairXor),
+                0u32,
+                Sum,
+            )
+            .unwrap();
+            black_box(result);
+        })
+    });
+    group.bench_function("diag_a1_pcg2_hash", |b| {
+        b.iter(|| {
+            let values = lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairHash);
+            black_box(reduce(&exec, values, 0u32, Sum).unwrap());
+        })
+    });
+    group.bench_function("diag_a1_pcg2_unit_compare", |b| {
+        b.iter(|| {
+            let values =
+                lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairUnitCompare);
+            let count = reduce(&exec, values, 0u32, Sum).unwrap();
+            assert!((1_900_000_000..2_100_000_000).contains(&black_box(count)));
+        })
+    });
+    group.bench_function("diag_a1_pcg2_circle", |b| {
+        b.iter(|| {
+            let values = lazy::transform(lazy::counting(black_box(0)).take(LEN), PcgPairCircle);
+            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+        })
+    });
+    group.bench_function("diag_a3_pcg2_circle_runtime_keys", |b| {
+        b.iter(|| {
+            let input = zip3(
+                lazy::counting(black_box(0)).take(LEN),
+                lazy::constant(black_box(X_KEY)).take(LEN),
+                lazy::constant(black_box(Y_KEY)).take(LEN),
+            );
+            let values = lazy::transform(input, PcgPairCircleRuntime);
+            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+        })
+    });
+    group.bench_function("diag_a5_pcg2_circle_runtime_range", |b| {
+        b.iter(|| {
+            let input = zip5(
+                lazy::counting(black_box(0)).take(LEN),
+                lazy::constant(black_box(X_KEY)).take(LEN),
+                lazy::constant(black_box(Y_KEY)).take(LEN),
+                lazy::constant(black_box(0.0f32)).take(LEN),
+                lazy::constant(black_box(1.0f32)).take(LEN),
+            );
+            let values = lazy::transform(input, PcgPairCircleRuntimeRange);
+            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
+        })
+    });
+    group.bench_function("diag_a8_pcg2_circle_direct", |b| {
+        b.iter(|| {
+            let x = zip4(
+                lazy::counting(black_box(0)).take(LEN),
+                lazy::constant(black_box(0.0f32)).take(LEN),
+                lazy::constant(black_box(1.0f32)).take(LEN),
+                lazy::constant(black_box(X_KEY)).take(LEN),
+            );
+            let y = zip4(
+                lazy::counting(black_box(0)).take(LEN),
+                lazy::constant(black_box(0.0f32)).take(LEN),
+                lazy::constant(black_box(1.0f32)).take(LEN),
+                lazy::constant(black_box(Y_KEY)).take(LEN),
+            );
+            let x = lazy::transform(x, UniformFromArgs);
+            let y = lazy::transform(y, UniformFromArgs);
+            let values = lazy::transform(zip2(x, y), DetectHit);
+            assert_pi(reduce(&exec, values, 0u32, Sum).unwrap());
         })
     });
     group.bench_function("monte_carlo_pi", |b| {
@@ -52,8 +284,7 @@ fn bench_reduce_4g(c: &mut Criterion) {
                 .take(LEN);
             let hits = lazy::transform(zip2(x, y), DetectHit);
             let count = reduce(&exec, hits, 0_u32, Sum).unwrap();
-            let pi = count as f64 * 4.0 / LEN as f64;
-            assert!((3.10..3.18).contains(&black_box(pi)), "pi={pi}");
+            assert_pi(count);
         })
     });
     group.finish();

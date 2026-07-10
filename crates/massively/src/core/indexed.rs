@@ -1,15 +1,21 @@
-//! Indexed algorithms built from the canonical permutation expression.
+//! Indexed algorithms and permutation application.
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::*;
 
 use crate::{
-    Dispatch, Error, Executor, MAlloc, MStorage, Permute, ReadExpression, ReverseCounting,
-    StorageLayout,
+    A1, A2, A3, A4, A5, A6, A7, A8, Dispatch, Error, Executor, MAlloc, MStorage, MStorageElement,
+    Permute, ReadExpression, ReverseCounting, S1, S2, S3, S4, S5, S6, S7, StorageLayout, WriteFrom,
     allocation::NormalizeInput,
+    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
     masked::MaskedCopyInput,
-    output::{LowerOutputExpression, OutputExpression, StageOutput},
-    read::{Env0, LowerReadExpression},
-    reduce::StageRead,
+    output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
+    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression},
+    reduce::{StageRead, StagedBindings},
+    storage::{
+        Decompose, Last, More, StoreLeaves1, StoreLeaves1Expand, StoreLeaves2, StoreLeaves2Expand,
+        StoreLeaves3, StoreLeaves3Expand, StoreLeaves4, StoreLeaves4Expand, StoreLeaves5,
+        StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand, StoreLeaves7, StoreLeaves7Expand,
+    },
     transform::{MaterializeDispatch, materialize},
 };
 
@@ -54,6 +60,214 @@ where
     Values: GatherInput<R, Indices, Output>,
 {
     values.gather(exec, indices, output)
+}
+
+const PERMUTATION_BLOCK_SIZE: u32 = 256;
+
+macro_rules! define_permutation_kernel {
+    (
+        $name:ident, $eval:ident, $method:ident;
+        [$( $leaf:ident : $slot:ident ),+];
+        [$( $output:ident : $out:ident ),+];
+        $leaves:ty
+    ) => {
+        #[cubecl::cube(launch_unchecked, explicit_define)]
+        fn $name<
+            Source: CubeType + Send + Sync + 'static,
+            Target: WriteFrom<Source> + Send + Sync + 'static,
+            $( $leaf: CubePrimitive, )+
+            $( $output: CubePrimitive, )+
+            Expr: $eval<Source, $( $leaf ),+>,
+            Layout: Decompose<Target, Leaves = $leaves>,
+        >(
+            $( $slot: &[$leaf], )+
+            read_offsets: &[u32],
+            indices: &[u32],
+            index_offset: &[u32],
+            len: &[u32],
+            $( $out: &mut [$output], )+
+            write_offsets: &[u32],
+        ) {
+            let index = ABSOLUTE_POS as usize;
+            if index < len[0] as usize {
+                let source_index = indices[index_offset[0] as usize + index] as usize;
+                let source = Expr::$method($( $slot, )+ read_offsets, source_index);
+                Layout::decompose(Target::write_from(source)).store(
+                    $( $out, )+ write_offsets, index,
+                );
+            }
+        }
+    };
+}
+
+macro_rules! define_permutation_kernels_for_eval {
+    (
+        $eval:ident, $method:ident;
+        [$( $leaf:ident : $slot:ident ),+];
+        [$k1:ident, $k2:ident, $k3:ident, $k4:ident, $k5:ident, $k6:ident, $k7:ident]
+    ) => {
+        define_permutation_kernel!($k1,$eval,$method; [$($leaf:$slot),+]; [O0:out0]; Last<O0>);
+        define_permutation_kernel!($k2,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1]; More<O0,Last<O1>>);
+        define_permutation_kernel!($k3,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2]; More<O0,More<O1,Last<O2>>>);
+        define_permutation_kernel!($k4,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3]; More<O0,More<O1,More<O2,Last<O3>>>>);
+        define_permutation_kernel!($k5,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4]; More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>);
+        define_permutation_kernel!($k6,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4,O5:out5]; More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>);
+        define_permutation_kernel!($k7,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4,O5:out5,O6:out6]; More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>);
+    };
+}
+
+define_permutation_kernels_for_eval!(Eval1,eval1; [L0:slot0]; [permutation_a1_s1,permutation_a1_s2,permutation_a1_s3,permutation_a1_s4,permutation_a1_s5,permutation_a1_s6,permutation_a1_s7]);
+define_permutation_kernels_for_eval!(Eval2,eval2; [L0:slot0,L1:slot1]; [permutation_a2_s1,permutation_a2_s2,permutation_a2_s3,permutation_a2_s4,permutation_a2_s5,permutation_a2_s6,permutation_a2_s7]);
+define_permutation_kernels_for_eval!(Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]; [permutation_a3_s1,permutation_a3_s2,permutation_a3_s3,permutation_a3_s4,permutation_a3_s5,permutation_a3_s6,permutation_a3_s7]);
+define_permutation_kernels_for_eval!(Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]; [permutation_a4_s1,permutation_a4_s2,permutation_a4_s3,permutation_a4_s4,permutation_a4_s5,permutation_a4_s6,permutation_a4_s7]);
+define_permutation_kernels_for_eval!(Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]; [permutation_a5_s1,permutation_a5_s2,permutation_a5_s3,permutation_a5_s4,permutation_a5_s5,permutation_a5_s6,permutation_a5_s7]);
+define_permutation_kernels_for_eval!(Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]; [permutation_a6_s1,permutation_a6_s2,permutation_a6_s3,permutation_a6_s4,permutation_a6_s5,permutation_a6_s6,permutation_a6_s7]);
+define_permutation_kernels_for_eval!(Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]; [permutation_a7_s1,permutation_a7_s2,permutation_a7_s3,permutation_a7_s4,permutation_a7_s5,permutation_a7_s6,permutation_a7_s7]);
+define_permutation_kernels_for_eval!(Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]; [permutation_a8_s1,permutation_a8_s2,permutation_a8_s3,permutation_a8_s4,permutation_a8_s5,permutation_a8_s6,permutation_a8_s7]);
+
+#[doc(hidden)]
+pub trait PermutationDispatch<R, Input, Output, ReadSlots, WriteSlots>
+where
+    R: Runtime,
+{
+    fn run(
+        exec: &Executor<R>,
+        input: &Input,
+        indices: &crate::Column<u32>,
+        output: &Output,
+    ) -> Result<(), Error>;
+}
+
+macro_rules! impl_permutation_dispatch {
+    (
+        $arity:ty, $storage:ty, $eval:ident, $kernel:ident;
+        [$( $leaf:ident : $read_index:literal ),+], $read_env:ty;
+        [$( $output:ident : $write_index:literal ),+], $write_env:ty;
+        $leaves:ty
+    ) => {
+        impl<R, Input, Output, Source, $( $leaf, )+ $( $output, )+>
+            PermutationDispatch<R, Input, Output, $read_env, $write_env>
+            for Dispatch<$arity, $storage>
+        where
+            R: Runtime,
+            $( $leaf: MStorageElement, )+
+            $( $output: MStorageElement, )+
+            Source: StorageLayout + Send + Sync + 'static,
+            Input: ReadExpression<Item = Source>
+                + LowerReadExpression<Slots = $read_env>
+                + StageRead<R, Env0>,
+            Input::DeviceExpr: $eval<Source, $( $leaf ),+>,
+            Output: OutputExpression<StorageArity = $storage>
+                + LowerOutputExpression<Slots = $write_env>
+                + StageOutput<R, Env0>,
+            Output::Item: StorageLayout<StorageArity = $storage, StorageLeaves = $leaves>
+                + WriteFrom<Source>,
+            <Output::Item as StorageLayout>::DeviceLayout:
+                Decompose<Output::Item, Leaves = $leaves>,
+        {
+            fn run(
+                exec: &Executor<R>,
+                input: &Input,
+                indices: &crate::Column<u32>,
+                output: &Output,
+            ) -> Result<(), Error> {
+                let len = <crate::Column<u32> as StageRead<R, Env0>>::logical_len(indices)?;
+                let output_len = output.logical_len()?;
+                if output_len < len {
+                    return Err(Error::OutputTooShort { input: len, output: output_len });
+                }
+                if len == 0 {
+                    return Ok(());
+                }
+                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
+                let mut reads = StagedBindings::new();
+                input.stage_at(exec.client(), exec.id(), &mut reads)?;
+                let mut index_reads = StagedBindings::new();
+                <crate::Column<u32> as StageRead<R, Env0>>::stage_at(
+                    indices,
+                    exec.client(),
+                    exec.id(),
+                    &mut index_reads,
+                )?;
+                let mut writes = OutputBindings::new();
+                output.stage_output(exec.id(), &mut writes)?;
+                let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
+                let index_offset = exec.client().create_from_slice(u32::as_bytes(&index_reads.offsets));
+                let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
+                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+                unsafe {
+                    $kernel::launch_unchecked::<
+                        Source,
+                        Output::Item,
+                        $( $leaf, )+
+                        $( $output, )+
+                        Input::DeviceExpr,
+                        <Output::Item as StorageLayout>::DeviceLayout,
+                        R,
+                    >(
+                        exec.client(),
+                        crate::launch::cube_count_1d(len.div_ceil(PERMUTATION_BLOCK_SIZE as usize))?,
+                        CubeDim::new_1d(PERMUTATION_BLOCK_SIZE),
+                        $( BufferArg::from_raw_parts(reads.slots[$read_index].0.clone(), reads.slots[$read_index].1), )+
+                        BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
+                        BufferArg::from_raw_parts(index_reads.slots[0].0.clone(), index_reads.slots[0].1),
+                        BufferArg::from_raw_parts(index_offset, 1),
+                        BufferArg::from_raw_parts(len_handle, 1),
+                        $( BufferArg::from_raw_parts(writes.slots[$write_index].0.clone(), writes.slots[$write_index].1), )+
+                        BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
+                    );
+                }
+                Ok(())
+            }
+        }
+    };
+}
+
+macro_rules! impl_all_permutation_storage_for_read {
+    (
+        $arity:ty, $eval:ident;
+        [$( $leaf:ident : $read_index:literal ),+], $read_env:ty;
+        [$k1:ident, $k2:ident, $k3:ident, $k4:ident, $k5:ident, $k6:ident, $k7:ident]
+    ) => {
+        impl_permutation_dispatch!($arity,S1,$eval,$k1; [$($leaf:$read_index),+],$read_env; [O0:0],Env1<O0>; Last<O0>);
+        impl_permutation_dispatch!($arity,S2,$eval,$k2; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1],Env2<O0,O1>; More<O0,Last<O1>>);
+        impl_permutation_dispatch!($arity,S3,$eval,$k3; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2],Env3<O0,O1,O2>; More<O0,More<O1,Last<O2>>>);
+        impl_permutation_dispatch!($arity,S4,$eval,$k4; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3],Env4<O0,O1,O2,O3>; More<O0,More<O1,More<O2,Last<O3>>>>);
+        impl_permutation_dispatch!($arity,S5,$eval,$k5; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4],Env5<O0,O1,O2,O3,O4>; More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>);
+        impl_permutation_dispatch!($arity,S6,$eval,$k6; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4,O5:5],Env6<O0,O1,O2,O3,O4,O5>; More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>);
+        impl_permutation_dispatch!($arity,S7,$eval,$k7; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4,O5:5,O6:6],Env7<O0,O1,O2,O3,O4,O5,O6>; More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>);
+    };
+}
+
+impl_all_permutation_storage_for_read!(A1,Eval1; [L0:0],Env1<L0>; [permutation_a1_s1,permutation_a1_s2,permutation_a1_s3,permutation_a1_s4,permutation_a1_s5,permutation_a1_s6,permutation_a1_s7]);
+impl_all_permutation_storage_for_read!(A2,Eval2; [L0:0,L1:1],Env2<L0,L1>; [permutation_a2_s1,permutation_a2_s2,permutation_a2_s3,permutation_a2_s4,permutation_a2_s5,permutation_a2_s6,permutation_a2_s7]);
+impl_all_permutation_storage_for_read!(A3,Eval3; [L0:0,L1:1,L2:2],Env3<L0,L1,L2>; [permutation_a3_s1,permutation_a3_s2,permutation_a3_s3,permutation_a3_s4,permutation_a3_s5,permutation_a3_s6,permutation_a3_s7]);
+impl_all_permutation_storage_for_read!(A4,Eval4; [L0:0,L1:1,L2:2,L3:3],Env4<L0,L1,L2,L3>; [permutation_a4_s1,permutation_a4_s2,permutation_a4_s3,permutation_a4_s4,permutation_a4_s5,permutation_a4_s6,permutation_a4_s7]);
+impl_all_permutation_storage_for_read!(A5,Eval5; [L0:0,L1:1,L2:2,L3:3,L4:4],Env5<L0,L1,L2,L3,L4>; [permutation_a5_s1,permutation_a5_s2,permutation_a5_s3,permutation_a5_s4,permutation_a5_s5,permutation_a5_s6,permutation_a5_s7]);
+impl_all_permutation_storage_for_read!(A6,Eval6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5],Env6<L0,L1,L2,L3,L4,L5>; [permutation_a6_s1,permutation_a6_s2,permutation_a6_s3,permutation_a6_s4,permutation_a6_s5,permutation_a6_s6,permutation_a6_s7]);
+impl_all_permutation_storage_for_read!(A7,Eval7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6],Env7<L0,L1,L2,L3,L4,L5,L6>; [permutation_a7_s1,permutation_a7_s2,permutation_a7_s3,permutation_a7_s4,permutation_a7_s5,permutation_a7_s6,permutation_a7_s7]);
+impl_all_permutation_storage_for_read!(A8,Eval8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7],Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [permutation_a8_s1,permutation_a8_s2,permutation_a8_s3,permutation_a8_s4,permutation_a8_s5,permutation_a8_s6,permutation_a8_s7]);
+
+pub(crate) fn apply_permutation<R, Input, Output>(
+    exec: &Executor<R>,
+    input: Input,
+    indices: crate::Column<u32>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Dispatch<Input::ReadArity, Output::StorageArity>:
+        PermutationDispatch<R, Input, Output, Input::Slots, Output::Slots>,
+{
+    <Dispatch<Input::ReadArity, Output::StorageArity> as PermutationDispatch<
+        R,
+        Input,
+        Output,
+        Input::Slots,
+        Output::Slots,
+    >>::run(exec, &input, &indices, &output)
 }
 
 /// Internal public-API capability that normalizes values and indices

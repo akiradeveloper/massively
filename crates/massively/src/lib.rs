@@ -57,8 +57,8 @@ pub(crate) use core::storage::{S1, S2, S3, S4, S5, S6, S7, StorageLayout};
 pub(crate) use core::transform::materialize;
 pub(crate) use core::value::MStorageElement;
 pub(crate) use core::{
-    allocation, arity, eval, indexed, launch, masked, merge, ordering, output, predicate, read,
-    reduce, scan, search, segmented, selection, storage, transform, value,
+    allocation, arg_reduce, arity, eval, indexed, launch, masked, merge, ordering, output,
+    predicate, read, reduce, scan, search, segmented, selection, storage, transform, value,
 };
 
 pub use api::algorithm::*;

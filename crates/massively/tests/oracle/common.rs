@@ -2,9 +2,22 @@ use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{BinaryPredicateOp, Executor, PredicateOp, ReductionOp, UnaryOp};
 use oracle_ref as oracle;
+use proptest::prelude::*;
 
 pub const CASES: u32 = 6;
-pub const MAX_LEN: usize = 96;
+
+const ORACLE_LENGTHS: [usize; 18] = [
+    0, 1, 2, 31, 32, 33, 255, 256, 257, 511, 512, 513, 767, 768, 769, 1_023, 1_024, 1_025,
+];
+
+pub fn oracle_vec<S>(element: S) -> impl Strategy<Value = Vec<S::Value>>
+where
+    S: Strategy + Clone,
+    S::Value: std::fmt::Debug,
+{
+    prop::sample::select(&ORACLE_LENGTHS)
+        .prop_flat_map(move |len| prop::collection::vec(element.clone(), len))
+}
 
 pub struct AddOne;
 pub struct Sum;

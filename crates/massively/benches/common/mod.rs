@@ -7,7 +7,8 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::Executor;
 
 pub const SIZES: &[usize] = &[1_024, 16 * 1_024, 256 * 1_024, 1_024 * 1_024];
-pub const SORT_SIZES: &[usize] = &[1_024, 16 * 1_024, 256 * 1_024];
+pub const SORT_SIZES: &[usize] = &[1_024, 16 * 1_024, 256 * 1_024, 1_024 * 1_024];
+pub const SORT_PATTERN_SIZE: usize = 256 * 1_024;
 
 pub fn exec() -> Executor<WgpuRuntime> {
     Executor::new(WgpuDevice::DefaultDevice)

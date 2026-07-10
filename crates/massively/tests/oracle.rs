@@ -7,6 +7,9 @@ mod scalar;
 #[path = "oracle/by_key.rs"]
 mod by_key;
 
+#[path = "oracle/ordering.rs"]
+mod ordering;
+
 #[path = "oracle/arity.rs"]
 mod arity;
 

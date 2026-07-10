@@ -1,12 +1,14 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, MIterMut, UnaryOp, fill, op::Identity, transform, zip2, zip3, zip4, zip5,
-    zip6, zip7,
+    Executor, MIter, MIterMut, UnaryOp, fill, gather, lazy, op::Identity, transform, zip2, zip3,
+    zip4, zip5, zip6, zip7,
 };
 
 struct AddThree;
 struct IdentityRightAssociated;
+struct SumFour;
+struct AddPair;
 
 #[cubecl::cube]
 impl UnaryOp<((u32, u32), u32)> for AddThree {
@@ -23,6 +25,24 @@ impl UnaryOp<(u32, (u32, u32))> for IdentityRightAssociated {
 
     fn apply(input: (u32, (u32, u32))) -> (u32, (u32, u32)) {
         input
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(((u32, u32), u32), u32)> for SumFour {
+    type Output = u32;
+
+    fn apply(input: (((u32, u32), u32), u32)) -> u32 {
+        input.0.0.0 + input.0.0.1 + input.0.1 + input.1
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for AddPair {
+    type Output = u32;
+
+    fn apply(input: (u32, u32)) -> u32 {
+        input.0 + input.1
     }
 }
 
@@ -180,4 +200,36 @@ fn mutable_slice_adapters_compose_and_can_be_read_back() {
     .unwrap();
     assert_eq!(exec.to_host(&copy_a).unwrap(), vec![7]);
     assert_eq!(exec.to_host(&copy_b).unwrap(), vec![9]);
+}
+
+#[test]
+fn gather_keeps_an_eval8_value_expression_lazy() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let columns: Vec<_> = (0_u32..8)
+        .map(|column| exec.to_device(&[column, column + 10, column + 20]))
+        .collect();
+    let indices = exec.to_device(&[2_u32, 0]);
+    let output = exec.alloc::<u32>(2);
+    let left = lazy::transform(
+        zip4(
+            columns[0].slice(..),
+            columns[1].slice(..),
+            columns[2].slice(..),
+            columns[3].slice(..),
+        ),
+        SumFour,
+    );
+    let right = lazy::transform(
+        zip4(
+            columns[4].slice(..),
+            columns[5].slice(..),
+            columns[6].slice(..),
+            columns[7].slice(..),
+        ),
+        SumFour,
+    );
+    let values = lazy::transform(zip2(left, right), AddPair);
+
+    gather(&exec, values, indices.slice(..), output.slice_mut(..)).unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![188, 28]);
 }

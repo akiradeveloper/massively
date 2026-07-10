@@ -291,6 +291,13 @@ pub trait KernelWrite<R: Runtime>: Sized {
         flags: crate::DeviceVec<R, u32>,
     ) -> Result<u32, Error>;
 
+    fn select_storage_control(
+        self,
+        exec: &Executor<R>,
+        input: &<Self::Item as crate::MAlloc<R>>::Storage,
+        control: &crate::selection::SelectionControl<R>,
+    ) -> Result<u32, Error>;
+
     fn concat_storage(
         self,
         exec: &Executor<R>,
@@ -709,7 +716,9 @@ macro_rules! indexed_method_impl {
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
             {
                 match (scatter, flags) {
-                    (false, None) => crate::indexed::gather(exec, input, indices, self.output),
+                    (false, None) => {
+                        crate::indexed::apply_permutation(exec, input, indices, self.output)
+                    }
                     (false, Some(flags)) => {
                         crate::indexed::gather_where(exec, input, indices, flags, self.output)
                     }
@@ -831,6 +840,17 @@ macro_rules! storage_write_methods {
                 crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(input));
             let control = crate::selection::SelectionControl::from_flags(exec, flags)?;
             crate::selection::CopySelected::copy_selected(input, exec, &control, self.output)
+        }
+
+        fn select_storage_control(
+            self,
+            exec: &Executor<R>,
+            input: &<Self::Item as crate::MAlloc<R>>::Storage,
+            control: &crate::selection::SelectionControl<R>,
+        ) -> Result<u32, Error> {
+            let input =
+                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(input));
+            crate::selection::CopySelected::copy_selected(input, exec, control, self.output)
         }
 
         fn concat_storage(
@@ -1211,6 +1231,14 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
     where
         Less: crate::BinaryPredicateOp<Item>;
 
+    fn sort_ordering<Less>(
+        exec: &Executor<R>,
+        input: <Item as crate::MAlloc<R>>::Storage,
+        _less: Less,
+    ) -> Result<crate::ordering::sort::OrderingResult<R, <Item as crate::MAlloc<R>>::Storage>, Error>
+    where
+        Less: crate::BinaryPredicateOp<Item>;
+
     fn segment_heads<Equal>(
         exec: &Executor<R>,
         input: &<Item as crate::MAlloc<R>>::Storage,
@@ -1411,6 +1439,25 @@ macro_rules! impl_kernel_item {
                     crate::ordering::sort_control_with(exec, input, less)
                 }
 
+                fn sort_ordering<Less>(
+                    exec: &Executor<R>,
+                    input: <Item as crate::MAlloc<R>>::Storage,
+                    _less: Less,
+                ) -> Result<
+                    crate::ordering::sort::OrderingResult<
+                        R,
+                        <Item as crate::MAlloc<R>>::Storage,
+                    >,
+                    Error,
+                >
+                where
+                    Less: crate::BinaryPredicateOp<Item>,
+                {
+                    <Item as crate::ordering::sort::SortStorageItem<R, Less>>::sort_storage(
+                        exec, input, true,
+                    )
+                }
+
                 fn segment_heads<Equal>(
                     exec: &Executor<R>,
                     input: &<Item as crate::MAlloc<R>>::Storage,
@@ -1578,6 +1625,17 @@ where
     {
         let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
         crate::ordering::sort_control_with(exec, input, less)
+    }
+
+    fn sort_ordering<Less>(
+        exec: &Executor<R>,
+        input: <Item as crate::MAlloc<R>>::Storage,
+        _less: Less,
+    ) -> Result<crate::ordering::sort::OrderingResult<R, <Item as crate::MAlloc<R>>::Storage>, Error>
+    where
+        Less: crate::BinaryPredicateOp<Item>,
+    {
+        <Item as crate::ordering::sort::SortStorageItem<R, Less>>::sort_storage(exec, input, true)
     }
 
     fn segment_heads<Equal>(

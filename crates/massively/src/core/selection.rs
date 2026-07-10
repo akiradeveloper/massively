@@ -11,18 +11,42 @@ use crate::{
     op::UnaryOp,
     output::{LowerOutputExpression, OutputExpression, SliceOutput, StageOutput},
     read::{Env0, Env1, LowerReadExpression},
-    reduce::StageRead,
-    scan::{first_u32, inclusive_scan_u32, last_u32},
-    transform::{MaterializeDispatch, materialize, transform},
+    reduce::{ReductionOp, StageRead},
+    scan::{InclusiveScanDispatch, inclusive_scan, inclusive_scan_u32, last_u32},
+    transform::{MaterializeDispatch, materialize},
 };
 
 const BLOCK_SIZE: u32 = 256;
 
 #[cubecl::cube(launch_unchecked)]
-fn selected_indices_kernel(flags: &[u32], positions: &[u32], len: &[u32], indices: &mut [u32]) {
+fn selected_indices_kernel(positions: &[u32], len: &[u32], invert: &[u32], indices: &mut [u32]) {
     let index = ABSOLUTE_POS as usize;
-    if index < len[0] as usize && flags[index] != 0 {
-        indices[(positions[index] - 1u32) as usize] = index as u32;
+    if index < len[0] as usize {
+        let previous = if index == 0usize {
+            0u32
+        } else {
+            positions[index - 1usize]
+        };
+        let passes = positions[index] != previous;
+        let selected = if invert[0] != 0u32 { !passes } else { passes };
+        if selected {
+            let rank = if invert[0] != 0u32 {
+                index as u32 + 1u32 - positions[index]
+            } else {
+                positions[index]
+            };
+            indices[(rank - 1u32) as usize] = index as u32;
+        }
+    }
+}
+
+struct IsNonZero;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for IsNonZero {
+    type Output = u32;
+    fn apply(input: u32) -> u32 {
+        if input != 0u32 { 1u32 } else { 0u32 }
     }
 }
 
@@ -33,6 +57,15 @@ impl UnaryOp<u32> for IsZero {
     type Output = u32;
     fn apply(input: u32) -> u32 {
         if input == 0 { 1u32 } else { 0u32 }
+    }
+}
+
+struct SumU32;
+
+#[cubecl::cube]
+impl ReductionOp<u32> for SumU32 {
+    fn apply(lhs: u32, rhs: u32) -> u32 {
+        lhs + rhs
     }
 }
 
@@ -235,6 +268,8 @@ where
 #[doc(hidden)]
 pub trait FlagInput<R: Runtime>: ReadExpression<Item = u32> + Sized {
     fn flag_len(&self) -> Result<usize, Error>;
+    fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
+    fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
     fn materialize_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
@@ -244,10 +279,57 @@ where
     Stencil: ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
     Dispatch<Stencil::ReadArity, S1>:
         MaterializeDispatch<R, Stencil, DeviceSliceMut<u32>, Stencil::Slots, Env1<u32>>,
+    Transform<Stencil, IsNonZero>:
+        ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
+    Transform<Stencil, IsZero>:
+        ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
+    Dispatch<<Transform<Stencil, IsNonZero> as ReadExpression>::ReadArity, S1>:
+        InclusiveScanDispatch<
+                R,
+                Transform<Stencil, IsNonZero>,
+                DeviceSliceMut<u32>,
+                u32,
+                <Transform<Stencil, IsNonZero> as LowerReadExpression>::Slots,
+                Env1<u32>,
+                SumU32,
+            >,
+    Dispatch<<Transform<Stencil, IsZero> as ReadExpression>::ReadArity, S1>: InclusiveScanDispatch<
+            R,
+            Transform<Stencil, IsZero>,
+            DeviceSliceMut<u32>,
+            u32,
+            <Transform<Stencil, IsZero> as LowerReadExpression>::Slots,
+            Env1<u32>,
+            SumU32,
+        >,
     DeviceSliceMut<u32>: StageOutput<R, Env0>,
 {
     fn flag_len(&self) -> Result<usize, Error> {
         self.logical_len()
+    }
+
+    fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
+        let len = self.logical_len()?;
+        let positions = exec.alloc::<u32>(len);
+        inclusive_scan(
+            exec,
+            Transform::new(self, IsNonZero),
+            SumU32,
+            positions.slice_mut(..),
+        )?;
+        SelectionControl::from_positions(exec, positions, false)
+    }
+
+    fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
+        let len = self.logical_len()?;
+        let positions = exec.alloc::<u32>(len);
+        inclusive_scan(
+            exec,
+            Transform::new(self, IsZero),
+            SumU32,
+            positions.slice_mut(..),
+        )?;
+        SelectionControl::from_positions(exec, positions, false)
     }
 
     fn materialize_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
@@ -263,41 +345,90 @@ where
 /// from coupling key arity to value arity.
 #[doc(hidden)]
 pub struct SelectionControl<R: Runtime> {
-    flags: DeviceVec<R, u32>,
+    len: usize,
     indices: DeviceVec<R, u32>,
     count: u32,
 }
 
 impl<R: Runtime> SelectionControl<R> {
+    pub(crate) fn from_indices(len: usize, indices: DeviceVec<R, u32>, count: u32) -> Self {
+        Self {
+            len,
+            indices,
+            count,
+        }
+    }
+
     pub(crate) fn from_flags(exec: &Executor<R>, flags: DeviceVec<R, u32>) -> Result<Self, Error> {
         let positions = inclusive_scan_u32(exec, &flags)?;
-        let count = last_u32(exec, &positions)?;
+        Self::from_positions(exec, positions, false)
+    }
+
+    pub(crate) fn split_from_positions(
+        exec: &Executor<R>,
+        positions: DeviceVec<R, u32>,
+    ) -> Result<(Self, Self), Error> {
+        let selected = last_u32(exec, &positions)?;
+        let len = u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
+            len: positions.len(),
+        })?;
+        let passing = Self::from_positions_with_count(exec, &positions, selected, false)?;
+        let failing = Self::from_positions_with_count(exec, &positions, len - selected, true)?;
+        Ok((passing, failing))
+    }
+
+    pub(crate) fn from_positions(
+        exec: &Executor<R>,
+        positions: DeviceVec<R, u32>,
+        invert: bool,
+    ) -> Result<Self, Error> {
+        let selected = last_u32(exec, &positions)?;
+        let count = if invert {
+            u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
+                len: positions.len(),
+            })? - selected
+        } else {
+            selected
+        };
+        Self::from_positions_with_count(exec, &positions, count, invert)
+    }
+
+    pub(crate) fn from_positions_with_count(
+        exec: &Executor<R>,
+        positions: &DeviceVec<R, u32>,
+        count: u32,
+        invert: bool,
+    ) -> Result<Self, Error> {
         let indices = exec.alloc::<u32>(count as usize);
         if count != 0 {
-            let len = u32::try_from(flags.len())
-                .map_err(|_| Error::LengthTooLarge { len: flags.len() })?;
+            let len = u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
+                len: positions.len(),
+            })?;
             let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
+            let invert_handle = exec
+                .client()
+                .create_from_slice(u32::as_bytes(&[u32::from(invert)]));
             unsafe {
                 selected_indices_kernel::launch_unchecked::<R>(
                     exec.client(),
-                    crate::launch::cube_count_1d(flags.len().div_ceil(BLOCK_SIZE as usize))?,
+                    crate::launch::cube_count_1d(positions.len().div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(flags.handle.clone(), flags.len()),
                     BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
                     BufferArg::from_raw_parts(len_handle, 1),
+                    BufferArg::from_raw_parts(invert_handle, 1),
                     BufferArg::from_raw_parts(indices.handle.clone(), indices.len()),
                 );
             }
         }
         Ok(Self {
-            flags,
+            len: positions.len(),
             indices,
             count,
         })
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.flags.len()
+        self.len
     }
 
     pub(crate) fn count(&self) -> u32 {
@@ -306,10 +437,6 @@ impl<R: Runtime> SelectionControl<R> {
 
     pub(crate) fn indices(&self) -> &DeviceVec<R, u32> {
         &self.indices
-    }
-
-    pub(crate) fn first_index(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
-        first_u32(exec, &self.indices)
     }
 }
 
@@ -389,8 +516,7 @@ where
             right: stencil_len,
         });
     }
-    let flags = stencil.materialize_flags(exec)?;
-    let control = SelectionControl::from_flags(exec, flags)?;
+    let control = stencil.selected_control(exec)?;
     input.copy_selected(exec, &control, output)
 }
 
@@ -414,10 +540,7 @@ where
             right: stencil_len,
         });
     }
-    let stencil = stencil.materialize_flags(exec)?;
-    let flags = exec.alloc::<u32>(stencil.len());
-    transform(exec, stencil.column(), IsZero, flags.slice_mut(..))?;
-    let control = SelectionControl::from_flags(exec, flags)?;
+    let control = stencil.rejected_control(exec)?;
     input.copy_selected(exec, &control, output)
 }
 
@@ -441,22 +564,15 @@ where
             output: output_len,
         });
     }
-    let flags = input.clone().predicate_flags(exec)?;
-    let passing_control = SelectionControl::from_flags(exec, flags)?;
+    let positions = input.clone().predicate_positions(exec)?;
+    let (passing_control, failing_control) =
+        SelectionControl::split_from_positions(exec, positions)?;
     let passing = passing_control.count();
     input.clone().copy_selected(
         exec,
         &passing_control,
         output.slice_output(..passing as usize),
     )?;
-    let inverse = exec.alloc::<u32>(len);
-    transform(
-        exec,
-        passing_control.flags.column(),
-        IsZero,
-        inverse.slice_mut(..),
-    )?;
-    let failing_control = SelectionControl::from_flags(exec, inverse)?;
     input.copy_selected(
         exec,
         &failing_control,
@@ -617,6 +733,21 @@ mod tests {
             exec.to_host(&out_c.slice(..count as usize)).unwrap(),
             vec![200, 300]
         );
+    }
+
+    #[test]
+    fn fused_stencil_scan_produces_binary_positions() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let flags = exec.to_device(&[0_u32, 7, 3, 0]);
+        let positions = exec.alloc::<u32>(4);
+        inclusive_scan(
+            &exec,
+            Transform::new(flags.column(), IsNonZero),
+            SumU32,
+            positions.slice_mut(..),
+        )
+        .unwrap();
+        assert_eq!(exec.to_host(&positions).unwrap(), vec![0, 1, 2, 2]);
     }
 
     #[test]

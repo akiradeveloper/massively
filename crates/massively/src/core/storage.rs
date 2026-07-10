@@ -309,11 +309,17 @@ pub trait MutableLeaves: CubeType + Sized {
 #[cubecl::cube]
 pub trait PlaneShuffleLeaves: CubeType + Sized {
     fn shuffle_leaves_down(value: Self, offset: u32) -> Self;
+    fn shuffle_leaves_up(value: Self, offset: u32) -> Self;
 }
 
 #[cubecl::cube]
 fn shuffle_primitive<T: CubePrimitive>(value: T, offset: u32) -> T {
     plane_shuffle_down(value, offset)
+}
+
+#[cubecl::cube]
+fn shuffle_primitive_up<T: CubePrimitive>(value: T, offset: u32) -> T {
+    plane_shuffle_up(value, offset)
 }
 
 #[cubecl::cube]
@@ -353,6 +359,12 @@ impl<T: CubePrimitive> PlaneShuffleLeaves for Last<T> {
     fn shuffle_leaves_down(value: Self, offset: u32) -> Self {
         Last::<T> {
             value: shuffle_primitive::<T>(value.value, offset),
+        }
+    }
+
+    fn shuffle_leaves_up(value: Self, offset: u32) -> Self {
+        Last::<T> {
+            value: shuffle_primitive_up::<T>(value.value, offset),
         }
     }
 }
@@ -410,6 +422,13 @@ where
         More::<Head, Tail> {
             head: shuffle_primitive::<Head>(value.head, offset),
             tail: Tail::shuffle_leaves_down(value.tail, offset),
+        }
+    }
+
+    fn shuffle_leaves_up(value: Self, offset: u32) -> Self {
+        More::<Head, Tail> {
+            head: shuffle_primitive_up::<Head>(value.head, offset),
+            tail: Tail::shuffle_leaves_up(value.tail, offset),
         }
     }
 }
@@ -657,6 +676,9 @@ macro_rules! define_load_leaves {
     };
 }
 
+define_load_leaves!(LoadLeaves1; Last<L0>; L0:in0; offsets,index;
+    Last::new(in0[offsets[0] as usize + index])
+);
 define_load_leaves!(LoadLeaves2; More<L0,Last<L1>>; L0:in0,L1:in1; offsets,index;
     More::new(in0[offsets[0] as usize + index], Last::new(in1[offsets[1] as usize + index]))
 );

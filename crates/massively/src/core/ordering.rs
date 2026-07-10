@@ -5,18 +5,22 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, Column, DeviceVec, Dispatch, Error, Executor, MAlloc, MStorage,
+    A1, A2, A3, A4, A5, A6, A7, A8, DeviceVec, Dispatch, Error, Executor, MAlloc, MStorage,
     MStorageElement, ReadExpression,
+    arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
-    indexed::GatherInput,
     launch::cube_count_1d,
+    op::IndexedBinaryOp,
     output::{LowerOutputExpression, OutputExpression, StageOutput},
     read::{
-        Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression, Reassociate,
+        AdjacentIndexedTransform, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8,
+        LowerReadExpression, Reassociate,
     },
-    reduce::{StageRead, StagedBindings},
+    reduce::{ReduceDispatch, ReductionOp, StageRead, StagedBindings, reduce},
     transform::{MaterializeDispatch, materialize},
 };
+
+pub(crate) mod sort;
 
 const BLOCK_SIZE: u32 = 256;
 
@@ -51,63 +55,92 @@ pub trait BinaryPredicateOp<Item: CubeType>: 'static + Send + Sync {
     fn apply(lhs: Item, rhs: Item) -> bool;
 }
 
-struct ReverseLess<Less>(PhantomData<fn() -> Less>);
-
-#[cubecl::cube]
-impl<Item, Less> BinaryPredicateOp<Item> for ReverseLess<Less>
-where
-    Item: CubeType + 'static,
-    Less: BinaryPredicateOp<Item>,
-{
-    fn apply(lhs: Item, rhs: Item) -> bool {
-        Less::apply(rhs, lhs)
-    }
-}
-
 #[cubecl::cube]
 trait AdjacentFlagOp<Item: CubeType>: 'static + Send + Sync {
     fn first() -> u32;
     fn apply(previous: Item, current: Item) -> u32;
 }
 
-struct SortedBreak<Less>(PhantomData<fn() -> Less>);
+struct ArgMinFirst<Less>(PhantomData<fn() -> Less>);
+struct ArgMinLast<Less>(PhantomData<fn() -> Less>);
+struct ArgMaxFirst<Less>(PhantomData<fn() -> Less>);
 
 #[cubecl::cube]
-impl<Item, Less> AdjacentFlagOp<Item> for SortedBreak<Less>
+impl<Item, Less> ArgReductionOp<Item> for ArgMinFirst<Less>
 where
     Item: CubeType + 'static,
     Less: BinaryPredicateOp<Item>,
 {
-    fn first() -> u32 {
-        0u32
-    }
-
-    fn apply(previous: Item, current: Item) -> u32 {
-        if Less::apply(current, previous) {
-            1u32
-        } else {
-            0u32
-        }
+    fn rhs_wins(lhs: Item, rhs: Item) -> bool {
+        Less::apply(rhs, lhs)
     }
 }
 
-struct AdjacentMatch<Equal>(PhantomData<fn() -> Equal>);
+#[cubecl::cube]
+impl<Item, Less> ArgReductionOp<Item> for ArgMinLast<Less>
+where
+    Item: CubeType + 'static,
+    Less: BinaryPredicateOp<Item>,
+{
+    fn rhs_wins(lhs: Item, rhs: Item) -> bool {
+        !Less::apply(lhs, rhs)
+    }
+}
 
 #[cubecl::cube]
-impl<Item, Equal> AdjacentFlagOp<Item> for AdjacentMatch<Equal>
+impl<Item, Less> ArgReductionOp<Item> for ArgMaxFirst<Less>
+where
+    Item: CubeType + 'static,
+    Less: BinaryPredicateOp<Item>,
+{
+    fn rhs_wins(lhs: Item, rhs: Item) -> bool {
+        Less::apply(lhs, rhs)
+    }
+}
+
+struct MinU32;
+
+#[cubecl::cube]
+impl ReductionOp<u32> for MinU32 {
+    fn apply(lhs: u32, rhs: u32) -> u32 {
+        u32::min(lhs, rhs)
+    }
+}
+
+struct FirstAdjacentMatch<Equal>(PhantomData<fn() -> Equal>);
+
+#[cubecl::cube]
+impl<Item, Equal> IndexedBinaryOp<Item> for FirstAdjacentMatch<Equal>
 where
     Item: CubeType + 'static,
     Equal: BinaryPredicateOp<Item>,
 {
-    fn first() -> u32 {
-        0u32
-    }
+    type Output = u32;
 
-    fn apply(previous: Item, current: Item) -> u32 {
-        if Equal::apply(previous, current) {
-            1u32
+    fn apply(previous: Item, current: Item, index: u32) -> u32 {
+        if index != 0u32 && Equal::apply(previous, current) {
+            index - 1u32
         } else {
-            0u32
+            4_294_967_295u32
+        }
+    }
+}
+
+struct FirstSortedBreak<Less>(PhantomData<fn() -> Less>);
+
+#[cubecl::cube]
+impl<Item, Less> IndexedBinaryOp<Item> for FirstSortedBreak<Less>
+where
+    Item: CubeType + 'static,
+    Less: BinaryPredicateOp<Item>,
+{
+    type Output = u32;
+
+    fn apply(previous: Item, current: Item, index: u32) -> u32 {
+        if index != 0u32 && Less::apply(current, previous) {
+            index
+        } else {
+            4_294_967_295u32
         }
     }
 }
@@ -471,6 +504,8 @@ impl<R, Input, Less, Output> SortInput<R, Less, Output> for Input
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Item: crate::WriteFrom<Input::Item>,
     Input::Item: MAlloc<R>,
     <Input::Item as MAlloc<R>>::Storage: MStorage<R>,
     <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Write:
@@ -490,20 +525,42 @@ where
     Input::Item: crate::WriteFrom<
             <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Item,
         >,
+    Input::Item: sort::SortStorageItem<R, Less>,
     Reassociate<
         <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
         Input::Item,
-    >: SortControlInput<R, Less>,
-    <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read:
-        GatherInput<R, Column<u32>, Output>,
+    >: ReadExpression<Item = Input::Item>
+        + LowerReadExpression
+        + StageRead<R, Env0>,
+    Dispatch<
+        <Reassociate<
+            <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+            Input::Item,
+        > as ReadExpression>::ReadArity,
+        <Output as OutputExpression>::StorageArity,
+    >: MaterializeDispatch<
+            R,
+            Reassociate<
+                <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+                Input::Item,
+            >,
+            Output,
+            <Reassociate<
+                <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+                Input::Item,
+            > as LowerReadExpression>::Slots,
+            <Output as LowerOutputExpression>::Slots,
+        >,
 {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
         let len = self.logical_len()?;
         let temporary = exec.alloc::<Input::Item>(len);
         materialize(exec, self, temporary.write())?;
-        let semantic = Reassociate::<_, Input::Item>::new(temporary.read());
-        let permutation = semantic.sort_control(exec)?;
-        crate::indexed::gather_direct(exec, temporary.read(), permutation.column(), output)
+        let result = <Input::Item as sort::SortStorageItem<R, Less>>::sort_storage(
+            exec, temporary, false,
+        )?;
+        let semantic = Reassociate::<_, Input::Item>::new(result.sorted_keys.read());
+        materialize(exec, semantic, output)
     }
 }
 
@@ -522,7 +579,6 @@ where
 }
 
 pub(crate) trait AdjacentFlagInput<R: Runtime, Op>: ReadExpression + Sized {
-    fn adjacent_len(&self) -> Result<usize, Error>;
     fn adjacent_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
@@ -534,10 +590,6 @@ where
     Dispatch<Input::ReadArity, crate::S1>:
         AdjacentFlagDispatch<R, Input, Input::Item, Input::Slots, Op>,
 {
-    fn adjacent_len(&self) -> Result<usize, Error> {
-        self.logical_len()
-    }
-
     fn adjacent_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         <Dispatch<Input::ReadArity, crate::S1> as AdjacentFlagDispatch<
             R,
@@ -564,20 +616,39 @@ where
 #[doc(hidden)]
 pub trait AdjacentFindInput<R: Runtime, Equal>: ReadExpression + Sized {
     fn adjacent_find_len(&self) -> Result<usize, Error>;
-    fn adjacent_match_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn first_adjacent_match(self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
 }
 
 impl<R, Input, Equal> AdjacentFindInput<R, Equal> for Input
 where
     R: Runtime,
-    Input: ReadExpression + AdjacentFlagInput<R, AdjacentMatch<Equal>>,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Equal: BinaryPredicateOp<Input::Item>,
+    AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>>:
+        ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
+    Dispatch<
+        <AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>> as ReadExpression>::ReadArity,
+        crate::S1,
+    >: ReduceDispatch<
+            R,
+            AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>>,
+            u32,
+            MinU32,
+            <AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>> as LowerReadExpression>::Slots,
+        >,
 {
     fn adjacent_find_len(&self) -> Result<usize, Error> {
-        self.adjacent_len()
+        self.logical_len()
     }
 
-    fn adjacent_match_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        self.adjacent_flags(exec)
+    fn first_adjacent_match(self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+        let index = reduce(
+            exec,
+            AdjacentIndexedTransform::new(self, FirstAdjacentMatch::<Equal>(PhantomData)),
+            u32::MAX,
+            MinU32,
+        )?;
+        Ok((index != u32::MAX).then_some(index))
     }
 }
 
@@ -594,9 +665,7 @@ where
     if input.adjacent_find_len()? < 2 {
         return Ok(None);
     }
-    let flags = input.adjacent_match_flags(exec)?;
-    let control = crate::selection::SelectionControl::from_flags(exec, flags)?;
-    Ok(control.first_index(exec)?.map(|index| index - 1))
+    input.first_adjacent_match(exec)
 }
 
 /// Internal public-API capability for stable adjacent deduplication.
@@ -640,29 +709,39 @@ where
 #[doc(hidden)]
 pub trait SortedInput<R: Runtime, Less>: ReadExpression + Sized {
     fn sorted_len(&self) -> Result<usize, Error>;
-    fn sorted_break_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn first_sorted_break(self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
 }
 
 impl<R, Input, Less> SortedInput<R, Less> for Input
 where
     R: Runtime,
-    Input: ReadExpression + AdjacentFlagInput<R, SortedBreak<Less>>,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Less: BinaryPredicateOp<Input::Item>,
+    AdjacentIndexedTransform<Input, FirstSortedBreak<Less>>:
+        ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
+    Dispatch<
+        <AdjacentIndexedTransform<Input, FirstSortedBreak<Less>> as ReadExpression>::ReadArity,
+        crate::S1,
+    >: ReduceDispatch<
+            R,
+            AdjacentIndexedTransform<Input, FirstSortedBreak<Less>>,
+            u32,
+            MinU32,
+            <AdjacentIndexedTransform<Input, FirstSortedBreak<Less>> as LowerReadExpression>::Slots,
+        >,
 {
     fn sorted_len(&self) -> Result<usize, Error> {
-        self.adjacent_len()
+        self.logical_len()
     }
 
-    fn sorted_break_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        self.adjacent_flags(exec)
-    }
-}
-
-struct NonZero;
-
-#[cubecl::cube]
-impl crate::PredicateOp<u32> for NonZero {
-    fn apply(input: u32) -> bool {
-        input != 0u32
+    fn first_sorted_break(self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+        let index = reduce(
+            exec,
+            AdjacentIndexedTransform::new(self, FirstSortedBreak::<Less>(PhantomData)),
+            u32::MAX,
+            MinU32,
+        )?;
+        Ok((index != u32::MAX).then_some(index))
     }
 }
 
@@ -679,8 +758,7 @@ where
 {
     let len = input.sorted_len()?;
     let end = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-    let flags = input.sorted_break_flags(exec)?;
-    Ok(crate::predicate::find_if(exec, flags.column(), NonZero)?.unwrap_or(end))
+    Ok(input.first_sorted_break(exec)?.unwrap_or(end))
 }
 
 /// Returns whether the input is sorted according to `less`.
@@ -702,28 +780,34 @@ where
 #[doc(hidden)]
 pub trait ExtremumInput<R: Runtime, Less>: ReadExpression + Sized {
     fn extremum_len(&self) -> Result<usize, Error>;
-    fn ascending(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
-    fn descending(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn first_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
+    fn last_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
+    fn first_maximum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
 }
 
 impl<R, Input, Less> ExtremumInput<R, Less> for Input
 where
     R: Runtime,
-    Input: ReadExpression
-        + StageRead<R, Env0>
-        + SortControlInput<R, Less>
-        + SortControlInput<R, ReverseLess<Less>>,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0> + Clone,
+    Less: BinaryPredicateOp<Input::Item>,
+    Dispatch<Input::ReadArity, crate::S1>: ArgReduceDispatch<R, Input, ArgMinFirst<Less>, Input::Slots>
+        + ArgReduceDispatch<R, Input, ArgMinLast<Less>, Input::Slots>
+        + ArgReduceDispatch<R, Input, ArgMaxFirst<Less>, Input::Slots>,
 {
     fn extremum_len(&self) -> Result<usize, Error> {
         self.logical_len()
     }
 
-    fn ascending(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        <Input as SortControlInput<R, Less>>::sort_control(self, exec)
+    fn first_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+        arg_reduce(exec, self.clone(), ArgMinFirst::<Less>(PhantomData))
     }
 
-    fn descending(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        <Input as SortControlInput<R, ReverseLess<Less>>>::sort_control(self, exec)
+    fn last_minimum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+        arg_reduce(exec, self.clone(), ArgMinLast::<Less>(PhantomData))
+    }
+
+    fn first_maximum(&self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+        arg_reduce(exec, self.clone(), ArgMaxFirst::<Less>(PhantomData))
     }
 }
 
@@ -737,11 +821,7 @@ where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    if input.extremum_len()? == 0 {
-        return Ok(None);
-    }
-    let order = input.ascending(exec)?;
-    crate::scan::first_u32(exec, &order)
+    input.first_minimum(exec)
 }
 
 /// Returns the first maximum element index.
@@ -754,11 +834,7 @@ where
     R: Runtime,
     Input: ExtremumInput<R, Less>,
 {
-    if input.extremum_len()? == 0 {
-        return Ok(None);
-    }
-    let order = input.descending(exec)?;
-    crate::scan::first_u32(exec, &order)
+    input.first_maximum(exec)
 }
 
 /// Returns the last minimum and first maximum indices.
@@ -774,9 +850,12 @@ where
     if input.extremum_len()? == 0 {
         return Ok(None);
     }
-    let descending = input.descending(exec)?;
-    let max = crate::scan::first_u32(exec, &descending)?.expect("non-empty permutation");
-    let min = crate::scan::last_u32(exec, &descending)?;
+    let min = input
+        .last_minimum(exec)?
+        .expect("non-empty input has a minimum");
+    let max = input
+        .first_maximum(exec)?
+        .expect("non-empty input has a maximum");
     Ok(Some((min, max)))
 }
 

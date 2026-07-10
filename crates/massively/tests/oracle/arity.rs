@@ -396,7 +396,7 @@ macro_rules! transform_arity_case {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
             #[test]
-            fn $name(seed in prop::collection::vec(0_u32..100, 0..MAX_LEN)) {
+            fn $name(seed in oracle_vec(0_u32..100)) {
                 let exec = exec();
                 let columns = seven_columns(&seed);
                 let device: Vec<_> = columns
@@ -503,7 +503,7 @@ macro_rules! transform_where_arity_case {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
             #[test]
-            fn $name(seed in prop::collection::vec(0_u32..100, 0..MAX_LEN)) {
+            fn $name(seed in oracle_vec(0_u32..100)) {
                 let exec = exec();
                 let columns = seven_columns(&seed);
                 let device: Vec<_> = columns
@@ -617,7 +617,7 @@ proptest! {
     /// Seven value leaves plus the permutation index consume all eight read slots.
     #[test]
     fn lazify_dispatches_through_eval8(
-        seed in prop::collection::vec(0_u32..100, 0..MAX_LEN),
+        seed in oracle_vec(0_u32..100),
     ) {
         let exec = exec();
         let columns = seven_columns(&seed);

@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    op::UnaryOp,
+    op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
     storage::{Decompose, Recompose, SelectLeaves},
 };
@@ -103,6 +103,36 @@ where
 #[doc(hidden)]
 pub struct TransformExpr<InputExpr, InputItem, Op> {
     _marker: PhantomData<fn() -> (InputExpr, InputItem, Op)>,
+}
+
+/// Device expression for an index-aware unary transform.
+#[doc(hidden)]
+pub struct IndexedTransformExpr<InputExpr, InputItem, Op> {
+    _marker: PhantomData<fn() -> (InputExpr, InputItem, Op)>,
+}
+
+/// Device expression for an index-aware adjacent transform.
+#[doc(hidden)]
+pub struct AdjacentIndexedTransformExpr<InputExpr, InputItem, Op> {
+    _marker: PhantomData<fn() -> (InputExpr, InputItem, Op)>,
+}
+
+impl<InputExpr, InputItem, Op> DeviceExpr<Op::Output>
+    for AdjacentIndexedTransformExpr<InputExpr, InputItem, Op>
+where
+    InputItem: CubeType + 'static,
+    InputExpr: DeviceExpr<InputItem>,
+    Op: IndexedBinaryOp<InputItem>,
+{
+}
+
+impl<InputExpr, InputItem, Op> DeviceExpr<Op::Output>
+    for IndexedTransformExpr<InputExpr, InputItem, Op>
+where
+    InputItem: CubeType + 'static,
+    InputExpr: DeviceExpr<InputItem>,
+    Op: IndexedUnaryOp<InputItem>,
+{
 }
 
 /// Device expression for adjacent reduction, preserving the first item.
@@ -211,6 +241,54 @@ macro_rules! define_eval {
             ) -> OutputItem {
                 let input = InputExpr::$method($( $slot, )+ slot_offsets, index);
                 Op::apply(input)
+            }
+        }
+
+        #[cubecl::cube]
+        impl<InputItem, OutputItem, InputExpr, Op, $( $leaf ),+>
+            $trait_name<OutputItem, $( $leaf ),+>
+            for AdjacentIndexedTransformExpr<InputExpr, InputItem, Op>
+        where
+            InputItem: CubeType + 'static,
+            OutputItem: CubeType + 'static,
+            $( $leaf: CubePrimitive, )+
+            InputExpr: $trait_name<InputItem, $( $leaf ),+>,
+            Op: IndexedBinaryOp<InputItem, Output = OutputItem>,
+        {
+            fn $method(
+                $( $slot: &[$leaf], )+
+                slot_offsets: &[u32],
+                index: usize,
+            ) -> OutputItem {
+                let previous_index = if index == 0usize { 0usize } else { index - 1usize };
+                let previous = InputExpr::$method(
+                    $( $slot, )+
+                    slot_offsets,
+                    previous_index,
+                );
+                let current = InputExpr::$method($( $slot, )+ slot_offsets, index);
+                Op::apply(previous, current, index as u32)
+            }
+        }
+
+        #[cubecl::cube]
+        impl<InputItem, OutputItem, InputExpr, Op, $( $leaf ),+>
+            $trait_name<OutputItem, $( $leaf ),+>
+            for IndexedTransformExpr<InputExpr, InputItem, Op>
+        where
+            InputItem: CubeType + 'static,
+            OutputItem: CubeType + 'static,
+            $( $leaf: CubePrimitive, )+
+            InputExpr: $trait_name<InputItem, $( $leaf ),+>,
+            Op: IndexedUnaryOp<InputItem, Output = OutputItem>,
+        {
+            fn $method(
+                $( $slot: &[$leaf], )+
+                slot_offsets: &[u32],
+                index: usize,
+            ) -> OutputItem {
+                let input = InputExpr::$method($( $slot, )+ slot_offsets, index);
+                Op::apply(input, index as u32)
             }
         }
 

@@ -26,9 +26,10 @@ const BLOCK_SIZE: u32 = 256;
 const ITEMS_PER_UNIT: usize = 256;
 const TILE_SIZE: usize = BLOCK_SIZE as usize * ITEMS_PER_UNIT;
 
-/// Associative and commutative binary operation used by reduction.
+/// Associative binary operation used by scans and reductions.
 ///
-/// The implementation may regroup and reorder operands across GPU units.
+/// Scans preserve operand order. Reductions may regroup and reorder operands
+/// across GPU units, so operations passed to `reduce` must also be commutative.
 ///
 /// # Examples
 ///
@@ -159,19 +160,35 @@ fn finish_storage1_workgroup<Item, Op>(
 
     if PLANE_POS == 0u32 {
         let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
-        let source = if UNIT_POS_PLANE < plane_count {
+        let lane = UNIT_POS_PLANE;
+        let source = if lane < plane_count {
             UNIT_POS_PLANE as usize
         } else {
             0usize
         };
-        let source_valid = if UNIT_POS_PLANE < plane_count {
+        let source_valid = if lane < plane_count {
             plane_valid[source]
         } else {
             0u32
         };
+        let accumulator = RuntimeCell::<Item>::new(plane_values[source]);
+        let accumulator_valid = RuntimeCell::<u32>::new(source_valid);
+        let cursor = RuntimeCell::<u32>::new(lane + PLANE_DIM);
+        while cursor.read() < plane_count {
+            let index = cursor.read() as usize;
+            if plane_valid[index] != 0u32 {
+                if accumulator_valid.read() != 0u32 {
+                    accumulator.store(Op::apply(accumulator.read(), plane_values[index]));
+                } else {
+                    accumulator.store(plane_values[index]);
+                    accumulator_valid.store(1u32);
+                }
+            }
+            cursor.store(cursor.read() + PLANE_DIM);
+        }
         let result = reduce_plane_valid::<Item, Last<Item>, ScalarLayout<Item>, Op>(
-            plane_values[source],
-            source_valid,
+            accumulator.read(),
+            accumulator_valid.read(),
         );
         if UNIT_POS_PLANE == 0u32 && result.1 != 0u32 {
             partials[CUBE_POS as usize] = result.0.value;
@@ -370,6 +387,48 @@ where
     Input: ReadExpression + StageRead<R, Env>,
     Op: UnaryOp<Input::Item>,
     Transform<Input, Op>: BindSlots<Env>,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        self.input.logical_len()
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut StagedBindings,
+    ) -> Result<(), Error> {
+        self.input.stage_at(client, owner, bindings)
+    }
+}
+
+impl<R, Input, Op, Env> StageRead<R, Env> for crate::read::IndexedTransform<Input, Op>
+where
+    R: Runtime,
+    Input: ReadExpression + StageRead<R, Env>,
+    Op: crate::op::IndexedUnaryOp<Input::Item>,
+    crate::read::IndexedTransform<Input, Op>: BindSlots<Env>,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        self.input.logical_len()
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut StagedBindings,
+    ) -> Result<(), Error> {
+        self.input.stage_at(client, owner, bindings)
+    }
+}
+
+impl<R, Input, Op, Env> StageRead<R, Env> for crate::read::AdjacentIndexedTransform<Input, Op>
+where
+    R: Runtime,
+    Input: ReadExpression + StageRead<R, Env>,
+    Op: crate::op::IndexedBinaryOp<Input::Item>,
+    crate::read::AdjacentIndexedTransform<Input, Op>: BindSlots<Env>,
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.input.logical_len()
@@ -706,9 +765,28 @@ macro_rules! define_multi_reduce_eval_kernel {
                         zero_offsets,
                         source,
                     ));
+                    let block_accumulator = Layout::decompose(source_value).into_cells();
+                    let block_valid = RuntimeCell::<u32>::new(source_valid);
+                    let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+                    while cursor.read() < plane_count {
+                        let index = cursor.read() as usize;
+                        if block_valid.read() != 0u32 && plane_valid[index] != 0u32 {
+                            let value = Layout::recompose(Leaves::load(
+                                &$first_shared,
+                                $( &$shared, )*
+                                zero_offsets,
+                                index,
+                            ));
+                            accumulate_register::<Item, Leaves, Layout, Op>(
+                                &block_accumulator,
+                                value,
+                            );
+                        }
+                        cursor.store(cursor.read() + PLANE_DIM);
+                    }
                     let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
-                        source_value,
-                        source_valid,
+                        Layout::recompose(Leaves::read(&block_accumulator)),
+                        block_valid.read(),
                     );
                     if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
                         block_result.0.store(
@@ -764,9 +842,28 @@ macro_rules! define_multi_reduce_eval_kernel {
                         zero_offsets,
                         source,
                     ));
+                    let block_accumulator = Layout::decompose(source_value).into_cells();
+                    let block_valid = RuntimeCell::<u32>::new(source_valid);
+                    let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+                    while cursor.read() < plane_count {
+                        let index = cursor.read() as usize;
+                        if block_valid.read() != 0u32 && plane_valid[index] != 0u32 {
+                            let value = Layout::recompose(Leaves::load(
+                                &$first_shared,
+                                $( &$shared, )*
+                                zero_offsets,
+                                index,
+                            ));
+                            accumulate_register::<Item, Leaves, Layout, Op>(
+                                &block_accumulator,
+                                value,
+                            );
+                        }
+                        cursor.store(cursor.read() + PLANE_DIM);
+                    }
                     let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
-                        source_value,
-                        source_valid,
+                        Layout::recompose(Leaves::read(&block_accumulator)),
+                        block_valid.read(),
                     );
                     if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
                         block_result.0.store(
@@ -886,9 +983,28 @@ macro_rules! define_storage_reduce_kernel {
                         zero_offsets,
                         source,
                     ));
+                    let block_accumulator = Layout::decompose(source_value).into_cells();
+                    let block_valid = RuntimeCell::<u32>::new(source_valid);
+                    let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+                    while cursor.read() < plane_count {
+                        let index = cursor.read() as usize;
+                        if block_valid.read() != 0u32 && plane_valid[index] != 0u32 {
+                            let value = Layout::recompose(Leaves::load(
+                                &$first_shared,
+                                $( &$shared, )*
+                                zero_offsets,
+                                index,
+                            ));
+                            accumulate_register::<Item, Leaves, Layout, Op>(
+                                &block_accumulator,
+                                value,
+                            );
+                        }
+                        cursor.store(cursor.read() + PLANE_DIM);
+                    }
                     let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
-                        source_value,
-                        source_valid,
+                        Layout::recompose(Leaves::read(&block_accumulator)),
+                        block_valid.read(),
                     );
                     if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
                         block_result.0.store(
@@ -945,9 +1061,28 @@ macro_rules! define_storage_reduce_kernel {
                         zero_offsets,
                         source,
                     ));
+                    let block_accumulator = Layout::decompose(source_value).into_cells();
+                    let block_valid = RuntimeCell::<u32>::new(source_valid);
+                    let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+                    while cursor.read() < plane_count {
+                        let index = cursor.read() as usize;
+                        if block_valid.read() != 0u32 && plane_valid[index] != 0u32 {
+                            let value = Layout::recompose(Leaves::load(
+                                &$first_shared,
+                                $( &$shared, )*
+                                zero_offsets,
+                                index,
+                            ));
+                            accumulate_register::<Item, Leaves, Layout, Op>(
+                                &block_accumulator,
+                                value,
+                            );
+                        }
+                        cursor.store(cursor.read() + PLANE_DIM);
+                    }
                     let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
-                        source_value,
-                        source_valid,
+                        Layout::recompose(Leaves::read(&block_accumulator)),
+                        block_valid.read(),
                     );
                     if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
                         block_result.0.store(

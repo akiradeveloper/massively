@@ -9,7 +9,7 @@ macro_rules! unary_case {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
             #[test]
             fn $name(
-                $input in prop::collection::vec(0_u32..100, 0..MAX_LEN),
+                $input in oracle_vec(0_u32..100),
             ) {
                 let $exec = exec();
                 let $gpu = $exec.to_device(&$input);
@@ -25,8 +25,8 @@ macro_rules! pair_case {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
             #[test]
             fn $name(
-                $left in prop::collection::vec(0_u32..100, 0..MAX_LEN),
-                $right in prop::collection::vec(0_u32..100, 0..MAX_LEN),
+                $left in oracle_vec(0_u32..100),
+                $right in oracle_vec(0_u32..100),
             ) {
                 let $exec = exec();
                 let $left_gpu = $exec.to_device(&$left);

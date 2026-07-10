@@ -3,6 +3,8 @@ mod iter;
 
 #[path = "api/lazy.rs"]
 mod lazy;
+#[path = "api/predicate.rs"]
+mod predicate;
 #[path = "api/random.rs"]
 mod random;
 #[path = "api/reduce.rs"]

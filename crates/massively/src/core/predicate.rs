@@ -4,11 +4,12 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression, S1, Transform, Zip,
-    op::UnaryOp,
+    DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression, S1, Transform,
+    op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     output::StageOutput,
-    read::{Env0, Env1, LowerReadExpression},
-    reduce::{ReductionOp, StageRead, reduce},
+    read::{AdjacentIndexedTransform, Env0, Env1, IndexedTransform, LowerReadExpression},
+    reduce::{ReduceDispatch, ReductionOp, StageRead, reduce},
+    scan::{InclusiveScanDispatch, inclusive_scan},
     transform::{MaterializeDispatch, transform},
 };
 
@@ -66,8 +67,57 @@ impl ReductionOp<u32> for SumU32 {
     }
 }
 
+struct MinU32;
+
+#[cubecl::cube]
+impl ReductionOp<u32> for MinU32 {
+    fn apply(lhs: u32, rhs: u32) -> u32 {
+        u32::min(lhs, rhs)
+    }
+}
+
+struct FirstMatchingIndex<Pred>(PhantomData<fn() -> Pred>);
+
+#[cubecl::cube]
+impl<Input, Pred> IndexedUnaryOp<Input> for FirstMatchingIndex<Pred>
+where
+    Input: CubeType + 'static,
+    Pred: PredicateOp<Input>,
+{
+    type Output = u32;
+
+    fn apply(input: Input, index: u32) -> u32 {
+        if Pred::apply(input) {
+            index
+        } else {
+            4_294_967_295u32
+        }
+    }
+}
+
+struct FirstPartitionViolation<Pred>(PhantomData<fn() -> Pred>);
+
+#[cubecl::cube]
+impl<Input, Pred> IndexedBinaryOp<Input> for FirstPartitionViolation<Pred>
+where
+    Input: CubeType + 'static,
+    Pred: PredicateOp<Input>,
+{
+    type Output = u32;
+
+    fn apply(previous: Input, current: Input, index: u32) -> u32 {
+        if index != 0u32 && !Pred::apply(previous) && Pred::apply(current) {
+            index
+        } else {
+            4_294_967_295u32
+        }
+    }
+}
+
+#[cfg(test)]
 struct PartitionViolation;
 
+#[cfg(test)]
 #[cubecl::cube]
 impl UnaryOp<(u32, u32)> for PartitionViolation {
     type Output = u32;
@@ -81,6 +131,10 @@ impl UnaryOp<(u32, u32)> for PartitionViolation {
 #[doc(hidden)]
 pub trait PredicateInput<R: Runtime, Pred>: ReadExpression + Sized {
     fn predicate_len(&self) -> Result<usize, Error>;
+    fn predicate_count(self, exec: &Executor<R>) -> Result<u32, Error>;
+    fn predicate_first(self, exec: &Executor<R>) -> Result<Option<u32>, Error>;
+    fn predicate_is_partitioned(self, exec: &Executor<R>) -> Result<bool, Error>;
+    fn predicate_positions(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
     fn predicate_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
@@ -99,10 +153,94 @@ where
                 <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
                 Env1<u32>,
             >,
+    IndexedTransform<Input, FirstMatchingIndex<Pred>>:
+        ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
+    Dispatch<<IndexedTransform<Input, FirstMatchingIndex<Pred>> as ReadExpression>::ReadArity, S1>:
+        ReduceDispatch<
+                R,
+                IndexedTransform<Input, FirstMatchingIndex<Pred>>,
+                u32,
+                MinU32,
+                <IndexedTransform<Input, FirstMatchingIndex<Pred>> as LowerReadExpression>::Slots,
+            >,
+    AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>>:
+        ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
+    Dispatch<
+        <AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>> as ReadExpression>::ReadArity,
+        S1,
+    >: ReduceDispatch<
+            R,
+            AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>>,
+            u32,
+            MinU32,
+            <AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>> as LowerReadExpression>::Slots,
+        >,
+    Dispatch<<Transform<Input, PredicateMap<Pred>> as ReadExpression>::ReadArity, S1>:
+        ReduceDispatch<
+                R,
+                Transform<Input, PredicateMap<Pred>>,
+                u32,
+                SumU32,
+                <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
+            >,
+    Dispatch<<Transform<Input, PredicateMap<Pred>> as ReadExpression>::ReadArity, S1>:
+        InclusiveScanDispatch<
+            R,
+            Transform<Input, PredicateMap<Pred>>,
+            DeviceSliceMut<u32>,
+            u32,
+            <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
+            Env1<u32>,
+            SumU32,
+        >,
     DeviceSliceMut<u32>: StageOutput<R, Env0>,
 {
     fn predicate_len(&self) -> Result<usize, Error> {
         self.logical_len()
+    }
+
+    fn predicate_count(self, exec: &Executor<R>) -> Result<u32, Error> {
+        reduce(
+            exec,
+            Transform::new(self, PredicateMap::<Pred>(PhantomData)),
+            0u32,
+            SumU32,
+        )
+    }
+
+    fn predicate_first(self, exec: &Executor<R>) -> Result<Option<u32>, Error> {
+        let index = reduce(
+            exec,
+            IndexedTransform::new(self, FirstMatchingIndex::<Pred>(PhantomData)),
+            u32::MAX,
+            MinU32,
+        )?;
+        Ok((index != u32::MAX).then_some(index))
+    }
+
+    fn predicate_is_partitioned(self, exec: &Executor<R>) -> Result<bool, Error> {
+        let index = reduce(
+            exec,
+            AdjacentIndexedTransform::new(
+                self,
+                FirstPartitionViolation::<Pred>(PhantomData),
+            ),
+            u32::MAX,
+            MinU32,
+        )?;
+        Ok(index == u32::MAX)
+    }
+
+    fn predicate_positions(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
+        let len = self.logical_len()?;
+        let positions = exec.alloc::<u32>(len);
+        inclusive_scan(
+            exec,
+            Transform::new(self, PredicateMap::<Pred>(PhantomData)),
+            SumU32,
+            positions.slice_mut(..),
+        )?;
+        Ok(positions)
     }
 
     fn predicate_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
@@ -118,10 +256,6 @@ where
     }
 }
 
-fn count_flags<R: Runtime>(exec: &Executor<R>, flags: &DeviceVec<R, u32>) -> Result<u32, Error> {
-    reduce(exec, flags.column(), 0, SumU32)
-}
-
 /// Counts elements satisfying `pred`.
 pub(crate) fn count_if<R, Input, Pred>(
     exec: &Executor<R>,
@@ -132,8 +266,7 @@ where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    let flags = input.predicate_flags(exec)?;
-    count_flags(exec, &flags)
+    input.predicate_count(exec)
 }
 
 /// Returns whether every element satisfies `pred`.
@@ -160,8 +293,7 @@ where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    let flags = input.predicate_flags(exec)?;
-    Ok(count_flags(exec, &flags)? != 0)
+    Ok(input.predicate_count(exec)? != 0)
 }
 
 /// Returns whether no element satisfies `pred`.
@@ -187,9 +319,7 @@ where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    let flags = input.predicate_flags(exec)?;
-    let control = crate::selection::SelectionControl::from_flags(exec, flags)?;
-    control.first_index(exec)
+    input.predicate_first(exec)
 }
 
 /// Returns whether all passing elements precede all failing elements.
@@ -202,21 +332,13 @@ where
     R: Runtime,
     Input: PredicateInput<R, Pred>,
 {
-    let flags = input.predicate_flags(exec)?;
-    if flags.len() < 2 {
-        return Ok(true);
-    }
-    let violations = Transform::new(
-        Zip::new(flags.slice(..flags.len() - 1), flags.slice(1..)),
-        PartitionViolation,
-    );
-    Ok(reduce(exec, violations, 0, SumU32)? == 0)
+    input.predicate_is_partitioned(exec)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute};
+    use crate::{Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     struct NestedMatch;

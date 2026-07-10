@@ -39,6 +39,24 @@ pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
     fn apply(input: Input) -> Self::Output;
 }
 
+/// Internal index-aware transform operation.
+#[doc(hidden)]
+#[cubecl::cube]
+pub trait IndexedUnaryOp<Input: CubeType>: 'static + Send + Sync {
+    type Output: StorageLayout;
+
+    fn apply(input: Input, index: u32) -> Self::Output;
+}
+
+/// Internal index-aware operation over an adjacent input pair.
+#[doc(hidden)]
+#[cubecl::cube]
+pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
+    type Output: StorageLayout;
+
+    fn apply(previous: Input, current: Input, index: u32) -> Self::Output;
+}
+
 /// Identity operation.
 ///
 /// # Examples

@@ -4,6 +4,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use cubecl::prelude::*;
 use massively::{
     BinaryPredicateOp, ReductionOp, exclusive_scan_by_key, inclusive_scan_by_key, reduce_by_key,
+    unique_by_key,
 };
 
 struct Equal;
@@ -112,6 +113,32 @@ fn bench_by_key_patterns(c: &mut Criterion) {
         }
     }
     reduce.finish();
+
+    let mut unique = c.benchmark_group("unique_by_key_patterns");
+    for &len in common::SIZES {
+        let values = exec.to_device(&(0..len as u32).collect::<Vec<_>>());
+        let out_keys = exec.alloc::<u32>(len);
+        let out_values = exec.alloc::<u32>(len);
+        for (pattern, host_keys) in key_patterns(len) {
+            let keys = exec.to_device(&host_keys);
+            unique.bench_function(BenchmarkId::new(pattern, len), |b| {
+                b.iter(|| {
+                    let output_len = unique_by_key(
+                        &exec,
+                        black_box(keys.slice(..)),
+                        black_box(values.slice(..)),
+                        Equal,
+                        black_box(out_keys.slice_mut(..)),
+                        black_box(out_values.slice_mut(..)),
+                    )
+                    .unwrap();
+                    exec.sync().unwrap();
+                    black_box((output_len, &out_keys, &out_values));
+                })
+            });
+        }
+    }
+    unique.finish();
 }
 
 criterion_group! {

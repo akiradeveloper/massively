@@ -9,12 +9,11 @@ macro_rules! by_key_case {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
             #[test]
             fn $name(
-                raw_keys in prop::collection::vec(0_u32..12, 0..MAX_LEN),
-                raw_values in prop::collection::vec(0_u32..50, 0..MAX_LEN),
+                pairs in oracle_vec((0_u32..12, 0_u32..50)),
             ) {
-                let len = raw_keys.len().min(raw_values.len());
-                let $keys = &raw_keys[..len];
-                let $values = &raw_values[..len];
+                let (raw_keys, raw_values): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
+                let $keys = raw_keys.as_slice();
+                let $values = raw_values.as_slice();
                 let $exec = exec();
                 let $key_gpu = $exec.to_device($keys);
                 let $value_gpu = $exec.to_device($values);
