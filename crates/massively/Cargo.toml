@@ -1,15 +1,12 @@
 [package]
-authors = ["Akira Hayakawa <ruby.wktk@gmail.com>"]
-autoexamples = false
-categories = ["algorithms", "concurrency", "science"]
+authors.workspace = true
 description = "Multi-platform GPU parallel algorithms for Rust."
-edition = "2024"
-keywords = ["gpu", "gpgpu", "parallel", "algorithms", "cubecl"]
-license = "MIT"
+edition.workspace = true
+license.workspace = true
 name = "massively"
 readme = "../../README.md"
-repository = "https://github.com/akiradeveloper/massively"
-version = "0.63.0"
+repository.workspace = true
+version = "0.64.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -19,6 +16,15 @@ futures-lite = "2.6"
 criterion = "0.5"
 oracle_ref = { package = "oracle", path = "../oracle" }
 proptest = "1"
+static_assertions = "1"
+
+[[bench]]
+name = "transform_reduce"
+harness = false
+
+[[bench]]
+name = "algorithms"
+harness = false
 
 [[bench]]
 name = "transform"
@@ -69,215 +75,3 @@ default = ["wgpu"]
 cuda = ["cubecl/cuda"]
 hip = ["cubecl/hip"]
 wgpu = ["cubecl/wgpu"]
-
-[[example]]
-name = "adjacent-difference"
-path = "examples/algorithm/adjacent_difference.rs"
-
-[[example]]
-name = "adjacent-find"
-path = "examples/algorithm/adjacent_find.rs"
-
-[[example]]
-name = "all-of"
-path = "examples/algorithm/all_of.rs"
-
-[[example]]
-name = "any-of"
-path = "examples/algorithm/any_of.rs"
-
-[[example]]
-name = "copy-where"
-path = "examples/algorithm/copy_where.rs"
-
-[[example]]
-name = "count-if"
-path = "examples/algorithm/count_if.rs"
-
-[[example]]
-name = "equal"
-path = "examples/algorithm/equal.rs"
-
-[[example]]
-name = "fill"
-path = "examples/algorithm/fill.rs"
-
-[[example]]
-name = "exclusive-scan"
-path = "examples/algorithm/exclusive_scan.rs"
-
-[[example]]
-name = "exclusive-scan-by-key"
-path = "examples/algorithm/exclusive_scan_by_key.rs"
-
-[[example]]
-name = "find-first-of"
-path = "examples/algorithm/find_first_of.rs"
-
-[[example]]
-name = "find-if"
-path = "examples/algorithm/find_if.rs"
-
-[[example]]
-name = "gather"
-path = "examples/algorithm/gather.rs"
-
-[[example]]
-name = "gather-where"
-path = "examples/algorithm/gather_where.rs"
-
-[[example]]
-name = "inclusive-scan"
-path = "examples/algorithm/inclusive_scan.rs"
-
-[[example]]
-name = "inclusive-scan-by-key"
-path = "examples/algorithm/inclusive_scan_by_key.rs"
-
-[[example]]
-name = "is-partitioned"
-path = "examples/algorithm/is_partitioned.rs"
-
-[[example]]
-name = "is-sorted"
-path = "examples/algorithm/is_sorted.rs"
-
-[[example]]
-name = "is-sorted-until"
-path = "examples/algorithm/is_sorted_until.rs"
-
-[[example]]
-name = "lexicographical-compare"
-path = "examples/algorithm/lexicographical_compare.rs"
-
-[[example]]
-name = "lower-bound"
-path = "examples/algorithm/lower_bound.rs"
-
-[[example]]
-name = "map"
-path = "examples/algorithm/map.rs"
-
-[[example]]
-name = "max-element"
-path = "examples/algorithm/max_element.rs"
-
-[[example]]
-name = "merge"
-path = "examples/algorithm/merge.rs"
-
-[[example]]
-name = "merge-by-key"
-path = "examples/algorithm/merge_by_key.rs"
-
-[[example]]
-name = "min-element"
-path = "examples/algorithm/min_element.rs"
-
-[[example]]
-name = "minmax-element"
-path = "examples/algorithm/minmax_element.rs"
-
-[[example]]
-name = "mismatch"
-path = "examples/algorithm/mismatch.rs"
-
-[[example]]
-name = "none-of"
-path = "examples/algorithm/none_of.rs"
-
-[[example]]
-name = "partition"
-path = "examples/algorithm/partition.rs"
-
-[[example]]
-name = "permute"
-path = "examples/algorithm/permute.rs"
-
-[[example]]
-name = "reduce"
-path = "examples/algorithm/reduce.rs"
-
-[[example]]
-name = "reduce-by-key"
-path = "examples/algorithm/reduce_by_key.rs"
-
-[[example]]
-name = "remove-where"
-path = "examples/algorithm/remove_where.rs"
-
-[[example]]
-name = "replace-where"
-path = "examples/algorithm/replace_where.rs"
-
-[[example]]
-name = "reverse"
-path = "examples/algorithm/reverse.rs"
-
-[[example]]
-name = "scatter"
-path = "examples/algorithm/scatter.rs"
-
-[[example]]
-name = "scatter-where"
-path = "examples/algorithm/scatter_where.rs"
-
-[[example]]
-name = "set-difference"
-path = "examples/algorithm/set_difference.rs"
-
-[[example]]
-name = "set-intersection"
-path = "examples/algorithm/set_intersection.rs"
-
-[[example]]
-name = "set-union"
-path = "examples/algorithm/set_union.rs"
-
-[[example]]
-name = "sort"
-path = "examples/algorithm/sort.rs"
-
-[[example]]
-name = "sort-by-key"
-path = "examples/algorithm/sort_by_key.rs"
-
-[[example]]
-name = "transform"
-path = "examples/algorithm/transform.rs"
-
-[[example]]
-name = "unique"
-path = "examples/algorithm/unique.rs"
-
-[[example]]
-name = "unique-by-key"
-path = "examples/algorithm/unique_by_key.rs"
-
-[[example]]
-name = "upper-bound"
-path = "examples/algorithm/upper_bound.rs"
-
-[[example]]
-name = "runtime-copy"
-path = "examples/runtime/copy.rs"
-
-[[example]]
-name = "runtime-alloc"
-path = "examples/runtime/alloc.rs"
-
-[[example]]
-name = "runtime-full"
-path = "examples/runtime/full.rs"
-
-[[example]]
-name = "runtime-counting"
-path = "examples/runtime/counting.rs"
-
-[[example]]
-name = "runtime-to-device"
-path = "examples/runtime/to_device.rs"
-
-[[example]]
-name = "util-random"
-path = "examples/util/random.rs"

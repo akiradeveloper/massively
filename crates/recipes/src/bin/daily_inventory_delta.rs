@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip1, merge_by_key, reduce_by_key};
+use massively::{DeviceVec, Executor, MIndex, merge_by_key, reduce_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     sku: DeviceVec<B, u32>,
@@ -32,29 +32,29 @@ where
     B: cubecl::prelude::Runtime,
 {
     let merged_len = (left_sku.len() + right_sku.len()) as usize;
-    let sku = exec.to_device(&vec![0_u32; merged_len])?;
-    let delta = exec.to_device(&vec![0.0_f32; merged_len])?;
+    let sku = exec.to_device(&vec![0_u32; merged_len]);
+    let delta = exec.to_device(&vec![0.0_f32; merged_len]);
     merge_by_key(
-        exec,
-        Zip1(left_sku.slice(..)),
-        Zip1(left_delta.slice(..)),
-        Zip1(right_sku.slice(..)),
-        Zip1(right_delta.slice(..)),
+        &exec,
+        left_sku.slice(..),
+        left_delta.slice(..),
+        right_sku.slice(..),
+        right_delta.slice(..),
         common::LessU32,
-        Zip1(sku.slice_mut(..)),
-        Zip1(delta.slice_mut(..)),
+        sku.slice_mut(..),
+        delta.slice_mut(..),
     )?;
-    let out_sku = exec.to_device(&vec![0_u32; merged_len])?;
-    let out_delta = exec.to_device(&vec![0.0_f32; merged_len])?;
+    let out_sku = exec.to_device(&vec![0_u32; merged_len]);
+    let out_delta = exec.to_device(&vec![0.0_f32; merged_len]);
     let len = reduce_by_key(
-        exec,
-        Zip1(sku.slice(..)),
-        Zip1(delta.slice(..)),
+        &exec,
+        sku.slice(..),
+        delta.slice(..),
         common::EqualU32,
-        (0.0_f32,),
+        0.0_f32,
         common::SumF32,
-        Zip1(out_sku.slice_mut(..)),
-        Zip1(out_delta.slice_mut(..)),
+        out_sku.slice_mut(..),
+        out_delta.slice_mut(..),
     )?;
     Ok(Output {
         sku: out_sku,
@@ -67,17 +67,17 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[1, 2, 4])?,
-        exec.to_device(&[5.0, -1.0, 9.0])?,
-        exec.to_device(&[2, 3, 4])?,
-        exec.to_device(&[2.0, 7.0, -3.0])?,
+        exec.to_device(&[1, 2, 4]),
+        exec.to_device(&[5.0, -1.0, 9.0]),
+        exec.to_device(&[2, 3, 4]),
+        exec.to_device(&[2.0, 7.0, -3.0]),
     )?;
     assert_eq!(
-        exec.to_host(&output.sku.slice(..output.len))?,
+        exec.to_host(&output.sku.slice(..output.len as usize))?,
         vec![1, 2, 3, 4]
     );
     assert_eq!(
-        exec.to_host(&output.delta.slice(..output.len))?,
+        exec.to_host(&output.delta.slice(..output.len as usize))?,
         vec![5.0, 1.0, 7.0, 6.0]
     );
     Ok(())

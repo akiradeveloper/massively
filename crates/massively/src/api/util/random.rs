@@ -1,0 +1,390 @@
+//! Lazy deterministic GPU-side random value generation.
+
+use cubecl::prelude::*;
+
+use crate::{Error, MIndex, Zip, lazy};
+
+type RandomInput<T> = Zip<
+    Zip<Zip<crate::read::Counting, crate::read::Constant<T>>, crate::read::Constant<T>>,
+    crate::read::Constant<u64>,
+>;
+
+fn validate_inclusive_range<T: PartialOrd>(min: T, max: T) -> Result<(), Error> {
+    if min <= max {
+        Ok(())
+    } else {
+        Err(Error::Launch {
+            message: "random distribution range must satisfy min <= max".to_string(),
+        })
+    }
+}
+
+macro_rules! uniform_stream {
+    ($stream:ident, $item:ty, $op:ident, $constructor:ident, $doc:literal, $example:literal) => {
+        #[doc = $doc]
+        #[derive(Clone, Copy, Debug)]
+        pub struct $stream {
+            min: $item,
+            max: $item,
+            seed: u64,
+        }
+
+        #[doc = $doc]
+        #[doc = ""]
+        #[doc = "The same seed and logical index always produce the same value."]
+        #[doc = ""]
+        #[doc = "# Examples"]
+        #[doc = ""]
+        #[doc = $example]
+        pub fn $constructor(min: $item, max: $item, seed: u64) -> Result<$stream, Error> {
+            validate_inclusive_range(min, max)?;
+            Ok($stream { min, max, seed })
+        }
+
+        impl $stream {
+            /// Limits this generator to `len` logical items.
+            pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+                lazy::Taken::new(self, len)
+            }
+        }
+
+        impl crate::read::TakenSource for $stream {
+            type Read = lazy::Transform<RandomInput<$item>, $op>;
+
+            fn lower(&self, offset: MIndex, len: MIndex) -> Self::Read {
+                crate::read::Transform::new(
+                    crate::zip4(
+                        crate::read::Counting::new(offset, len as usize),
+                        crate::read::Constant::new(self.min, len as usize),
+                        crate::read::Constant::new(self.max, len as usize),
+                        crate::read::Constant::new(self.seed, len as usize),
+                    ),
+                    $op,
+                )
+            }
+        }
+    };
+}
+
+uniform_stream!(
+    UniformU32,
+    u32,
+    UniformU32Op,
+    uniform_u32,
+    "A deterministic uniform `u32` stream over an inclusive range.",
+    r#"```
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{Executor, transform};
+use massively::{op::Identity, util::random};
+
+let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+let output = exec.alloc::<u32>(8);
+let values = random::uniform_u32(10, 20, 123).unwrap().take(8);
+transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+
+let values = exec.to_host(&output).unwrap();
+assert!(values.iter().all(|value| (10..=20).contains(value)));
+```"#
+);
+uniform_stream!(
+    UniformU64,
+    u64,
+    UniformU64Op,
+    uniform_u64,
+    "A deterministic uniform `u64` stream over an inclusive range.",
+    r#"```
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{Executor, transform};
+use massively::{op::Identity, util::random};
+
+let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+let output = exec.alloc::<u64>(8);
+let values = random::uniform_u64(100, 200, 123).unwrap().take(8);
+transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+
+let values = exec.to_host(&output).unwrap();
+assert!(values.iter().all(|value| (100..=200).contains(value)));
+```"#
+);
+uniform_stream!(
+    UniformF32,
+    f32,
+    UniformF32Op,
+    uniform_f32,
+    "A deterministic uniform `f32` stream over a bounded range.",
+    r#"```
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{Executor, transform};
+use massively::{op::Identity, util::random};
+
+let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+let output = exec.alloc::<f32>(8);
+let values = random::uniform_f32(-1.0, 1.0, 123).unwrap().take(8);
+transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+
+let values = exec.to_host(&output).unwrap();
+assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
+```"#
+);
+uniform_stream!(
+    UniformF64,
+    f64,
+    UniformF64Op,
+    uniform_f64,
+    "A deterministic uniform `f64` stream over a bounded range.",
+    r#"```
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{Executor, transform};
+use massively::{op::Identity, util::random};
+
+let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+let output = exec.alloc::<f64>(8);
+let values = random::uniform_f64(-1.0, 1.0, 123).unwrap().take(8);
+transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+
+let values = exec.to_host(&output).unwrap();
+assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
+```"#
+);
+
+macro_rules! normal_stream {
+    ($stream:ident, $item:ty, $op:ident, $constructor:ident, $doc:literal, $example:literal) => {
+        #[doc = $doc]
+        #[derive(Clone, Copy, Debug)]
+        pub struct $stream {
+            mean: $item,
+            stddev: $item,
+            seed: u64,
+        }
+
+        #[doc = $doc]
+        #[doc = ""]
+        #[doc = "The same seed and logical index always produce the same value."]
+        #[doc = ""]
+        #[doc = "# Examples"]
+        #[doc = ""]
+        #[doc = $example]
+        pub fn $constructor(mean: $item, stddev: $item, seed: u64) -> $stream {
+            $stream { mean, stddev, seed }
+        }
+
+        impl $stream {
+            /// Limits this generator to `len` logical items.
+            pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+                lazy::Taken::new(self, len)
+            }
+        }
+
+        impl crate::read::TakenSource for $stream {
+            type Read = lazy::Transform<RandomInput<$item>, $op>;
+
+            fn lower(&self, offset: MIndex, len: MIndex) -> Self::Read {
+                crate::read::Transform::new(
+                    crate::zip4(
+                        crate::read::Counting::new(offset, len as usize),
+                        crate::read::Constant::new(self.mean, len as usize),
+                        crate::read::Constant::new(self.stddev, len as usize),
+                        crate::read::Constant::new(self.seed, len as usize),
+                    ),
+                    $op,
+                )
+            }
+        }
+    };
+}
+
+normal_stream!(
+    NormalF32,
+    f32,
+    NormalF32Op,
+    normal_f32,
+    "A deterministic normally distributed `f32` stream.",
+    r#"```
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{Executor, transform};
+use massively::{op::Identity, util::random};
+
+let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+let output = exec.alloc::<f32>(8);
+let values = random::normal_f32(0.0, 1.0, 123).take(8);
+transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+
+assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
+```"#
+);
+normal_stream!(
+    NormalF64,
+    f64,
+    NormalF64Op,
+    normal_f64,
+    "A deterministic normally distributed `f64` stream.",
+    r#"```
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{Executor, transform};
+use massively::{op::Identity, util::random};
+
+let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+let output = exec.alloc::<f64>(8);
+let values = random::normal_f64(0.0, 1.0, 123).take(8);
+transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+
+assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
+```"#
+);
+
+#[doc(hidden)]
+pub struct UniformU32Op;
+#[doc(hidden)]
+pub struct UniformU64Op;
+#[doc(hidden)]
+pub struct UniformF32Op;
+#[doc(hidden)]
+pub struct UniformF64Op;
+#[doc(hidden)]
+pub struct NormalF32Op;
+#[doc(hidden)]
+pub struct NormalF64Op;
+
+type RandomU32Args = (((MIndex, u32), u32), u64);
+type RandomU64Args = (((MIndex, u64), u64), u64);
+type RandomF32Args = (((MIndex, f32), f32), u64);
+type RandomF64Args = (((MIndex, f64), f64), u64);
+
+#[cubecl::cube]
+impl crate::UnaryOp<RandomU32Args> for UniformU32Op {
+    type Output = u32;
+
+    fn apply(input: RandomU32Args) -> u32 {
+        uniform_u32_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+#[cubecl::cube]
+impl crate::UnaryOp<RandomU64Args> for UniformU64Op {
+    type Output = u64;
+
+    fn apply(input: RandomU64Args) -> u64 {
+        uniform_u64_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+#[cubecl::cube]
+impl crate::UnaryOp<RandomF32Args> for UniformF32Op {
+    type Output = f32;
+
+    fn apply(input: RandomF32Args) -> f32 {
+        uniform_f32_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+#[cubecl::cube]
+impl crate::UnaryOp<RandomF64Args> for UniformF64Op {
+    type Output = f64;
+
+    fn apply(input: RandomF64Args) -> f64 {
+        uniform_f64_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+#[cubecl::cube]
+impl crate::UnaryOp<RandomF32Args> for NormalF32Op {
+    type Output = f32;
+
+    fn apply(input: RandomF32Args) -> f32 {
+        normal_f32_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+#[cubecl::cube]
+impl crate::UnaryOp<RandomF64Args> for NormalF64Op {
+    type Output = f64;
+
+    fn apply(input: RandomF64Args) -> f64 {
+        normal_f64_value(input.0.0.1, input.0.1, input.1, input.0.0.0)
+    }
+}
+
+#[cubecl::cube]
+fn splitmix64(mut state: u64) -> u64 {
+    state += 0x9e37_79b9_7f4a_7c15u64;
+    let z = RuntimeCell::<u64>::new(state);
+    z.store((z.read() ^ (z.read() >> 30u64)) * 0xbf58_476d_1ce4_e5b9u64);
+    z.store((z.read() ^ (z.read() >> 27u64)) * 0x94d0_49bb_1331_11ebu64);
+    z.read() ^ (z.read() >> 31u64)
+}
+
+#[cubecl::cube]
+fn random_u32_at(seed: u64, index: MIndex, stream: u64) -> u32 {
+    splitmix64(seed + (index as u64) * 0x9e37_79b9_7f4a_7c15u64 + stream) as u32
+}
+
+#[cubecl::cube]
+fn random_u64_at(seed: u64, index: MIndex, stream: u64) -> u64 {
+    splitmix64(seed + (index as u64) * 0x9e37_79b9_7f4a_7c15u64 + stream)
+}
+
+#[cubecl::cube]
+fn unit_f32(seed: u64, index: MIndex, stream: u64) -> f32 {
+    ((random_u32_at(seed, index, stream) >> 8u32) as f32) * 0.00000005960464832810486063f32
+}
+
+#[cubecl::cube]
+fn unit_f64(seed: u64, index: MIndex, stream: u64) -> f64 {
+    ((random_u64_at(seed, index, stream) >> 11u64) as f64) * 0.00000000000000011102230246251567f64
+}
+
+#[cubecl::cube]
+fn open_unit_f32(seed: u64, index: MIndex, stream: u64) -> f32 {
+    (((random_u32_at(seed, index, stream) >> 8u32) as f32) + 0.5f32)
+        * 0.00000005960464832810486063f32
+}
+
+#[cubecl::cube]
+fn uniform_f32_value(min: f32, max: f32, seed: u64, index: MIndex) -> f32 {
+    min + unit_f32(seed, index, 0u64) * (max - min)
+}
+
+#[cubecl::cube]
+fn uniform_f64_value(min: f64, max: f64, seed: u64, index: MIndex) -> f64 {
+    min + unit_f64(seed, index, 0u64) * (max - min)
+}
+
+#[cubecl::cube]
+fn uniform_u32_value(min: u32, max: u32, seed: u64, index: MIndex) -> u32 {
+    let span = max - min;
+    let value = random_u32_at(seed, index, 0u64);
+    if span == 0xffff_ffffu32 {
+        value
+    } else {
+        min + value % (span + 1u32)
+    }
+}
+
+#[cubecl::cube]
+fn uniform_u64_value(min: u64, max: u64, seed: u64, index: MIndex) -> u64 {
+    let span = max - min;
+    let value = random_u64_at(seed, index, 0u64);
+    if span == 0xffff_ffff_ffff_ffffu64 {
+        value
+    } else {
+        min + value % (span + 1u64)
+    }
+}
+
+#[cubecl::cube]
+fn normal_f32_value(mean: f32, stddev: f32, seed: u64, index: MIndex) -> f32 {
+    let u1 = open_unit_f32(seed, index, 0u64);
+    let u2 = open_unit_f32(seed, index, 1u64);
+    let radius = (-2.0f32 * u1.ln()).sqrt();
+    let angle = 6.28318530717958647692f32 * u2;
+    mean + stddev * radius * angle.cos()
+}
+
+#[cubecl::cube]
+fn normal_f64_value(mean: f64, stddev: f64, seed: u64, index: MIndex) -> f64 {
+    let u1 = open_unit_f32(seed, index, 0u64);
+    let u2 = open_unit_f32(seed, index, 1u64);
+    let radius = (-2.0f32 * u1.ln()).sqrt();
+    let angle = 6.28318530717958647692f32 * u2;
+    mean + stddev * ((radius * angle.cos()) as f64)
+}

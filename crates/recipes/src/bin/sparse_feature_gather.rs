@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip2, gather};
+use massively::{DeviceVec, Executor, MIndex, gather, zip2};
 
 struct Output<B: cubecl::prelude::Runtime> {
     age: DeviceVec<B, u32>,
@@ -33,10 +33,10 @@ where
     let gathered_age = exec.full(row_index.len(), 0_u32)?;
     let gathered_score = exec.full(row_index.len(), 0.0_f32)?;
     gather(
-        exec,
-        Zip2(age.slice(..), score.slice(..)),
+        &exec,
+        zip2(age.slice(..), score.slice(..)),
         row_index.slice(..),
-        Zip2(gathered_age.slice_mut(..), gathered_score.slice_mut(..)),
+        zip2(gathered_age.slice_mut(..), gathered_score.slice_mut(..)),
     )?;
     Ok(Output {
         age: gathered_age,
@@ -48,9 +48,9 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[21, 35, 50])?,
-        exec.to_device(&[0.2, 0.8, 0.4])?,
-        exec.to_device(&[2, 0, 2, 1])?,
+        exec.to_device(&[21, 35, 50]),
+        exec.to_device(&[0.2, 0.8, 0.4]),
+        exec.to_device(&[2, 0, 2, 1]),
     )?;
     assert_eq!(exec.to_host(&output.age)?, vec![50, 21, 50, 35]);
     assert_eq!(exec.to_host(&output.score)?, vec![0.4, 0.2, 0.4, 0.8]);

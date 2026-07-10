@@ -14,7 +14,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip1, reverse, sort_by_key};
+use massively::{DeviceVec, Executor, MIndex, reverse, sort_by_key};
 
 struct Output<B: cubecl::prelude::Runtime> {
     player_id: DeviceVec<B, u32>,
@@ -31,31 +31,23 @@ where
     B: cubecl::prelude::Runtime,
 {
     let len = player_id.len();
-    let sorted_score = exec.full(len, 0.0_f32)?;
-    let sorted_player_id = exec.full(len, 0_u32)?;
+    let sorted_score = exec.full(len as usize, 0.0_f32)?;
+    let sorted_player_id = exec.full(len as usize, 0_u32)?;
     sort_by_key(
-        exec,
-        Zip1(score.slice(..)),
-        Zip1(player_id.slice(..)),
+        &exec,
+        score.slice(..),
+        player_id.slice(..),
         common::LessF32,
-        Zip1(sorted_score.slice_mut(..)),
-        Zip1(sorted_player_id.slice_mut(..)),
+        sorted_score.slice_mut(..),
+        sorted_player_id.slice_mut(..),
     )?;
-    let score = exec.full(len, 0.0_f32)?;
-    let player_id = exec.full(len, 0_u32)?;
-    reverse(
-        exec,
-        Zip1(sorted_score.slice(..)),
-        Zip1(score.slice_mut(..)),
-    )?;
-    reverse(
-        exec,
-        Zip1(sorted_player_id.slice(..)),
-        Zip1(player_id.slice_mut(..)),
-    )?;
+    let score = exec.full(len as usize, 0.0_f32)?;
+    let player_id = exec.full(len as usize, 0_u32)?;
+    reverse(&exec, sorted_score.slice(..), score.slice_mut(..))?;
+    reverse(&exec, sorted_player_id.slice(..), player_id.slice_mut(..))?;
     Ok(Output {
-        player_id: exec.to_device(&exec.to_host(&player_id.slice(..k))?)?,
-        score: exec.to_device(&exec.to_host(&score.slice(..k))?)?,
+        player_id: exec.to_device(&exec.to_host(&player_id.slice(..k as usize))?),
+        score: exec.to_device(&exec.to_host(&score.slice(..k as usize))?),
     })
 }
 
@@ -63,8 +55,8 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[10, 20, 30, 40])?,
-        exec.to_device(&[7.0, 10.0, 3.0, 9.0])?,
+        exec.to_device(&[10, 20, 30, 40]),
+        exec.to_device(&[7.0, 10.0, 3.0, 9.0]),
         2,
     )?;
     assert_eq!(exec.to_host(&output.player_id)?, vec![20, 40]);

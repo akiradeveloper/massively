@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip1, mismatch};
+use massively::{DeviceVec, Executor, MIndex, mismatch};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -24,9 +24,9 @@ where
     B: cubecl::prelude::Runtime,
 {
     mismatch(
-        exec,
-        Zip1(expected.slice(..)),
-        Zip1(actual.slice(..)),
+        &exec,
+        expected.slice(..),
+        actual.slice(..),
         common::EqualU32,
     )
 }
@@ -35,8 +35,8 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let index = solve(
         &exec,
-        exec.to_device(&[1, 4, 9, 16])?,
-        exec.to_device(&[1, 4, 8, 16])?,
+        exec.to_device(&[1, 4, 9, 16]),
+        exec.to_device(&[1, 4, 8, 16]),
     )?;
     assert_eq!(index, Some(2));
     Ok(())

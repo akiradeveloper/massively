@@ -16,15 +16,12 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::BinaryPredicateOp;
-use massively::{DeviceVec, Executor, Zip1, Zip2, reduce_by_key, sort, unique};
+use massively::{DeviceVec, Executor, reduce_by_key, sort, unique, zip2};
 
 struct LessVisitPair;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32, u32)> for LessVisitPair
-where
-    B: cubecl::prelude::Runtime,
-{
+impl BinaryPredicateOp<(u32, u32)> for LessVisitPair {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 < rhs.0 || (lhs.0 == rhs.0 && lhs.1 < rhs.1)
     }
@@ -33,10 +30,7 @@ where
 struct EqualVisitPair;
 
 #[cubecl::cube]
-impl<B> BinaryPredicateOp<B, (u32, u32)> for EqualVisitPair
-where
-    B: cubecl::prelude::Runtime,
-{
+impl BinaryPredicateOp<(u32, u32)> for EqualVisitPair {
     fn apply(lhs: (u32, u32), rhs: (u32, u32)) -> bool {
         lhs.0 == rhs.0 && lhs.1 == rhs.1
     }
@@ -56,38 +50,38 @@ where
     B: cubecl::prelude::Runtime,
 {
     let len = page_id.len();
-    let sorted_page_id = exec.full(len, 0_u32)?;
-    let sorted_user_id = exec.full(len, 0_u32)?;
+    let sorted_page_id = exec.full(len as usize, 0_u32)?;
+    let sorted_user_id = exec.full(len as usize, 0_u32)?;
     sort(
-        exec,
-        Zip2(page_id.slice(..), user_id.slice(..)),
+        &exec,
+        zip2(page_id.slice(..), user_id.slice(..)),
         LessVisitPair,
-        Zip2(sorted_page_id.slice_mut(..), sorted_user_id.slice_mut(..)),
+        zip2(sorted_page_id.slice_mut(..), sorted_user_id.slice_mut(..)),
     )?;
-    let page_id = exec.full(len, 0_u32)?;
-    let user_id = exec.full(len, 0_u32)?;
+    let page_id = exec.full(len as usize, 0_u32)?;
+    let user_id = exec.full(len as usize, 0_u32)?;
     let unique_len = unique(
-        exec,
-        Zip2(sorted_page_id.slice(..), sorted_user_id.slice(..)),
+        &exec,
+        zip2(sorted_page_id.slice(..), sorted_user_id.slice(..)),
         EqualVisitPair,
-        Zip2(page_id.slice_mut(..), user_id.slice_mut(..)),
+        zip2(page_id.slice_mut(..), user_id.slice_mut(..)),
     )?;
-    let ones = exec.full(unique_len, 1_u32)?;
-    let out_page_id = exec.full(unique_len, 0_u32)?;
-    let unique_count = exec.full(unique_len, 0_u32)?;
+    let ones = exec.full(unique_len as usize, 1_u32)?;
+    let out_page_id = exec.full(unique_len as usize, 0_u32)?;
+    let unique_count = exec.full(unique_len as usize, 0_u32)?;
     let len = reduce_by_key(
-        exec,
-        Zip1(page_id.slice(..unique_len)),
-        Zip1(ones.slice(..)),
+        &exec,
+        page_id.slice(..unique_len as usize),
+        ones.slice(..),
         common::EqualU32,
-        (0_u32,),
+        0_u32,
         common::SumU32,
-        Zip1(out_page_id.slice_mut(..)),
-        Zip1(unique_count.slice_mut(..)),
+        out_page_id.slice_mut(..),
+        unique_count.slice_mut(..),
     )?;
     Ok(Output {
-        page_id: exec.to_device(&exec.to_host(&out_page_id.slice(..len))?)?,
-        unique_count: exec.to_device(&exec.to_host(&unique_count.slice(..len))?)?,
+        page_id: exec.to_device(&exec.to_host(&out_page_id.slice(..len as usize))?),
+        unique_count: exec.to_device(&exec.to_host(&unique_count.slice(..len as usize))?),
     })
 }
 
@@ -95,8 +89,8 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[2, 1, 1, 2, 1, 2])?,
-        exec.to_device(&[7, 5, 5, 7, 8, 9])?,
+        exec.to_device(&[2, 1, 1, 2, 1, 2]),
+        exec.to_device(&[7, 5, 5, 7, 8, 9]),
     )?;
     assert_eq!(exec.to_host(&output.page_id)?, vec![1, 2]);
     assert_eq!(exec.to_host(&output.unique_count)?, vec![2, 2]);

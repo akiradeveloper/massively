@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip1, lower_bound, upper_bound};
+use massively::{DeviceVec, Executor, MIndex, lower_bound, upper_bound};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -23,20 +23,20 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let query = exec.to_device(&[target])?;
+    let query = exec.to_device(&[target]);
     let lower = exec.full(1, 0_u32)?;
     lower_bound(
-        exec,
-        Zip1(score.slice(..)),
-        Zip1(query.slice(..)),
+        &exec,
+        score.slice(..),
+        query.slice(..),
         common::LessU32,
         lower.slice_mut(..),
     )?;
     let upper = exec.full(1, 0_u32)?;
     upper_bound(
-        exec,
-        Zip1(score.slice(..)),
-        Zip1(query.slice(..)),
+        &exec,
+        score.slice(..),
+        query.slice(..),
         common::LessU32,
         upper.slice_mut(..),
     )?;
@@ -47,7 +47,7 @@ where
 
 fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
-    let range = solve(&exec, exec.to_device(&[10, 20, 20, 20, 30])?, 20)?;
+    let range = solve(&exec, exec.to_device(&[10, 20, 20, 20, 30]), 20)?;
     assert_eq!(range, (1, 4));
     Ok(())
 }

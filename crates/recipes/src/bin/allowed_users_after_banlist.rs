@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, Zip1, set_difference};
+use massively::{DeviceVec, Executor, set_difference};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,21 +25,21 @@ where
 {
     let out = exec.full(allowlist.len(), 0_u32)?;
     let len = set_difference(
-        exec,
-        Zip1(allowlist.slice(..)),
-        Zip1(banlist.slice(..)),
+        &exec,
+        allowlist.slice(..),
+        banlist.slice(..),
         common::LessU32,
-        Zip1(out.slice_mut(..)),
+        out.slice_mut(..),
     )?;
-    Ok(exec.to_device(&exec.to_host(&out.slice(..len))?)?)
+    Ok(exec.to_device(&exec.to_host(&out.slice(..len as usize))?))
 }
 
 fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let out = solve(
         &exec,
-        exec.to_device(&[1, 2, 4, 8])?,
-        exec.to_device(&[2, 7])?,
+        exec.to_device(&[1, 2, 4, 8]),
+        exec.to_device(&[2, 7]),
     )?;
     assert_eq!(exec.to_host(&out)?, vec![1, 4, 8]);
     Ok(())

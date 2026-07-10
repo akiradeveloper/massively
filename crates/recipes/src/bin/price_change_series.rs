@@ -14,17 +14,14 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::ReductionOp;
-use massively::{DeviceVec, Executor, Zip1, adjacent_difference};
+use massively::{DeviceVec, Executor, adjacent_difference};
 
 struct PriceDelta;
 
 #[cubecl::cube]
-impl<B> ReductionOp<B, (f32,)> for PriceDelta
-where
-    B: cubecl::prelude::Runtime,
-{
-    fn apply(lhs: (f32,), rhs: (f32,)) -> (f32,) {
-        (lhs.0 - rhs.0,)
+impl ReductionOp<f32> for PriceDelta {
+    fn apply(lhs: f32, rhs: f32) -> f32 {
+        lhs - rhs
     }
 }
 
@@ -33,18 +30,13 @@ where
     B: cubecl::prelude::Runtime,
 {
     let delta = exec.full(price.len(), 0.0_f32)?;
-    adjacent_difference(
-        exec,
-        Zip1(price.slice(..)),
-        PriceDelta,
-        Zip1(delta.slice_mut(..)),
-    )?;
+    adjacent_difference(&exec, price.slice(..), PriceDelta, delta.slice_mut(..))?;
     Ok(delta)
 }
 
 fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
-    let delta = solve(&exec, exec.to_device(&[10.0, 13.0, 12.0, 18.0])?)?;
+    let delta = solve(&exec, exec.to_device(&[10.0, 13.0, 12.0, 18.0]))?;
     assert_eq!(exec.to_host(&delta)?, vec![10.0, 3.0, -1.0, 6.0]);
     Ok(())
 }

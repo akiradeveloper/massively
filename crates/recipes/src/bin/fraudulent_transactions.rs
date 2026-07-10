@@ -17,31 +17,29 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::{PredicateOp, UnaryOp};
-use massively::{DeviceVec, Executor, Zip3, copy_where, partition};
+use massively::{DeviceVec, Executor, copy_where, lazy, partition, zip3};
 
 struct SuspiciousTransaction;
 
 #[cubecl::cube]
-impl<B> UnaryOp<B, (u32, f32, u32)> for SuspiciousTransaction
-where
-    B: cubecl::prelude::Runtime,
-{
-    type Output = bool;
+impl UnaryOp<((u32, f32), u32)> for SuspiciousTransaction {
+    type Output = u32;
 
-    fn apply(input: (u32, f32, u32)) -> bool {
-        input.1 >= 100.0 || input.2 >= 80_u32
+    fn apply(input: ((u32, f32), u32)) -> u32 {
+        if input.0.1 >= 100.0 || input.1 >= 80_u32 {
+            1u32
+        } else {
+            0u32
+        }
     }
 }
 
 struct HighRiskTransaction;
 
 #[cubecl::cube]
-impl<B> PredicateOp<B, (u32, f32, u32)> for HighRiskTransaction
-where
-    B: cubecl::prelude::Runtime,
-{
-    fn apply(input: (u32, f32, u32)) -> bool {
-        input.1 >= 200.0 || input.2 >= 90_u32
+impl PredicateOp<((u32, f32), u32)> for HighRiskTransaction {
+    fn apply(input: ((u32, f32), u32)) -> bool {
+        input.0.1 >= 200.0 || input.1 >= 90_u32
     }
 }
 
@@ -69,30 +67,30 @@ where
     let suspicious_amount = exec.full(amount.len(), 0.0_f32)?;
     let suspicious_risk_score = exec.full(risk_score.len(), 0_u32)?;
     let suspicious_len = copy_where(
-        exec,
-        Zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
-        massively::lazy::transform(
-            Zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
+        &exec,
+        zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
+        lazy::transform(
+            zip3(account_id.slice(..), amount.slice(..), risk_score.slice(..)),
             SuspiciousTransaction,
         ),
-        Zip3(
+        zip3(
             suspicious_account_id.slice_mut(..),
             suspicious_amount.slice_mut(..),
             suspicious_risk_score.slice_mut(..),
         ),
     )?;
-    let account_id = exec.full(suspicious_len, 0_u32)?;
-    let amount = exec.full(suspicious_len, 0.0_f32)?;
-    let risk_score = exec.full(suspicious_len, 0_u32)?;
+    let account_id = exec.full(suspicious_len as usize, 0_u32)?;
+    let amount = exec.full(suspicious_len as usize, 0.0_f32)?;
+    let risk_score = exec.full(suspicious_len as usize, 0_u32)?;
     let split = partition(
-        exec,
-        Zip3(
-            suspicious_account_id.slice(..suspicious_len),
-            suspicious_amount.slice(..suspicious_len),
-            suspicious_risk_score.slice(..suspicious_len),
+        &exec,
+        zip3(
+            suspicious_account_id.slice(..suspicious_len as usize),
+            suspicious_amount.slice(..suspicious_len as usize),
+            suspicious_risk_score.slice(..suspicious_len as usize),
         ),
         HighRiskTransaction,
-        Zip3(
+        zip3(
             account_id.slice_mut(..),
             amount.slice_mut(..),
             risk_score.slice_mut(..),
@@ -100,14 +98,19 @@ where
     )?;
     Ok(Output {
         high_risk: Group {
-            account_id: exec.to_device(&exec.to_host(&account_id.slice(..split))?)?,
-            amount: exec.to_device(&exec.to_host(&amount.slice(..split))?)?,
-            risk_score: exec.to_device(&exec.to_host(&risk_score.slice(..split))?)?,
+            account_id: exec.to_device(&exec.to_host(&account_id.slice(..split as usize))?),
+            amount: exec.to_device(&exec.to_host(&amount.slice(..split as usize))?),
+            risk_score: exec.to_device(&exec.to_host(&risk_score.slice(..split as usize))?),
         },
         review_needed: Group {
-            account_id: exec.to_device(&exec.to_host(&account_id.slice(split..suspicious_len))?)?,
-            amount: exec.to_device(&exec.to_host(&amount.slice(split..suspicious_len))?)?,
-            risk_score: exec.to_device(&exec.to_host(&risk_score.slice(split..suspicious_len))?)?,
+            account_id: exec.to_device(
+                &exec.to_host(&account_id.slice(split as usize..suspicious_len as usize))?,
+            ),
+            amount: exec
+                .to_device(&exec.to_host(&amount.slice(split as usize..suspicious_len as usize))?),
+            risk_score: exec.to_device(
+                &exec.to_host(&risk_score.slice(split as usize..suspicious_len as usize))?,
+            ),
         },
     })
 }
@@ -116,9 +119,9 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let output = solve(
         &exec,
-        exec.to_device(&[1, 2, 3, 4])?,
-        exec.to_device(&[50.0, 150.0, 250.0, 40.0])?,
-        exec.to_device(&[20, 85, 70, 95])?,
+        exec.to_device(&[1, 2, 3, 4]),
+        exec.to_device(&[50.0, 150.0, 250.0, 40.0]),
+        exec.to_device(&[20, 85, 70, 95]),
     )?;
     assert_eq!(exec.to_host(&output.high_risk.account_id)?, vec![3, 4]);
     assert_eq!(exec.to_host(&output.high_risk.amount)?, vec![250.0, 40.0]);

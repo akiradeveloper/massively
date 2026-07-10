@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, Zip1, inclusive_scan_by_key};
+use massively::{DeviceVec, Executor, inclusive_scan_by_key};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,12 +25,12 @@ where
 {
     let balance = exec.full(amount_delta.len(), 0.0_f32)?;
     inclusive_scan_by_key(
-        exec,
-        Zip1(account_id.slice(..)),
-        Zip1(amount_delta.slice(..)),
+        &exec,
+        account_id.slice(..),
+        amount_delta.slice(..),
         common::EqualU32,
         common::SumF32,
-        Zip1(balance.slice_mut(..)),
+        balance.slice_mut(..),
     )?;
     Ok(balance)
 }
@@ -39,8 +39,8 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let balance = solve(
         &exec,
-        exec.to_device(&[1, 1, 2, 2, 2])?,
-        exec.to_device(&[10.0, -3.0, 5.0, 7.0, -2.0])?,
+        exec.to_device(&[1, 1, 2, 2, 2]),
+        exec.to_device(&[10.0, -3.0, 5.0, 7.0, -2.0]),
     )?;
     assert_eq!(exec.to_host(&balance)?, vec![10.0, 7.0, 5.0, 12.0, 10.0]);
     Ok(())

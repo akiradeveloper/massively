@@ -18,40 +18,19 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::op::UnaryOp;
-use massively::{Executor, MIndex, Zip1, Zip2, reduce, transform, util::random};
+use massively::{Executor, MIndex, reduce, transform, zip2};
 
 const SCALE: u32 = 1_000_000;
 
 struct InsideQuarterCircle;
-struct MaterializeU32;
-
 #[cubecl::cube]
-impl<B> UnaryOp<B, u32> for MaterializeU32
-where
-    B: cubecl::prelude::Runtime,
-{
-    type Output = (u32,);
+impl UnaryOp<(u32, u32)> for InsideQuarterCircle {
+    type Output = u32;
 
-    fn apply(input: u32) -> (u32,) {
-        (input,)
-    }
-}
-
-#[cubecl::cube]
-impl<B> UnaryOp<B, (u32, u32)> for InsideQuarterCircle
-where
-    B: cubecl::prelude::Runtime,
-{
-    type Output = (u32,);
-
-    fn apply(input: (u32, u32)) -> (u32,) {
+    fn apply(input: (u32, u32)) -> u32 {
         let x = (input.0 as f32) / SCALE as f32;
         let y = (input.1 as f32) / SCALE as f32;
-        if x * x + y * y <= 1.0 {
-            (1_u32,)
-        } else {
-            (0_u32,)
-        }
+        if x * x + y * y <= 1.0 { 1_u32 } else { 0_u32 }
     }
 }
 
@@ -59,29 +38,28 @@ fn solve<B>(exec: &Executor<B>, samples: MIndex) -> common::Result<f32>
 where
     B: cubecl::prelude::Runtime,
 {
-    let x = exec.full(samples, 0_u32)?;
-    let y = exec.full(samples, 0_u32)?;
-    transform(
-        exec,
-        random::uniform_u32(0, SCALE, 0x1234_5678)?.take(samples),
-        MaterializeU32,
-        Zip1(x.slice_mut(..)),
-    )?;
-    transform(
-        exec,
-        random::uniform_u32(0, SCALE, 0x8765_4321)?.take(samples),
-        MaterializeU32,
-        Zip1(y.slice_mut(..)),
-    )?;
+    let pseudo_random = |seed: u32| {
+        (0..samples)
+            .map(|index| {
+                index
+                    .wrapping_mul(1_664_525)
+                    .wrapping_add(seed)
+                    .wrapping_add(1_013_904_223)
+                    % SCALE
+            })
+            .collect::<Vec<_>>()
+    };
+    let x = exec.to_device(&pseudo_random(0x1234_5678));
+    let y = exec.to_device(&pseudo_random(0x8765_4321));
 
-    let inside = exec.full(samples, 0_u32)?;
+    let inside = exec.full(samples as usize, 0_u32)?;
     transform(
-        exec,
-        Zip2(x.slice(..), y.slice(..)),
+        &exec,
+        zip2(x.slice(..), y.slice(..)),
         InsideQuarterCircle,
-        Zip1(inside.slice_mut(..)),
+        inside.slice_mut(..),
     )?;
-    let (hits,) = reduce(exec, Zip1(inside.slice(..)), (0_u32,), common::SumU32)?;
+    let hits = reduce(&exec, inside.slice(..), 0_u32, common::SumU32)?;
     Ok(4.0 * hits as f32 / samples as f32)
 }
 

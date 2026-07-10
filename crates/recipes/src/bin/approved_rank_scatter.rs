@@ -13,7 +13,7 @@
 
 mod common;
 
-use massively::{DeviceVec, Executor, MIndex, Zip1, scatter_where};
+use massively::{DeviceVec, Executor, MIndex, scatter_where};
 
 fn solve<B>(
     exec: &Executor<B>,
@@ -25,13 +25,13 @@ fn solve<B>(
 where
     B: cubecl::prelude::Runtime,
 {
-    let out = exec.full(len, 0_u32)?;
+    let out = exec.full(len as usize, 0_u32)?;
     scatter_where(
-        exec,
-        Zip1(item_id.slice(..)),
+        &exec,
+        item_id.slice(..),
         slot.slice(..),
-        massively::lazy::transform(approved.slice(..), common::U32Flag),
-        Zip1(out.slice_mut(..)),
+        approved.slice(..),
+        out.slice_mut(..),
     )?;
     Ok(out)
 }
@@ -40,9 +40,9 @@ fn main() -> common::Result {
     let exec = Executor::<cubecl::wgpu::WgpuRuntime>::new(cubecl::wgpu::WgpuDevice::Cpu);
     let out = solve(
         &exec,
-        exec.to_device(&[10, 20, 30])?,
-        exec.to_device(&[2, 0, 1])?,
-        exec.to_device(&[1, 0, 1])?,
+        exec.to_device(&[10, 20, 30]),
+        exec.to_device(&[2, 0, 1]),
+        exec.to_device(&[1, 0, 1]),
         4,
     )?;
     assert_eq!(exec.to_host(&out)?, vec![0, 30, 10, 0]);
