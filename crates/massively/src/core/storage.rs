@@ -293,6 +293,29 @@ pub trait SelectLeaves: CubeType + Sized {
     fn select(condition: bool, if_true: Self, if_false: Self) -> Self;
 }
 
+/// Mutable register cells for an ordered physical leaf list.
+#[doc(hidden)]
+#[cubecl::cube]
+pub trait MutableLeaves: CubeType + Sized {
+    type Cells: CubeType;
+
+    fn into_cells(self) -> Self::Cells;
+    fn read(cells: &Self::Cells) -> Self;
+    fn store(cells: &Self::Cells, value: Self);
+}
+
+/// Applies one plane shuffle to every physical leaf.
+#[doc(hidden)]
+#[cubecl::cube]
+pub trait PlaneShuffleLeaves: CubeType + Sized {
+    fn shuffle_leaves_down(value: Self, offset: u32) -> Self;
+}
+
+#[cubecl::cube]
+fn shuffle_primitive<T: CubePrimitive>(value: T, offset: u32) -> T {
+    plane_shuffle_down(value, offset)
+}
+
 #[cubecl::cube]
 impl<T: CubePrimitive> SelectLeaves for Last<T> {
     fn select(condition: bool, if_true: Self, if_false: Self) -> Self {
@@ -302,6 +325,34 @@ impl<T: CubePrimitive> SelectLeaves for Last<T> {
             } else {
                 if_false.value
             },
+        }
+    }
+}
+
+#[cubecl::cube]
+impl<T: CubePrimitive> MutableLeaves for Last<T> {
+    type Cells = Last<RuntimeCell<T>>;
+
+    fn into_cells(self) -> Self::Cells {
+        Last::new(RuntimeCell::<T>::new(self.value))
+    }
+
+    fn read(cells: &Self::Cells) -> Self {
+        Last::<T> {
+            value: cells.value.read(),
+        }
+    }
+
+    fn store(cells: &Self::Cells, value: Self) {
+        cells.value.store(value.value);
+    }
+}
+
+#[cubecl::cube]
+impl<T: CubePrimitive> PlaneShuffleLeaves for Last<T> {
+    fn shuffle_leaves_down(value: Self, offset: u32) -> Self {
+        Last::<T> {
+            value: shuffle_primitive::<T>(value.value, offset),
         }
     }
 }
@@ -320,6 +371,45 @@ where
                 if_false.head
             },
             tail: Tail::select(condition, if_true.tail, if_false.tail),
+        }
+    }
+}
+
+#[cubecl::cube]
+impl<Head, Tail> MutableLeaves for More<Head, Tail>
+where
+    Head: CubePrimitive,
+    Tail: MutableLeaves,
+{
+    type Cells = More<RuntimeCell<Head>, Tail::Cells>;
+
+    fn into_cells(self) -> Self::Cells {
+        More::new(RuntimeCell::<Head>::new(self.head), self.tail.into_cells())
+    }
+
+    fn read(cells: &Self::Cells) -> Self {
+        More::<Head, Tail> {
+            head: cells.head.read(),
+            tail: Tail::read(&cells.tail),
+        }
+    }
+
+    fn store(cells: &Self::Cells, value: Self) {
+        cells.head.store(value.head);
+        Tail::store(&cells.tail, value.tail);
+    }
+}
+
+#[cubecl::cube]
+impl<Head, Tail> PlaneShuffleLeaves for More<Head, Tail>
+where
+    Head: CubePrimitive,
+    Tail: PlaneShuffleLeaves,
+{
+    fn shuffle_leaves_down(value: Self, offset: u32) -> Self {
+        More::<Head, Tail> {
+            head: shuffle_primitive::<Head>(value.head, offset),
+            tail: Tail::shuffle_leaves_down(value.tail, offset),
         }
     }
 }

@@ -6,8 +6,20 @@ use crate::{Error, MIndex, Zip, lazy};
 
 type RandomInput<T> = Zip<
     Zip<Zip<crate::read::Counting, crate::read::Constant<T>>, crate::read::Constant<T>>,
-    crate::read::Constant<u64>,
+    crate::read::Constant<u32>,
 >;
+
+fn pcg_hash32_host(input: u32) -> u32 {
+    let state = input.wrapping_mul(747_796_405).wrapping_add(2_891_336_453);
+    let word = ((state >> ((state >> 28) + 4)) ^ state).wrapping_mul(277_803_737);
+    (word >> 22) ^ word
+}
+
+fn seed_key(seed: u64) -> u32 {
+    let low = seed as u32;
+    let high = (seed >> 32) as u32;
+    pcg_hash32_host(low ^ pcg_hash32_host(high))
+}
 
 fn validate_inclusive_range<T: PartialOrd>(min: T, max: T) -> Result<(), Error> {
     if min <= max {
@@ -26,7 +38,7 @@ macro_rules! uniform_stream {
         pub struct $stream {
             min: $item,
             max: $item,
-            seed: u64,
+            key: u32,
         }
 
         #[doc = $doc]
@@ -38,7 +50,11 @@ macro_rules! uniform_stream {
         #[doc = $example]
         pub fn $constructor(min: $item, max: $item, seed: u64) -> Result<$stream, Error> {
             validate_inclusive_range(min, max)?;
-            Ok($stream { min, max, seed })
+            Ok($stream {
+                min,
+                max,
+                key: seed_key(seed),
+            })
         }
 
         impl $stream {
@@ -57,7 +73,7 @@ macro_rules! uniform_stream {
                         crate::read::Counting::new(offset, len as usize),
                         crate::read::Constant::new(self.min, len as usize),
                         crate::read::Constant::new(self.max, len as usize),
-                        crate::read::Constant::new(self.seed, len as usize),
+                        crate::read::Constant::new(self.key, len as usize),
                     ),
                     $op,
                 )
@@ -154,7 +170,7 @@ macro_rules! normal_stream {
         pub struct $stream {
             mean: $item,
             stddev: $item,
-            seed: u64,
+            key: u32,
         }
 
         #[doc = $doc]
@@ -165,7 +181,11 @@ macro_rules! normal_stream {
         #[doc = ""]
         #[doc = $example]
         pub fn $constructor(mean: $item, stddev: $item, seed: u64) -> $stream {
-            $stream { mean, stddev, seed }
+            $stream {
+                mean,
+                stddev,
+                key: seed_key(seed),
+            }
         }
 
         impl $stream {
@@ -184,7 +204,7 @@ macro_rules! normal_stream {
                         crate::read::Counting::new(offset, len as usize),
                         crate::read::Constant::new(self.mean, len as usize),
                         crate::read::Constant::new(self.stddev, len as usize),
-                        crate::read::Constant::new(self.seed, len as usize),
+                        crate::read::Constant::new(self.key, len as usize),
                     ),
                     $op,
                 )
@@ -245,10 +265,10 @@ pub struct NormalF32Op;
 #[doc(hidden)]
 pub struct NormalF64Op;
 
-type RandomU32Args = (((MIndex, u32), u32), u64);
-type RandomU64Args = (((MIndex, u64), u64), u64);
-type RandomF32Args = (((MIndex, f32), f32), u64);
-type RandomF64Args = (((MIndex, f64), f64), u64);
+type RandomU32Args = (((MIndex, u32), u32), u32);
+type RandomU64Args = (((MIndex, u64), u64), u32);
+type RandomF32Args = (((MIndex, f32), f32), u32);
+type RandomF64Args = (((MIndex, f64), f64), u32);
 
 #[cubecl::cube]
 impl crate::UnaryOp<RandomU32Args> for UniformU32Op {
@@ -305,54 +325,54 @@ impl crate::UnaryOp<RandomF64Args> for NormalF64Op {
 }
 
 #[cubecl::cube]
-fn splitmix64(mut state: u64) -> u64 {
-    state += 0x9e37_79b9_7f4a_7c15u64;
-    let z = RuntimeCell::<u64>::new(state);
-    z.store((z.read() ^ (z.read() >> 30u64)) * 0xbf58_476d_1ce4_e5b9u64);
-    z.store((z.read() ^ (z.read() >> 27u64)) * 0x94d0_49bb_1331_11ebu64);
-    z.read() ^ (z.read() >> 31u64)
+fn pcg_hash32(input: u32) -> u32 {
+    let state = input * 747_796_405u32 + 2_891_336_453u32;
+    let word = ((state >> ((state >> 28u32) + 4u32)) ^ state) * 277_803_737u32;
+    (word >> 22u32) ^ word
 }
 
 #[cubecl::cube]
-fn random_u32_at(seed: u64, index: MIndex, stream: u64) -> u32 {
-    splitmix64(seed + (index as u64) * 0x9e37_79b9_7f4a_7c15u64 + stream) as u32
+fn random_u32_at(key: u32, index: MIndex, stream: u32) -> u32 {
+    pcg_hash32(index ^ key ^ stream)
 }
 
 #[cubecl::cube]
-fn random_u64_at(seed: u64, index: MIndex, stream: u64) -> u64 {
-    splitmix64(seed + (index as u64) * 0x9e37_79b9_7f4a_7c15u64 + stream)
+fn random_u64_at(key: u32, index: MIndex, stream: u32) -> u64 {
+    let low = random_u32_at(key, index, stream);
+    let high = random_u32_at(key, index, stream ^ 0x9e37_79b9u32);
+    (low as u64) | ((high as u64) << 32u64)
 }
 
 #[cubecl::cube]
-fn unit_f32(seed: u64, index: MIndex, stream: u64) -> f32 {
-    ((random_u32_at(seed, index, stream) >> 8u32) as f32) * 0.00000005960464832810486063f32
+fn unit_f32(key: u32, index: MIndex, stream: u32) -> f32 {
+    ((random_u32_at(key, index, stream) >> 8u32) as f32) * 0.00000005960464832810486063f32
 }
 
 #[cubecl::cube]
-fn unit_f64(seed: u64, index: MIndex, stream: u64) -> f64 {
-    ((random_u64_at(seed, index, stream) >> 11u64) as f64) * 0.00000000000000011102230246251567f64
+fn unit_f64(key: u32, index: MIndex, stream: u32) -> f64 {
+    ((random_u64_at(key, index, stream) >> 11u64) as f64) * 0.00000000000000011102230246251567f64
 }
 
 #[cubecl::cube]
-fn open_unit_f32(seed: u64, index: MIndex, stream: u64) -> f32 {
-    (((random_u32_at(seed, index, stream) >> 8u32) as f32) + 0.5f32)
+fn open_unit_f32(key: u32, index: MIndex, stream: u32) -> f32 {
+    (((random_u32_at(key, index, stream) >> 8u32) as f32) + 0.5f32)
         * 0.00000005960464832810486063f32
 }
 
 #[cubecl::cube]
-fn uniform_f32_value(min: f32, max: f32, seed: u64, index: MIndex) -> f32 {
-    min + unit_f32(seed, index, 0u64) * (max - min)
+fn uniform_f32_value(min: f32, max: f32, key: u32, index: MIndex) -> f32 {
+    min + unit_f32(key, index, 0u32) * (max - min)
 }
 
 #[cubecl::cube]
-fn uniform_f64_value(min: f64, max: f64, seed: u64, index: MIndex) -> f64 {
-    min + unit_f64(seed, index, 0u64) * (max - min)
+fn uniform_f64_value(min: f64, max: f64, key: u32, index: MIndex) -> f64 {
+    min + unit_f64(key, index, 0u32) * (max - min)
 }
 
 #[cubecl::cube]
-fn uniform_u32_value(min: u32, max: u32, seed: u64, index: MIndex) -> u32 {
+fn uniform_u32_value(min: u32, max: u32, key: u32, index: MIndex) -> u32 {
     let span = max - min;
-    let value = random_u32_at(seed, index, 0u64);
+    let value = random_u32_at(key, index, 0u32);
     if span == 0xffff_ffffu32 {
         value
     } else {
@@ -361,9 +381,9 @@ fn uniform_u32_value(min: u32, max: u32, seed: u64, index: MIndex) -> u32 {
 }
 
 #[cubecl::cube]
-fn uniform_u64_value(min: u64, max: u64, seed: u64, index: MIndex) -> u64 {
+fn uniform_u64_value(min: u64, max: u64, key: u32, index: MIndex) -> u64 {
     let span = max - min;
-    let value = random_u64_at(seed, index, 0u64);
+    let value = random_u64_at(key, index, 0u32);
     if span == 0xffff_ffff_ffff_ffffu64 {
         value
     } else {
@@ -372,18 +392,18 @@ fn uniform_u64_value(min: u64, max: u64, seed: u64, index: MIndex) -> u64 {
 }
 
 #[cubecl::cube]
-fn normal_f32_value(mean: f32, stddev: f32, seed: u64, index: MIndex) -> f32 {
-    let u1 = open_unit_f32(seed, index, 0u64);
-    let u2 = open_unit_f32(seed, index, 1u64);
+fn normal_f32_value(mean: f32, stddev: f32, key: u32, index: MIndex) -> f32 {
+    let u1 = open_unit_f32(key, index, 0u32);
+    let u2 = open_unit_f32(key, index, 0x9e37_79b9u32);
     let radius = (-2.0f32 * u1.ln()).sqrt();
     let angle = 6.28318530717958647692f32 * u2;
     mean + stddev * radius * angle.cos()
 }
 
 #[cubecl::cube]
-fn normal_f64_value(mean: f64, stddev: f64, seed: u64, index: MIndex) -> f64 {
-    let u1 = open_unit_f32(seed, index, 0u64);
-    let u2 = open_unit_f32(seed, index, 1u64);
+fn normal_f64_value(mean: f64, stddev: f64, key: u32, index: MIndex) -> f64 {
+    let u1 = open_unit_f32(key, index, 0u32);
+    let u2 = open_unit_f32(key, index, 0x9e37_79b9u32);
     let radius = (-2.0f32 * u1.ln()).sqrt();
     let angle = 6.28318530717958647692f32 * u2;
     mean + stddev * ((radius * angle.cos()) as f64)

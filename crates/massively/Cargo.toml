@@ -6,7 +6,7 @@ license.workspace = true
 name = "massively"
 readme = "../../README.md"
 repository.workspace = true
-version = "0.65.0"
+version = "0.66.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -36,6 +36,10 @@ harness = false
 
 [[bench]]
 name = "reduce"
+harness = false
+
+[[bench]]
+name = "reduce_4g"
 harness = false
 
 [[bench]]

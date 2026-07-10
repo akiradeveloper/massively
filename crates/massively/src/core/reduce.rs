@@ -15,15 +15,20 @@ use crate::{
     },
     storage::{
         Decompose, Last, LoadLeaves2, LoadLeaves3, LoadLeaves4, LoadLeaves5, LoadLeaves6,
-        LoadLeaves7, More, Recompose, StoreLeaves2, StoreLeaves2Expand, StoreLeaves3,
-        StoreLeaves3Expand, StoreLeaves4, StoreLeaves4Expand, StoreLeaves5, StoreLeaves5Expand,
-        StoreLeaves6, StoreLeaves6Expand, StoreLeaves7, StoreLeaves7Expand,
+        LoadLeaves7, More, MutableLeaves, MutableLeavesExpand, PlaneShuffleLeaves, Recompose,
+        ScalarLayout, StoreLeaves2, StoreLeaves2Expand, StoreLeaves3, StoreLeaves3Expand,
+        StoreLeaves4, StoreLeaves4Expand, StoreLeaves5, StoreLeaves5Expand, StoreLeaves6,
+        StoreLeaves6Expand, StoreLeaves7, StoreLeaves7Expand,
     },
 };
 
 const BLOCK_SIZE: u32 = 256;
+const ITEMS_PER_UNIT: usize = 256;
+const TILE_SIZE: usize = BLOCK_SIZE as usize * ITEMS_PER_UNIT;
 
-/// Associative binary operation used by reduction.
+/// Associative and commutative binary operation used by reduction.
+///
+/// The implementation may regroup and reorder operands across GPU units.
 ///
 /// # Examples
 ///
@@ -66,6 +71,113 @@ impl<T> ReduceStorage1 for T where
 /// Dispatch key combining read arity and reduction storage arity.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Dispatch<Read, Storage>(PhantomData<fn() -> (Read, Storage)>);
+
+#[cubecl::cube]
+fn accumulate_register<Item, Leaves, Layout, Op>(cells: &Leaves::Cells, value: Item)
+where
+    Item: CubeType,
+    Leaves: MutableLeaves,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+{
+    let accumulated = Op::apply(Layout::recompose(Leaves::read(cells)), value);
+    Leaves::store(cells, Layout::decompose(accumulated));
+}
+
+#[cubecl::cube]
+fn reduce_plane_full<Item, Leaves, Layout, Op>(value: Item) -> Leaves
+where
+    Item: CubeType,
+    Leaves: MutableLeaves + PlaneShuffleLeaves,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+{
+    let cells = Layout::decompose(value).into_cells();
+    let offset = RuntimeCell::<u32>::new(PLANE_DIM / 2u32);
+    while offset.read() > 0u32 {
+        let right = Leaves::shuffle_leaves_down(Leaves::read(&cells), offset.read());
+        if UNIT_POS_PLANE < offset.read() {
+            let combined = Op::apply(
+                Layout::recompose(Leaves::read(&cells)),
+                Layout::recompose(right),
+            );
+            Leaves::store(&cells, Layout::decompose(combined));
+        }
+        offset.store(offset.read() / 2u32);
+    }
+    Leaves::read(&cells)
+}
+
+#[cubecl::cube]
+fn reduce_plane_valid<Item, Leaves, Layout, Op>(value: Item, valid: u32) -> (Leaves, u32)
+where
+    Item: CubeType,
+    Leaves: MutableLeaves + PlaneShuffleLeaves,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+{
+    let cells = Layout::decompose(value).into_cells();
+    let cell_valid = RuntimeCell::<u32>::new(valid);
+    let offset = RuntimeCell::<u32>::new(PLANE_DIM / 2u32);
+    while offset.read() > 0u32 {
+        let right = Leaves::shuffle_leaves_down(Leaves::read(&cells), offset.read());
+        let right_cells = right.into_cells();
+        let right_valid = plane_shuffle_down(cell_valid.read(), offset.read());
+        if UNIT_POS_PLANE < offset.read() && right_valid != 0u32 {
+            if cell_valid.read() != 0u32 {
+                let combined = Op::apply(
+                    Layout::recompose(Leaves::read(&cells)),
+                    Layout::recompose(Leaves::read(&right_cells)),
+                );
+                Leaves::store(&cells, Layout::decompose(combined));
+            } else {
+                Leaves::store(&cells, Leaves::read(&right_cells));
+                cell_valid.store(1u32);
+            }
+        }
+        offset.store(offset.read() / 2u32);
+    }
+    (Leaves::read(&cells), cell_valid.read())
+}
+
+#[cubecl::cube]
+fn finish_storage1_workgroup<Item, Op>(
+    value: Item,
+    valid: u32,
+    plane_values: &mut Shared<[Item]>,
+    plane_valid: &mut Shared<[u32]>,
+    partials: &mut [Item],
+) where
+    Item: CubePrimitive,
+    Op: ReductionOp<Item>,
+{
+    if UNIT_POS_PLANE == 0u32 {
+        plane_values[PLANE_POS as usize] = value;
+        plane_valid[PLANE_POS as usize] = valid;
+    }
+    sync_cube();
+
+    if PLANE_POS == 0u32 {
+        let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+        let source = if UNIT_POS_PLANE < plane_count {
+            UNIT_POS_PLANE as usize
+        } else {
+            0usize
+        };
+        let source_valid = if UNIT_POS_PLANE < plane_count {
+            plane_valid[source]
+        } else {
+            0u32
+        };
+        let result = reduce_plane_valid::<Item, Last<Item>, ScalarLayout<Item>, Op>(
+            plane_values[source],
+            source_valid,
+        );
+        if UNIT_POS_PLANE == 0u32 && result.1 != 0u32 {
+            partials[CUBE_POS as usize] = result.0.value;
+        }
+    }
+}
 
 #[doc(hidden)]
 pub struct StagedBindings {
@@ -375,21 +487,57 @@ macro_rules! define_reduce_eval_storage1_kernel {
             let unit = UNIT_POS as usize;
             let cube_dim = BLOCK_SIZE as usize;
             let logical_len = len[0] as usize;
-            let mut values = Shared::<[Item]>::new_slice(cube_dim);
-            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            let index = (CUBE_POS as usize) * cube_dim + unit;
-
-            if index < logical_len {
-                values[unit] = Expr::$method($( $slot, )+ offsets, index);
-                valid[unit] = 1;
+            let mut plane_values = Shared::<[Item]>::new_slice(cube_dim);
+            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+            let tile_start = (CUBE_POS as usize) * TILE_SIZE;
+            let first_index = tile_start + unit;
+            let safe_index = if first_index < logical_len {
+                first_index
             } else {
-                valid[unit] = 0;
-            }
-            sync_cube();
+                logical_len - 1usize
+            };
+            let accumulator = RuntimeCell::<Item>::new(
+                Expr::$method($( $slot, )+ offsets, safe_index),
+            );
 
-            reduce_shared::<Item, Op>(unit, cube_dim, &mut values, &mut valid);
-            if unit == 0 && valid[0] != 0 {
-                partials[CUBE_POS as usize] = values[0];
+            if tile_start + TILE_SIZE <= logical_len {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let value = Expr::$method(
+                        $( $slot, )+
+                        offsets,
+                        first_index + item * cube_dim,
+                    );
+                    accumulator.store(Op::apply(accumulator.read(), value));
+                }
+                let result = reduce_plane_full::<Item, Last<Item>, ScalarLayout<Item>, Op>(
+                    accumulator.read(),
+                );
+                finish_storage1_workgroup::<Item, Op>(
+                    result.value,
+                    1u32,
+                    &mut plane_values,
+                    &mut plane_valid,
+                    partials,
+                );
+            } else {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let index = first_index + item * cube_dim;
+                    if index < logical_len {
+                        let value = Expr::$method($( $slot, )+ offsets, index);
+                        accumulator.store(Op::apply(accumulator.read(), value));
+                    }
+                }
+                let result = reduce_plane_valid::<Item, Last<Item>, ScalarLayout<Item>, Op>(
+                    accumulator.read(),
+                    if first_index < logical_len { 1u32 } else { 0u32 },
+                );
+                finish_storage1_workgroup::<Item, Op>(
+                    result.0.value,
+                    result.1,
+                    &mut plane_values,
+                    &mut plane_valid,
+                    partials,
+                );
             }
         }
     };
@@ -486,7 +634,9 @@ macro_rules! define_multi_reduce_eval_kernel {
             $( $out_ty: CubePrimitive, )*
             Leaves: CubeType + Send + Sync + 'static
                 + $load_trait<$first_out, $( $out_ty ),*>
-                + $store_trait<$first_out, $( $out_ty ),*>,
+                + $store_trait<$first_out, $( $out_ty ),*>
+                + MutableLeaves
+                + PlaneShuffleLeaves,
             Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
             Expr: $eval<Item, $( $leaf ),+>,
             Op: ReductionOp<Item>,
@@ -503,52 +653,130 @@ macro_rules! define_multi_reduce_eval_kernel {
             let logical_len = len[0] as usize;
             let mut $first_shared = Shared::<[$first_out]>::new_slice(cube_dim);
             $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )*
-            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            let index = (CUBE_POS as usize) * cube_dim + unit;
-
-            if index < logical_len {
-                let value = Expr::$method($( $slot, )+ read_offsets, index);
-                Layout::decompose(value).store(
-                    &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                );
-                valid[unit] = 1u32;
+            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+            let tile_start = (CUBE_POS as usize) * TILE_SIZE;
+            let first_index = tile_start + unit;
+            let safe_index = if first_index < logical_len {
+                first_index
             } else {
-                valid[unit] = 0u32;
-            }
-            sync_cube();
+                logical_len - 1usize
+            };
+            let accumulator = Layout::decompose(
+                Expr::$method($( $slot, )+ read_offsets, safe_index),
+            ).into_cells();
 
-            let stride = RuntimeCell::<usize>::new(cube_dim / 2usize);
-            while stride.read() > 0usize {
-                let right = unit + stride.read();
-                if unit < stride.read() && valid[right] != 0u32 {
-                    if valid[unit] != 0u32 {
-                        let right_item = Layout::recompose(Leaves::load(
-                            &$first_shared, $( &$shared, )* zero_offsets, right,
-                        ));
-                        let left_item = Layout::recompose(Leaves::load(
-                            &$first_shared, $( &$shared, )* zero_offsets, unit,
-                        ));
-                        Layout::decompose(Op::apply(left_item, right_item)).store(
-                            &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                        );
-                    } else {
-                        let right_item = Layout::recompose(Leaves::load(
-                            &$first_shared, $( &$shared, )* zero_offsets, right,
-                        ));
-                        Layout::decompose(right_item).store(
-                            &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                        );
-                        valid[unit] = 1u32;
-                    }
+            if tile_start + TILE_SIZE <= logical_len {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let value = Expr::$method(
+                        $( $slot, )+
+                        read_offsets,
+                        first_index + item * cube_dim,
+                    );
+                    accumulate_register::<Item, Leaves, Layout, Op>(&accumulator, value);
+                }
+                let result = reduce_plane_full::<Item, Leaves, Layout, Op>(
+                    Layout::recompose(Leaves::read(&accumulator)),
+                );
+                if UNIT_POS_PLANE == 0u32 {
+                    result.store(
+                        &mut $first_shared,
+                        $( &mut $shared, )*
+                        zero_offsets,
+                        PLANE_POS as usize,
+                    );
+                    plane_valid[PLANE_POS as usize] = 1u32;
                 }
                 sync_cube();
-                stride.store(stride.read() / 2usize);
-            }
 
-            if unit == 0usize && valid[0] != 0u32 {
-                Leaves::load(&$first_shared, $( &$shared, )* zero_offsets, 0).store(
-                    $first_partial, $( $partial, )* zero_offsets, CUBE_POS as usize,
+                if PLANE_POS == 0u32 {
+                    let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                    let source = if UNIT_POS_PLANE < plane_count {
+                        UNIT_POS_PLANE as usize
+                    } else {
+                        0usize
+                    };
+                    let source_valid = if UNIT_POS_PLANE < plane_count {
+                        plane_valid[source]
+                    } else {
+                        0u32
+                    };
+                    let source_value = Layout::recompose(Leaves::load(
+                        &$first_shared,
+                        $( &$shared, )*
+                        zero_offsets,
+                        source,
+                    ));
+                    let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+                        source_value,
+                        source_valid,
+                    );
+                    if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
+                        block_result.0.store(
+                            $first_partial,
+                            $( $partial, )*
+                            zero_offsets,
+                            CUBE_POS as usize,
+                        );
+                    }
+                }
+            } else {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let index = first_index + item * cube_dim;
+                    if index < logical_len {
+                        let value = Expr::$method(
+                            $( $slot, )+
+                            read_offsets,
+                            index,
+                        );
+                        accumulate_register::<Item, Leaves, Layout, Op>(&accumulator, value);
+                    }
+                }
+                let result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+                    Layout::recompose(Leaves::read(&accumulator)),
+                    if first_index < logical_len { 1u32 } else { 0u32 },
                 );
+                if UNIT_POS_PLANE == 0u32 {
+                    result.0.store(
+                        &mut $first_shared,
+                        $( &mut $shared, )*
+                        zero_offsets,
+                        PLANE_POS as usize,
+                    );
+                    plane_valid[PLANE_POS as usize] = result.1;
+                }
+                sync_cube();
+
+                if PLANE_POS == 0u32 {
+                    let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                    let source = if UNIT_POS_PLANE < plane_count {
+                        UNIT_POS_PLANE as usize
+                    } else {
+                        0usize
+                    };
+                    let source_valid = if UNIT_POS_PLANE < plane_count {
+                        plane_valid[source]
+                    } else {
+                        0u32
+                    };
+                    let source_value = Layout::recompose(Leaves::load(
+                        &$first_shared,
+                        $( &$shared, )*
+                        zero_offsets,
+                        source,
+                    ));
+                    let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+                        source_value,
+                        source_valid,
+                    );
+                    if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
+                        block_result.0.store(
+                            $first_partial,
+                            $( $partial, )*
+                            zero_offsets,
+                            CUBE_POS as usize,
+                        );
+                    }
+                }
             }
         }
     };
@@ -583,7 +811,9 @@ macro_rules! define_storage_reduce_kernel {
             $( $out_ty: CubePrimitive, )*
             Leaves: CubeType + Send + Sync + 'static
                 + $load_trait<$first_out, $( $out_ty ),*>
-                + $store_trait<$first_out, $( $out_ty ),*>,
+                + $store_trait<$first_out, $( $out_ty ),*>
+                + MutableLeaves
+                + PlaneShuffleLeaves,
             Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
             Op: ReductionOp<Item>,
         >(
@@ -599,54 +829,135 @@ macro_rules! define_storage_reduce_kernel {
             let logical_len = len[0] as usize;
             let mut $first_shared = Shared::<[$first_out]>::new_slice(cube_dim);
             $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )*
-            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-            let index = (CUBE_POS as usize) * cube_dim + unit;
-
-            if index < logical_len {
-                let value = Layout::recompose(Leaves::load(
-                    $first_input, $( $input, )* zero_offsets, index,
-                ));
-                Layout::decompose(value).store(
-                    &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                );
-                valid[unit] = 1u32;
+            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+            let tile_start = (CUBE_POS as usize) * TILE_SIZE;
+            let first_index = tile_start + unit;
+            let safe_index = if first_index < logical_len {
+                first_index
             } else {
-                valid[unit] = 0u32;
-            }
-            sync_cube();
+                logical_len - 1usize
+            };
+            let accumulator = Leaves::load(
+                $first_input,
+                $( $input, )*
+                zero_offsets,
+                safe_index,
+            ).into_cells();
 
-            let stride = RuntimeCell::<usize>::new(cube_dim / 2usize);
-            while stride.read() > 0usize {
-                let right = unit + stride.read();
-                if unit < stride.read() && valid[right] != 0u32 {
-                    if valid[unit] != 0u32 {
-                        let right_item = Layout::recompose(Leaves::load(
-                            &$first_shared, $( &$shared, )* zero_offsets, right,
-                        ));
-                        let left_item = Layout::recompose(Leaves::load(
-                            &$first_shared, $( &$shared, )* zero_offsets, unit,
-                        ));
-                        Layout::decompose(Op::apply(left_item, right_item)).store(
-                            &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                        );
-                    } else {
-                        let right_item = Layout::recompose(Leaves::load(
-                            &$first_shared, $( &$shared, )* zero_offsets, right,
-                        ));
-                        Layout::decompose(right_item).store(
-                            &mut $first_shared, $( &mut $shared, )* zero_offsets, unit,
-                        );
-                        valid[unit] = 1u32;
-                    }
+            if tile_start + TILE_SIZE <= logical_len {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let value = Layout::recompose(Leaves::load(
+                        $first_input,
+                        $( $input, )*
+                        zero_offsets,
+                        first_index + item * cube_dim,
+                    ));
+                    accumulate_register::<Item, Leaves, Layout, Op>(&accumulator, value);
+                }
+                let result = reduce_plane_full::<Item, Leaves, Layout, Op>(
+                    Layout::recompose(Leaves::read(&accumulator)),
+                );
+                if UNIT_POS_PLANE == 0u32 {
+                    result.store(
+                        &mut $first_shared,
+                        $( &mut $shared, )*
+                        zero_offsets,
+                        PLANE_POS as usize,
+                    );
+                    plane_valid[PLANE_POS as usize] = 1u32;
                 }
                 sync_cube();
-                stride.store(stride.read() / 2usize);
-            }
 
-            if unit == 0usize && valid[0] != 0u32 {
-                Leaves::load(&$first_shared, $( &$shared, )* zero_offsets, 0).store(
-                    $first_partial, $( $partial, )* zero_offsets, CUBE_POS as usize,
+                if PLANE_POS == 0u32 {
+                    let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                    let source = if UNIT_POS_PLANE < plane_count {
+                        UNIT_POS_PLANE as usize
+                    } else {
+                        0usize
+                    };
+                    let source_valid = if UNIT_POS_PLANE < plane_count {
+                        plane_valid[source]
+                    } else {
+                        0u32
+                    };
+                    let source_value = Layout::recompose(Leaves::load(
+                        &$first_shared,
+                        $( &$shared, )*
+                        zero_offsets,
+                        source,
+                    ));
+                    let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+                        source_value,
+                        source_valid,
+                    );
+                    if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
+                        block_result.0.store(
+                            $first_partial,
+                            $( $partial, )*
+                            zero_offsets,
+                            CUBE_POS as usize,
+                        );
+                    }
+                }
+            } else {
+                for item in 1usize..ITEMS_PER_UNIT {
+                    let index = first_index + item * cube_dim;
+                    if index < logical_len {
+                        let value = Layout::recompose(Leaves::load(
+                            $first_input,
+                            $( $input, )*
+                            zero_offsets,
+                            index,
+                        ));
+                        accumulate_register::<Item, Leaves, Layout, Op>(&accumulator, value);
+                    }
+                }
+                let result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+                    Layout::recompose(Leaves::read(&accumulator)),
+                    if first_index < logical_len { 1u32 } else { 0u32 },
                 );
+                if UNIT_POS_PLANE == 0u32 {
+                    result.0.store(
+                        &mut $first_shared,
+                        $( &mut $shared, )*
+                        zero_offsets,
+                        PLANE_POS as usize,
+                    );
+                    plane_valid[PLANE_POS as usize] = result.1;
+                }
+                sync_cube();
+
+                if PLANE_POS == 0u32 {
+                    let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+                    let source = if UNIT_POS_PLANE < plane_count {
+                        UNIT_POS_PLANE as usize
+                    } else {
+                        0usize
+                    };
+                    let source_valid = if UNIT_POS_PLANE < plane_count {
+                        plane_valid[source]
+                    } else {
+                        0u32
+                    };
+                    let source_value = Layout::recompose(Leaves::load(
+                        &$first_shared,
+                        $( &$shared, )*
+                        zero_offsets,
+                        source,
+                    ));
+                    let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+                        source_value,
+                        source_valid,
+                    );
+                    if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
+                        block_result.0.store(
+                            $first_partial,
+                            $( $partial, )*
+                            zero_offsets,
+                            CUBE_POS as usize,
+                        );
+                    }
+                }
             }
         }
     };
@@ -698,28 +1009,6 @@ define_multi_reduce_finalize_kernel!(reduce_finalize_s5,LoadLeaves5,StoreLeaves5
 define_multi_reduce_finalize_kernel!(reduce_finalize_s6,LoadLeaves6,StoreLeaves6; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5]);
 define_multi_reduce_finalize_kernel!(reduce_finalize_s7,LoadLeaves7,StoreLeaves7; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6]);
 
-#[cubecl::cube]
-fn reduce_shared<Item: CubePrimitive, Op: ReductionOp<Item>>(
-    unit: usize,
-    cube_dim: usize,
-    values: &mut Shared<[Item]>,
-    valid: &mut Shared<[u32]>,
-) {
-    let stride = RuntimeCell::<usize>::new(cube_dim / 2);
-    while stride.read() > 0 {
-        if unit < stride.read() && valid[unit + stride.read()] != 0 {
-            if valid[unit] != 0 {
-                values[unit] = Op::apply(values[unit], values[unit + stride.read()]);
-            } else {
-                values[unit] = values[unit + stride.read()];
-                valid[unit] = 1;
-            }
-        }
-        sync_cube();
-        stride.store(stride.read() / 2);
-    }
-}
-
 #[cubecl::cube(launch_unchecked, explicit_define)]
 fn reduce_storage1_partials_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
     input: &[Item],
@@ -729,21 +1018,55 @@ fn reduce_storage1_partials_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
     let unit = UNIT_POS as usize;
     let cube_dim = BLOCK_SIZE as usize;
     let logical_len = len[0] as usize;
-    let mut values = Shared::<[Item]>::new_slice(cube_dim);
-    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-    let index = (CUBE_POS as usize) * cube_dim + unit;
-
-    if index < logical_len {
-        values[unit] = input[index];
-        valid[unit] = 1;
+    let mut plane_values = Shared::<[Item]>::new_slice(cube_dim);
+    let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+    let tile_start = (CUBE_POS as usize) * TILE_SIZE;
+    let first_index = tile_start + unit;
+    let safe_index = if first_index < logical_len {
+        first_index
     } else {
-        valid[unit] = 0;
-    }
-    sync_cube();
+        logical_len - 1usize
+    };
+    let accumulator = RuntimeCell::<Item>::new(input[safe_index]);
 
-    reduce_shared::<Item, Op>(unit, cube_dim, &mut values, &mut valid);
-    if unit == 0 && valid[0] != 0 {
-        partials[CUBE_POS as usize] = values[0];
+    if tile_start + TILE_SIZE <= logical_len {
+        for item in 1usize..ITEMS_PER_UNIT {
+            accumulator.store(Op::apply(
+                accumulator.read(),
+                input[first_index + item * cube_dim],
+            ));
+        }
+        let result =
+            reduce_plane_full::<Item, Last<Item>, ScalarLayout<Item>, Op>(accumulator.read());
+        finish_storage1_workgroup::<Item, Op>(
+            result.value,
+            1u32,
+            &mut plane_values,
+            &mut plane_valid,
+            partials,
+        );
+    } else {
+        for item in 1usize..ITEMS_PER_UNIT {
+            let index = first_index + item * cube_dim;
+            if index < logical_len {
+                accumulator.store(Op::apply(accumulator.read(), input[index]));
+            }
+        }
+        let result = reduce_plane_valid::<Item, Last<Item>, ScalarLayout<Item>, Op>(
+            accumulator.read(),
+            if first_index < logical_len {
+                1u32
+            } else {
+                0u32
+            },
+        );
+        finish_storage1_workgroup::<Item, Op>(
+            result.0.value,
+            result.1,
+            &mut plane_values,
+            &mut plane_valid,
+            partials,
+        );
     }
 }
 
@@ -759,7 +1082,7 @@ fn reduce_storage1_finalize_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
 }
 
 fn pass_block_count(len: usize) -> usize {
-    len.div_ceil(BLOCK_SIZE as usize).max(1)
+    len.div_ceil(TILE_SIZE).max(1)
 }
 
 fn checked_u32(len: usize) -> Result<u32, Error> {
@@ -1474,7 +1797,7 @@ mod tests {
     #[test]
     fn dispatch_a8_storage7_reduces_semantic_item_with_physical_leaf_partials() {
         let exec = executor();
-        let len = 513usize;
+        let len = TILE_SIZE * 2 + 17;
         let columns: Vec<_> = (1_u32..=7)
             .map(|value| exec.to_device(&vec![value; len]))
             .collect();

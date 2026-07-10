@@ -69,6 +69,25 @@ fn uniform_u32_is_deterministic_and_bounded() {
 }
 
 #[test]
+fn random_seed_high_bits_affect_the_stream() {
+    let exec = exec();
+    let low_seed = materialize_u32(
+        &exec,
+        massively::util::random::uniform_u32(u32::MIN, u32::MAX, 7)
+            .unwrap()
+            .take(64),
+    );
+    let high_seed = materialize_u32(
+        &exec,
+        massively::util::random::uniform_u32(u32::MIN, u32::MAX, 7 | (1_u64 << 32))
+            .unwrap()
+            .take(64),
+    );
+
+    assert_ne!(low_seed, high_seed);
+}
+
+#[test]
 fn random_uses_generic_taken_and_tracks_nested_slice_offsets() {
     let exec = exec();
     let full = materialize_u32(
