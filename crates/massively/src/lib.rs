@@ -44,6 +44,7 @@
 
 mod api;
 mod core;
+pub mod seg;
 
 // Crate-private compatibility aliases keep the kernel core independent from
 // the public module layout. They are not part of the external API.

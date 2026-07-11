@@ -1263,6 +1263,14 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
     where
         Equal: crate::BinaryPredicateOp<Item>;
 
+    fn sorted_breaks<Less>(
+        exec: &Executor<R>,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        less: Less,
+    ) -> Result<crate::DeviceVec<R, u32>, Error>
+    where
+        Less: crate::BinaryPredicateOp<Item>;
+
     fn segmented<Op>(
         exec: &Executor<R>,
         input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
@@ -1486,6 +1494,18 @@ macro_rules! impl_kernel_item {
                     crate::core::by_key::segment_heads_with(exec, input, equal)
                 }
 
+                fn sorted_breaks<Less>(
+                    exec: &Executor<R>,
+                    input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+                    _less: Less,
+                ) -> Result<crate::DeviceVec<R, u32>, Error>
+                where
+                    Less: crate::BinaryPredicateOp<Item>,
+                {
+                    let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
+                    crate::ordering::sorted_break_flags::<R, _, Less>(exec, input)
+                }
+
                 fn segmented<Op>(
                     exec: &Executor<R>,
                     input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
@@ -1672,6 +1692,18 @@ where
     {
         let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         crate::core::by_key::segment_heads_with(exec, input, equal)
+    }
+
+    fn sorted_breaks<Less>(
+        exec: &Executor<R>,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        _less: Less,
+    ) -> Result<crate::DeviceVec<R, u32>, Error>
+    where
+        Less: crate::BinaryPredicateOp<Item>,
+    {
+        let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
+        crate::ordering::sorted_break_flags::<R, _, Less>(exec, input)
     }
 
     fn segmented<Op>(
@@ -2365,6 +2397,18 @@ where
 {
     fn logical_len(&self) -> Result<usize, Error> {
         self.indices.logical_len()
+    }
+}
+
+impl<Values> IterLength for crate::read::Reverse<Values>
+where
+    Values: IterLength,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        match self.len {
+            Some(len) => Ok(len),
+            None => self.values.logical_len(),
+        }
     }
 }
 

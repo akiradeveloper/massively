@@ -529,6 +529,32 @@ where
     }
 }
 
+impl<R, Values, Env> StageRead<R, Env> for crate::read::Reverse<Values>
+where
+    R: Runtime,
+    Values: StageRead<R, Env>,
+    ReverseCounting: StageRead<R, Values::NextEnv>,
+    crate::read::Reverse<Values>: BindSlots<Env>,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        match self.len {
+            Some(len) => Ok(len),
+            None => self.values.logical_len(),
+        }
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut StagedBindings,
+    ) -> Result<(), Error> {
+        let input_len = self.values.logical_len()?;
+        self.values.stage_at(client, owner, bindings)?;
+        self.indices(input_len).stage_at(client, owner, bindings)
+    }
+}
+
 macro_rules! define_reduce_eval_storage1_kernel {
     ($name:ident, $eval:ident, $method:ident; $( $leaf:ident : $slot:ident ),+ $(,)?) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]

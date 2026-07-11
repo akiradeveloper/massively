@@ -160,6 +160,31 @@ impl ReverseCounting {
     }
 }
 
+/// A lazy expression that reads its input in reverse order.
+#[derive(Clone, Copy, Debug)]
+pub struct Reverse<Values> {
+    pub(crate) values: Values,
+    pub(crate) offset: usize,
+    pub(crate) len: Option<usize>,
+}
+
+impl<Values> Reverse<Values> {
+    pub const fn new(values: Values) -> Self {
+        Self {
+            values,
+            offset: 0,
+            len: None,
+        }
+    }
+
+    pub(crate) fn indices(&self, input_len: usize) -> ReverseCounting {
+        ReverseCounting {
+            start: input_len.saturating_sub(1).saturating_sub(self.offset),
+            len: self.len.unwrap_or(input_len),
+        }
+    }
+}
+
 impl Counting {
     pub const fn new(start: u32, len: usize) -> Self {
         Self { start, len }
@@ -465,6 +490,15 @@ where
     type ReadArity = <Values::ReadArity as AddArity<Indices::ReadArity>>::Output;
 }
 
+impl<Values> ReadExpression for Reverse<Values>
+where
+    Values: ReadExpression,
+    Values::ReadArity: AddArity<A1>,
+{
+    type Item = Values::Item;
+    type ReadArity = <Values::ReadArity as AddArity<A1>>::Output;
+}
+
 impl<Input, Output> ReadExpression for Reassociate<Input, Output>
 where
     Input: ReadExpression,
@@ -614,6 +648,23 @@ where
             self.values.clone(),
             self.indices.slice_expression(start, len),
         )
+    }
+}
+
+impl<Values> SliceExpression for Reverse<Values>
+where
+    Values: ReadExpression + Clone,
+    Reverse<Values>: ReadExpression,
+{
+    fn slice_expression(&self, start: usize, len: usize) -> Self {
+        Self {
+            values: self.values.clone(),
+            offset: self
+                .offset
+                .checked_add(start)
+                .expect("reverse slice offset overflow"),
+            len: Some(len),
+        }
     }
 }
 
@@ -777,6 +828,15 @@ where
 {
     type Expr = PermuteExpr<Values::Expr, Indices::Expr>;
     type NextEnv = Indices::NextEnv;
+}
+
+impl<Values, Env> BindSlots<Env> for Reverse<Values>
+where
+    Values: BindSlots<Env>,
+    ReverseCounting: BindSlots<Values::NextEnv>,
+{
+    type Expr = PermuteExpr<Values::Expr, <ReverseCounting as BindSlots<Values::NextEnv>>::Expr>;
+    type NextEnv = <ReverseCounting as BindSlots<Values::NextEnv>>::NextEnv;
 }
 
 impl<Input, Output, Env> BindSlots<Env> for Reassociate<Input, Output>

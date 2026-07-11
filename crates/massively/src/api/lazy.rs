@@ -5,7 +5,7 @@
 
 use crate::{MIndex, MStorageElement};
 
-pub use crate::core::read::{Permute, Taken, Transform};
+pub use crate::core::read::{Permute, Reverse, Taken, Transform};
 
 /// An unbounded stream that repeats one value.
 #[derive(Clone, Copy, Debug)]
@@ -156,6 +156,35 @@ pub fn transform<Input, Op>(input: Input, op: Op) -> Transform<Input, Op> {
 /// ```
 pub fn permute<Values, Indices>(values: Values, indices: Indices) -> Permute<Values, Indices> {
     Permute::new(values, indices)
+}
+
+/// Lazily reads an input in reverse order.
+///
+/// This generates reverse indices as part of the consuming kernel and does
+/// not allocate an intermediate index or value buffer.
+///
+/// # Examples
+///
+/// ```
+/// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+/// use massively::{Executor, lazy, op::Identity, transform};
+///
+/// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+/// let input = exec.to_device(&[10_u32, 20, 30]);
+/// let output = exec.alloc::<u32>(input.len());
+///
+/// transform(
+///     &exec,
+///     lazy::reverse(input.slice(..)),
+///     Identity,
+///     output.slice_mut(..),
+/// )
+/// .unwrap();
+///
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 20, 10]);
+/// ```
+pub fn reverse<Values>(values: Values) -> Reverse<Values> {
+    Reverse::new(values)
 }
 
 /// Wraps an input in a lazy identity transform.

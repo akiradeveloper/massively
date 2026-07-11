@@ -166,6 +166,27 @@ where
     }
 }
 
+pub(crate) struct SortedBreak<Less>(PhantomData<fn() -> Less>);
+
+#[cubecl::cube]
+impl<Item, Less> AdjacentFlagOp<Item> for SortedBreak<Less>
+where
+    Item: CubeType + 'static,
+    Less: BinaryPredicateOp<Item>,
+{
+    fn first() -> u32 {
+        0u32
+    }
+
+    fn apply(previous: Item, current: Item) -> u32 {
+        if Less::apply(current, previous) {
+            1u32
+        } else {
+            0u32
+        }
+    }
+}
+
 macro_rules! define_adjacent_flags_kernel {
     ($name:ident,$eval:ident,$method:ident; $( $leaf:ident:$slot:ident ),+ $(,)?) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
@@ -608,6 +629,17 @@ pub(crate) fn unique_head_flags<R, Input, Equal>(
 where
     R: Runtime,
     Input: AdjacentFlagInput<R, UniqueHead<Equal>>,
+{
+    input.adjacent_flags(exec)
+}
+
+pub(crate) fn sorted_break_flags<R, Input, Less>(
+    exec: &Executor<R>,
+    input: Input,
+) -> Result<DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Input: AdjacentFlagInput<R, SortedBreak<Less>>,
 {
     input.adjacent_flags(exec)
 }

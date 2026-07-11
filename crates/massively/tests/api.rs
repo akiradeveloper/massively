@@ -11,6 +11,8 @@ mod random;
 mod reduce;
 #[path = "api/runtime.rs"]
 mod runtime;
+#[path = "api/seg.rs"]
+mod seg;
 #[path = "api/tuple.rs"]
 mod tuple;
 #[path = "api/write_from.rs"]

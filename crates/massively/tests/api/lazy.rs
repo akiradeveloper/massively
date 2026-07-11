@@ -1,6 +1,6 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, MIter, ReductionOp, UnaryOp, lazy, reduce, transform, zip7};
+use massively::{Executor, MIter, ReductionOp, UnaryOp, lazy, reduce, transform, zip2, zip7};
 
 struct Double;
 struct Sum;
@@ -120,4 +120,43 @@ fn slicing_does_not_increase_read_arity_eight() {
         let base = column as u32 * 10;
         assert_eq!(exec.to_host(output).unwrap(), vec![base + 1, base + 2]);
     }
+}
+
+#[test]
+fn reverse_composes_with_slicing_and_multi_column_inputs() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let empty = exec.alloc::<u32>(0);
+    let reversed_empty = lazy::reverse(empty.slice(..));
+    assert_eq!(MIter::<WgpuRuntime>::len(&reversed_empty).unwrap(), 0);
+    transform(
+        &exec,
+        reversed_empty,
+        massively::op::Identity,
+        empty.slice_mut(..),
+    )
+    .unwrap();
+
+    let values = exec.to_device(&[10_u32, 20, 30, 40, 50]);
+    let output = exec.alloc::<u32>(1);
+    let middle = lazy::reverse(values.slice(..)).slice(1..4).slice(1..2);
+
+    transform(&exec, middle, massively::op::Identity, output.slice_mut(..)).unwrap();
+    assert_eq!(exec.to_host(&output).unwrap(), vec![30]);
+
+    let first = exec.to_device(&[1_u32, 2, 3]);
+    let second = exec.to_device(&[10_u32, 20, 30]);
+    let output_first = exec.alloc::<u32>(3);
+    let output_second = exec.alloc::<u32>(3);
+    let reversed = lazy::reverse(zip2(first.slice(..), second.slice(..)));
+
+    assert_eq!(MIter::<WgpuRuntime>::len(&reversed).unwrap(), 3);
+    transform(
+        &exec,
+        reversed,
+        massively::op::Identity,
+        zip2(output_first.slice_mut(..), output_second.slice_mut(..)),
+    )
+    .unwrap();
+    assert_eq!(exec.to_host(&output_first).unwrap(), vec![3, 2, 1]);
+    assert_eq!(exec.to_host(&output_second).unwrap(), vec![30, 20, 10]);
 }

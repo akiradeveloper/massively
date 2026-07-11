@@ -18,8 +18,9 @@ on top of [CubeCL](https://github.com/tracel-ai/cubecl). The same algorithm API
 can run on WGPU, CUDA, or HIP through the corresponding CubeCL runtime.
 
 Memory movement is explicit, outputs are preallocated, and user-defined
-operations are compiled into GPU kernels. Lazy transforms and permutations can
-be consumed without first materializing an intermediate buffer.
+operations are compiled into GPU kernels. Lazy transforms, permutations, and
+reversed views can be consumed without first materializing an intermediate
+buffer.
 
 The public API is built around a few ideas:
 
@@ -136,6 +137,7 @@ tuple3(a, b, c)                        = Tuple3<A, B, C>
 flatten3(value)                        = (A, B, C)
 lazy::transform(input, op)             = fused lazy computation
 lazy::permute(values, indices)         = lazy indexed view
+lazy::reverse(input)                    = lazy reversed view
 ```
 
 General input and output items support up to seven columns. By-key algorithms
@@ -146,10 +148,10 @@ manually matching its internal association.
 
 ### Lazy Iterators
 
-`lazy::constant`, `lazy::counting`, `lazy::transform`, and `lazy::permute`
-produce `MIter` values without allocating result storage. Their expressions are
-evaluated by the consuming algorithm, allowing operations to be composed while
-keeping intermediate values off device memory.
+`lazy::constant`, `lazy::counting`, `lazy::transform`, `lazy::permute`, and
+`lazy::reverse` produce `MIter` values without allocating result storage. Their
+expressions are evaluated by the consuming algorithm, allowing operations to be
+composed while keeping intermediate values off device memory.
 
 ### Operations
 

@@ -5,6 +5,7 @@
 //! GPU operation traits without CubeCL runtime constraints.
 
 pub mod op;
+pub mod seg;
 
 use std::cmp::Ordering;
 
