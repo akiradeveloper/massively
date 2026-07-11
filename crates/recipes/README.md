@@ -1,22 +1,23 @@
 # massively recipes
 
-Runnable LeetCode-style recipes for `massively`.
+Small algorithms composed from Massively primitives. The sources are split by
+domain:
 
-Each binary starts with a problem statement, implements a `solve` function, and
-uses `main` only to run a small sample case with assertions.
+- `src/vector/`: vector and data-processing algorithms
+- `src/graph/`: graph algorithms written with `massively::graph` traversal algebra
 
-Recipes use CubeCL runtimes directly through `Executor<R>`, device slices, and
-the public `zip2` through `zip7` helpers. `monte_carlo_pi` uploads deterministic
-host-generated sample coordinates before performing its map/reduce computation
-on the GPU.
-
-Run one recipe:
+The graph recipes are runtime-generic `solve` functions. Their tests use the
+WGPU CPU adapter, exercise the same GPU kernels, and serve as compact runnable
+examples:
 
 ```sh
-cargo run -p recipes --bin monte_carlo_pi
+cargo nextest run -p massively --test graph_oracle
 ```
 
-Recipes:
+The oracle test generates valid sorted CSR graphs and compares all graph
+recipes with independent CPU implementations.
+
+## Vector recipes
 
 - `monte_carlo_pi`
 - `delayed_freight_by_route`
@@ -48,3 +49,26 @@ Recipes:
 - `duplicate_score_range`
 - `merged_audience_union`
 - `release_version_order`
+
+## Graph recipes
+
+- `bc`: betweenness centrality
+- `bfs`: breadth-first search
+- `color`: graph coloring
+- `forman_ricci`: Forman–Ricci edge curvature
+- `geo`: graph-based geolocation
+- `hits`: hub and authority scores
+- `kcore`: k-core decomposition
+- `mst`: minimum spanning tree
+- `ppr`: personalized PageRank
+- `pr`: PageRank
+- `spgemm`: Boolean sparse matrix multiplication
+- `spmv`: sparse matrix-vector multiplication
+- `sssp`: single-source shortest paths
+- `tc`: triangle counting
+
+These are composition and correctness recipes, not alternative public graph
+APIs. Edge programs use source, destination, and edge expressions followed by
+emit, source/destination reduction, destination-state update, or batched
+adjacency intersection. Iterative algorithms keep convergence control on the
+host while bulk traversal and state transitions run through Massively.

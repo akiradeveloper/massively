@@ -31,7 +31,7 @@ const BLOCK_SIZE: u32 = 256;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, sort};
+/// use massively::{Executor, vector::sort};
 /// use massively::op::BinaryPredicateOp;
 ///
 /// struct Less;

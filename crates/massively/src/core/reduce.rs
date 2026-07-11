@@ -36,7 +36,7 @@ const TILE_SIZE: usize = BLOCK_SIZE as usize * ITEMS_PER_UNIT;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, reduce};
+/// use massively::{Executor, vector::reduce};
 /// use massively::op::ReductionOp;
 ///
 /// struct Add;

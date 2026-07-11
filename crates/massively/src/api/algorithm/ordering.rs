@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, WriteFrom};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
 
 /// Stably sorts an input into preallocated output storage.
 ///
@@ -9,7 +9,7 @@ use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, WriteFr
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, sort};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::sort};
 ///
 /// struct Less;
 ///
@@ -51,7 +51,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, adjacent_find};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::adjacent_find};
 ///
 /// struct Equal;
 ///
@@ -89,7 +89,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, unique};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::unique};
 ///
 /// struct Equal;
 ///
@@ -132,7 +132,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, is_sorted_until};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::is_sorted_until};
 ///
 /// struct Less;
 ///
@@ -168,7 +168,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, is_sorted};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::is_sorted};
 ///
 /// struct Less;
 ///
@@ -226,7 +226,7 @@ extremum_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{BinaryPredicateOp, Executor, min_element};
+use massively::{op::BinaryPredicateOp, Executor, vector::min_element};
 
 struct Less;
 
@@ -255,7 +255,7 @@ extremum_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{BinaryPredicateOp, Executor, max_element};
+use massively::{op::BinaryPredicateOp, Executor, vector::max_element};
 
 struct Less;
 
@@ -284,7 +284,7 @@ extremum_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{BinaryPredicateOp, Executor, minmax_element};
+use massively::{op::BinaryPredicateOp, Executor, vector::minmax_element};
 
 struct Less;
 

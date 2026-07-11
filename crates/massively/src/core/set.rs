@@ -205,7 +205,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BinaryPredicateOp;
+    use crate::op::BinaryPredicateOp;
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     struct LessU32;

@@ -1,16 +1,8 @@
-//! CPU references for algorithms applied independently to nested vectors.
+//! CPU references for segment algorithms applied independently to nested vectors.
 
 use std::cmp::Ordering;
 
 use crate::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
-
-/// Gathers whole nested segments in index order.
-pub fn gather<T: Clone>(segments: &[Vec<T>], indices: &[u32]) -> Vec<Vec<T>> {
-    indices
-        .iter()
-        .map(|&index| segments[index as usize].clone())
-        .collect()
-}
 
 pub fn map<T, Op>(segments: &[Vec<T>], _op: Op) -> Vec<Vec<Op::Output>>
 where

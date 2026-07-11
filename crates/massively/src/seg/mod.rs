@@ -9,14 +9,14 @@
 //! - [`UniqueLikeExecutable`] may change each segment's length and writes new offsets.
 //! - [`ReduceLikeExecutable`] writes one item per segment.
 
-mod control;
+pub(crate) mod control;
 
 use cubecl::prelude::*;
 use std::marker::PhantomData;
 
 use crate::{
-    BinaryPredicateOp, Error, Executor, MAlloc, MIndex, MItem, MIter, MIterMut, MStorage,
-    PredicateOp, ReductionOp, UnaryOp, WriteFrom,
+    Error, Executor, MAlloc, MIndex, MItem, MIter, MIterMut, MStorage, WriteFrom,
+    op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
 };
 
 /// A flat value stream and the offsets delimiting its segments.
@@ -75,67 +75,6 @@ impl<Values, Offsets> SegmentedMut<Values, Offsets> {
     pub fn into_parts(self) -> (Values, Offsets) {
         (self.values, self.offsets)
     }
-}
-
-/// Gathers whole segments into preallocated flat values and offsets.
-///
-/// Segment indices may be reordered or repeated. If the input represents
-/// `[[a, b], [c], [d, e, f]]`, indices `[2, 0, 2]` produce
-/// `[[d, e, f], [a, b], [d, e, f]]`. The output offsets must have exactly
-/// `indices.len() + 1` items. The returned index is the number of flat values
-/// written; the flat value output may have additional unused capacity.
-pub fn gather<R, Values, InputOffsets, Indices, Output, OutputOffsets>(
-    exec: &Executor<R>,
-    input: Segmented<Values, InputOffsets>,
-    indices: Indices,
-    output: SegmentedMut<Output, OutputOffsets>,
-) -> Result<MIndex, Error>
-where
-    R: Runtime,
-    Values: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
-    Indices: MIter<R, Item = MIndex>,
-    Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
-    OutputOffsets: MIterMut<R, Item = MIndex>,
-{
-    let selection_count = indices.len()? as usize;
-    let expected_offset_count = selection_count
-        .checked_add(1)
-        .ok_or(Error::LengthTooLarge {
-            len: selection_count,
-        })?;
-    let (output_values, output_offsets) = output.into_parts();
-    let actual_offset_count = output_offsets.len()? as usize;
-    if actual_offset_count != expected_offset_count {
-        return Err(Error::LengthMismatch {
-            left: expected_offset_count,
-            right: actual_offset_count,
-        });
-    }
-
-    let (values, input_offsets) = input.into_parts();
-    let control = control::GatherControl::new(exec, input_offsets, indices)?;
-    let output_capacity = output_values.len()? as usize;
-    if output_capacity < control.output_len as usize {
-        return Err(Error::OutputTooShort {
-            input: control.output_len as usize,
-            output: output_capacity,
-        });
-    }
-
-    control
-        .output_offsets
-        .slice(..)
-        .transform_into(exec, crate::op::Identity, output_offsets)?;
-    values.indexed_with(
-        exec,
-        control.source_indices.column(),
-        None,
-        false,
-        output_values,
-    )?;
-    Ok(control.output_len)
 }
 
 /// Lifts one ordinary algorithm so it runs independently for every segment.
@@ -536,7 +475,7 @@ impl UnaryOp<u32> for InvertFlag {
     }
 }
 
-fn reduce_segments<R, Values, Offsets, Output, Op>(
+pub(crate) fn reduce_segments<R, Values, Offsets, Output, Op>(
     exec: &Executor<R>,
     input: Segmented<Values, Offsets>,
     init: Values::Item,

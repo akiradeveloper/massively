@@ -3,8 +3,8 @@ mod common;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::{
-    BinaryPredicateOp, ReductionOp, exclusive_scan, exclusive_scan_by_key, inclusive_scan,
-    inclusive_scan_by_key,
+    op::BinaryPredicateOp, op::ReductionOp, vector::exclusive_scan, vector::exclusive_scan_by_key,
+    vector::inclusive_scan, vector::inclusive_scan_by_key,
 };
 
 struct Sum;

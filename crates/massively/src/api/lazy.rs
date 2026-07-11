@@ -65,7 +65,7 @@ impl crate::read::TakenSource for Counting {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, transform};
+/// use massively::{Executor, vector::transform};
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -87,7 +87,7 @@ pub fn constant<T>(value: T) -> Constant<T> {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, transform};
+/// use massively::{Executor, vector::transform};
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -110,7 +110,7 @@ pub fn counting(start: MIndex) -> Counting {
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, UnaryOp, transform};
+/// use massively::{Executor, op::UnaryOp, vector::transform};
 /// use massively::{lazy, op::Identity};
 ///
 /// struct Double;
@@ -142,7 +142,7 @@ pub fn transform<Input, Op>(input: Input, op: Op) -> Transform<Input, Op> {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, transform};
+/// use massively::{Executor, vector::transform};
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -167,7 +167,7 @@ pub fn permute<Values, Indices>(values: Values, indices: Indices) -> Permute<Val
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, lazy, op::Identity, transform};
+/// use massively::{Executor, lazy, op::Identity, vector::transform};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30]);
@@ -195,7 +195,7 @@ pub fn reverse<Values>(values: Values) -> Reverse<Values> {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, transform};
+/// use massively::{Executor, vector::transform};
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);

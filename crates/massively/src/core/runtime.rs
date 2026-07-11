@@ -136,7 +136,7 @@ impl<R: Runtime> Executor<R> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, fill};
+    /// use massively::{Executor, vector::fill};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);
@@ -210,7 +210,7 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, fill};
+    /// use massively::{Executor, vector::fill};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4]);
@@ -329,7 +329,7 @@ impl<T> DeviceSliceMut<T> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, fill};
+    /// use massively::{Executor, vector::fill};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4, 5]);

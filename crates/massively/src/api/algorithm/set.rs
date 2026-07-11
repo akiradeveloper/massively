@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, WriteFrom};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
 
 macro_rules! set_api {
     ($name:ident, $mode:literal, $doc:literal) => {
@@ -37,7 +37,7 @@ The return value is the number of items written at the beginning of `output`.
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{BinaryPredicateOp, Executor, set_union};
+use massively::{op::BinaryPredicateOp, Executor, vector::set_union};
 
 struct Less;
 
@@ -82,7 +82,7 @@ The return value is the number of items written at the beginning of `output`.
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{BinaryPredicateOp, Executor, set_intersection};
+use massively::{op::BinaryPredicateOp, Executor, vector::set_intersection};
 
 struct Less;
 
@@ -124,7 +124,7 @@ The return value is the number of items written at the beginning of `output`.
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{BinaryPredicateOp, Executor, set_difference};
+use massively::{op::BinaryPredicateOp, Executor, vector::set_difference};
 
 struct Less;
 

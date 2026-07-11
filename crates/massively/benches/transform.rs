@@ -2,7 +2,7 @@ mod common;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::{UnaryOp, transform};
+use massively::{op::UnaryOp, vector::transform};
 
 struct MulTwo;
 

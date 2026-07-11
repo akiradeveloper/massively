@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, PredicateOp};
+use crate::{Error, Executor, MIndex, MIter, op::PredicateOp};
 
 macro_rules! predicate_api {
     ($name:ident, $method:ident, $output:ty, $doc:literal) => {
@@ -31,7 +31,7 @@ predicate_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, PredicateOp, count_if};
+use massively::{Executor, op::PredicateOp, vector::count_if};
 
 struct Even;
 
@@ -60,7 +60,7 @@ predicate_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, PredicateOp, all_of};
+use massively::{Executor, op::PredicateOp, vector::all_of};
 
 struct Even;
 
@@ -89,7 +89,7 @@ predicate_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, PredicateOp, any_of};
+use massively::{Executor, op::PredicateOp, vector::any_of};
 
 struct Even;
 
@@ -118,7 +118,7 @@ predicate_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, PredicateOp, none_of};
+use massively::{Executor, op::PredicateOp, vector::none_of};
 
 struct Even;
 
@@ -147,7 +147,7 @@ predicate_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, PredicateOp, find_if};
+use massively::{Executor, op::PredicateOp, vector::find_if};
 
 struct Even;
 
@@ -176,7 +176,7 @@ predicate_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, PredicateOp, is_partitioned};
+use massively::{Executor, op::PredicateOp, vector::is_partitioned};
 
 struct Even;
 

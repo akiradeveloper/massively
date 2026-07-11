@@ -19,6 +19,7 @@ pub(crate) mod reduce;
 pub(crate) mod runtime;
 pub(crate) mod scan;
 pub(crate) mod scatter;
+pub(crate) mod scatter_reduce;
 pub(crate) mod search;
 pub(crate) mod segmented;
 pub(crate) mod selection;

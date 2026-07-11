@@ -1,7 +1,17 @@
 mod common;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use massively::scatter;
+use cubecl::prelude::*;
+use massively::{op::ReductionOp, vector::scatter, vector::scatter_reduce};
+
+struct Add;
+
+#[cubecl::cube]
+impl ReductionOp<f32> for Add {
+    fn apply(lhs: f32, rhs: f32) -> f32 {
+        lhs + rhs
+    }
+}
 
 fn bench_scatter(c: &mut Criterion) {
     let exec = common::exec();
@@ -17,6 +27,25 @@ fn bench_scatter(c: &mut Criterion) {
                     &exec,
                     input.slice(..),
                     indices.slice(..),
+                    output.slice_mut(..),
+                )
+                .unwrap();
+                exec.sync().unwrap();
+            })
+        });
+
+        let collision_indices: Vec<u32> = (0..len)
+            .map(|index| (index % (len / 4).max(1)) as u32)
+            .collect();
+        let collision_indices = exec.to_device(&collision_indices);
+        group.bench_function(BenchmarkId::new("reduce_4_to_1", len), |b| {
+            b.iter(|| {
+                scatter_reduce(
+                    &exec,
+                    input.slice(..),
+                    collision_indices.slice(..),
+                    0.0,
+                    Add,
                     output.slice_mut(..),
                 )
                 .unwrap();

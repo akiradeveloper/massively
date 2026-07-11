@@ -97,7 +97,7 @@ where
     Values::Storage: CanonicalStorage<R> + SegmentedStorage<R, Values::Item, Op>,
     <Values::Storage as CanonicalStorage<R>>::Item: WriteFrom<Values::Item>,
     <Values::Storage as CanonicalStorage<R>>::Write: FillOutput<R>,
-    Op: crate::ReductionOp<Values::Item>,
+    Op: crate::op::ReductionOp<Values::Item>,
 {
     fn inclusive_storage(
         self,
@@ -368,7 +368,7 @@ mod tests {
     struct SumSeven;
 
     #[cubecl::cube]
-    impl crate::ReductionOp<Seven> for SumSeven {
+    impl crate::op::ReductionOp<Seven> for SumSeven {
         fn apply(lhs: Seven, rhs: Seven) -> Seven {
             (
                 lhs.0 + rhs.0,

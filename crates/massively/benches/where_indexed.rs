@@ -1,7 +1,7 @@
 mod common;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use massively::{gather_where, scatter_where};
+use massively::{vector::gather_where, vector::scatter_where};
 
 fn bench_where_indexed(c: &mut Criterion) {
     let exec = common::exec();

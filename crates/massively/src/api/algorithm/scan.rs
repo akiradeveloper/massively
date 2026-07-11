@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, MIterMut, ReductionOp, WriteFrom};
+use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::ReductionOp};
 
 /// Computes an inclusive scan into preallocated output storage.
 ///
@@ -9,7 +9,7 @@ use crate::{Error, Executor, MIter, MIterMut, ReductionOp, WriteFrom};
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, ReductionOp, inclusive_scan};
+/// use massively::{Executor, op::ReductionOp, vector::inclusive_scan};
 ///
 /// struct Add;
 ///
@@ -51,7 +51,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, ReductionOp, adjacent_difference};
+/// use massively::{Executor, op::ReductionOp, vector::adjacent_difference};
 ///
 /// struct Add;
 ///
@@ -93,7 +93,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, ReductionOp, exclusive_scan};
+/// use massively::{Executor, op::ReductionOp, vector::exclusive_scan};
 ///
 /// struct Add;
 ///

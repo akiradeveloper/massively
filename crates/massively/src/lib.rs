@@ -9,7 +9,7 @@
 //! ```
 //! use cubecl::prelude::*;
 //! use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-//! use massively::{Executor, UnaryOp, transform};
+//! use massively::{Executor, op::UnaryOp, vector::transform};
 //!
 //! struct Double;
 //!
@@ -44,7 +44,9 @@
 
 mod api;
 mod core;
+pub mod graph;
 pub mod seg;
+pub mod vector;
 
 // Crate-private compatibility aliases keep the kernel core independent from
 // the public module layout. They are not part of the external API.
@@ -62,18 +64,16 @@ pub(crate) use core::{
     predicate, read, reduce, scan, search, segmented, selection, storage, transform, value,
 };
 
-pub use api::algorithm::*;
 pub use api::iter::{
     MAlloc, MItem, MIter, MIterMut, MStorage, WriteFrom, Zip, zip2, zip3, zip4, zip5, zip6, zip7,
 };
-pub use api::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use api::tuple::{
     Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, flatten3, flatten4, flatten5, flatten6,
     flatten7, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7,
 };
 pub use api::{Error, MIndex, lazy, op, util};
-/// Common public data and operation types. Algorithms remain at crate root.
+/// Common public data and operation types.
 pub mod prelude {
     pub use crate::{
         DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,

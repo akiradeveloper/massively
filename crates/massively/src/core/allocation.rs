@@ -435,7 +435,7 @@ impl<R: Runtime> Executor<R> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, fill};
+    /// use massively::{Executor, vector::fill};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);

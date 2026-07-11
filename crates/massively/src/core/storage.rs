@@ -215,7 +215,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::Identity, transform, zip2, zip3};
+/// use massively::{Executor, op::Identity, vector::transform, zip2, zip3};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let a = exec.to_device(&[1_u32, 2]);

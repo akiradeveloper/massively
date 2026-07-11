@@ -3,7 +3,7 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, ReductionOp, UnaryOp, lazy, reduce, zip2, zip3};
+use massively::{Executor, lazy, op::ReductionOp, op::UnaryOp, vector::reduce, zip2, zip3};
 
 const SIZES: &[usize] = &[256 * 1024, 1024 * 1024, 16 * 1024 * 1024];
 

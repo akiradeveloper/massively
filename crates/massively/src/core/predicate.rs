@@ -20,7 +20,7 @@ use crate::{
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, count_if};
+/// use massively::{Executor, vector::count_if};
 /// use massively::op::PredicateOp;
 ///
 /// struct Positive;

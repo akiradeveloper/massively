@@ -83,7 +83,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, MIter, transform};
+/// use massively::{Executor, MIter, vector::transform};
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -126,38 +126,38 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
-        Op: crate::UnaryOp<Self::Item>,
-        Output::Item: crate::WriteFrom<<Op as crate::UnaryOp<Self::Item>>::Output>;
+        Op: crate::op::UnaryOp<Self::Item>,
+        Output::Item: crate::WriteFrom<<Op as crate::op::UnaryOp<Self::Item>>::Output>;
 
     #[doc(hidden)]
     fn count_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<MIndex, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn all_of_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn any_of_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn none_of_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn find_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<Option<MIndex>, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn is_partitioned_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn reduce_with<Op>(
@@ -167,7 +167,7 @@ pub trait MIter<R: Runtime>: Sized {
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Op: crate::ReductionOp<Self::Item>;
+        Op: crate::op::ReductionOp<Self::Item>;
 
     #[doc(hidden)]
     fn adjacent_find_with<Equal>(
@@ -176,17 +176,17 @@ pub trait MIter<R: Runtime>: Sized {
         equal: Equal,
     ) -> Result<Option<MIndex>, Error>
     where
-        Equal: crate::BinaryPredicateOp<Self::Item>;
+        Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn is_sorted_until_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<MIndex, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn is_sorted_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<bool, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn min_element_with<Less>(
@@ -195,7 +195,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<Option<MIndex>, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn max_element_with<Less>(
@@ -204,7 +204,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<Option<MIndex>, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn minmax_element_with<Less>(
@@ -213,7 +213,7 @@ pub trait MIter<R: Runtime>: Sized {
         less: Less,
     ) -> Result<Option<(MIndex, MIndex)>, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn inclusive_scan_with<Output, Op>(
@@ -225,7 +225,7 @@ pub trait MIter<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Op: crate::ReductionOp<Self::Item>;
+        Op: crate::op::ReductionOp<Self::Item>;
 
     #[doc(hidden)]
     fn adjacent_difference_with<Output, Op>(
@@ -237,7 +237,7 @@ pub trait MIter<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Op: crate::ReductionOp<Self::Item>;
+        Op: crate::op::ReductionOp<Self::Item>;
 
     #[doc(hidden)]
     fn sort_with<Output, Less>(
@@ -249,7 +249,7 @@ pub trait MIter<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn unique_with<Output, Equal>(
@@ -261,7 +261,7 @@ pub trait MIter<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>;
+        Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn materialize_u32(self, exec: &Executor<R>) -> Result<crate::DeviceVec<R, MIndex>, Error>
@@ -296,7 +296,7 @@ pub trait MIter<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Pred: crate::PredicateOp<Self::Item>;
+        Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn indexed_with<Output>(
@@ -335,8 +335,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
-        Op: crate::UnaryOp<Self::Item>,
-        Output::Item: crate::WriteFrom<<Op as crate::UnaryOp<Self::Item>>::Output>;
+        Op: crate::op::UnaryOp<Self::Item>,
+        Output::Item: crate::WriteFrom<<Op as crate::op::UnaryOp<Self::Item>>::Output>;
 
     #[doc(hidden)]
     fn exclusive_scan_with<Output, Op>(
@@ -349,7 +349,7 @@ pub trait MIter<R: Runtime>: Sized {
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Op: crate::ReductionOp<Self::Item>;
+        Op: crate::op::ReductionOp<Self::Item>;
 
     #[doc(hidden)]
     fn equal_with<Right, Equal>(
@@ -360,7 +360,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>;
+        Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn mismatch_with<Right, Equal>(
@@ -371,7 +371,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<Option<MIndex>, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>;
+        Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn lexicographical_with<Right, Less>(
@@ -382,7 +382,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<bool, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn find_first_of_with<Needles, Equal>(
@@ -393,7 +393,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<Option<MIndex>, Error>
     where
         Needles: MIter<R, Item = Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>;
+        Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
     fn bounds_with<Values, Less, Output>(
@@ -406,7 +406,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<MIndex>;
 
@@ -420,7 +420,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>;
 
@@ -435,7 +435,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<MIndex, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>;
 
@@ -450,7 +450,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: MIter<R>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -468,8 +468,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<(), Error>
     where
         Values: MIter<R>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
-        Op: crate::ReductionOp<Values::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
+        Op: crate::op::ReductionOp<Values::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Values::Item>;
 
@@ -486,8 +486,8 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<MIndex, Error>
     where
         Values: MIter<R>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
-        Op: crate::ReductionOp<Values::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
+        Op: crate::op::ReductionOp<Values::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -504,7 +504,7 @@ pub trait MIter<R: Runtime>: Sized {
     ) -> Result<MIndex, Error>
     where
         Values: MIter<R>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -525,7 +525,7 @@ pub trait MIter<R: Runtime>: Sized {
         LeftValues: MIter<R>,
         RightKeys: MIter<R, Item = Self::Item>,
         RightValues: MIter<R, Item = LeftValues::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -592,6 +592,26 @@ pub trait MIterMut<R: Runtime>: Sized {
     ) -> Result<(), Error> {
         <Self::Write as private::KernelWrite<R>>::replace(self.lower_write(), exec, value, flags)
     }
+
+    #[doc(hidden)]
+    fn scatter_combine_with<Values, Op>(
+        self,
+        exec: &Executor<R>,
+        values: Values,
+        indices: crate::DeviceVec<R, MIndex>,
+    ) -> Result<(), Error>
+    where
+        Values: MIter<R, Item = Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>,
+    {
+        let values = private::AnyRead::normalize(values.lower_read(), exec)?;
+        <Self::Write as private::KernelWrite<R>>::scatter_combine_storage::<Op>(
+            self.lower_write(),
+            exec,
+            &values,
+            &indices,
+        )
+    }
 }
 
 #[doc(hidden)]
@@ -640,8 +660,8 @@ where
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
-        Op: crate::UnaryOp<Self::Item>,
-        Output::Item: crate::WriteFrom<<Op as crate::UnaryOp<Self::Item>>::Output>,
+        Op: crate::op::UnaryOp<Self::Item>,
+        Output::Item: crate::WriteFrom<<Op as crate::op::UnaryOp<Self::Item>>::Output>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::transform(
             self,
@@ -653,42 +673,42 @@ where
 
     fn count_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<MIndex, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::count_if(self, exec, pred)
     }
 
     fn all_of_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::all_of(self, exec, pred)
     }
 
     fn any_of_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::any_of(self, exec, pred)
     }
 
     fn none_of_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::none_of(self, exec, pred)
     }
 
     fn find_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<Option<MIndex>, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::find_if(self, exec, pred)
     }
 
     fn is_partitioned_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::is_partitioned(self, exec, pred)
     }
@@ -700,7 +720,7 @@ where
         op: Op,
     ) -> Result<Self::Item, Error>
     where
-        Op: crate::ReductionOp<Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::reduce(self, exec, init, op)
     }
@@ -711,35 +731,35 @@ where
         equal: Equal,
     ) -> Result<Option<MIndex>, Error>
     where
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::adjacent_find(self, exec, equal)
     }
 
     fn is_sorted_until_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<MIndex, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::is_sorted_until(self, exec, less)
     }
 
     fn is_sorted_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<bool, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::is_sorted(self, exec, less)
     }
 
     fn min_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<MIndex>, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::min_element(self, exec, less)
     }
 
     fn max_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<MIndex>, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::max_element(self, exec, less)
     }
@@ -750,7 +770,7 @@ where
         less: Less,
     ) -> Result<Option<(MIndex, MIndex)>, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::minmax_element(self, exec, less)
     }
@@ -764,7 +784,7 @@ where
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Op: crate::ReductionOp<Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::inclusive_scan(
             self,
@@ -783,7 +803,7 @@ where
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Op: crate::ReductionOp<Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::adjacent_difference(
             self,
@@ -802,7 +822,7 @@ where
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::sort(
             self,
@@ -821,7 +841,7 @@ where
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::unique(
             self,
@@ -860,7 +880,7 @@ where
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Pred: crate::PredicateOp<Self::Item>,
+        Pred: crate::op::PredicateOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::partition(
             self,
@@ -901,8 +921,8 @@ where
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
-        Op: crate::UnaryOp<Self::Item>,
-        Output::Item: crate::WriteFrom<<Op as crate::UnaryOp<Self::Item>>::Output>,
+        Op: crate::op::UnaryOp<Self::Item>,
+        Output::Item: crate::WriteFrom<<Op as crate::op::UnaryOp<Self::Item>>::Output>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::transform_where(
             self,
@@ -923,7 +943,7 @@ where
     where
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
-        Op: crate::ReductionOp<Self::Item>,
+        Op: crate::op::ReductionOp<Self::Item>,
     {
         <Input::Slots as private::KernelRead<R, Input>>::exclusive_scan(
             self,
@@ -942,7 +962,7 @@ where
     ) -> Result<bool, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
     {
         match private::run_pair(exec, self.lower_read(), right.lower_read(), equal, 0)? {
             private::PairResult::Bool(value) => Ok(value),
@@ -958,7 +978,7 @@ where
     ) -> Result<Option<MIndex>, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
     {
         match private::run_pair(exec, self.lower_read(), right.lower_read(), equal, 1)? {
             private::PairResult::Index(value) => Ok(value),
@@ -974,7 +994,7 @@ where
     ) -> Result<bool, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
     {
         match private::run_pair(exec, self.lower_read(), right.lower_read(), less, 2)? {
             private::PairResult::Bool(value) => Ok(value),
@@ -990,7 +1010,7 @@ where
     ) -> Result<Option<MIndex>, Error>
     where
         Needles: MIter<R, Item = Self::Item>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
     {
         match private::run_pair(exec, self.lower_read(), needles.lower_read(), equal, 3)? {
             private::PairResult::Index(value) => Ok(value),
@@ -1008,7 +1028,7 @@ where
     ) -> Result<(), Error>
     where
         Values: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<MIndex>,
     {
@@ -1033,7 +1053,7 @@ where
     ) -> Result<(), Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
     {
@@ -1062,7 +1082,7 @@ where
     ) -> Result<MIndex, Error>
     where
         Right: MIter<R, Item = Self::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Self::Item>,
     {
@@ -1088,7 +1108,7 @@ where
     ) -> Result<(), Error>
     where
         Values: MIter<R>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -1132,8 +1152,8 @@ where
     ) -> Result<(), Error>
     where
         Values: MIter<R>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
-        Op: crate::ReductionOp<Values::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
+        Op: crate::op::ReductionOp<Values::Item>,
         Output: MIterMut<R>,
         Output::Item: crate::WriteFrom<Values::Item>,
     {
@@ -1167,8 +1187,8 @@ where
     ) -> Result<MIndex, Error>
     where
         Values: MIter<R>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
-        Op: crate::ReductionOp<Values::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
+        Op: crate::op::ReductionOp<Values::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -1220,7 +1240,7 @@ where
     ) -> Result<MIndex, Error>
     where
         Values: MIter<R>,
-        Equal: crate::BinaryPredicateOp<Self::Item>,
+        Equal: crate::op::BinaryPredicateOp<Self::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -1271,7 +1291,7 @@ where
         LeftValues: MIter<R>,
         RightKeys: MIter<R, Item = Self::Item>,
         RightValues: MIter<R, Item = LeftValues::Item>,
-        Less: crate::BinaryPredicateOp<Self::Item>,
+        Less: crate::op::BinaryPredicateOp<Self::Item>,
         KeyOutput: MIterMut<R>,
         KeyOutput::Item: crate::WriteFrom<Self::Item>,
         ValueOutput: MIterMut<R>,
@@ -1395,7 +1415,7 @@ use crate::core::facade as private;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, UnaryOp, transform, zip2};
+/// use massively::{Executor, op::UnaryOp, vector::transform, zip2};
 ///
 /// struct AddPair;
 ///

@@ -63,8 +63,9 @@ Each test area has a specific role.
   guide internal implementation improvements. Because we do not add
   single-column-specific optimizations, improving the single-column foundation
   should also improve multi-column cases.
-- `massively/tests`: Use simple data to verify that multi-column support works.
-- `massively/tests/oracle.rs`: Property tests against the multi-column AoS CPU
+- `massively/tests/vector`: Vector API, multi-column, oracle, and scale property
+  tests.
+- `massively/tests/seg`: Segmented API and property tests against the CPU
   reference.
-- `massively/tests/oracle_scale.rs`: Ignored scale property tests against the
-  multi-column AoS CPU reference.
+- `massively/tests/graph`: Graph algorithm property tests against independent CPU
+  implementations on generated CSR graphs.

@@ -2,7 +2,7 @@ mod common;
 
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::{BinaryPredicateOp, ReductionOp, reduce, reduce_by_key};
+use massively::{op::BinaryPredicateOp, op::ReductionOp, vector::reduce, vector::reduce_by_key};
 
 struct Sum;
 struct Equal;
