@@ -815,7 +815,7 @@ mod tests {
     struct IsEven;
 
     #[cubecl::cube]
-    impl crate::PredicateOp<u32> for IsEven {
+    impl crate::op::PredicateOp<u32> for IsEven {
         fn apply(input: u32) -> bool {
             input % 2u32 == 0u32
         }

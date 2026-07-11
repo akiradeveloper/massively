@@ -3,7 +3,9 @@ use std::time::Duration;
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, ReductionOp, UnaryOp, lazy, reduce, zip2, zip3, zip4, zip5};
+use massively::{
+    Executor, lazy, op::ReductionOp, op::UnaryOp, vector::reduce, zip2, zip3, zip4, zip5,
+};
 
 const LEN: u32 = 4_000_000_000;
 const X_KEY: u32 = seed_key(0);

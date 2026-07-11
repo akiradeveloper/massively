@@ -8,7 +8,7 @@ use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom};
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, gather};
+/// use massively::{Executor, vector::gather};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
@@ -50,7 +50,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, gather_where};
+/// use massively::{Executor, vector::gather_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
@@ -101,7 +101,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, reverse};
+/// use massively::{Executor, vector::reverse};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);

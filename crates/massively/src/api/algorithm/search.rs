@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, WriteFrom};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
 
 /// Finds the first source item equal to any needle.
 ///
@@ -9,7 +9,7 @@ use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, WriteFr
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, find_first_of};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::find_first_of};
 ///
 /// struct Equal;
 ///
@@ -52,7 +52,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, lower_bound};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::lower_bound};
 ///
 /// struct Less;
 ///
@@ -106,7 +106,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, upper_bound};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::upper_bound};
 ///
 /// struct Less;
 ///
@@ -158,7 +158,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, equal};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::equal};
 ///
 /// struct Equal;
 ///
@@ -197,7 +197,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, mismatch};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::mismatch};
 ///
 /// struct Equal;
 ///
@@ -236,7 +236,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, lexicographical_compare};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::lexicographical_compare};
 ///
 /// struct Less;
 ///

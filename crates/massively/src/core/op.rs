@@ -11,7 +11,7 @@ use crate::StorageLayout;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, transform};
+/// use massively::{Executor, vector::transform};
 /// use massively::op::UnaryOp;
 ///
 /// struct Square;
@@ -63,7 +63,7 @@ pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, transform};
+/// use massively::{Executor, vector::transform};
 /// use massively::op::Identity;
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);

@@ -90,7 +90,7 @@ uniform_stream!(
     "A deterministic uniform `u32` stream over an inclusive range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, transform};
+use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -110,7 +110,7 @@ uniform_stream!(
     "A deterministic uniform `u64` stream over an inclusive range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, transform};
+use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -130,7 +130,7 @@ uniform_stream!(
     "A deterministic uniform `f32` stream over a bounded range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, transform};
+use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -150,7 +150,7 @@ uniform_stream!(
     "A deterministic uniform `f64` stream over a bounded range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, transform};
+use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -221,7 +221,7 @@ normal_stream!(
     "A deterministic normally distributed `f32` stream.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, transform};
+use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -240,7 +240,7 @@ normal_stream!(
     "A deterministic normally distributed `f64` stream.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, transform};
+use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -271,7 +271,7 @@ type RandomF32Args = (((MIndex, f32), f32), u32);
 type RandomF64Args = (((MIndex, f64), f64), u32);
 
 #[cubecl::cube]
-impl crate::UnaryOp<RandomU32Args> for UniformU32Op {
+impl crate::op::UnaryOp<RandomU32Args> for UniformU32Op {
     type Output = u32;
 
     fn apply(input: RandomU32Args) -> u32 {
@@ -280,7 +280,7 @@ impl crate::UnaryOp<RandomU32Args> for UniformU32Op {
 }
 
 #[cubecl::cube]
-impl crate::UnaryOp<RandomU64Args> for UniformU64Op {
+impl crate::op::UnaryOp<RandomU64Args> for UniformU64Op {
     type Output = u64;
 
     fn apply(input: RandomU64Args) -> u64 {
@@ -289,7 +289,7 @@ impl crate::UnaryOp<RandomU64Args> for UniformU64Op {
 }
 
 #[cubecl::cube]
-impl crate::UnaryOp<RandomF32Args> for UniformF32Op {
+impl crate::op::UnaryOp<RandomF32Args> for UniformF32Op {
     type Output = f32;
 
     fn apply(input: RandomF32Args) -> f32 {
@@ -298,7 +298,7 @@ impl crate::UnaryOp<RandomF32Args> for UniformF32Op {
 }
 
 #[cubecl::cube]
-impl crate::UnaryOp<RandomF64Args> for UniformF64Op {
+impl crate::op::UnaryOp<RandomF64Args> for UniformF64Op {
     type Output = f64;
 
     fn apply(input: RandomF64Args) -> f64 {
@@ -307,7 +307,7 @@ impl crate::UnaryOp<RandomF64Args> for UniformF64Op {
 }
 
 #[cubecl::cube]
-impl crate::UnaryOp<RandomF32Args> for NormalF32Op {
+impl crate::op::UnaryOp<RandomF32Args> for NormalF32Op {
     type Output = f32;
 
     fn apply(input: RandomF32Args) -> f32 {
@@ -316,7 +316,7 @@ impl crate::UnaryOp<RandomF32Args> for NormalF32Op {
 }
 
 #[cubecl::cube]
-impl crate::UnaryOp<RandomF64Args> for NormalF64Op {
+impl crate::op::UnaryOp<RandomF64Args> for NormalF64Op {
     type Output = f64;
 
     fn apply(input: RandomF64Args) -> f64 {

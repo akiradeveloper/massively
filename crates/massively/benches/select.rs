@@ -2,7 +2,9 @@ mod common;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use cubecl::prelude::*;
-use massively::{PredicateOp, copy_where, partition, remove_where, zip7};
+use massively::{
+    op::PredicateOp, vector::copy_where, vector::partition, vector::remove_where, zip7,
+};
 
 struct Positive;
 #[cubecl::cube]

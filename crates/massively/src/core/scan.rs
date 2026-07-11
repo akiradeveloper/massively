@@ -1067,7 +1067,7 @@ pub(crate) fn last_u32<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanonicalStorage, Counting, Permute, Transform, UnaryOp, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Transform, Zip, op::UnaryOp};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]

@@ -7,7 +7,7 @@
 
 ----
 
-**Multi-platform GPU parallel algorithms for Rust.**
+**Multi-platform GPU parallel and graph algorithms for Rust.**
 
 </div>
 
@@ -16,6 +16,15 @@
 `massively` provides Thrust-style parallel algorithms for device-resident data
 on top of [CubeCL](https://github.com/tracel-ai/cubecl). The same algorithm API
 can run on WGPU, CUDA, or HIP through the corresponding CubeCL runtime.
+
+The algorithms are organized into three complementary families:
+
+- vector algorithms for transform, scan, reduction, sorting, selection, and
+  indexed movement
+- segment algorithms that apply map, scan, reduction, ordering, and selection
+  independently to offset-delimited regions
+- graph algorithms expressed through edge computation, aggregation, state
+  updates, frontier relaxation, and batched adjacency operations
 
 Memory movement is explicit, outputs are preallocated, and user-defined
 operations are compiled into GPU kernels. Lazy transforms, permutations, and
@@ -28,9 +37,12 @@ The public API is built around a few ideas:
 - owning device storage through `DeviceVec` and zero-copy views through
   `DeviceSlice` and `DeviceSliceMut`
 - logical row values assembled with `zip2` through `zip7`
-- CubeCL-backed operations such as `UnaryOp`, `PredicateOp`, and `ReductionOp`
-- parallel algorithms such as `transform`, `reduce`, `inclusive_scan`, `sort`,
-  `gather`, `copy_where`, and by-key variants
+- CubeCL-backed operations under `massively::op`, such as `UnaryOp`,
+  `PredicateOp`, and `ReductionOp`
+- parallel algorithms under `massively::vector`, such as `transform`, `reduce`,
+  `inclusive_scan`, `sort`, `gather`, `copy_where`, and by-key variants
+- CSR graph traversal through source, destination, and edge expressions followed
+  by explicit emit, reduction, or state-update terminals
 
 ## Setup
 
@@ -54,7 +66,7 @@ output storage.
 ```rust
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, UnaryOp, transform};
+use massively::{Executor, op::UnaryOp, vector::transform};
 
 struct Double;
 
@@ -78,6 +90,92 @@ fn main() -> Result<(), massively::Error> {
     Ok(())
 }
 ```
+
+## Graph Algorithms
+
+`massively::graph` is a graph programming layer built from the same device
+storage, lazy expressions, multi-column values, and parallel primitives as the
+vector API. It is part of the main crate rather than a separate framework.
+
+Graph programs describe the meaning of an edge computation instead of choosing
+a low-level expansion strategy. A traversal selects outgoing CSR edges from a
+frontier, edge-context expressions select the data to read, and a terminal
+defines where results go.
+
+| Edge expression | Meaning |
+| --- | --- |
+| `source(values)` | Read a value at each edge's source vertex |
+| `destination(values)` | Read a value at each edge's destination vertex |
+| `edge(values)` | Read a value at the edge's CSR position |
+| `source_id()` / `destination_id()` / `edge_id()` | Read topology identities |
+
+Expressions compose with the ordinary `zip2` through `zip7` helpers. Terminals
+then give the edge stream an explicit interpretation:
+
+- `emit` writes one result per traversed edge.
+- `reduce_by_source` reduces each selected CSR row.
+- `reduce_by_destination` resolves colliding destination proposals.
+- `update_by_destination` combines proposals into existing vertex state.
+- `relax_min_by_destination` updates minimum state and produces the next
+  frontier from vertices that actually changed.
+- `intersect_count` performs batched intersections of sorted adjacency rows.
+
+For example, CSR sparse matrix-vector multiplication is the edge expression
+`edge(weight) * destination(vector)`, reduced by source row:
+
+```rust
+use cubecl::prelude::*;
+use massively::{Executor, op::ReductionOp, op::UnaryOp, graph, zip2};
+
+struct Multiply;
+
+#[cubecl::cube]
+impl UnaryOp<(f32, f32)> for Multiply {
+    type Output = f32;
+
+    fn apply(input: (f32, f32)) -> f32 {
+        input.0 * input.1
+    }
+}
+
+struct Sum;
+
+#[cubecl::cube]
+impl ReductionOp<f32> for Sum {
+    fn apply(lhs: f32, rhs: f32) -> f32 {
+        lhs + rhs
+    }
+}
+
+// destinations and offsets form a CSR topology; frontier contains its rows.
+let output = exec.alloc::<f32>(frontier.len());
+graph::traverse(
+    &exec,
+    graph::Csr::new(destinations.slice(..), offsets.slice(..)),
+    frontier.slice(..),
+)?
+.map(
+    zip2(
+        graph::edge(weights.slice(..)),
+        graph::destination(vector.slice(..)),
+    ),
+    Multiply,
+)
+.reduce_by_source(&exec, 0.0, Sum, output.slice_mut(..))?;
+```
+
+Traversal planning and temporary expansion data are private. The current
+lowering composes GPU gather, transform, segmented reduction, sorting, and
+scatter-reduce primitives. Because programs expose semantics rather than that
+lowering, future implementations can fuse edge expressions into terminals and
+choose atomic, sort-reduce, hierarchical, push/pull, or degree-aware
+intersection strategies without changing graph programs.
+
+The graph recipes include breadth-first search, single-source shortest paths,
+PageRank, personalized PageRank, HITS, graph coloring, k-core decomposition,
+minimum spanning tree, Boolean SpGEMM, SpMV, triangle counting, betweenness
+centrality, Forman–Ricci curvature, and graph-based geolocation. See
+[`crates/recipes/src/graph`](crates/recipes/src/graph) for tested compositions.
 
 ## Core Model
 
@@ -176,28 +274,31 @@ single-column-only shortcuts and avoids arity explosion by separating control
 generation from payload movement where possible, especially in by-key
 algorithms.
 
+The same principle applies to graph traversal: the public model names topology,
+edge-context values, and terminal semantics, while frontier expansion and
+conflict resolution remain lowering decisions. This separation is what lets
+graph algorithms share improvements to Massively's underlying primitives.
+
 ## Further Reading
 
 ### Correctness Examples
 
 Every public algorithm has a runnable, single-column example in the
-[API documentation](https://docs.rs/massively). The integration tests under
-`crates/massively/tests` show lazy and multi-column usage. The oracle tests
-compare each public function against the CPU AoS reference and cover the full
-transform input/output arity matrix.
+[API documentation](https://docs.rs/massively). Integration tests are grouped
+under `crates/massively/tests/vector` and `crates/massively/tests/seg`. Their
+oracle tests compare public functions against CPU AoS references and cover the
+full transform input/output arity matrix. Graph algorithm oracles live under
+`crates/massively/tests/graph` and compare all graph recipes with independent CPU
+implementations on generated CSR graphs.
 
 ### Recipes
 
-Runnable recipes live under `crates/recipes`. They are small, LeetCode-style
-programs that combine the algorithm APIs into practical GPU data-processing
-tasks. Each recipe defines a runtime-agnostic `solve` function and uses `main`
-only for a compact sample case with assertions.
-
-Run one with Cargo:
+Recipes under `crates/recipes/src` combine Massively primitives into complete
+algorithms. Vector examples live in `vector/`; graph examples
+written with the traversal algebra live in `graph/` and include GPU tests.
 
 ```sh
-cargo run -p recipes --bin monte_carlo_pi
-cargo run -p recipes --bin merge_ranked_feeds
+cargo nextest run -p massively --test graph_oracle
 ```
 
-See the [recipe list](crates/recipes/README.md) for all runnable programs.
+See the [recipe list](crates/recipes/README.md) for the full catalog.

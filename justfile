@@ -14,4 +14,4 @@ test: test-api
     cargo test -p massively --doc
 
 test-scale:
-    cargo nextest run -p massively --test oracle_scale --no-fail-fast
+    cargo nextest run -p massively --test vector_oracle_scale --no-fail-fast

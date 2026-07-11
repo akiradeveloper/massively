@@ -4,8 +4,9 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    BinaryPredicateOp, Executor, ReductionOp, UnaryOp, copy_where, gather, inclusive_scan,
-    inclusive_scan_by_key, reduce, reduce_by_key, scatter, sort_by_key, transform,
+    Executor, op::BinaryPredicateOp, op::ReductionOp, op::UnaryOp, vector::copy_where,
+    vector::gather, vector::inclusive_scan, vector::inclusive_scan_by_key, vector::reduce,
+    vector::reduce_by_key, vector::scatter, vector::sort_by_key, vector::transform,
 };
 
 const SIZES: &[usize] = &[1_024, 16 * 1_024, 256 * 1_024, 1_024 * 1_024];

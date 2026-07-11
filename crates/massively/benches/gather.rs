@@ -1,7 +1,7 @@
 mod common;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use massively::gather;
+use massively::vector::gather;
 
 fn bench_gather(c: &mut Criterion) {
     let exec = common::exec();

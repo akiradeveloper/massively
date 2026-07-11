@@ -1,6 +1,8 @@
 use cubecl::prelude::Runtime;
 
-use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, ReductionOp, WriteFrom};
+use crate::{
+    Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp, op::ReductionOp,
+};
 
 /// Stably sorts keys and applies the same ordering to values.
 ///
@@ -9,7 +11,7 @@ use crate::{BinaryPredicateOp, Error, Executor, MIndex, MIter, MIterMut, Reducti
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, sort_by_key};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::sort_by_key};
 ///
 /// struct Less;
 ///
@@ -67,7 +69,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, ReductionOp, inclusive_scan_by_key};
+/// use massively::{op::BinaryPredicateOp, Executor, op::ReductionOp, vector::inclusive_scan_by_key};
 ///
 /// struct Equal;
 /// struct Add;
@@ -130,7 +132,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, ReductionOp, exclusive_scan_by_key};
+/// use massively::{op::BinaryPredicateOp, Executor, op::ReductionOp, vector::exclusive_scan_by_key};
 ///
 /// struct Equal;
 /// struct Add;
@@ -197,7 +199,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, ReductionOp, reduce_by_key};
+/// use massively::{op::BinaryPredicateOp, Executor, op::ReductionOp, vector::reduce_by_key};
 ///
 /// struct Equal;
 /// struct Add;
@@ -271,7 +273,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, unique_by_key};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::unique_by_key};
 ///
 /// struct Equal;
 ///

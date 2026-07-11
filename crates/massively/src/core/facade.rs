@@ -65,7 +65,7 @@ where
     Item::StorageLeaves: KernelItem<R, Item>,
     Left: AnyRead<R, Item = Item>,
     Right: AnyRead<R, Item = Item>,
-    Op: crate::BinaryPredicateOp<Item>,
+    Op: crate::op::BinaryPredicateOp<Item>,
 {
     let left = left.normalize(exec)?;
     let right = right.normalize(exec)?;
@@ -96,7 +96,7 @@ macro_rules! scan_method_decl {
                     + crate::read::LowerReadExpression<Slots = $env>
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Op: crate::ReductionOp<Self::Item>;
+                Op: crate::op::ReductionOp<Self::Item>;
         };
     }
 
@@ -115,7 +115,7 @@ macro_rules! sort_method_decl {
                     + crate::read::LowerReadExpression<Slots = $env>
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Less: crate::BinaryPredicateOp<Self::Item>;
+                Less: crate::op::BinaryPredicateOp<Self::Item>;
         };
     }
 
@@ -138,7 +138,7 @@ macro_rules! unique_method_decl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Equal: crate::BinaryPredicateOp<Self::Item>;
+                Equal: crate::op::BinaryPredicateOp<Self::Item>;
         };
     }
 
@@ -181,7 +181,7 @@ macro_rules! partition_method_decl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Pred: crate::PredicateOp<Self::Item>;
+                Pred: crate::op::PredicateOp<Self::Item>;
         };
     }
 
@@ -229,7 +229,7 @@ macro_rules! transform_where_method_decl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Input::Item, $($leaf),+>,
-                Op: crate::UnaryOp<Input::Item>,
+                Op: crate::op::UnaryOp<Input::Item>,
                 Self::Item: crate::WriteFrom<Op::Output>;
         };
     }
@@ -254,7 +254,7 @@ macro_rules! exclusive_method_decl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Op: crate::ReductionOp<Self::Item>;
+                Op: crate::op::ReductionOp<Self::Item>;
         };
     }
 
@@ -283,6 +283,15 @@ pub trait KernelWrite<R: Runtime>: Sized {
         input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         indices: crate::Column<u32>,
     ) -> Result<(), Error>;
+
+    fn scatter_combine_storage<Op>(
+        self,
+        exec: &Executor<R>,
+        input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        indices: &crate::DeviceVec<R, u32>,
+    ) -> Result<(), Error>
+    where
+        Op: crate::op::ReductionOp<Self::Item>;
 
     fn select_storage(
         self,
@@ -315,7 +324,7 @@ pub trait KernelWrite<R: Runtime>: Sized {
         mode: u8,
     ) -> Result<u32, Error>
     where
-        Less: crate::BinaryPredicateOp<Self::Item>;
+        Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     fn materialize_a1<Input, L0>(self, exec: &Executor<R>, input: Input) -> Result<(), Error>
     where
@@ -577,7 +586,7 @@ macro_rules! scan_method_impl {
                     + crate::read::LowerReadExpression<Slots = $read_env>
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Op: crate::ReductionOp<Self::Item>,
+                Op: crate::op::ReductionOp<Self::Item>,
             {
                 <crate::Dispatch<$read_arity, $write_arity> as crate::scan::InclusiveScanDispatch<
                     R,
@@ -607,7 +616,7 @@ macro_rules! sort_method_impl {
                     + crate::read::LowerReadExpression<Slots = $read_env>
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Less: crate::BinaryPredicateOp<Self::Item>,
+                Less: crate::op::BinaryPredicateOp<Self::Item>,
             {
                 crate::ordering::sort(exec, input, less, self.output)
             }
@@ -633,7 +642,7 @@ macro_rules! unique_method_impl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Equal: crate::BinaryPredicateOp<Self::Item>,
+                Equal: crate::op::BinaryPredicateOp<Self::Item>,
             {
                 crate::ordering::unique(exec, input, equal, self.output)
             }
@@ -686,7 +695,7 @@ macro_rules! partition_method_impl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Pred: crate::PredicateOp<Self::Item>,
+                Pred: crate::op::PredicateOp<Self::Item>,
             {
                 crate::selection::partition(exec, input, pred, self.output)
             }
@@ -751,7 +760,7 @@ macro_rules! transform_where_method_impl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Input::Item, $($leaf),+>,
-                Op: crate::UnaryOp<Input::Item>,
+                Op: crate::op::UnaryOp<Input::Item>,
                 Item: crate::WriteFrom<Op::Output>,
             {
                 let input_len = input.logical_len()?;
@@ -800,7 +809,7 @@ macro_rules! exclusive_method_impl {
                     >
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Self::Item, $($leaf),+>,
-                Op: crate::ReductionOp<Self::Item>,
+                Op: crate::op::ReductionOp<Self::Item>,
             {
                 crate::scan::exclusive_scan(exec, input, init, op, self.output)
             }
@@ -830,6 +839,21 @@ macro_rules! storage_write_methods {
                 crate::CanonicalStorage::read(input),
             );
             crate::indexed::gather_direct(exec, input, indices, self.output)
+        }
+
+        fn scatter_combine_storage<Op>(
+            self,
+            exec: &Executor<R>,
+            input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+            indices: &crate::DeviceVec<R, u32>,
+        ) -> Result<(), Error>
+        where
+            Op: crate::op::ReductionOp<Self::Item>,
+        {
+            let input = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(input),
+            );
+            crate::core::scatter_reduce::apply::<R, _, _, Op>(exec, input, indices, self.output)
         }
 
         fn select_storage(
@@ -881,7 +905,7 @@ macro_rules! storage_write_methods {
             mode: u8,
         ) -> Result<u32, Error>
         where
-            Less: crate::BinaryPredicateOp<Self::Item>,
+            Less: crate::op::BinaryPredicateOp<Self::Item>,
         {
             let left =
                 crate::read::Reassociate::<_, Self::Item>::new(crate::CanonicalStorage::read(left));
@@ -1159,7 +1183,7 @@ macro_rules! reduce_method_decl {
                     + crate::read::LowerReadExpression<Slots = $env>
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Item, $($leaf),+>,
-                Op: crate::ReductionOp<Item>;
+                Op: crate::op::ReductionOp<Item>;
         };
     }
 
@@ -1212,7 +1236,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         mode: u8,
     ) -> Result<PairResult, Error>
     where
-        Op: crate::BinaryPredicateOp<Item>;
+        Op: crate::op::BinaryPredicateOp<Item>;
 
     fn bounds<Less>(
         exec: &Executor<R>,
@@ -1222,7 +1246,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         upper: bool,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>;
+        Less: crate::op::BinaryPredicateOp<Item>;
 
     fn merge_control<Less>(
         exec: &Executor<R>,
@@ -1231,7 +1255,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         less: Less,
     ) -> Result<crate::merge::MergeControl<R>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>;
+        Less: crate::op::BinaryPredicateOp<Item>;
 
     fn sort_control<Less>(
         exec: &Executor<R>,
@@ -1239,7 +1263,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         less: Less,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>;
+        Less: crate::op::BinaryPredicateOp<Item>;
 
     fn sort_ordering<Less>(
         exec: &Executor<R>,
@@ -1253,7 +1277,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         Error,
     >
     where
-        Less: crate::BinaryPredicateOp<Item>;
+        Less: crate::op::BinaryPredicateOp<Item>;
 
     fn segment_heads<Equal>(
         exec: &Executor<R>,
@@ -1261,7 +1285,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         equal: Equal,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Equal: crate::BinaryPredicateOp<Item>;
+        Equal: crate::op::BinaryPredicateOp<Item>;
 
     fn sorted_breaks<Less>(
         exec: &Executor<R>,
@@ -1269,7 +1293,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         less: Less,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>;
+        Less: crate::op::BinaryPredicateOp<Item>;
 
     fn segmented<Op>(
         exec: &Executor<R>,
@@ -1280,7 +1304,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAl
         mode: u8,
     ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
     where
-        Op: crate::ReductionOp<Item>;
+        Op: crate::op::ReductionOp<Item>;
 
     reduce_method_decl!(reduce_a1, crate::A1, crate::read::Env1<L0>, Eval1, [L0]);
     reduce_method_decl!(reduce_a2, crate::A2, crate::read::Env2<L0, L1>, Eval2, [L0, L1]);
@@ -1316,7 +1340,7 @@ macro_rules! reduce_method_impl {
                     + crate::read::LowerReadExpression<Slots = $env>
                     + crate::reduce::StageRead<R, crate::read::Env0>,
                 Input::DeviceExpr: crate::eval::$eval<Item, $($leaf),+>,
-                Op: crate::ReductionOp<Item>,
+                Op: crate::op::ReductionOp<Item>,
             {
                 <crate::Dispatch<$arity, $storage> as crate::reduce::ReduceDispatch<
                     R,
@@ -1393,7 +1417,7 @@ macro_rules! impl_kernel_item {
                     mode: u8,
                 ) -> Result<PairResult, Error>
                 where
-                    Op: crate::BinaryPredicateOp<Item>,
+                    Op: crate::op::BinaryPredicateOp<Item>,
                 {
                     let left = crate::read::Reassociate::<_, Item>::new(
                         crate::CanonicalStorage::read(left),
@@ -1422,7 +1446,7 @@ macro_rules! impl_kernel_item {
                     upper: bool,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Item>,
+                    Less: crate::op::BinaryPredicateOp<Item>,
                 {
                     let source = crate::read::Reassociate::<_, Item>::new(
                         crate::CanonicalStorage::read(source),
@@ -1444,7 +1468,7 @@ macro_rules! impl_kernel_item {
                     less: Less,
                 ) -> Result<crate::merge::MergeControl<R>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Item>,
+                    Less: crate::op::BinaryPredicateOp<Item>,
                 {
                     let left = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
                     let right = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
@@ -1457,7 +1481,7 @@ macro_rules! impl_kernel_item {
                     less: Less,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Item>,
+                    Less: crate::op::BinaryPredicateOp<Item>,
                 {
                     let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     crate::ordering::sort_control_with(exec, input, less)
@@ -1475,7 +1499,7 @@ macro_rules! impl_kernel_item {
                     Error,
                 >
                 where
-                    Less: crate::BinaryPredicateOp<Item>,
+                    Less: crate::op::BinaryPredicateOp<Item>,
                 {
                     <Item as crate::ordering::sort::SortStorageItem<R, Less>>::sort_storage(
                         exec, input, true,
@@ -1488,7 +1512,7 @@ macro_rules! impl_kernel_item {
                     equal: Equal,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
                 where
-                    Equal: crate::BinaryPredicateOp<Item>,
+                    Equal: crate::op::BinaryPredicateOp<Item>,
                 {
                     let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     crate::core::by_key::segment_heads_with(exec, input, equal)
@@ -1500,7 +1524,7 @@ macro_rules! impl_kernel_item {
                     _less: Less,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Item>,
+                    Less: crate::op::BinaryPredicateOp<Item>,
                 {
                     let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     crate::ordering::sorted_break_flags::<R, _, Less>(exec, input)
@@ -1515,7 +1539,7 @@ macro_rules! impl_kernel_item {
                     mode: u8,
                 ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
                 where
-                    Op: crate::ReductionOp<Item>,
+                    Op: crate::op::ReductionOp<Item>,
                 {
                     let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     match mode {
@@ -1597,7 +1621,7 @@ where
         mode: u8,
     ) -> Result<PairResult, Error>
     where
-        Op: crate::BinaryPredicateOp<Item>,
+        Op: crate::op::BinaryPredicateOp<Item>,
     {
         let left = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
         let right = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
@@ -1626,7 +1650,7 @@ where
         upper: bool,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>,
+        Less: crate::op::BinaryPredicateOp<Item>,
     {
         let source =
             crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(source));
@@ -1646,7 +1670,7 @@ where
         less: Less,
     ) -> Result<crate::merge::MergeControl<R>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>,
+        Less: crate::op::BinaryPredicateOp<Item>,
     {
         let left = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
         let right = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
@@ -1659,7 +1683,7 @@ where
         less: Less,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>,
+        Less: crate::op::BinaryPredicateOp<Item>,
     {
         let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         crate::ordering::sort_control_with(exec, input, less)
@@ -1677,7 +1701,7 @@ where
         Error,
     >
     where
-        Less: crate::BinaryPredicateOp<Item>,
+        Less: crate::op::BinaryPredicateOp<Item>,
     {
         <Item as crate::ordering::sort::SortStorageItem<R, Less>>::sort_storage(exec, input, true)
     }
@@ -1688,7 +1712,7 @@ where
         equal: Equal,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Equal: crate::BinaryPredicateOp<Item>,
+        Equal: crate::op::BinaryPredicateOp<Item>,
     {
         let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         crate::core::by_key::segment_heads_with(exec, input, equal)
@@ -1700,7 +1724,7 @@ where
         _less: Less,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Less: crate::BinaryPredicateOp<Item>,
+        Less: crate::op::BinaryPredicateOp<Item>,
     {
         let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         crate::ordering::sorted_break_flags::<R, _, Less>(exec, input)
@@ -1715,7 +1739,7 @@ where
         mode: u8,
     ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
     where
-        Op: crate::ReductionOp<Item>,
+        Op: crate::op::ReductionOp<Item>,
     {
         let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         match mode {
@@ -1780,41 +1804,41 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     ) -> Result<(), Error>
     where
         Output: KernelWrite<R>,
-        Op: crate::UnaryOp<<Input as crate::read::ReadExpression>::Item>,
+        Op: crate::op::UnaryOp<<Input as crate::read::ReadExpression>::Item>,
         Output::Item: crate::WriteFrom<
-                <Op as crate::UnaryOp<<Input as crate::read::ReadExpression>::Item>>::Output,
+                <Op as crate::op::UnaryOp<<Input as crate::read::ReadExpression>::Item>>::Output,
             >,
         Input: crate::read::ReadExpression;
 
     fn count_if<Pred>(input: Input, exec: &Executor<R>, pred: Pred) -> Result<u32, Error>
     where
         Input: crate::read::ReadExpression,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn all_of<Pred>(input: Input, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
         Input: crate::read::ReadExpression,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn any_of<Pred>(input: Input, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
         Input: crate::read::ReadExpression,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn none_of<Pred>(input: Input, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
         Input: crate::read::ReadExpression,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn find_if<Pred>(input: Input, exec: &Executor<R>, pred: Pred) -> Result<Option<u32>, Error>
     where
         Input: crate::read::ReadExpression,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn is_partitioned<Pred>(input: Input, exec: &Executor<R>, pred: Pred) -> Result<bool, Error>
     where
         Input: crate::read::ReadExpression,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn reduce<Op>(
         input: Input,
@@ -1824,7 +1848,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     ) -> Result<<Input as crate::read::ReadExpression>::Item, Error>
     where
         Input: crate::read::ReadExpression,
-        Op: crate::ReductionOp<Input::Item>;
+        Op: crate::op::ReductionOp<Input::Item>;
 
     fn adjacent_find<Equal>(
         input: Input,
@@ -1833,17 +1857,17 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     ) -> Result<Option<u32>, Error>
     where
         Input: crate::read::ReadExpression,
-        Equal: crate::BinaryPredicateOp<Input::Item>;
+        Equal: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn is_sorted_until<Less>(input: Input, exec: &Executor<R>, less: Less) -> Result<u32, Error>
     where
         Input: crate::read::ReadExpression,
-        Less: crate::BinaryPredicateOp<Input::Item>;
+        Less: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn is_sorted<Less>(input: Input, exec: &Executor<R>, less: Less) -> Result<bool, Error>
     where
         Input: crate::read::ReadExpression,
-        Less: crate::BinaryPredicateOp<Input::Item>;
+        Less: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn min_element<Less>(
         input: Input,
@@ -1852,7 +1876,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     ) -> Result<Option<u32>, Error>
     where
         Input: crate::read::ReadExpression,
-        Less: crate::BinaryPredicateOp<Input::Item>;
+        Less: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn max_element<Less>(
         input: Input,
@@ -1861,7 +1885,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     ) -> Result<Option<u32>, Error>
     where
         Input: crate::read::ReadExpression,
-        Less: crate::BinaryPredicateOp<Input::Item>;
+        Less: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn minmax_element<Less>(
         input: Input,
@@ -1870,7 +1894,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     ) -> Result<Option<(u32, u32)>, Error>
     where
         Input: crate::read::ReadExpression,
-        Less: crate::BinaryPredicateOp<Input::Item>;
+        Less: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn inclusive_scan<Output, Op>(
         input: Input,
@@ -1881,7 +1905,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R, Item = Input::Item>,
-        Op: crate::ReductionOp<Input::Item>;
+        Op: crate::op::ReductionOp<Input::Item>;
 
     fn adjacent_difference<Output, Op>(
         input: Input,
@@ -1892,7 +1916,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R, Item = Input::Item>,
-        Op: crate::ReductionOp<Input::Item>;
+        Op: crate::op::ReductionOp<Input::Item>;
 
     fn sort<Output, Less>(
         input: Input,
@@ -1903,7 +1927,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R, Item = Input::Item>,
-        Less: crate::BinaryPredicateOp<Input::Item>;
+        Less: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn unique<Output, Equal>(
         input: Input,
@@ -1914,7 +1938,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R, Item = Input::Item>,
-        Equal: crate::BinaryPredicateOp<Input::Item>;
+        Equal: crate::op::BinaryPredicateOp<Input::Item>;
 
     fn select<Output>(
         input: Input,
@@ -1936,7 +1960,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R, Item = Input::Item>,
-        Pred: crate::PredicateOp<Input::Item>;
+        Pred: crate::op::PredicateOp<Input::Item>;
 
     fn indexed<Output>(
         input: Input,
@@ -1960,7 +1984,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R>,
-        Op: crate::UnaryOp<Input::Item>,
+        Op: crate::op::UnaryOp<Input::Item>,
         Output::Item: crate::WriteFrom<Op::Output>;
 
     fn exclusive_scan<Output, Op>(
@@ -1973,7 +1997,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     where
         Input: crate::read::ReadExpression,
         Output: KernelWrite<R, Item = Input::Item>,
-        Op: crate::ReductionOp<Input::Item>;
+        Op: crate::op::ReductionOp<Input::Item>;
 }
 
 macro_rules! impl_kernel_read {
@@ -2016,9 +2040,9 @@ macro_rules! impl_kernel_read {
                 ) -> Result<(), Error>
                 where
                     Output: KernelWrite<R>,
-                    Op: crate::UnaryOp<Input::Item>,
+                    Op: crate::op::UnaryOp<Input::Item>,
                     Output::Item:
-                        crate::WriteFrom<<Op as crate::UnaryOp<Input::Item>>::Output>,
+                        crate::WriteFrom<<Op as crate::op::UnaryOp<Input::Item>>::Output>,
                 {
                     output.$method(exec, crate::read::Transform::new(input, op))
                 }
@@ -2029,7 +2053,7 @@ macro_rules! impl_kernel_read {
                     pred: Pred,
                 ) -> Result<u32, Error>
                 where
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     crate::predicate::count_if(exec, input, pred)
                 }
@@ -2040,7 +2064,7 @@ macro_rules! impl_kernel_read {
                     pred: Pred,
                 ) -> Result<bool, Error>
                 where
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     crate::predicate::all_of(exec, input, pred)
                 }
@@ -2051,7 +2075,7 @@ macro_rules! impl_kernel_read {
                     pred: Pred,
                 ) -> Result<bool, Error>
                 where
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     crate::predicate::any_of(exec, input, pred)
                 }
@@ -2062,7 +2086,7 @@ macro_rules! impl_kernel_read {
                     pred: Pred,
                 ) -> Result<bool, Error>
                 where
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     crate::predicate::none_of(exec, input, pred)
                 }
@@ -2073,7 +2097,7 @@ macro_rules! impl_kernel_read {
                     pred: Pred,
                 ) -> Result<Option<u32>, Error>
                 where
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     crate::predicate::find_if(exec, input, pred)
                 }
@@ -2084,7 +2108,7 @@ macro_rules! impl_kernel_read {
                     pred: Pred,
                 ) -> Result<bool, Error>
                 where
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     crate::predicate::is_partitioned(exec, input, pred)
                 }
@@ -2096,7 +2120,7 @@ macro_rules! impl_kernel_read {
                     op: Op,
                 ) -> Result<Input::Item, Error>
                 where
-                    Op: crate::ReductionOp<Input::Item>,
+                    Op: crate::op::ReductionOp<Input::Item>,
                 {
                     <<Input::Item as crate::StorageLayout>::StorageLeaves as KernelItem<
                         R,
@@ -2110,7 +2134,7 @@ macro_rules! impl_kernel_read {
                     equal: Equal,
                 ) -> Result<Option<u32>, Error>
                 where
-                    Equal: crate::BinaryPredicateOp<Input::Item>,
+                    Equal: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     crate::ordering::adjacent_find(exec, input, equal)
                 }
@@ -2121,7 +2145,7 @@ macro_rules! impl_kernel_read {
                     less: Less,
                 ) -> Result<u32, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Input::Item>,
+                    Less: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     crate::ordering::is_sorted_until(exec, input, less)
                 }
@@ -2132,7 +2156,7 @@ macro_rules! impl_kernel_read {
                     less: Less,
                 ) -> Result<bool, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Input::Item>,
+                    Less: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     crate::ordering::is_sorted(exec, input, less)
                 }
@@ -2143,7 +2167,7 @@ macro_rules! impl_kernel_read {
                     less: Less,
                 ) -> Result<Option<u32>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Input::Item>,
+                    Less: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     crate::ordering::min_element(exec, input, less)
                 }
@@ -2154,7 +2178,7 @@ macro_rules! impl_kernel_read {
                     less: Less,
                 ) -> Result<Option<u32>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Input::Item>,
+                    Less: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     crate::ordering::max_element(exec, input, less)
                 }
@@ -2165,7 +2189,7 @@ macro_rules! impl_kernel_read {
                     less: Less,
                 ) -> Result<Option<(u32, u32)>, Error>
                 where
-                    Less: crate::BinaryPredicateOp<Input::Item>,
+                    Less: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     crate::ordering::minmax_element(exec, input, less)
                 }
@@ -2178,7 +2202,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<(), Error>
                 where
                     Output: KernelWrite<R, Item = Input::Item>,
-                    Op: crate::ReductionOp<Input::Item>,
+                    Op: crate::op::ReductionOp<Input::Item>,
                 {
                     output.$scan_method(exec, input, op)
                 }
@@ -2191,7 +2215,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<(), Error>
                 where
                     Output: KernelWrite<R, Item = Input::Item>,
-                    Op: crate::ReductionOp<Input::Item>,
+                    Op: crate::op::ReductionOp<Input::Item>,
                 {
                     output.$method(exec, crate::read::Adjacent::new(input, op))
                 }
@@ -2204,7 +2228,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<(), Error>
                 where
                     Output: KernelWrite<R, Item = Input::Item>,
-                    Less: crate::BinaryPredicateOp<Input::Item>,
+                    Less: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     output.$sort_method(exec, input, less)
                 }
@@ -2217,7 +2241,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<u32, Error>
                 where
                     Output: KernelWrite<R, Item = Input::Item>,
-                    Equal: crate::BinaryPredicateOp<Input::Item>,
+                    Equal: crate::op::BinaryPredicateOp<Input::Item>,
                 {
                     output.$unique_method(exec, input, equal)
                 }
@@ -2243,7 +2267,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<u32, Error>
                 where
                     Output: KernelWrite<R, Item = Input::Item>,
-                    Pred: crate::PredicateOp<Input::Item>,
+                    Pred: crate::op::PredicateOp<Input::Item>,
                 {
                     output.$partition_method(exec, input, pred)
                 }
@@ -2271,7 +2295,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<(), Error>
                 where
                     Output: KernelWrite<R>,
-                    Op: crate::UnaryOp<Input::Item>,
+                    Op: crate::op::UnaryOp<Input::Item>,
                     Output::Item: crate::WriteFrom<Op::Output>,
                 {
                     output.$transform_where_method(exec, input, op, flags)
@@ -2286,7 +2310,7 @@ macro_rules! impl_kernel_read {
                 ) -> Result<(), Error>
                 where
                     Output: KernelWrite<R, Item = Input::Item>,
-                    Op: crate::ReductionOp<Input::Item>,
+                    Op: crate::op::ReductionOp<Input::Item>,
                 {
                     output.$exclusive_method(exec, input, init, op)
                 }

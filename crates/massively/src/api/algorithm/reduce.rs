@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, ReductionOp};
+use crate::{Error, Executor, MIter, op::ReductionOp};
 
 /// Reduces all input items, starting from `init`.
 ///
@@ -9,7 +9,7 @@ use crate::{Error, Executor, MIter, ReductionOp};
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, ReductionOp, reduce};
+/// use massively::{Executor, op::ReductionOp, vector::reduce};
 ///
 /// struct Add;
 ///

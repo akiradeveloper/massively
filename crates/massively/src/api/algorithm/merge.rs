@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{BinaryPredicateOp, Error, Executor, MIter, MIterMut, WriteFrom};
+use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
 
 /// Stably merges two sorted ranges.
 ///
@@ -9,7 +9,7 @@ use crate::{BinaryPredicateOp, Error, Executor, MIter, MIterMut, WriteFrom};
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, merge};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::merge};
 ///
 /// struct Less;
 ///
@@ -61,7 +61,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{BinaryPredicateOp, Executor, merge_by_key};
+/// use massively::{op::BinaryPredicateOp, Executor, vector::merge_by_key};
 ///
 /// struct Less;
 ///

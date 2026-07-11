@@ -3,7 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceVec, Error, Executor, MStorageElement, ReductionOp, StorageLayout,
+    DeviceVec, Error, Executor, MStorageElement, StorageLayout,
+    op::ReductionOp,
     storage::{
         Decompose, Last, LoadLeaves2, LoadLeaves3, LoadLeaves4, LoadLeaves5, LoadLeaves6,
         LoadLeaves7, LoadMutLeaves2, LoadMutLeaves3, LoadMutLeaves4, LoadMutLeaves5,

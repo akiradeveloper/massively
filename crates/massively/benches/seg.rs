@@ -3,11 +3,15 @@ mod common;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use cubecl::prelude::*;
 use massively::{
-    BinaryPredicateOp, ReductionOp, UnaryOp, inclusive_scan_by_key, reduce_by_key,
+    op::BinaryPredicateOp,
+    op::ReductionOp,
+    op::UnaryOp,
     seg::{
         ForEachSegment, InclusiveScan, Map, MapLikeExecutable, Reduce, ReduceLikeExecutable,
         Reverse, Segmented, SegmentedMut, Sort, Unique, UniqueLikeExecutable,
     },
+    vector::inclusive_scan_by_key,
+    vector::reduce_by_key,
 };
 
 struct AddOne;

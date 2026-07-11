@@ -4,7 +4,8 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, PredicateOp, all_of, any_of, count_if, find_if, is_partitioned, lazy, none_of, zip7,
+    Executor, lazy, op::PredicateOp, vector::all_of, vector::any_of, vector::count_if,
+    vector::find_if, vector::is_partitioned, vector::none_of, zip7,
 };
 
 const SIZES: &[u32] = &[1 << 20, 1 << 24];

@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, MIterMut, UnaryOp, WriteFrom};
+use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::UnaryOp};
 
 /// Applies a unary operation and writes its result to preallocated storage.
 ///
@@ -9,7 +9,7 @@ use crate::{Error, Executor, MIter, MIterMut, UnaryOp, WriteFrom};
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, UnaryOp, transform};
+/// use massively::{Executor, op::UnaryOp, vector::transform};
 ///
 /// struct AddOne;
 ///

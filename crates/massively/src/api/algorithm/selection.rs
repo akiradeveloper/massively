@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, PredicateOp, UnaryOp, WriteFrom};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::PredicateOp, op::UnaryOp};
 
 /// Copies rows whose stencil is nonzero.
 ///
@@ -10,7 +10,7 @@ use crate::{Error, Executor, MIndex, MIter, MIterMut, PredicateOp, UnaryOp, Writ
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, copy_where};
+/// use massively::{Executor, vector::copy_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30, 40]);
@@ -53,7 +53,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, remove_where};
+/// use massively::{Executor, vector::remove_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30, 40]);
@@ -97,7 +97,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, PredicateOp, partition};
+/// use massively::{Executor, op::PredicateOp, vector::partition};
 ///
 /// struct Even;
 ///
@@ -139,7 +139,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, fill};
+/// use massively::{Executor, vector::fill};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let output = exec.alloc::<u32>(4);
@@ -162,7 +162,7 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, replace_where};
+/// use massively::{Executor, vector::replace_where};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let stencil = exec.to_device(&[0_u32, 1, 0, 1]);
@@ -202,7 +202,7 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, UnaryOp, transform_where};
+/// use massively::{Executor, op::UnaryOp, vector::transform_where};
 ///
 /// struct AddOne;
 ///

@@ -1,8 +1,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    BinaryPredicateOp, DeviceVec, Error, Executor, MIndex, MItem, MIter, MIterMut, ReductionOp,
-    WriteFrom,
+    DeviceVec, Error, Executor, MIndex, MItem, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp,
+    op::ReductionOp,
 };
 
 const BLOCK_SIZE: u32 = 256;
@@ -97,47 +97,6 @@ fn selected_offsets_kernel(
         } else {
             positions[end - 1usize]
         };
-    }
-}
-
-#[cubecl::cube(launch_unchecked)]
-fn gathered_segment_lengths_kernel(
-    input_offsets: &[u32],
-    segment_indices: &[u32],
-    lengths: &mut [u32],
-) {
-    let selection = ABSOLUTE_POS as usize;
-    if selection < lengths.len() {
-        let segment = segment_indices[selection] as usize;
-        lengths[selection] = input_offsets[segment + 1usize] - input_offsets[segment];
-    }
-}
-
-#[cubecl::cube(launch_unchecked)]
-fn gathered_offsets_kernel(positions: &[u32], output_offsets: &mut [u32]) {
-    let selection = ABSOLUTE_POS as usize;
-    if selection < positions.len() {
-        if selection == 0usize {
-            output_offsets[0] = 0u32;
-        }
-        output_offsets[selection + 1usize] = positions[selection];
-    }
-}
-
-#[cubecl::cube(launch_unchecked)]
-fn gathered_source_indices_kernel(
-    input_offsets: &[u32],
-    segment_indices: &[u32],
-    output_offsets: &[u32],
-    output_segment_ids: &[u32],
-    source_indices: &mut [u32],
-) {
-    let output_index = ABSOLUTE_POS as usize;
-    if output_index < source_indices.len() {
-        let output_segment = output_segment_ids[output_index] as usize - 1usize;
-        let input_segment = segment_indices[output_segment] as usize;
-        source_indices[output_index] =
-            input_offsets[input_segment] + output_index as u32 - output_offsets[output_segment];
     }
 }
 
@@ -237,7 +196,7 @@ impl<R: Runtime> SegmentControl<R> {
 
         let ids = exec.alloc::<u32>(value_len);
         if value_len != 0 {
-            crate::inclusive_scan(exec, heads.slice(..), MaxU32, ids.slice_mut(..))?;
+            crate::vector::inclusive_scan(exec, heads.slice(..), MaxU32, ids.slice_mut(..))?;
         }
 
         Ok(Self {
@@ -457,105 +416,5 @@ impl<R: Runtime> SegmentControl<R> {
             storage,
             &selection,
         )
-    }
-}
-
-pub(crate) struct GatherControl<R: Runtime> {
-    pub(crate) output_offsets: DeviceVec<R, u32>,
-    pub(crate) source_indices: DeviceVec<R, u32>,
-    pub(crate) output_len: MIndex,
-}
-
-impl<R: Runtime> GatherControl<R> {
-    pub(crate) fn new<InputOffsets, Indices>(
-        exec: &Executor<R>,
-        input_offsets: InputOffsets,
-        segment_indices: Indices,
-    ) -> Result<Self, Error>
-    where
-        InputOffsets: MIter<R, Item = MIndex>,
-        Indices: MIter<R, Item = MIndex>,
-    {
-        let input_offsets = input_offsets.materialize_u32(exec)?;
-        if input_offsets.is_empty() {
-            return Err(Error::LengthMismatch { left: 1, right: 0 });
-        }
-        let segment_indices = segment_indices.materialize_u32(exec)?;
-        let selection_count = segment_indices.len();
-        let lengths = exec.alloc::<u32>(selection_count);
-
-        if selection_count != 0 {
-            unsafe {
-                gathered_segment_lengths_kernel::launch_unchecked::<R>(
-                    exec.client(),
-                    crate::launch::cube_count_1d(selection_count.div_ceil(BLOCK_SIZE as usize))?,
-                    CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(input_offsets.handle.clone(), input_offsets.len()),
-                    BufferArg::from_raw_parts(
-                        segment_indices.handle.clone(),
-                        segment_indices.len(),
-                    ),
-                    BufferArg::from_raw_parts(lengths.handle.clone(), lengths.len()),
-                );
-            }
-        }
-
-        let positions = crate::core::scan::inclusive_scan_u32(exec, &lengths)?;
-        let output_len = crate::core::scan::last_u32(exec, &positions)?;
-        let output_offset_count = selection_count
-            .checked_add(1)
-            .ok_or(Error::LengthTooLarge {
-                len: selection_count,
-            })?;
-        let output_offsets = if selection_count == 0 {
-            exec.full(1, 0u32)?
-        } else {
-            let output_offsets = exec.alloc::<u32>(output_offset_count);
-            unsafe {
-                gathered_offsets_kernel::launch_unchecked::<R>(
-                    exec.client(),
-                    crate::launch::cube_count_1d(selection_count.div_ceil(BLOCK_SIZE as usize))?,
-                    CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
-                    BufferArg::from_raw_parts(output_offsets.handle.clone(), output_offsets.len()),
-                );
-            }
-            output_offsets
-        };
-
-        let source_indices = exec.alloc::<u32>(output_len as usize);
-        if output_len != 0 {
-            let output_control = SegmentControl::from_materialized(
-                exec,
-                output_offsets.clone(),
-                output_len as usize,
-            )?;
-            unsafe {
-                gathered_source_indices_kernel::launch_unchecked::<R>(
-                    exec.client(),
-                    crate::launch::cube_count_1d(
-                        (output_len as usize).div_ceil(BLOCK_SIZE as usize),
-                    )?,
-                    CubeDim::new_1d(BLOCK_SIZE),
-                    BufferArg::from_raw_parts(input_offsets.handle.clone(), input_offsets.len()),
-                    BufferArg::from_raw_parts(
-                        segment_indices.handle.clone(),
-                        segment_indices.len(),
-                    ),
-                    BufferArg::from_raw_parts(output_offsets.handle.clone(), output_offsets.len()),
-                    BufferArg::from_raw_parts(
-                        output_control.ids.handle.clone(),
-                        output_control.ids.len(),
-                    ),
-                    BufferArg::from_raw_parts(source_indices.handle.clone(), source_indices.len()),
-                );
-            }
-        }
-
-        Ok(Self {
-            output_offsets,
-            source_indices,
-            output_len,
-        })
     }
 }
