@@ -3,8 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MAlloc, MStorage,
-    ReadExpression, S1, StorageLayout, Transform, Zip,
+    A1, CanonicalAlloc, CanonicalStorage, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch,
+    Error, Executor, ReadExpression, S1, StorageLayout, Transform, Zip,
     allocation::NormalizeInput,
     indexed::GatherInput,
     masked::MaskedCopyInput,
@@ -310,7 +310,7 @@ where
 
     fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc::<u32>(len);
+        let positions = exec.alloc_canonical::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, IsNonZero),
@@ -322,7 +322,7 @@ where
 
     fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc::<u32>(len);
+        let positions = exec.alloc_canonical::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, IsZero),
@@ -334,7 +334,7 @@ where
 
     fn materialize_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let flags = exec.alloc::<u32>(len);
+        let flags = exec.alloc_canonical::<u32>(len);
         materialize(exec, self, flags.slice_mut(..))?;
         Ok(flags)
     }
@@ -399,7 +399,7 @@ impl<R: Runtime> SelectionControl<R> {
         count: u32,
         invert: bool,
     ) -> Result<Self, Error> {
-        let indices = exec.alloc::<u32>(count as usize);
+        let indices = exec.alloc_canonical::<u32>(count as usize);
         if count != 0 {
             let len = u32::try_from(positions.len()).map_err(|_| Error::LengthTooLarge {
                 len: positions.len(),
@@ -456,8 +456,8 @@ impl<R, Input, Output> CopySelected<R, Output> for Input
 where
     R: Runtime,
     Input: NormalizeInput<R> + StageRead<R, Env0>,
-    Input::Storage: MStorage<R>,
-    <Input::Storage as MStorage<R>>::Read: GatherInput<R, Column<u32>, Output>,
+    Input::Storage: CanonicalStorage<R>,
+    <Input::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Column<u32>, Output>,
     Output: OutputExpression,
 {
     fn source_len(&self) -> Result<usize, Error> {
@@ -635,26 +635,26 @@ where
     R: Runtime,
     Input: ReadExpression + StageRead<R, Env0>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: MAlloc<R>,
-    <Op::Output as MAlloc<R>>::Storage: MStorage<R>,
+    Op::Output: CanonicalAlloc<R>,
+    <Op::Output as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     Transform<Input, Op>: ReadExpression<Item = Op::Output>
         + LowerReadExpression
         + StageRead<R, Env0>,
-    <<Op::Output as MAlloc<R>>::Storage as MStorage<R>>::Write:
+    <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
         LowerOutputExpression + StageOutput<R, Env0>,
-    <<<Op::Output as MAlloc<R>>::Storage as MStorage<R>>::Write as OutputExpression>::Item:
+    <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
         crate::WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
     Dispatch<
         <Transform<Input, Op> as ReadExpression>::ReadArity,
-        <<<Op::Output as MAlloc<R>>::Storage as MStorage<R>>::Write as OutputExpression>::StorageArity,
+        <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity,
     >: MaterializeDispatch<
             R,
             Transform<Input, Op>,
-            <<Op::Output as MAlloc<R>>::Storage as MStorage<R>>::Write,
+            <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
             <Transform<Input, Op> as LowerReadExpression>::Slots,
-            <<<Op::Output as MAlloc<R>>::Storage as MStorage<R>>::Write as LowerOutputExpression>::Slots,
+            <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
         >,
-    <<Op::Output as MAlloc<R>>::Storage as MStorage<R>>::Read:
+    <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read:
         MaskedCopyInput<R, Output>,
     Stencil: FlagInput<R>,
     Output: OutputExpression,
@@ -675,7 +675,7 @@ where
         if input_len != output_len {
             return Err(Error::LengthMismatch { left: input_len, right: output_len });
         }
-        let temporary = exec.alloc::<Op::Output>(input_len);
+        let temporary = exec.alloc_canonical::<Op::Output>(input_len);
         crate::transform::transform(exec, self, op, temporary.write())?;
         let flags = stencil.materialize_flags(exec)?;
         temporary.read().masked_copy(exec, &flags, output)
@@ -739,7 +739,7 @@ mod tests {
     fn fused_stencil_scan_produces_binary_positions() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let flags = exec.to_device(&[0_u32, 7, 3, 0]);
-        let positions = exec.alloc::<u32>(4);
+        let positions = exec.alloc_canonical::<u32>(4);
         inclusive_scan(
             &exec,
             Transform::new(flags.column(), IsNonZero),

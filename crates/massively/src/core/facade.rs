@@ -32,7 +32,7 @@ pub trait AnyRead<R: Runtime>: Sized {
     fn normalize(
         self,
         exec: &Executor<R>,
-    ) -> Result<<Self::Item as crate::MAlloc<R>>::Storage, Error>;
+    ) -> Result<<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>;
 }
 
 impl<R, Input, Slots> AnyRead<R> for Read<Input, Slots>
@@ -47,7 +47,7 @@ where
     fn normalize(
         self,
         exec: &Executor<R>,
-    ) -> Result<<Self::Item as crate::MAlloc<R>>::Storage, Error> {
+    ) -> Result<<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error> {
         <Slots as KernelRead<R, Input>>::normalize(self.input, exec)
     }
 }
@@ -274,43 +274,43 @@ pub trait KernelWrite<R: Runtime>: Sized {
     fn materialize_storage(
         self,
         exec: &Executor<R>,
-        input: &<Self::Item as crate::MAlloc<R>>::Storage,
+        input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
     ) -> Result<(), Error>;
 
     fn gather_storage(
         self,
         exec: &Executor<R>,
-        input: &<Self::Item as crate::MAlloc<R>>::Storage,
+        input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         indices: crate::Column<u32>,
     ) -> Result<(), Error>;
 
     fn select_storage(
         self,
         exec: &Executor<R>,
-        input: &<Self::Item as crate::MAlloc<R>>::Storage,
+        input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         flags: crate::DeviceVec<R, u32>,
     ) -> Result<u32, Error>;
 
     fn select_storage_control(
         self,
         exec: &Executor<R>,
-        input: &<Self::Item as crate::MAlloc<R>>::Storage,
+        input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         control: &crate::selection::SelectionControl<R>,
     ) -> Result<u32, Error>;
 
     fn concat_storage(
         self,
         exec: &Executor<R>,
-        left: &<Self::Item as crate::MAlloc<R>>::Storage,
-        right: &<Self::Item as crate::MAlloc<R>>::Storage,
+        left: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        right: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         control: &crate::merge::MergeControl<R>,
     ) -> Result<(), Error>;
 
     fn set_storage<Less>(
         self,
         exec: &Executor<R>,
-        left: &<Self::Item as crate::MAlloc<R>>::Storage,
-        right: &<Self::Item as crate::MAlloc<R>>::Storage,
+        left: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        right: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
         mode: u8,
     ) -> Result<u32, Error>
@@ -762,16 +762,16 @@ macro_rules! transform_where_method_impl {
                 if input_len != output_len {
                     return Err(Error::LengthMismatch { left: input_len, right: output_len });
                 }
-                let temporary = exec.alloc::<Item>(input_len);
+                let temporary = exec.alloc_canonical::<Item>(input_len);
                 let temporary_output = crate::output::ReassociatedOutput::<
                     _,
                     Item,
                     $write_slots,
-                >::new(crate::MStorage::write(&temporary));
+                >::new(crate::CanonicalStorage::write(&temporary));
                 crate::transform::transform(exec, input, op, temporary_output)?;
                 let flags = crate::selection::FlagInput::materialize_flags(flags, exec)?;
                 crate::masked::MaskedCopyInput::masked_copy(
-                    crate::MStorage::read(&temporary),
+                    crate::CanonicalStorage::read(&temporary),
                     exec,
                     &flags,
                     self.output,
@@ -812,32 +812,35 @@ macro_rules! storage_write_methods {
         fn materialize_storage(
             self,
             exec: &Executor<R>,
-            input: &<Self::Item as crate::MAlloc<R>>::Storage,
+            input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         ) -> Result<(), Error> {
-            let input =
-                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(input));
+            let input = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(input),
+            );
             crate::materialize(exec, input, self.output)
         }
 
         fn gather_storage(
             self,
             exec: &Executor<R>,
-            input: &<Self::Item as crate::MAlloc<R>>::Storage,
+            input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
             indices: crate::Column<u32>,
         ) -> Result<(), Error> {
-            let input =
-                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(input));
+            let input = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(input),
+            );
             crate::indexed::gather_direct(exec, input, indices, self.output)
         }
 
         fn select_storage(
             self,
             exec: &Executor<R>,
-            input: &<Self::Item as crate::MAlloc<R>>::Storage,
+            input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
             flags: crate::DeviceVec<R, u32>,
         ) -> Result<u32, Error> {
-            let input =
-                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(input));
+            let input = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(input),
+            );
             let control = crate::selection::SelectionControl::from_flags(exec, flags)?;
             crate::selection::CopySelected::copy_selected(input, exec, &control, self.output)
         }
@@ -845,41 +848,46 @@ macro_rules! storage_write_methods {
         fn select_storage_control(
             self,
             exec: &Executor<R>,
-            input: &<Self::Item as crate::MAlloc<R>>::Storage,
+            input: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
             control: &crate::selection::SelectionControl<R>,
         ) -> Result<u32, Error> {
-            let input =
-                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(input));
+            let input = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(input),
+            );
             crate::selection::CopySelected::copy_selected(input, exec, control, self.output)
         }
 
         fn concat_storage(
             self,
             exec: &Executor<R>,
-            left: &<Self::Item as crate::MAlloc<R>>::Storage,
-            right: &<Self::Item as crate::MAlloc<R>>::Storage,
+            left: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+            right: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
             control: &crate::merge::MergeControl<R>,
         ) -> Result<(), Error> {
-            let left = crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(left));
-            let right =
-                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(right));
+            let left =
+                crate::read::Reassociate::<_, Self::Item>::new(crate::CanonicalStorage::read(left));
+            let right = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(right),
+            );
             crate::merge::ConcatApply::concat_apply(left, exec, right, control, self.output)
         }
 
         fn set_storage<Less>(
             self,
             exec: &Executor<R>,
-            left: &<Self::Item as crate::MAlloc<R>>::Storage,
-            right: &<Self::Item as crate::MAlloc<R>>::Storage,
+            left: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+            right: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
             less: Less,
             mode: u8,
         ) -> Result<u32, Error>
         where
             Less: crate::BinaryPredicateOp<Self::Item>,
         {
-            let left = crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(left));
-            let right =
-                crate::read::Reassociate::<_, Self::Item>::new(crate::MStorage::read(right));
+            let left =
+                crate::read::Reassociate::<_, Self::Item>::new(crate::CanonicalStorage::read(left));
+            let right = crate::read::Reassociate::<_, Self::Item>::new(
+                crate::CanonicalStorage::read(right),
+            );
             match mode {
                 0 => crate::core::set::set_union(exec, left, right, less, self.output),
                 1 => crate::core::set::set_intersection(exec, left, right, less, self.output),
@@ -1160,7 +1168,7 @@ macro_rules! normalize_method_decl {
             fn $name<Input, $($leaf),+>(
                 input: Input,
                 exec: &Executor<R>,
-            ) -> Result<<Item as crate::MAlloc<R>>::Storage, Error>
+            ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
             where
                 $($leaf: crate::MStorageElement,)+
                 Input: Clone
@@ -1175,7 +1183,9 @@ macro_rules! normalize_method_decl {
         };
     }
 
-pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>: Sized {
+pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::CanonicalAlloc<R>>:
+    Sized
+{
     type ReboundWrite<Output>: KernelWrite<R, Item = Item>
     where
         Output: crate::output::OutputExpression
@@ -1196,8 +1206,8 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
 
     fn pair<Op>(
         exec: &Executor<R>,
-        left: &<Item as crate::MAlloc<R>>::Storage,
-        right: &<Item as crate::MAlloc<R>>::Storage,
+        left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         op: Op,
         mode: u8,
     ) -> Result<PairResult, Error>
@@ -1206,8 +1216,8 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
 
     fn bounds<Less>(
         exec: &Executor<R>,
-        source: &<Item as crate::MAlloc<R>>::Storage,
-        values: &<Item as crate::MAlloc<R>>::Storage,
+        source: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        values: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
         upper: bool,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
@@ -1216,8 +1226,8 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
 
     fn merge_control<Less>(
         exec: &Executor<R>,
-        left: &<Item as crate::MAlloc<R>>::Storage,
-        right: &<Item as crate::MAlloc<R>>::Storage,
+        left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
     ) -> Result<crate::merge::MergeControl<R>, Error>
     where
@@ -1225,7 +1235,7 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
 
     fn sort_control<Less>(
         exec: &Executor<R>,
-        input: &<Item as crate::MAlloc<R>>::Storage,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
@@ -1233,15 +1243,21 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
 
     fn sort_ordering<Less>(
         exec: &Executor<R>,
-        input: <Item as crate::MAlloc<R>>::Storage,
+        input: <Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         _less: Less,
-    ) -> Result<crate::ordering::sort::OrderingResult<R, <Item as crate::MAlloc<R>>::Storage>, Error>
+    ) -> Result<
+        crate::ordering::sort::OrderingResult<
+            R,
+            <Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        >,
+        Error,
+    >
     where
         Less: crate::BinaryPredicateOp<Item>;
 
     fn segment_heads<Equal>(
         exec: &Executor<R>,
-        input: &<Item as crate::MAlloc<R>>::Storage,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         equal: Equal,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
@@ -1249,12 +1265,12 @@ pub trait KernelItem<R: Runtime, Item: crate::StorageLayout + crate::MAlloc<R>>:
 
     fn segmented<Op>(
         exec: &Executor<R>,
-        input: &<Item as crate::MAlloc<R>>::Storage,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         heads: &crate::DeviceVec<R, u32>,
         init: Option<Item>,
         op: Op,
         mode: u8,
-    ) -> Result<<Item as crate::MAlloc<R>>::Storage, Error>
+    ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
     where
         Op: crate::ReductionOp<Item>;
 
@@ -1310,7 +1326,7 @@ macro_rules! normalize_method_impl {
             fn $name<Input, $($leaf),+>(
                 input: Input,
                 exec: &Executor<R>,
-            ) -> Result<<Item as crate::MAlloc<R>>::Storage, Error>
+            ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
             where
                 $($leaf: crate::MStorageElement,)+
                 Input: Clone
@@ -1363,8 +1379,8 @@ macro_rules! impl_kernel_item {
 
                 fn pair<Op>(
                     exec: &Executor<R>,
-                    left: &<Item as crate::MAlloc<R>>::Storage,
-                    right: &<Item as crate::MAlloc<R>>::Storage,
+                    left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+                    right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     op: Op,
                     mode: u8,
                 ) -> Result<PairResult, Error>
@@ -1372,10 +1388,10 @@ macro_rules! impl_kernel_item {
                     Op: crate::BinaryPredicateOp<Item>,
                 {
                     let left = crate::read::Reassociate::<_, Item>::new(
-                        crate::MStorage::read(left),
+                        crate::CanonicalStorage::read(left),
                     );
                     let right = crate::read::Reassociate::<_, Item>::new(
-                        crate::MStorage::read(right),
+                        crate::CanonicalStorage::read(right),
                     );
                     match mode {
                         0 => Ok(PairResult::Bool(crate::search::equal(exec, left, right, op)?)),
@@ -1392,8 +1408,8 @@ macro_rules! impl_kernel_item {
 
                 fn bounds<Less>(
                     exec: &Executor<R>,
-                    source: &<Item as crate::MAlloc<R>>::Storage,
-                    values: &<Item as crate::MAlloc<R>>::Storage,
+                    source: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+                    values: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     less: Less,
                     upper: bool,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
@@ -1401,10 +1417,10 @@ macro_rules! impl_kernel_item {
                     Less: crate::BinaryPredicateOp<Item>,
                 {
                     let source = crate::read::Reassociate::<_, Item>::new(
-                        crate::MStorage::read(source),
+                        crate::CanonicalStorage::read(source),
                     );
                     let values = crate::read::Reassociate::<_, Item>::new(
-                        crate::MStorage::read(values),
+                        crate::CanonicalStorage::read(values),
                     );
                     if upper {
                         crate::search::upper_bounds_storage(exec, source, values, less)
@@ -1415,38 +1431,38 @@ macro_rules! impl_kernel_item {
 
                 fn merge_control<Less>(
                     exec: &Executor<R>,
-                    left: &<Item as crate::MAlloc<R>>::Storage,
-                    right: &<Item as crate::MAlloc<R>>::Storage,
+                    left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+                    right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     less: Less,
                 ) -> Result<crate::merge::MergeControl<R>, Error>
                 where
                     Less: crate::BinaryPredicateOp<Item>,
                 {
-                    let left = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(left));
-                    let right = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(right));
+                    let left = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
+                    let right = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
                     crate::merge::merge_control_with(exec, left, right, less)
                 }
 
                 fn sort_control<Less>(
                     exec: &Executor<R>,
-                    input: &<Item as crate::MAlloc<R>>::Storage,
+                    input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     less: Less,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
                 where
                     Less: crate::BinaryPredicateOp<Item>,
                 {
-                    let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
+                    let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     crate::ordering::sort_control_with(exec, input, less)
                 }
 
                 fn sort_ordering<Less>(
                     exec: &Executor<R>,
-                    input: <Item as crate::MAlloc<R>>::Storage,
+                    input: <Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     _less: Less,
                 ) -> Result<
                     crate::ordering::sort::OrderingResult<
                         R,
-                        <Item as crate::MAlloc<R>>::Storage,
+                        <Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     >,
                     Error,
                 >
@@ -1460,28 +1476,28 @@ macro_rules! impl_kernel_item {
 
                 fn segment_heads<Equal>(
                     exec: &Executor<R>,
-                    input: &<Item as crate::MAlloc<R>>::Storage,
+                    input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     equal: Equal,
                 ) -> Result<crate::DeviceVec<R, u32>, Error>
                 where
                     Equal: crate::BinaryPredicateOp<Item>,
                 {
-                    let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
+                    let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     crate::core::by_key::segment_heads_with(exec, input, equal)
                 }
 
                 fn segmented<Op>(
                     exec: &Executor<R>,
-                    input: &<Item as crate::MAlloc<R>>::Storage,
+                    input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
                     heads: &crate::DeviceVec<R, u32>,
                     init: Option<Item>,
                     op: Op,
                     mode: u8,
-                ) -> Result<<Item as crate::MAlloc<R>>::Storage, Error>
+                ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
                 where
                     Op: crate::ReductionOp<Item>,
                 {
-                    let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
+                    let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
                     match mode {
                         0 => crate::core::by_key::segmented_inclusive_with(exec, input, heads, op),
                         1 => crate::core::by_key::segmented_exclusive_with(
@@ -1555,16 +1571,16 @@ where
 
     fn pair<Op>(
         exec: &Executor<R>,
-        left: &<Item as crate::MAlloc<R>>::Storage,
-        right: &<Item as crate::MAlloc<R>>::Storage,
+        left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         op: Op,
         mode: u8,
     ) -> Result<PairResult, Error>
     where
         Op: crate::BinaryPredicateOp<Item>,
     {
-        let left = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(left));
-        let right = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(right));
+        let left = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
+        let right = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
         match mode {
             0 => Ok(PairResult::Bool(crate::search::equal(
                 exec, left, right, op,
@@ -1584,16 +1600,18 @@ where
 
     fn bounds<Less>(
         exec: &Executor<R>,
-        source: &<Item as crate::MAlloc<R>>::Storage,
-        values: &<Item as crate::MAlloc<R>>::Storage,
+        source: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        values: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
         upper: bool,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
         Less: crate::BinaryPredicateOp<Item>,
     {
-        let source = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(source));
-        let values = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(values));
+        let source =
+            crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(source));
+        let values =
+            crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(values));
         if upper {
             crate::search::upper_bounds_storage(exec, source, values, less)
         } else {
@@ -1603,35 +1621,41 @@ where
 
     fn merge_control<Less>(
         exec: &Executor<R>,
-        left: &<Item as crate::MAlloc<R>>::Storage,
-        right: &<Item as crate::MAlloc<R>>::Storage,
+        left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
     ) -> Result<crate::merge::MergeControl<R>, Error>
     where
         Less: crate::BinaryPredicateOp<Item>,
     {
-        let left = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(left));
-        let right = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(right));
+        let left = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
+        let right = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
         crate::merge::merge_control_with(exec, left, right, less)
     }
 
     fn sort_control<Less>(
         exec: &Executor<R>,
-        input: &<Item as crate::MAlloc<R>>::Storage,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         less: Less,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
         Less: crate::BinaryPredicateOp<Item>,
     {
-        let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
+        let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         crate::ordering::sort_control_with(exec, input, less)
     }
 
     fn sort_ordering<Less>(
         exec: &Executor<R>,
-        input: <Item as crate::MAlloc<R>>::Storage,
+        input: <Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         _less: Less,
-    ) -> Result<crate::ordering::sort::OrderingResult<R, <Item as crate::MAlloc<R>>::Storage>, Error>
+    ) -> Result<
+        crate::ordering::sort::OrderingResult<
+            R,
+            <Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        >,
+        Error,
+    >
     where
         Less: crate::BinaryPredicateOp<Item>,
     {
@@ -1640,28 +1664,28 @@ where
 
     fn segment_heads<Equal>(
         exec: &Executor<R>,
-        input: &<Item as crate::MAlloc<R>>::Storage,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         equal: Equal,
     ) -> Result<crate::DeviceVec<R, u32>, Error>
     where
         Equal: crate::BinaryPredicateOp<Item>,
     {
-        let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
+        let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         crate::core::by_key::segment_heads_with(exec, input, equal)
     }
 
     fn segmented<Op>(
         exec: &Executor<R>,
-        input: &<Item as crate::MAlloc<R>>::Storage,
+        input: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
         heads: &crate::DeviceVec<R, u32>,
         init: Option<Item>,
         op: Op,
         mode: u8,
-    ) -> Result<<Item as crate::MAlloc<R>>::Storage, Error>
+    ) -> Result<<Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
     where
         Op: crate::ReductionOp<Item>,
     {
-        let input = crate::read::Reassociate::<_, Item>::new(crate::MStorage::read(input));
+        let input = crate::read::Reassociate::<_, Item>::new(crate::CanonicalStorage::read(input));
         match mode {
             0 => crate::core::by_key::segmented_inclusive_with(exec, input, heads, op),
             1 => crate::core::by_key::segmented_exclusive_with(
@@ -1711,7 +1735,7 @@ pub trait KernelRead<R: Runtime, Input>: Sized {
     fn normalize(
         input: Input,
         exec: &Executor<R>,
-    ) -> Result<<Input::Item as crate::MAlloc<R>>::Storage, Error>
+    ) -> Result<<Input::Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
     where
         Input: crate::read::ReadExpression,
         Input::Item: crate::api::iter::MItem<R>;
@@ -1942,7 +1966,7 @@ macro_rules! impl_kernel_read {
                 fn normalize(
                     input: Input,
                     exec: &Executor<R>,
-                ) -> Result<<Input::Item as crate::MAlloc<R>>::Storage, Error>
+                ) -> Result<<Input::Item as crate::CanonicalAlloc<R>>::CanonicalStorage, Error>
                 where
                     Input::Item: crate::api::iter::MItem<R>,
                 {

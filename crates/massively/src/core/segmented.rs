@@ -470,9 +470,9 @@ where
         return Ok(());
     }
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let local_flags = exec.alloc::<u32>(len);
+    let local_flags = exec.alloc_canonical::<u32>(len);
     let block_sums = exec.alloc_column::<Item>(blocks);
-    let block_flags = exec.alloc::<u32>(blocks);
+    let block_flags = exec.alloc_canonical::<u32>(blocks);
     let len_handle = exec
         .client()
         .create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
@@ -549,9 +549,9 @@ macro_rules! define_segmented_storage_host {
                 return Ok(());
             }
             let blocks = len.div_ceil(BLOCK_SIZE as usize);
-            let local_flags = exec.alloc::<u32>(len);
+            let local_flags = exec.alloc_canonical::<u32>(len);
             $( let $sum = exec.alloc_column::<$out_ty>(blocks); )+
-            let block_flags = exec.alloc::<u32>(blocks);
+            let block_flags = exec.alloc_canonical::<u32>(blocks);
             let len_handle = exec.client().create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
             let zero_offsets = vec![$({ let _ = stringify!($out_ty); 0u32 }),+];
             let zero_handle = exec.client().create_from_slice(u32::as_bytes(&zero_offsets));

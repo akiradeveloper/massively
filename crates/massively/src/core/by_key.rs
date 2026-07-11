@@ -3,7 +3,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Counting, DeviceVec, Error, Executor, MAlloc, MStorage, ReadExpression,
+    CanonicalAlloc, CanonicalStorage, Counting, DeviceVec, Error, Executor, ReadExpression,
     allocation::{NormalizeInput, singleton},
     indexed::GatherInput,
     ordering::{AdjacentFlagInput, BinaryPredicateOp, UniqueHead, unique_head_flags},
@@ -31,7 +31,7 @@ pub(crate) fn tail_control_from_heads<R: Runtime>(
     heads: &SelectionControl<R>,
 ) -> Result<SelectionControl<R>, Error> {
     let count = heads.count();
-    let tails = exec.alloc::<u32>(count as usize);
+    let tails = exec.alloc_canonical::<u32>(count as usize);
     if count != 0u32 {
         let len =
             u32::try_from(heads.len()).map_err(|_| Error::LengthTooLarge { len: heads.len() })?;
@@ -93,10 +93,10 @@ impl<R, Values, Op> SegmentedValues<R, Op> for Values
 where
     R: Runtime,
     Values: NormalizeInput<R>,
-    Values::Item: MAlloc<R, Storage = Values::Storage>,
-    Values::Storage: MStorage<R> + SegmentedStorage<R, Values::Item, Op>,
-    <Values::Storage as MStorage<R>>::Item: WriteFrom<Values::Item>,
-    <Values::Storage as MStorage<R>>::Write: FillOutput<R>,
+    Values::Item: CanonicalAlloc<R, CanonicalStorage = Values::Storage>,
+    Values::Storage: CanonicalStorage<R> + SegmentedStorage<R, Values::Item, Op>,
+    <Values::Storage as CanonicalStorage<R>>::Item: WriteFrom<Values::Item>,
+    <Values::Storage as CanonicalStorage<R>>::Write: FillOutput<R>,
     Op: crate::ReductionOp<Values::Item>,
 {
     fn inclusive_storage(
@@ -111,7 +111,7 @@ where
                 right: heads.len(),
             });
         }
-        let output = exec.alloc::<Values::Item>(heads.len());
+        let output = exec.alloc_canonical::<Values::Item>(heads.len());
         values.segmented_inclusive(exec, heads, &output)?;
         Ok(output)
     }
@@ -124,7 +124,7 @@ where
     ) -> Result<Self::Storage, Error> {
         let inclusive = self.inclusive_storage(exec, heads)?;
         let initial = singleton::<R, Values::Item>(exec, init)?;
-        let output = exec.alloc::<Values::Item>(heads.len());
+        let output = exec.alloc_canonical::<Values::Item>(heads.len());
         inclusive.segmented_exclusive(exec, heads, &initial, &output)?;
         Ok(output)
     }
@@ -137,7 +137,7 @@ where
     ) -> Result<Self::Storage, Error> {
         let inclusive = self.inclusive_storage(exec, heads)?;
         let initial = singleton::<R, Values::Item>(exec, init)?;
-        let output = exec.alloc::<Values::Item>(heads.len());
+        let output = exec.alloc_canonical::<Values::Item>(heads.len());
         inclusive.apply_init(exec, &initial, &output)?;
         Ok(output)
     }
@@ -209,8 +209,8 @@ where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
     Values: SegmentedValues<R, Op>,
-    Values::Storage: MStorage<R>,
-    <Values::Storage as MStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    Values::Storage: CanonicalStorage<R>,
+    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
 {
     let heads = keys.segment_heads(exec)?;
     let scanned = values.inclusive_storage(exec, &heads)?;
@@ -231,8 +231,8 @@ where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
     Values: SegmentedValues<R, Op>,
-    Values::Storage: MStorage<R>,
-    <Values::Storage as MStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    Values::Storage: CanonicalStorage<R>,
+    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
 {
     let heads = keys.segment_heads(exec)?;
     let scanned = values.exclusive_storage(exec, &heads, init)?;
@@ -255,8 +255,8 @@ where
     R: Runtime,
     Keys: Clone + SegmentKeyInput<R, Equal> + CopySelected<R, KeyOutput>,
     Values: SegmentedValues<R, Op>,
-    Values::Storage: MStorage<R>,
-    <Values::Storage as MStorage<R>>::Read: CopySelected<R, ValueOutput>,
+    Values::Storage: CanonicalStorage<R>,
+    <Values::Storage as CanonicalStorage<R>>::Read: CopySelected<R, ValueOutput>,
 {
     let heads = keys.clone().segment_heads(exec)?;
     let reduced = values.reduced_storage(exec, &heads, init)?;
@@ -342,7 +342,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, MStorage, Permute, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Three = (u32, (u32, u32));
@@ -523,7 +523,7 @@ mod tests {
             Permute::new(seven, Counting::new(0, len))
         };
 
-        let inclusive = exec.alloc::<Seven>(len);
+        let inclusive = exec.alloc_canonical::<Seven>(len);
         inclusive_scan_by_key(
             &exec,
             keys.column(),
@@ -539,7 +539,7 @@ mod tests {
         assert_eq!((seventh[299], seventh[300], seventh[599]), (2100, 7, 2100));
 
         let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
-        let exclusive = exec.alloc::<Seven>(len);
+        let exclusive = exec.alloc_canonical::<Seven>(len);
         exclusive_scan_by_key(
             &exec,
             keys.column(),
@@ -557,7 +557,7 @@ mod tests {
         );
 
         let key_output = exec.to_device(&vec![0_u32; len]);
-        let value_output = exec.alloc::<Seven>(len);
+        let value_output = exec.alloc_canonical::<Seven>(len);
         let count = reduce_by_key(
             &exec,
             keys.column(),

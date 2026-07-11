@@ -3,8 +3,9 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, Dispatch, Error, Executor, MAlloc, MStorage, MStorageElement,
-    Permute, ReadExpression, ReverseCounting, S1, S2, S3, S4, S5, S6, S7, StorageLayout, WriteFrom,
+    A1, A2, A3, A4, A5, A6, A7, A8, CanonicalAlloc, CanonicalStorage, Dispatch, Error, Executor,
+    MStorageElement, Permute, ReadExpression, ReverseCounting, S1, S2, S3, S4, S5, S6, S7,
+    StorageLayout, WriteFrom,
     allocation::NormalizeInput,
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
     masked::MaskedCopyInput,
@@ -286,12 +287,12 @@ impl<R, Values, Indices, Output> GatherNormalized<R, Indices, Output> for Values
 where
     R: Runtime,
     Values: NormalizeInput<R>,
-    Values::Storage: MStorage<R>,
+    Values::Storage: CanonicalStorage<R>,
     Indices: NormalizeInput<R> + ReadExpression<Item = u32>,
-    Indices::Storage: MStorage<R>,
-    <Indices::Storage as MStorage<R>>::Read: ReadExpression<Item = u32>,
-    <Values::Storage as MStorage<R>>::Read:
-        GatherInput<R, <Indices::Storage as MStorage<R>>::Read, Output>,
+    Indices::Storage: CanonicalStorage<R>,
+    <Indices::Storage as CanonicalStorage<R>>::Read: ReadExpression<Item = u32>,
+    <Values::Storage as CanonicalStorage<R>>::Read:
+        GatherInput<R, <Indices::Storage as CanonicalStorage<R>>::Read, Output>,
 {
     fn gather_normalized(
         self,
@@ -335,18 +336,19 @@ impl<R, Values, Indices, Stencil, Output> GatherWhereInput<R, Indices, Stencil, 
 where
     R: Runtime,
     Values: NormalizeInput<R>,
-    Values::Item: MAlloc<R>,
-    Values::Storage: MStorage<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R>,
+    Values::Item: CanonicalAlloc<R>,
+    Values::Storage: CanonicalStorage<R>,
+    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     Indices: NormalizeInput<R> + ReadExpression<Item = u32>,
-    Indices::Storage: MStorage<R>,
-    <Indices::Storage as MStorage<R>>::Read: ReadExpression<Item = u32>,
-    <Values::Storage as MStorage<R>>::Read: GatherInput<
+    Indices::Storage: CanonicalStorage<R>,
+    <Indices::Storage as CanonicalStorage<R>>::Read: ReadExpression<Item = u32>,
+    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<
             R,
-            <Indices::Storage as MStorage<R>>::Read,
-            <<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Write,
+            <Indices::Storage as CanonicalStorage<R>>::Read,
+            <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
         >,
-    <<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Read: MaskedCopyInput<R, Output>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read:
+        MaskedCopyInput<R, Output>,
     Stencil: crate::selection::FlagInput<R>,
     Output: OutputExpression,
 {
@@ -367,7 +369,7 @@ where
         }
         let values = self.normalize(exec)?;
         let indices = indices.normalize(exec)?;
-        let gathered = exec.alloc::<Values::Item>(output_len);
+        let gathered = exec.alloc_canonical::<Values::Item>(output_len);
         gather_direct(exec, values.read(), indices.read(), gathered.write())?;
         let flags = stencil.materialize_flags(exec)?;
         gathered.read().masked_copy(exec, &flags, output)
@@ -435,7 +437,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, MStorage, Permute, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
@@ -567,7 +569,7 @@ mod tests {
         let values = Permute::new(seven, Counting::new(0, 3));
         let raw_indices = exec.to_device(&[2_u32, 0]);
         let indices = Permute::new(raw_indices.column(), Counting::new(0, 2));
-        let output = exec.alloc::<Seven>(2);
+        let output = exec.alloc_canonical::<Seven>(2);
 
         gather(&exec, values, indices, output.write()).unwrap();
         assert_eq!(exec.to_host(&output.0.0.0.0.0.0).unwrap(), vec![3, 1]);

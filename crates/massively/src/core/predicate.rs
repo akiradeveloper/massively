@@ -233,7 +233,7 @@ where
 
     fn predicate_positions(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let positions = exec.alloc::<u32>(len);
+        let positions = exec.alloc_canonical::<u32>(len);
         inclusive_scan(
             exec,
             Transform::new(self, PredicateMap::<Pred>(PhantomData)),
@@ -245,7 +245,7 @@ where
 
     fn predicate_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
         let len = self.logical_len()?;
-        let flags = exec.alloc::<u32>(len);
+        let flags = exec.alloc_canonical::<u32>(len);
         transform(
             exec,
             self,
@@ -385,7 +385,7 @@ mod tests {
             <_ as PredicateInput<WgpuRuntime, IsEven>>::predicate_flags(input.column(), &exec)
                 .unwrap();
         assert_eq!(exec.to_host(&flags).unwrap(), vec![1, 1]);
-        let violations = exec.alloc::<u32>(1);
+        let violations = exec.alloc_canonical::<u32>(1);
         transform(
             &exec,
             Zip::new(flags.slice(..1), flags.slice(1..)),

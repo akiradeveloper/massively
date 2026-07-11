@@ -47,7 +47,7 @@ mod core;
 
 // Crate-private compatibility aliases keep the kernel core independent from
 // the public module layout. They are not part of the external API.
-pub(crate) use core::allocation::{MAlloc, MStorage};
+pub(crate) use core::allocation::{CanonicalAlloc, CanonicalStorage};
 pub(crate) use core::arity::{A1, A2, A3, A4, A5, A6, A7, A8};
 pub(crate) use core::read::{
     Column, Constant, Counting, Permute, ReadExpression, ReverseCounting, Taken, Transform,
@@ -62,7 +62,9 @@ pub(crate) use core::{
 };
 
 pub use api::algorithm::*;
-pub use api::iter::{MIter, MIterMut, WriteFrom, Zip, zip2, zip3, zip4, zip5, zip6, zip7};
+pub use api::iter::{
+    MAlloc, MItem, MIter, MIterMut, MStorage, WriteFrom, Zip, zip2, zip3, zip4, zip5, zip6, zip7,
+};
 pub use api::op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp};
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use api::tuple::{
@@ -73,8 +75,9 @@ pub use api::{Error, MIndex, lazy, op, util};
 /// Common public data and operation types. Algorithms remain at crate root.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIndex, MIter, MIterMut, Tuple2, Tuple3,
-        Tuple4, Tuple5, Tuple6, Tuple7, Zip, flatten3, flatten4, flatten5, flatten6, flatten7,
-        tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, zip2, zip3, zip4, zip5, zip6, zip7,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,
+        MStorage, Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, Zip, flatten3, flatten4,
+        flatten5, flatten6, flatten7, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, zip2, zip3,
+        zip4, zip5, zip6, zip7,
     };
 }

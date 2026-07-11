@@ -3,8 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, DeviceVec, Dispatch, Error, Executor, MAlloc, MStorage,
-    MStorageElement, ReadExpression, S1, S2, S3, S4, S5, S6, S7,
+    A1, A2, A3, A4, A5, A6, A7, CanonicalAlloc, CanonicalStorage, DeviceVec, Dispatch, Error,
+    Executor, MStorageElement, ReadExpression, S1, S2, S3, S4, S5, S6, S7,
     output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
     read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression},
     reduce::{StageRead, StagedBindings},
@@ -185,15 +185,15 @@ impl<R, Values, Indices, Output> ScatterInput<R, Indices, Output> for Values
 where
     R: Runtime,
     Values: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Values::Item: MAlloc<R>,
-    <Values::Item as MAlloc<R>>::Storage: MStorage<R>,
-    <<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Write:
+    Values::Item: CanonicalAlloc<R>,
+    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
         LowerOutputExpression + StageOutput<R, Env0>,
-    <<<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Write as OutputExpression>::Item:
+    <<<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
         crate::WriteFrom<Values::Item>,
-    Dispatch<Values::ReadArity, <<<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Write as OutputExpression>::StorageArity>:
-        MaterializeDispatch<R, Values, <<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Write, Values::Slots, <<<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Write as LowerOutputExpression>::Slots>,
-    <<Values::Item as MAlloc<R>>::Storage as MStorage<R>>::Read: ScatterStorage<R, Output>,
+    Dispatch<Values::ReadArity, <<<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity>:
+        MaterializeDispatch<R, Values, <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write, Values::Slots, <<<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read: ScatterStorage<R, Output>,
     Indices: FlagInput<R>,
 {
     fn scatter_input(
@@ -208,7 +208,7 @@ where
         if indices_len != len {
             return Err(Error::LengthMismatch { left: len, right: indices_len });
         }
-        let temporary = exec.alloc::<Values::Item>(len);
+        let temporary = exec.alloc_canonical::<Values::Item>(len);
         materialize(exec, self, temporary.write())?;
         let indices = indices.materialize_flags(exec)?;
         temporary.read().scatter_storage(exec, &indices, flags, output)

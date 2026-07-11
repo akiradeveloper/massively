@@ -75,7 +75,7 @@ where
             right: other_lower.len().min(other_upper.len()),
         });
     }
-    let flags = exec.alloc::<u32>(len);
+    let flags = exec.alloc_canonical::<u32>(len);
     if len == 0 {
         return Ok(flags);
     }
@@ -121,14 +121,14 @@ where
         occurrence_flags::<R, UnionExtra>(exec, &right_own_lower, &left_lower, &left_upper)?;
 
     let total = merge.left_len + merge.right_len;
-    let conceptual_flags = exec.alloc::<u32>(total);
+    let conceptual_flags = exec.alloc_canonical::<u32>(total);
     crate::selection::fill(exec, 1u32, conceptual_flags.slice_mut(..merge.left_len))?;
     crate::materialize(
         exec,
         right_extra.column(),
         conceptual_flags.slice_mut(merge.left_len..),
     )?;
-    let merged_flags = exec.alloc::<u32>(total);
+    let merged_flags = exec.alloc_canonical::<u32>(total);
     crate::indexed::gather_direct(
         exec,
         conceptual_flags.column(),
@@ -137,7 +137,7 @@ where
     )?;
     let selection = SelectionControl::from_flags(exec, merged_flags)?;
     let count = selection.count();
-    let selected_permutation = exec.alloc::<u32>(count as usize);
+    let selected_permutation = exec.alloc_canonical::<u32>(count as usize);
     crate::indexed::gather_direct(
         exec,
         merge.permutation.column(),

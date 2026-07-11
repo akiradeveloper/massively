@@ -6,7 +6,34 @@ use crate::{Error, Executor, MIndex};
 pub use crate::core::iter::Zip;
 pub use crate::core::storage::WriteFrom;
 
-fn resolve_iter_range<Bounds>(len: MIndex, range: Bounds) -> (usize, usize)
+/// Owned canonical storage for one left-associated logical item type.
+pub trait MStorage<R: Runtime>: Sized {
+    type Item: MAlloc<R, Storage = Self>;
+
+    fn len(&self) -> Result<MIndex, Error>;
+
+    fn is_empty(&self) -> Result<bool, Error> {
+        Ok(self.len()? == 0)
+    }
+
+    fn slice<Bounds>(&self, range: Bounds) -> impl MIter<R, Item = Self::Item> + '_
+    where
+        Bounds: RangeBounds<MIndex>;
+
+    fn slice_mut<Bounds>(&self, range: Bounds) -> impl MIterMut<R, Item = Self::Item> + '_
+    where
+        Bounds: RangeBounds<MIndex>;
+}
+
+/// A left-associated logical item with canonical owned device storage.
+pub trait MAlloc<R: Runtime>: MItem<R> {
+    type Storage: MStorage<R, Item = Self>;
+
+    #[doc(hidden)]
+    fn alloc(exec: &Executor<R>, len: usize) -> <Self as MAlloc<R>>::Storage;
+}
+
+pub(crate) fn resolve_iter_range<Bounds>(len: MIndex, range: Bounds) -> (usize, usize)
 where
     Bounds: RangeBounds<MIndex>,
 {
@@ -33,7 +60,7 @@ where
 
 /// Logical item supported by the public iterator and storage facade.
 #[doc(hidden)]
-pub trait MItem<R: Runtime>: crate::StorageLayout + crate::MAlloc<R> {
+pub trait MItem<R: Runtime>: crate::StorageLayout + crate::CanonicalAlloc<R> {
     #[doc(hidden)]
     type Kernel: private::KernelItem<R, Self>;
 }
@@ -42,7 +69,7 @@ pub trait MItem<R: Runtime>: crate::StorageLayout + crate::MAlloc<R> {
 impl<R, Item> MItem<R> for Item
 where
     R: Runtime,
-    Item: crate::StorageLayout + crate::MAlloc<R>,
+    Item: crate::StorageLayout + crate::CanonicalAlloc<R>,
     Item::StorageLeaves: private::KernelItem<R, Item>,
 {
     type Kernel = Item::StorageLeaves;
@@ -509,7 +536,7 @@ pub trait MIter<R: Runtime>: Sized {
 ///
 /// Device mutable slices and [`Zip`] trees of mutable slices implement this trait.
 pub trait MIterMut<R: Runtime>: Sized {
-    type Item: MItem<R>;
+    type Item: MAlloc<R>;
 
     #[doc(hidden)]
     type Slice;
@@ -1068,7 +1095,7 @@ where
         ValueOutput::Item: crate::WriteFrom<Values::Item>,
     {
         let keys = <Self::Read as private::AnyRead<R>>::normalize(self.lower_read(), exec)?;
-        let key_len = crate::MStorage::len(&keys)?;
+        let key_len = crate::CanonicalStorage::len(&keys)?;
         let value_len = values.len()? as usize;
         if key_len != value_len {
             return Err(Error::LengthMismatch {
@@ -1149,8 +1176,8 @@ where
     {
         let keys = <Self::Read as private::AnyRead<R>>::normalize(self.lower_read(), exec)?;
         let values = <Values::Read as private::AnyRead<R>>::normalize(values.lower_read(), exec)?;
-        let key_len = crate::MStorage::len(&keys)?;
-        let value_len = crate::MStorage::len(&values)?;
+        let key_len = crate::CanonicalStorage::len(&keys)?;
+        let value_len = crate::CanonicalStorage::len(&values)?;
         if key_len != value_len {
             return Err(Error::LengthMismatch {
                 left: key_len,
@@ -1201,8 +1228,8 @@ where
     {
         let keys = <Self::Read as private::AnyRead<R>>::normalize(self.lower_read(), exec)?;
         let values = <Values::Read as private::AnyRead<R>>::normalize(values.lower_read(), exec)?;
-        let key_len = crate::MStorage::len(&keys)?;
-        let value_len = crate::MStorage::len(&values)?;
+        let key_len = crate::CanonicalStorage::len(&keys)?;
+        let value_len = crate::CanonicalStorage::len(&values)?;
         if key_len != value_len {
             return Err(Error::LengthMismatch {
                 left: key_len,
@@ -1257,10 +1284,10 @@ where
             <RightKeys::Read as private::AnyRead<R>>::normalize(right_keys.lower_read(), exec)?;
         let right_values =
             <RightValues::Read as private::AnyRead<R>>::normalize(right_values.lower_read(), exec)?;
-        let left_key_len = crate::MStorage::len(&left_keys)?;
-        let left_value_len = crate::MStorage::len(&left_values)?;
-        let right_key_len = crate::MStorage::len(&right_keys)?;
-        let right_value_len = crate::MStorage::len(&right_values)?;
+        let left_key_len = crate::CanonicalStorage::len(&left_keys)?;
+        let left_value_len = crate::CanonicalStorage::len(&left_values)?;
+        let right_key_len = crate::CanonicalStorage::len(&right_keys)?;
+        let right_value_len = crate::CanonicalStorage::len(&right_values)?;
         if left_key_len != left_value_len {
             return Err(Error::LengthMismatch {
                 left: left_key_len,
@@ -1307,7 +1334,7 @@ where
         + crate::output::SliceOutput,
     private::Write<Output, Output::Slots>:
         private::KernelWrite<R, Item = Output::Item, Output = Output>,
-    Output::Item: MItem<R>,
+    Output::Item: MAlloc<R>,
 {
     type Item = <Output as crate::output::OutputExpression>::Item;
     type Slice = crate::read::Slice<R, Output::Read>;

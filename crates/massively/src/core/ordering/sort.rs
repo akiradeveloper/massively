@@ -8,7 +8,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Dispatch, Error, Executor, MAlloc, MStorage, MStorageElement, ReadExpression, StorageLayout,
+    CanonicalAlloc, CanonicalStorage, Dispatch, Error, Executor, MStorageElement, ReadExpression,
+    StorageLayout,
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7},
     launch::cube_count_1d,
     output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
@@ -662,57 +663,57 @@ impl_sort_pass_dispatch!(crate::A6, crate::S6, Eval6, block_sort_s6, merge_runs_
 impl_sort_pass_dispatch!(crate::A7, crate::S7, Eval7, block_sort_s7, merge_runs_s7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6], Env7<L0,L1,L2,L3,L4,L5,L6>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,Last<L6>>>>>>>; 4usize);
 
 /// Capability for sorting an owned canonical storage value.
-pub(crate) trait SortStorageItem<R: Runtime, Less>: MAlloc<R> + Sized {
+pub(crate) trait SortStorageItem<R: Runtime, Less>: CanonicalAlloc<R> + Sized {
     fn sort_storage(
         exec: &Executor<R>,
-        input: Self::Storage,
+        input: Self::CanonicalStorage,
         carry_indices: bool,
-    ) -> Result<OrderingResult<R, Self::Storage>, Error>;
+    ) -> Result<OrderingResult<R, Self::CanonicalStorage>, Error>;
 }
 
 impl<R, Item, Less> SortStorageItem<R, Less> for Item
 where
     R: Runtime,
-    Item: MAlloc<R> + StorageLayout + Send + Sync + 'static,
+    Item: CanonicalAlloc<R> + StorageLayout + Send + Sync + 'static,
     Less: BinaryPredicateOp<Item>,
-    Item::Storage: MStorage<R>,
-    Reassociate<<Item::Storage as MStorage<R>>::Read, Item>:
+    <Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    Reassociate<<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read, Item>:
         ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
-    <Item::Storage as MStorage<R>>::Write: OutputExpression<StorageArity = Item::StorageArity>
+    <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write: OutputExpression<StorageArity = Item::StorageArity>
         + LowerOutputExpression
         + StageOutput<R, Env0>,
     Dispatch<
-        <Reassociate<<Item::Storage as MStorage<R>>::Read, Item> as ReadExpression>::ReadArity,
+        <Reassociate<<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read, Item> as ReadExpression>::ReadArity,
         crate::S1,
     >: SortPassDispatch<
             R,
-            Reassociate<<Item::Storage as MStorage<R>>::Read, Item>,
-            <Item::Storage as MStorage<R>>::Write,
+            Reassociate<<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read, Item>,
+            <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
             Item,
-            <Reassociate<<Item::Storage as MStorage<R>>::Read, Item> as LowerReadExpression>::Slots,
-            <<Item::Storage as MStorage<R>>::Write as LowerOutputExpression>::Slots,
+            <Reassociate<<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read, Item> as LowerReadExpression>::Slots,
+            <<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
             Less,
         >,
 {
     fn sort_storage(
         exec: &Executor<R>,
-        input: Self::Storage,
+        input: Self::CanonicalStorage,
         carry_indices: bool,
-    ) -> Result<OrderingResult<R, Self::Storage>, Error> {
+    ) -> Result<OrderingResult<R, Self::CanonicalStorage>, Error> {
         let len = input.len()?;
         if len == 0 {
             return Ok(OrderingResult {
                 sorted_keys: input,
-                control: OrderingControl::new(exec.alloc::<u32>(0)),
+                control: OrderingControl::new(exec.alloc_canonical::<u32>(0)),
             });
         }
 
-        let mut current_keys = exec.alloc::<Item>(len);
+        let mut current_keys = exec.alloc_canonical::<Item>(len);
         let index_len = if carry_indices { len } else { 1 };
-        let mut current_indices = exec.alloc::<u32>(index_len);
+        let mut current_indices = exec.alloc_canonical::<u32>(index_len);
         let input_read = Reassociate::<_, Item>::new(input.read());
         <Dispatch<
-            <Reassociate<<Item::Storage as MStorage<R>>::Read, Item> as ReadExpression>::ReadArity,
+            <Reassociate<<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read, Item> as ReadExpression>::ReadArity,
             crate::S1,
         > as SortPassDispatch<R, _, _, Item, _, _, Less>>::block(
             exec,
@@ -723,13 +724,13 @@ where
         )?;
 
         if len > BLOCK_ITEMS {
-            let mut next_keys = exec.alloc::<Item>(len);
-            let mut next_indices = exec.alloc::<u32>(index_len);
+            let mut next_keys = exec.alloc_canonical::<Item>(len);
+            let mut next_indices = exec.alloc_canonical::<u32>(index_len);
             let mut width = BLOCK_ITEMS;
             while width < len {
                 let current_read = Reassociate::<_, Item>::new(current_keys.read());
                 <Dispatch<
-                    <Reassociate<<Item::Storage as MStorage<R>>::Read, Item> as ReadExpression>::ReadArity,
+                    <Reassociate<<<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read, Item> as ReadExpression>::ReadArity,
                     crate::S1,
                 > as SortPassDispatch<
                     R,

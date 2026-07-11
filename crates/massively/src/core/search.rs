@@ -263,7 +263,7 @@ macro_rules! impl_pair_code_dispatch {
                 let left_len = left.logical_len()?;
                 let right_len = right.logical_len()?;
                 let len = left_len.min(right_len);
-                let codes = exec.alloc::<u32>(len);
+                let codes = exec.alloc_canonical::<u32>(len);
                 if len == 0 {
                     return Ok((codes, None, left_len, right_len));
                 }
@@ -406,7 +406,7 @@ macro_rules! impl_range_query_dispatch {
             ) -> Result<DeviceVec<R, u32>, Error> {
                 let source_len = source.logical_len()?;
                 let value_len = values.logical_len()?;
-                let bounds = exec.alloc::<u32>(value_len);
+                let bounds = exec.alloc_canonical::<u32>(value_len);
                 if value_len == 0 {
                     return Ok(bounds);
                 }
@@ -743,7 +743,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, MStorage, Permute, Zip, allocation::NormalizeInput, read::Reassociate};
+    use crate::{
+        CanonicalStorage, Counting, Permute, Zip, allocation::NormalizeInput, read::Reassociate,
+    };
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));

@@ -3,9 +3,9 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, Counting, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor,
-    MAlloc, MStorage, MStorageElement, ReadExpression, S1, S2, S3, S4, S5, S6, S7, StorageLayout,
-    WriteFrom,
+    A1, A2, A3, A4, A5, A6, A7, A8, CanonicalAlloc, CanonicalStorage, Counting, DeviceSliceMut,
+    DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, S1, S2, S3, S4, S5, S6,
+    S7, StorageLayout, WriteFrom,
     allocation::PrependInput,
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
     indexed::GatherInput,
@@ -947,24 +947,25 @@ impl<R, Input, Output, Op> ExclusiveScanInput<R, Output, Op> for Input
 where
     R: Runtime,
     Input: PrependInput<R>,
-    Input::Item: MAlloc<R, Storage = Input::Storage>,
-    Input::Storage: MStorage<R>,
+    Input::Item: CanonicalAlloc<R, CanonicalStorage = Input::Storage>,
+    Input::Storage: CanonicalStorage<R>,
     Input::SemanticRead: LowerReadExpression + StageRead<R, Env0>,
-    <Input::Storage as MStorage<R>>::Write: LowerOutputExpression + StageOutput<R, Env0>,
-    <<Input::Storage as MStorage<R>>::Write as OutputExpression>::Item: WriteFrom<Input::Item>,
+    <Input::Storage as CanonicalStorage<R>>::Write: LowerOutputExpression + StageOutput<R, Env0>,
+    <<Input::Storage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
+        WriteFrom<Input::Item>,
     Dispatch<
         <Input::SemanticRead as ReadExpression>::ReadArity,
-        <<Input::Storage as MStorage<R>>::Write as OutputExpression>::StorageArity,
+        <<Input::Storage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity,
     >: InclusiveScanDispatch<
             R,
             Input::SemanticRead,
-            <Input::Storage as MStorage<R>>::Write,
+            <Input::Storage as CanonicalStorage<R>>::Write,
             Input::Item,
             <Input::SemanticRead as LowerReadExpression>::Slots,
-            <<Input::Storage as MStorage<R>>::Write as LowerOutputExpression>::Slots,
+            <<Input::Storage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
             Op,
         >,
-    <Input::Storage as MStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    <Input::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
     Op: ReductionOp<Input::Item>,
 {
     fn exclusive_scan_into(
@@ -976,7 +977,7 @@ where
     ) -> Result<(), Error> {
         let prefixed = self.prepend(exec, init)?;
         let prefixed_len = prefixed.len()?;
-        let scanned = exec.alloc::<Input::Item>(prefixed_len);
+        let scanned = exec.alloc_canonical::<Input::Item>(prefixed_len);
         inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned.write())?;
         crate::indexed::gather_direct(
             exec,
@@ -1007,13 +1008,13 @@ pub(crate) fn inclusive_scan_u32<R: Runtime>(
     input: &DeviceVec<R, u32>,
 ) -> Result<DeviceVec<R, u32>, Error> {
     if input.is_empty() {
-        return Ok(exec.alloc::<u32>(0));
+        return Ok(exec.alloc_canonical::<u32>(0));
     }
     let len = input.len();
     let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
-    let output = exec.alloc::<u32>(len);
-    let block_sums = exec.alloc::<u32>(blocks);
+    let output = exec.alloc_canonical::<u32>(len);
+    let block_sums = exec.alloc_canonical::<u32>(blocks);
     let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
     let count = cube_count_1d(blocks)?;
     unsafe {
@@ -1050,7 +1051,7 @@ pub(crate) fn last_u32<R: Runtime>(
     if input.is_empty() {
         return Ok(0);
     }
-    let output = exec.alloc::<u32>(1);
+    let output = exec.alloc_canonical::<u32>(1);
     unsafe {
         copy_last_kernel::launch_unchecked::<R>(
             exec.client(),
@@ -1066,7 +1067,7 @@ pub(crate) fn last_u32<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, MStorage, Permute, Transform, UnaryOp, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Transform, UnaryOp, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
@@ -1107,7 +1108,7 @@ mod tests {
         let len = 70_001;
         let left = exec.to_device(&vec![1_u32; len]);
         let right = exec.to_device(&vec![2_u32; len]);
-        let output = exec.alloc::<(u32, u32)>(len);
+        let output = exec.alloc_canonical::<(u32, u32)>(len);
 
         inclusive_scan(
             &exec,
@@ -1192,7 +1193,7 @@ mod tests {
             ),
         );
         let input = Permute::new(seven, Counting::new(0, 600));
-        let output = exec.alloc::<Seven>(600);
+        let output = exec.alloc_canonical::<Seven>(600);
 
         inclusive_scan(&exec, input, SumSevenItems, output.write()).unwrap();
 
@@ -1276,7 +1277,7 @@ mod tests {
             ),
         );
         let input = Permute::new(seven, Counting::new(0, 4));
-        let output = exec.alloc::<Seven>(4);
+        let output = exec.alloc_canonical::<Seven>(4);
         let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
         exclusive_scan(&exec, input, init, SumSevenItems, output.write()).unwrap();
 

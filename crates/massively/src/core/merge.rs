@@ -5,8 +5,8 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, Column, DeviceVec, Error, Executor, MAlloc, MStorage,
-    MStorageElement, ReadExpression, StorageLayout,
+    A1, A2, A3, A4, A5, A6, A7, CanonicalAlloc, CanonicalStorage, Column, DeviceVec, Error,
+    Executor, MStorageElement, ReadExpression, StorageLayout,
     allocation::{CopyStorage, NormalizeInput},
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7},
     indexed::GatherInput,
@@ -122,7 +122,7 @@ macro_rules! impl_merge_control_dispatch {
                 let left_len = left.logical_len()?;
                 let right_len = right.logical_len()?;
                 let total = left_len.checked_add(right_len).ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-                let permutation = exec.alloc::<u32>(total);
+                let permutation = exec.alloc_canonical::<u32>(total);
                 if total == 0 {
                     return Ok(MergeControl { permutation, left_len, right_len });
                 }
@@ -240,10 +240,10 @@ impl<R, Left, Right, Output> ConcatApply<R, Right, Output> for Left
 where
     R: Runtime,
     Left: NormalizeInput<R>,
-    Left::Item: MAlloc<R, Storage = Left::Storage>,
+    Left::Item: CanonicalAlloc<R, CanonicalStorage = Left::Storage>,
     Left::Storage: CopyStorage<R>,
     Right: NormalizeInput<R, Storage = Left::Storage> + ReadExpression<Item = Left::Item>,
-    <Left::Storage as MStorage<R>>::Read: GatherInput<R, Column<u32>, Output>,
+    <Left::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Column<u32>, Output>,
 {
     fn concat_apply(
         self,
@@ -262,7 +262,7 @@ where
                 right: control.left_len + control.right_len,
             });
         }
-        let combined = exec.alloc::<Left::Item>(left_len + right_len);
+        let combined = exec.alloc_canonical::<Left::Item>(left_len + right_len);
         left.copy_storage(exec, combined.slice_mut(..left_len))?;
         right.copy_storage(exec, combined.slice_mut(left_len..))?;
         combined

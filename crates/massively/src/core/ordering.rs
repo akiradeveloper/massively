@@ -5,8 +5,8 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, DeviceVec, Dispatch, Error, Executor, MAlloc, MStorage,
-    MStorageElement, ReadExpression,
+    A1, A2, A3, A4, A5, A6, A7, A8, CanonicalAlloc, CanonicalStorage, DeviceVec, Dispatch, Error,
+    Executor, MStorageElement, ReadExpression,
     arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
     eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
     launch::cube_count_1d,
@@ -227,7 +227,7 @@ macro_rules! impl_adjacent_flags_dispatch {
         {
             fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
                 let len = input.logical_len()?;
-                let flags = exec.alloc::<u32>(len);
+                let flags = exec.alloc_canonical::<u32>(len);
                 if len == 0 {
                     return Ok(flags);
                 }
@@ -395,7 +395,7 @@ macro_rules! impl_sort_control_dispatch {
         {
             fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
                 let len = input.logical_len()?;
-                let mut current = exec.alloc::<u32>(len);
+                let mut current = exec.alloc_canonical::<u32>(len);
                 if len == 0 {
                     return Ok(current);
                 }
@@ -414,7 +414,7 @@ macro_rules! impl_sort_control_dispatch {
                 if len == 1 {
                     return Ok(current);
                 }
-                let mut next = exec.alloc::<u32>(len);
+                let mut next = exec.alloc_canonical::<u32>(len);
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 let offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
@@ -506,47 +506,47 @@ where
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Item: crate::WriteFrom<Input::Item>,
-    Input::Item: MAlloc<R>,
-    <Input::Item as MAlloc<R>>::Storage: MStorage<R>,
-    <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Write:
+    Input::Item: CanonicalAlloc<R>,
+    <Input::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
         LowerOutputExpression + StageOutput<R, Env0>,
-    <<<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Write as OutputExpression>::Item:
+    <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
         crate::WriteFrom<Input::Item>,
     Dispatch<
         Input::ReadArity,
-        <<<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Write as OutputExpression>::StorageArity,
+        <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity,
     >: MaterializeDispatch<
             R,
             Input,
-            <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Write,
+            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
             Input::Slots,
-            <<<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Write as LowerOutputExpression>::Slots,
+            <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
         >,
     Input::Item: crate::WriteFrom<
-            <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Item,
+            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item,
         >,
     Input::Item: sort::SortStorageItem<R, Less>,
     Reassociate<
-        <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+        <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
         Input::Item,
     >: ReadExpression<Item = Input::Item>
         + LowerReadExpression
         + StageRead<R, Env0>,
     Dispatch<
         <Reassociate<
-            <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
             Input::Item,
         > as ReadExpression>::ReadArity,
         <Output as OutputExpression>::StorageArity,
     >: MaterializeDispatch<
             R,
             Reassociate<
-                <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+                <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
                 Input::Item,
             >,
             Output,
             <Reassociate<
-                <<Input::Item as MAlloc<R>>::Storage as MStorage<R>>::Read,
+                <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
                 Input::Item,
             > as LowerReadExpression>::Slots,
             <Output as LowerOutputExpression>::Slots,
@@ -554,7 +554,7 @@ where
 {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
         let len = self.logical_len()?;
-        let temporary = exec.alloc::<Input::Item>(len);
+        let temporary = exec.alloc_canonical::<Input::Item>(len);
         materialize(exec, self, temporary.write())?;
         let result = <Input::Item as sort::SortStorageItem<R, Less>>::sort_storage(
             exec, temporary, false,
@@ -983,7 +983,7 @@ mod tests {
             ),
         );
         let input = Permute::new(seven, Counting::new(0, len));
-        let output = exec.alloc::<Seven>(len);
+        let output = exec.alloc_canonical::<Seven>(len);
 
         sort(&exec, input, LexicographicLess, output.write()).unwrap();
 
@@ -1036,7 +1036,7 @@ mod tests {
             adjacent_find(&exec, make_input(), EqualSeven).unwrap(),
             Some(0)
         );
-        let output = exec.alloc::<Seven>(5);
+        let output = exec.alloc_canonical::<Seven>(5);
         let count = unique(&exec, make_input(), EqualSeven, output.write()).unwrap();
         assert_eq!(count, 3);
         assert_eq!(

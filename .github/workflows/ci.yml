@@ -20,15 +20,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install WGPU CPU adapter dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools ripgrep
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest@0.9
 
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
@@ -40,13 +45,16 @@ jobs:
         run: cargo check --tests --examples --benches
 
       - name: Run tests
-        run: cargo test --tests
+        run: cargo nextest run
 
       - name: Run doctests
         run: cargo test --doc
 
       - name: Build documentation
-        run: cargo doc --no-deps
+        run: cargo doc -p massively --no-deps
+
+      - name: Check public API
+        run: bash scripts/check-public-api.sh
 
       - name: Verify package
         run: cargo package --no-verify
