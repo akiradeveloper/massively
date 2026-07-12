@@ -4,7 +4,7 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression, S1, Transform,
+    DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, ReadExpression, Transform,
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     output::StageOutput,
     read::{AdjacentIndexedTransform, Env0, Env1, IndexedTransform, LowerReadExpression},
@@ -145,52 +145,59 @@ where
     Pred: PredicateOp<Input::Item>,
     Transform<Input, PredicateMap<Pred>>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<<Transform<Input, PredicateMap<Pred>> as ReadExpression>::ReadArity, S1>:
+    Dispatch<crate::A13, crate::S12>:
         MaterializeDispatch<
                 R,
                 Transform<Input, PredicateMap<Pred>>,
                 DeviceSliceMut<u32>,
-                <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
-                Env1<u32>,
+                crate::read::KernelReadSlots<
+                    <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
+                >,
+                crate::output::KernelOutputSlots<Env1<u32>>,
             >,
     IndexedTransform<Input, FirstMatchingIndex<Pred>>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<<IndexedTransform<Input, FirstMatchingIndex<Pred>> as ReadExpression>::ReadArity, S1>:
+    Dispatch<crate::A13, crate::S12>:
         ReduceDispatch<
                 R,
                 IndexedTransform<Input, FirstMatchingIndex<Pred>>,
                 u32,
                 MinU32,
-                <IndexedTransform<Input, FirstMatchingIndex<Pred>> as LowerReadExpression>::Slots,
+                crate::read::KernelReadSlots<
+                    <IndexedTransform<Input, FirstMatchingIndex<Pred>> as LowerReadExpression>::Slots,
+                >,
             >,
     AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<
-        <AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>> as ReadExpression>::ReadArity,
-        S1,
-    >: ReduceDispatch<
+    Dispatch<crate::A13, crate::S12>: ReduceDispatch<
             R,
             AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>>,
             u32,
             MinU32,
-            <AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>> as LowerReadExpression>::Slots,
+            crate::read::KernelReadSlots<
+                <AdjacentIndexedTransform<Input, FirstPartitionViolation<Pred>> as LowerReadExpression>::Slots,
+            >,
         >,
-    Dispatch<<Transform<Input, PredicateMap<Pred>> as ReadExpression>::ReadArity, S1>:
+    Dispatch<crate::A13, crate::S12>:
         ReduceDispatch<
                 R,
                 Transform<Input, PredicateMap<Pred>>,
                 u32,
                 SumU32,
-                <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
+                crate::read::KernelReadSlots<
+                    <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
+                >,
             >,
-    Dispatch<<Transform<Input, PredicateMap<Pred>> as ReadExpression>::ReadArity, S1>:
+    Dispatch<crate::A13, crate::S12>:
         InclusiveScanDispatch<
             R,
             Transform<Input, PredicateMap<Pred>>,
             DeviceSliceMut<u32>,
             u32,
-            <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
-            Env1<u32>,
+            crate::read::KernelReadSlots<
+                <Transform<Input, PredicateMap<Pred>> as LowerReadExpression>::Slots,
+            >,
+            crate::output::KernelOutputSlots<Env1<u32>>,
             SumU32,
         >,
     DeviceSliceMut<u32>: StageOutput<R, Env0>,

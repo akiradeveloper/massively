@@ -3,31 +3,36 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, CanonicalAlloc, CanonicalStorage, Counting, DeviceSliceMut,
-    DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression, S1, S2, S3, S4, S5, S6,
-    S7, StorageLayout, WriteFrom,
+    A13, CanonicalAlloc, CanonicalStorage, Counting, DeviceVec, Dispatch, Error, Executor,
+    MStorageElement, ReadExpression, S12, StorageLayout, WritableFrom,
     allocation::PrependInput,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    eval::Eval13,
     indexed::GatherInput,
     launch::cube_count_1d,
-    output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
-    read::{Adjacent, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression},
+    output::{
+        LowerOutputExpression, OutputBindings, OutputExpression, PaddedOutputSlots, StageOutput,
+    },
+    read::{Adjacent, Env0, Env12, Env13, KernelReadSlots, LowerReadExpression, PaddedReadSlots},
     reduce::{ReductionOp, StageRead, StagedBindings},
     storage::{
-        Decompose, Last, LoadLeaves2, LoadLeaves3, LoadLeaves4, LoadLeaves5, LoadLeaves6,
-        LoadLeaves7, LoadMutLeaves2, LoadMutLeaves3, LoadMutLeaves4, LoadMutLeaves5,
-        LoadMutLeaves6, LoadMutLeaves7, More, MutableLeaves, PlaneShuffleLeaves, Recompose,
-        SelectStoreLeaves2, SelectStoreLeaves2Expand, SelectStoreLeaves3, SelectStoreLeaves3Expand,
-        SelectStoreLeaves4, SelectStoreLeaves4Expand, SelectStoreLeaves5, SelectStoreLeaves5Expand,
-        SelectStoreLeaves6, SelectStoreLeaves6Expand, SelectStoreLeaves7, SelectStoreLeaves7Expand,
-        StoreLeaves2, StoreLeaves2Expand, StoreLeaves3, StoreLeaves3Expand, StoreLeaves4,
-        StoreLeaves4Expand, StoreLeaves5, StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand,
-        StoreLeaves7, StoreLeaves7Expand,
+        Decompose, LoadMutPadded12, LoadPadded12, MutableLeaves, PlaneShuffleLeaves, Recompose,
+        SharedLeaves, StorePadded12, StorePadded12Expand,
     },
     transform::{MaterializeDispatch, materialize},
 };
 
 const BLOCK_SIZE: u32 = 256;
+
+type FixedScanStorage<R, Item> = <Item as crate::CanonicalAlloc<R>>::CanonicalStorage;
+type FixedScanRead<R, Item> =
+    crate::read::FixedReassociate<<FixedScanStorage<R, Item> as CanonicalStorage<R>>::Read, Item>;
+type FixedScanSlots<Item> =
+    <<Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots;
+type FixedScanOutput<R, Item> = crate::output::ReassociatedOutput<
+    <FixedScanStorage<R, Item> as CanonicalStorage<R>>::Write,
+    Item,
+    FixedScanSlots<Item>,
+>;
 
 #[cubecl::cube(launch_unchecked, explicit_define)]
 fn u32_block_inclusive_scan_kernel(
@@ -116,7 +121,11 @@ fn copy_last_kernel(input: &[u32], output: &mut [u32]) {
     }
 }
 
-macro_rules! define_scalar_scan_kernel {
+#[cfg(any())]
+mod unused_scalar_scan_kernels {
+    use super::*;
+
+    macro_rules! define_scalar_scan_kernel {
     ($name:ident,$eval:ident,$method:ident; $( $leaf:ident:$slot:ident ),+ $(,)?) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
@@ -207,34 +216,213 @@ macro_rules! define_scalar_scan_kernel {
     };
 }
 
-define_scalar_scan_kernel!(scalar_scan_a1,Eval1,eval1; L0:slot0);
-define_scalar_scan_kernel!(scalar_scan_a2,Eval2,eval2; L0:slot0,L1:slot1);
-define_scalar_scan_kernel!(scalar_scan_a3,Eval3,eval3; L0:slot0,L1:slot1,L2:slot2);
-define_scalar_scan_kernel!(scalar_scan_a4,Eval4,eval4; L0:slot0,L1:slot1,L2:slot2,L3:slot3);
-define_scalar_scan_kernel!(scalar_scan_a5,Eval5,eval5; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4);
-define_scalar_scan_kernel!(scalar_scan_a6,Eval6,eval6; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5);
-define_scalar_scan_kernel!(scalar_scan_a7,Eval7,eval7; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6);
-define_scalar_scan_kernel!(scalar_scan_a8,Eval8,eval8; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7);
+    define_scalar_scan_kernel!(scalar_scan_a1,Eval1,eval1; L0:slot0);
+    define_scalar_scan_kernel!(scalar_scan_a2,Eval2,eval2; L0:slot0,L1:slot1);
+    define_scalar_scan_kernel!(scalar_scan_a3,Eval3,eval3; L0:slot0,L1:slot1,L2:slot2);
+    define_scalar_scan_kernel!(scalar_scan_a4,Eval4,eval4; L0:slot0,L1:slot1,L2:slot2,L3:slot3);
+    define_scalar_scan_kernel!(scalar_scan_a5,Eval5,eval5; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4);
+    define_scalar_scan_kernel!(scalar_scan_a6,Eval6,eval6; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5);
+    define_scalar_scan_kernel!(scalar_scan_a7,Eval7,eval7; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6);
+    define_scalar_scan_kernel!(scalar_scan_a8,Eval8,eval8; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7);
+    define_scalar_scan_kernel!(scalar_scan_a9,Eval9,eval9; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8);
+    define_scalar_scan_kernel!(scalar_scan_a10,Eval10,eval10; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9);
+    define_scalar_scan_kernel!(scalar_scan_a11,Eval11,eval11; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10);
+    define_scalar_scan_kernel!(scalar_scan_a12,Eval12,eval12; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11);
+    define_scalar_scan_kernel!(scalar_scan_a13,Eval13,eval13; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12);
+}
 
-macro_rules! define_multi_scan_kernel {
-    (
-        $name:ident,$eval:ident,$method:ident,$load_trait:ident,$store_trait:ident,$select_trait:ident;
-        [$( $leaf:ident:$slot:ident ),+];
-        [$( $out_ty:ident:$output:ident:$shared:ident:$block_sum:ident ),+]
-    ) => {
+#[cubecl::cube]
+#[allow(clippy::too_many_arguments)]
+fn scan_value_padded12<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, Leaves, Layout, Op>(
+    value: Item,
+    valid_value: u32,
+    logical_len: usize,
+    global: usize,
+    unit: usize,
+    block: usize,
+    zero_offsets: &[u32],
+    output_offsets: &[u32],
+    out0: &mut [O0],
+    out1: &mut [O1],
+    out2: &mut [O2],
+    out3: &mut [O3],
+    out4: &mut [O4],
+    out5: &mut [O5],
+    out6: &mut [O6],
+    out7: &mut [O7],
+    out8: &mut [O8],
+    out9: &mut [O9],
+    out10: &mut [O10],
+    out11: &mut [O11],
+    sum0: &mut [O0],
+    sum1: &mut [O1],
+    sum2: &mut [O2],
+    sum3: &mut [O3],
+    sum4: &mut [O4],
+    sum5: &mut [O5],
+    sum6: &mut [O6],
+    sum7: &mut [O7],
+    sum8: &mut [O8],
+    sum9: &mut [O9],
+    sum10: &mut [O10],
+    sum11: &mut [O11],
+) where
+    Item: CubeType + Send + Sync + 'static,
+    O0: CubePrimitive,
+    O1: CubePrimitive,
+    O2: CubePrimitive,
+    O3: CubePrimitive,
+    O4: CubePrimitive,
+    O5: CubePrimitive,
+    O6: CubePrimitive,
+    O7: CubePrimitive,
+    O8: CubePrimitive,
+    O9: CubePrimitive,
+    O10: CubePrimitive,
+    O11: CubePrimitive,
+    Leaves: SharedLeaves
+        + MutableLeaves
+        + PlaneShuffleLeaves
+        + StorePadded12<
+            O0 = O0,
+            O1 = O1,
+            O2 = O2,
+            O3 = O3,
+            O4 = O4,
+            O5 = O5,
+            O6 = O6,
+            O7 = O7,
+            O8 = O8,
+            O9 = O9,
+            O10 = O10,
+            O11 = O11,
+        > + Send
+        + Sync
+        + 'static,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+{
+    let cube_dim = BLOCK_SIZE as usize;
+    let mut shared = Leaves::new_shared(cube_dim);
+    let mut valid = Shared::<[u32]>::new_slice(cube_dim);
+    let cells = Leaves::into_cells(Layout::decompose(value));
+    let is_valid = RuntimeCell::<u32>::new(valid_value);
+    let offset = RuntimeCell::<u32>::new(1u32);
+    while offset.read() < PLANE_DIM {
+        let left_cells = Leaves::into_cells(Leaves::shuffle_leaves_up(
+            Leaves::read(&cells),
+            offset.read(),
+        ));
+        let left_valid = plane_shuffle_up(is_valid.read(), offset.read());
+        if UNIT_POS_PLANE >= offset.read() && left_valid != 0u32 {
+            if is_valid.read() != 0u32 {
+                let combined = Layout::decompose(Op::apply(
+                    Layout::recompose(Leaves::read(&left_cells)),
+                    Layout::recompose(Leaves::read(&cells)),
+                ));
+                Leaves::store(&cells, combined);
+            } else {
+                Leaves::store(&cells, Leaves::read(&left_cells));
+                is_valid.store(1u32);
+            }
+        }
+        offset.store(offset.read() * 2u32);
+    }
+    if UNIT_POS_PLANE + 1u32 == PLANE_DIM {
+        Leaves::store_shared(Leaves::read(&cells), &mut shared, PLANE_POS as usize);
+        valid[PLANE_POS as usize] = is_valid.read();
+    }
+    sync_cube();
+    if unit == 0usize {
+        let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+        let plane_cells = Leaves::into_cells(Leaves::load_shared(&shared, 0usize));
+        let plane_is_valid = RuntimeCell::<u32>::new(valid[0]);
+        let plane = RuntimeCell::<u32>::new(1u32);
+        while plane.read() < plane_count {
+            let index = plane.read() as usize;
+            if valid[index] != 0u32 {
+                if plane_is_valid.read() != 0u32 {
+                    let combined = Layout::decompose(Op::apply(
+                        Layout::recompose(Leaves::read(&plane_cells)),
+                        Layout::recompose(Leaves::load_shared(&shared, index)),
+                    ));
+                    Leaves::store(&plane_cells, combined);
+                } else {
+                    Leaves::store(&plane_cells, Leaves::load_shared(&shared, index));
+                    plane_is_valid.store(1u32);
+                }
+            }
+            Leaves::store_shared(Leaves::read(&plane_cells), &mut shared, index);
+            plane.store(plane.read() + 1u32);
+        }
+    }
+    sync_cube();
+    if PLANE_POS > 0u32 && is_valid.read() != 0u32 {
+        let prefix = Leaves::load_shared(&shared, PLANE_POS as usize - 1usize);
+        let combined = Layout::decompose(Op::apply(
+            Layout::recompose(prefix),
+            Layout::recompose(Leaves::read(&cells)),
+        ));
+        Leaves::store(&cells, combined);
+    }
+    if global < logical_len {
+        Leaves::read(&cells).store_padded(
+            out0,
+            out1,
+            out2,
+            out3,
+            out4,
+            out5,
+            out6,
+            out7,
+            out8,
+            out9,
+            out10,
+            out11,
+            output_offsets,
+            global,
+        );
+    }
+    if unit == 0usize {
+        let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+        Leaves::load_shared(&shared, plane_count as usize - 1usize).store_padded(
+            sum0,
+            sum1,
+            sum2,
+            sum3,
+            sum4,
+            sum5,
+            sum6,
+            sum7,
+            sum8,
+            sum9,
+            sum10,
+            sum11,
+            zero_offsets,
+            block,
+        );
+    }
+}
+
+macro_rules! define_padded_scan_kernel {
+    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$slot:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Item: CubeType + Send + Sync + 'static,
             $( $leaf: CubePrimitive, )+
-            $( $out_ty: CubePrimitive, )+
-            Leaves: CubeType + Send + Sync + 'static
-                + $load_trait<$( $out_ty ),+>
-                + $store_trait<$( $out_ty ),+>
-                + $select_trait<$( $out_ty ),+>
+            O0: CubePrimitive, O1: CubePrimitive, O2: CubePrimitive, O3: CubePrimitive,
+            O4: CubePrimitive, O5: CubePrimitive, O6: CubePrimitive, O7: CubePrimitive,
+            O8: CubePrimitive, O9: CubePrimitive, O10: CubePrimitive, O11: CubePrimitive,
+            Leaves: SharedLeaves
                 + MutableLeaves
-                + PlaneShuffleLeaves,
-            Expr: $eval<Item, $( $leaf ),+>,
+                + PlaneShuffleLeaves
+                + StorePadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >
+                + Send + Sync + 'static,
             Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+            Expr: $eval<Item, $( $leaf ),+>,
             Op: ReductionOp<Item>,
         >(
             $( $slot: &[$leaf], )+
@@ -242,141 +430,36 @@ macro_rules! define_multi_scan_kernel {
             len: &[u32],
             zero_offsets: &[u32],
             output_offsets: &[u32],
-            $( $output: &mut [$out_ty], )+
-            $( $block_sum: &mut [$out_ty], )+
+            out0: &mut [O0], out1: &mut [O1], out2: &mut [O2], out3: &mut [O3],
+            out4: &mut [O4], out5: &mut [O5], out6: &mut [O6], out7: &mut [O7],
+            out8: &mut [O8], out9: &mut [O9], out10: &mut [O10], out11: &mut [O11],
+            sum0: &mut [O0], sum1: &mut [O1], sum2: &mut [O2], sum3: &mut [O3],
+            sum4: &mut [O4], sum5: &mut [O5], sum6: &mut [O6], sum7: &mut [O7],
+            sum8: &mut [O8], sum9: &mut [O9], sum10: &mut [O10], sum11: &mut [O11],
         ) {
             let unit = UNIT_POS as usize;
             let block = CUBE_POS as usize;
-            let cube_dim = BLOCK_SIZE as usize;
-            let global = block * cube_dim + unit;
+            let global = block * BLOCK_SIZE as usize + unit;
             let logical_len = len[0] as usize;
-            $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )+
-            let mut valid = Shared::<[u32]>::new_slice(cube_dim);
-
             let safe_global = if global < logical_len { global } else { 0usize };
-            let cells = <Leaves as MutableLeaves>::into_cells(Layout::decompose(
+            scan_value_padded12::<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, Leaves, Layout, Op>(
                 Expr::$method($( $slot, )+ read_offsets, safe_global),
-            ));
-            let is_valid = RuntimeCell::<u32>::new(
                 if global < logical_len { 1u32 } else { 0u32 },
+                logical_len, global, unit, block, zero_offsets, output_offsets,
+                out0, out1, out2, out3, out4, out5, out6, out7, out8, out9, out10, out11,
+                sum0, sum1, sum2, sum3, sum4, sum5, sum6, sum7, sum8, sum9, sum10, sum11,
             );
-
-            let offset = RuntimeCell::<u32>::new(1u32);
-            while offset.read() < PLANE_DIM {
-                let left_cells = <Leaves as MutableLeaves>::into_cells(
-                    Leaves::shuffle_leaves_up(
-                        <Leaves as MutableLeaves>::read(&cells),
-                        offset.read(),
-                    ),
-                );
-                let left_valid = plane_shuffle_up(is_valid.read(), offset.read());
-                if UNIT_POS_PLANE >= offset.read() && left_valid != 0u32 {
-                    if is_valid.read() != 0u32 {
-                        let combined = Layout::decompose(Op::apply(
-                            Layout::recompose(<Leaves as MutableLeaves>::read(&left_cells)),
-                            Layout::recompose(<Leaves as MutableLeaves>::read(&cells)),
-                        ));
-                        <Leaves as MutableLeaves>::store(&cells, combined);
-                    } else {
-                        <Leaves as MutableLeaves>::store(
-                            &cells,
-                            <Leaves as MutableLeaves>::read(&left_cells),
-                        );
-                        is_valid.store(1u32);
-                    }
-                }
-                offset.store(offset.read() * 2u32);
-            }
-
-            if UNIT_POS_PLANE + 1u32 == PLANE_DIM {
-                <Leaves as MutableLeaves>::read(&cells).store(
-                    $( &mut $shared, )+ zero_offsets, PLANE_POS as usize,
-                );
-                valid[PLANE_POS as usize] = is_valid.read();
-            }
-            sync_cube();
-
-            if unit == 0usize {
-                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
-                let plane_cells = <Leaves as MutableLeaves>::into_cells(Leaves::load(
-                    $( &$shared, )+ zero_offsets, 0usize,
-                ));
-                let plane_is_valid = RuntimeCell::<u32>::new(valid[0]);
-                let plane = RuntimeCell::<u32>::new(1u32);
-                while plane.read() < plane_count {
-                    let index = plane.read() as usize;
-                    if valid[index] != 0u32 {
-                        if plane_is_valid.read() != 0u32 {
-                            let combined = Layout::decompose(Op::apply(
-                                Layout::recompose(<Leaves as MutableLeaves>::read(&plane_cells)),
-                                Layout::recompose(Leaves::load(
-                                    $( &$shared, )+ zero_offsets, index,
-                                )),
-                            ));
-                            <Leaves as MutableLeaves>::store(&plane_cells, combined);
-                        } else {
-                            <Leaves as MutableLeaves>::store(
-                                &plane_cells,
-                                Leaves::load($( &$shared, )+ zero_offsets, index),
-                            );
-                            plane_is_valid.store(1u32);
-                        }
-                    }
-                    <Leaves as MutableLeaves>::read(&plane_cells).store(
-                        $( &mut $shared, )+ zero_offsets, index,
-                    );
-                    plane.store(plane.read() + 1u32);
-                }
-            }
-            sync_cube();
-
-            if PLANE_POS > 0u32 && is_valid.read() != 0u32 {
-                let prefix = Leaves::load(
-                    $( &$shared, )+ zero_offsets, PLANE_POS as usize - 1usize,
-                );
-                let combined = Layout::decompose(Op::apply(
-                    Layout::recompose(prefix),
-                    Layout::recompose(<Leaves as MutableLeaves>::read(&cells)),
-                ));
-                <Leaves as MutableLeaves>::store(&cells, combined);
-            }
-
-            if global < logical_len {
-                <Leaves as MutableLeaves>::read(&cells).store(
-                    $( $output, )+ output_offsets, global,
-                );
-            }
-            if unit == 0usize {
-                let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
-                Leaves::load(
-                    $( &$shared, )+ zero_offsets, plane_count as usize - 1usize,
-                ).store($( $block_sum, )+ zero_offsets, block);
-            }
         }
     };
 }
 
-macro_rules! define_multi_scan_kernels_for_eval {
-    ($eval:ident,$method:ident; [$( $leaf:ident:$slot:ident ),+]; [$k2:ident,$k3:ident,$k4:ident,$k5:ident,$k6:ident,$k7:ident]) => {
-        define_multi_scan_kernel!($k2,$eval,$method,LoadLeaves2,StoreLeaves2,SelectStoreLeaves2; [$($leaf:$slot),+]; [O0:out0:shared0:sum0,O1:out1:shared1:sum1]);
-        define_multi_scan_kernel!($k3,$eval,$method,LoadLeaves3,StoreLeaves3,SelectStoreLeaves3; [$($leaf:$slot),+]; [O0:out0:shared0:sum0,O1:out1:shared1:sum1,O2:out2:shared2:sum2]);
-        define_multi_scan_kernel!($k4,$eval,$method,LoadLeaves4,StoreLeaves4,SelectStoreLeaves4; [$($leaf:$slot),+]; [O0:out0:shared0:sum0,O1:out1:shared1:sum1,O2:out2:shared2:sum2,O3:out3:shared3:sum3]);
-        define_multi_scan_kernel!($k5,$eval,$method,LoadLeaves5,StoreLeaves5,SelectStoreLeaves5; [$($leaf:$slot),+]; [O0:out0:shared0:sum0,O1:out1:shared1:sum1,O2:out2:shared2:sum2,O3:out3:shared3:sum3,O4:out4:shared4:sum4]);
-        define_multi_scan_kernel!($k6,$eval,$method,LoadLeaves6,StoreLeaves6,SelectStoreLeaves6; [$($leaf:$slot),+]; [O0:out0:shared0:sum0,O1:out1:shared1:sum1,O2:out2:shared2:sum2,O3:out3:shared3:sum3,O4:out4:shared4:sum4,O5:out5:shared5:sum5]);
-        define_multi_scan_kernel!($k7,$eval,$method,LoadLeaves7,StoreLeaves7,SelectStoreLeaves7; [$($leaf:$slot),+]; [O0:out0:shared0:sum0,O1:out1:shared1:sum1,O2:out2:shared2:sum2,O3:out3:shared3:sum3,O4:out4:shared4:sum4,O5:out5:shared5:sum5,O6:out6:shared6:sum6]);
-    };
-}
+define_padded_scan_kernel!(padded_scan_a13,Eval13,eval13; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12]);
 
-define_multi_scan_kernels_for_eval!(Eval1,eval1; [L0:slot0]; [multi_scan_a1_s2,multi_scan_a1_s3,multi_scan_a1_s4,multi_scan_a1_s5,multi_scan_a1_s6,multi_scan_a1_s7]);
-define_multi_scan_kernels_for_eval!(Eval2,eval2; [L0:slot0,L1:slot1]; [multi_scan_a2_s2,multi_scan_a2_s3,multi_scan_a2_s4,multi_scan_a2_s5,multi_scan_a2_s6,multi_scan_a2_s7]);
-define_multi_scan_kernels_for_eval!(Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]; [multi_scan_a3_s2,multi_scan_a3_s3,multi_scan_a3_s4,multi_scan_a3_s5,multi_scan_a3_s6,multi_scan_a3_s7]);
-define_multi_scan_kernels_for_eval!(Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]; [multi_scan_a4_s2,multi_scan_a4_s3,multi_scan_a4_s4,multi_scan_a4_s5,multi_scan_a4_s6,multi_scan_a4_s7]);
-define_multi_scan_kernels_for_eval!(Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]; [multi_scan_a5_s2,multi_scan_a5_s3,multi_scan_a5_s4,multi_scan_a5_s5,multi_scan_a5_s6,multi_scan_a5_s7]);
-define_multi_scan_kernels_for_eval!(Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]; [multi_scan_a6_s2,multi_scan_a6_s3,multi_scan_a6_s4,multi_scan_a6_s5,multi_scan_a6_s6,multi_scan_a6_s7]);
-define_multi_scan_kernels_for_eval!(Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]; [multi_scan_a7_s2,multi_scan_a7_s3,multi_scan_a7_s4,multi_scan_a7_s5,multi_scan_a7_s6,multi_scan_a7_s7]);
-define_multi_scan_kernels_for_eval!(Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]; [multi_scan_a8_s2,multi_scan_a8_s3,multi_scan_a8_s4,multi_scan_a8_s5,multi_scan_a8_s6,multi_scan_a8_s7]);
+#[cfg(any())]
+mod legacy_storage_scan {
+    use super::*;
 
-macro_rules! define_storage_scan_kernel {
+    macro_rules! define_storage_scan_kernel {
     (
         $name:ident,$load_trait:ident,$store_trait:ident,$select_trait:ident;
         [$( $out_ty:ident:$input:ident:$output:ident:$shared:ident:$block_sum:ident ),+]
@@ -454,7 +537,19 @@ macro_rules! define_storage_scan_kernel {
     };
 }
 
-macro_rules! define_multi_add_prefix_kernel {
+    define_storage_scan_kernel!(storage_scan_s2,LoadLeaves2,StoreLeaves2,SelectStoreLeaves2; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1]);
+    define_storage_scan_kernel!(storage_scan_s3,LoadLeaves3,StoreLeaves3,SelectStoreLeaves3; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2]);
+    define_storage_scan_kernel!(storage_scan_s4,LoadLeaves4,StoreLeaves4,SelectStoreLeaves4; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3]);
+    define_storage_scan_kernel!(storage_scan_s5,LoadLeaves5,StoreLeaves5,SelectStoreLeaves5; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4]);
+    define_storage_scan_kernel!(storage_scan_s6,LoadLeaves6,StoreLeaves6,SelectStoreLeaves6; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5]);
+    define_storage_scan_kernel!(storage_scan_s7,LoadLeaves7,StoreLeaves7,SelectStoreLeaves7; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6]);
+    define_storage_scan_kernel!(storage_scan_s8,LoadLeaves8,StoreLeaves8,SelectStoreLeaves8; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6,O7:in7:out7:shared7:sum7]);
+    define_storage_scan_kernel!(storage_scan_s9,LoadLeaves9,StoreLeaves9,SelectStoreLeaves9; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6,O7:in7:out7:shared7:sum7,O8:in8:out8:shared8:sum8]);
+    define_storage_scan_kernel!(storage_scan_s10,LoadLeaves10,StoreLeaves10,SelectStoreLeaves10; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6,O7:in7:out7:shared7:sum7,O8:in8:out8:shared8:sum8,O9:in9:out9:shared9:sum9]);
+    define_storage_scan_kernel!(storage_scan_s11,LoadLeaves11,StoreLeaves11,SelectStoreLeaves11; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6,O7:in7:out7:shared7:sum7,O8:in8:out8:shared8:sum8,O9:in9:out9:shared9:sum9,O10:in10:out10:shared10:sum10]);
+    define_storage_scan_kernel!(storage_scan_s12,LoadLeaves12,StoreLeaves12,SelectStoreLeaves12; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6,O7:in7:out7:shared7:sum7,O8:in8:out8:shared8:sum8,O9:in9:out9:shared9:sum9,O10:in10:out10:shared10:sum10,O11:in11:out11:shared11:sum11]);
+
+    macro_rules! define_multi_add_prefix_kernel {
     (
         $name:ident,$load_trait:ident,$load_mut_trait:ident,$store_trait:ident;
         [$( $out_ty:ident:$prefix:ident:$output:ident ),+]
@@ -493,36 +588,34 @@ macro_rules! define_multi_add_prefix_kernel {
     };
 }
 
-define_storage_scan_kernel!(storage_scan_s2,LoadLeaves2,StoreLeaves2,SelectStoreLeaves2; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1]);
-define_storage_scan_kernel!(storage_scan_s3,LoadLeaves3,StoreLeaves3,SelectStoreLeaves3; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2]);
-define_storage_scan_kernel!(storage_scan_s4,LoadLeaves4,StoreLeaves4,SelectStoreLeaves4; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3]);
-define_storage_scan_kernel!(storage_scan_s5,LoadLeaves5,StoreLeaves5,SelectStoreLeaves5; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4]);
-define_storage_scan_kernel!(storage_scan_s6,LoadLeaves6,StoreLeaves6,SelectStoreLeaves6; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5]);
-define_storage_scan_kernel!(storage_scan_s7,LoadLeaves7,StoreLeaves7,SelectStoreLeaves7; [O0:in0:out0:shared0:sum0,O1:in1:out1:shared1:sum1,O2:in2:out2:shared2:sum2,O3:in3:out3:shared3:sum3,O4:in4:out4:shared4:sum4,O5:in5:out5:shared5:sum5,O6:in6:out6:shared6:sum6]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s2,LoadLeaves2,LoadMutLeaves2,StoreLeaves2; [O0:prefix0:out0,O1:prefix1:out1]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s3,LoadLeaves3,LoadMutLeaves3,StoreLeaves3; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s4,LoadLeaves4,LoadMutLeaves4,StoreLeaves4; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s5,LoadLeaves5,LoadMutLeaves5,StoreLeaves5; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s6,LoadLeaves6,LoadMutLeaves6,StoreLeaves6; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s7,LoadLeaves7,LoadMutLeaves7,StoreLeaves7; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s8,LoadLeaves8,LoadMutLeaves8,StoreLeaves8; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6,O7:prefix7:out7]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s9,LoadLeaves9,LoadMutLeaves9,StoreLeaves9; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6,O7:prefix7:out7,O8:prefix8:out8]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s10,LoadLeaves10,LoadMutLeaves10,StoreLeaves10; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6,O7:prefix7:out7,O8:prefix8:out8,O9:prefix9:out9]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s11,LoadLeaves11,LoadMutLeaves11,StoreLeaves11; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6,O7:prefix7:out7,O8:prefix8:out8,O9:prefix9:out9,O10:prefix10:out10]);
+    define_multi_add_prefix_kernel!(multi_add_prefix_s12,LoadLeaves12,LoadMutLeaves12,StoreLeaves12; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6,O7:prefix7:out7,O8:prefix8:out8,O9:prefix9:out9,O10:prefix10:out10,O11:prefix11:out11]);
 
-define_multi_add_prefix_kernel!(multi_add_prefix_s2,LoadLeaves2,LoadMutLeaves2,StoreLeaves2; [O0:prefix0:out0,O1:prefix1:out1]);
-define_multi_add_prefix_kernel!(multi_add_prefix_s3,LoadLeaves3,LoadMutLeaves3,StoreLeaves3; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2]);
-define_multi_add_prefix_kernel!(multi_add_prefix_s4,LoadLeaves4,LoadMutLeaves4,StoreLeaves4; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3]);
-define_multi_add_prefix_kernel!(multi_add_prefix_s5,LoadLeaves5,LoadMutLeaves5,StoreLeaves5; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4]);
-define_multi_add_prefix_kernel!(multi_add_prefix_s6,LoadLeaves6,LoadMutLeaves6,StoreLeaves6; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5]);
-define_multi_add_prefix_kernel!(multi_add_prefix_s7,LoadLeaves7,LoadMutLeaves7,StoreLeaves7; [O0:prefix0:out0,O1:prefix1:out1,O2:prefix2:out2,O3:prefix3:out3,O4:prefix4:out4,O5:prefix5:out5,O6:prefix6:out6]);
-
-#[cubecl::cube(launch_unchecked, explicit_define)]
-fn scalar_add_block_prefix_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
-    block_prefixes: &[Item],
-    len: &[u32],
-    output_offset: &[u32],
-    output: &mut [Item],
-) {
-    let block = CUBE_POS as usize;
-    let global = block * BLOCK_SIZE as usize + UNIT_POS as usize;
-    if block > 0usize && global < len[0] as usize {
-        let index = output_offset[0] as usize + global;
-        output[index] = Op::apply(block_prefixes[block - 1usize], output[index]);
+    #[cubecl::cube(launch_unchecked, explicit_define)]
+    fn scalar_add_block_prefix_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
+        block_prefixes: &[Item],
+        len: &[u32],
+        output_offset: &[u32],
+        output: &mut [Item],
+    ) {
+        let block = CUBE_POS as usize;
+        let global = block * BLOCK_SIZE as usize + UNIT_POS as usize;
+        if block > 0usize && global < len[0] as usize {
+            let index = output_offset[0] as usize + global;
+            output[index] = Op::apply(block_prefixes[block - 1usize], output[index]);
+        }
     }
-}
 
-macro_rules! define_storage_scan_host {
+    macro_rules! define_storage_scan_host {
     (
         $name:ident,$arity:ty,$leaves:ty,$scan_kernel:ident,$prefix_kernel:ident,
         $load_trait:ident,$load_mut_trait:ident,$store_trait:ident,$select_trait:ident;
@@ -613,12 +706,148 @@ macro_rules! define_storage_scan_host {
     (@first_len $first:ident $(, $rest:ident)*) => { $first.len() };
 }
 
-define_storage_scan_host!(scan_storage2,S2,More<O0,Last<O1>>,storage_scan_s2,multi_add_prefix_s2,LoadLeaves2,LoadMutLeaves2,StoreLeaves2,SelectStoreLeaves2; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1]);
-define_storage_scan_host!(scan_storage3,S3,More<O0,More<O1,Last<O2>>>,storage_scan_s3,multi_add_prefix_s3,LoadLeaves3,LoadMutLeaves3,StoreLeaves3,SelectStoreLeaves3; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2]);
-define_storage_scan_host!(scan_storage4,S4,More<O0,More<O1,More<O2,Last<O3>>>>,storage_scan_s4,multi_add_prefix_s4,LoadLeaves4,LoadMutLeaves4,StoreLeaves4,SelectStoreLeaves4; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3]);
-define_storage_scan_host!(scan_storage5,S5,More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>,storage_scan_s5,multi_add_prefix_s5,LoadLeaves5,LoadMutLeaves5,StoreLeaves5,SelectStoreLeaves5; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4]);
-define_storage_scan_host!(scan_storage6,S6,More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>,storage_scan_s6,multi_add_prefix_s6,LoadLeaves6,LoadMutLeaves6,StoreLeaves6,SelectStoreLeaves6; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5]);
-define_storage_scan_host!(scan_storage7,S7,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>,storage_scan_s7,multi_add_prefix_s7,LoadLeaves7,LoadMutLeaves7,StoreLeaves7,SelectStoreLeaves7; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6]);
+    define_storage_scan_host!(scan_storage2,S2,More<O0,Last<O1>>,storage_scan_s2,multi_add_prefix_s2,LoadLeaves2,LoadMutLeaves2,StoreLeaves2,SelectStoreLeaves2; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1]);
+    define_storage_scan_host!(scan_storage3,S3,More<O0,More<O1,Last<O2>>>,storage_scan_s3,multi_add_prefix_s3,LoadLeaves3,LoadMutLeaves3,StoreLeaves3,SelectStoreLeaves3; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2]);
+    define_storage_scan_host!(scan_storage4,S4,More<O0,More<O1,More<O2,Last<O3>>>>,storage_scan_s4,multi_add_prefix_s4,LoadLeaves4,LoadMutLeaves4,StoreLeaves4,SelectStoreLeaves4; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3]);
+    define_storage_scan_host!(scan_storage5,S5,More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>,storage_scan_s5,multi_add_prefix_s5,LoadLeaves5,LoadMutLeaves5,StoreLeaves5,SelectStoreLeaves5; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4]);
+    define_storage_scan_host!(scan_storage6,S6,More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>,storage_scan_s6,multi_add_prefix_s6,LoadLeaves6,LoadMutLeaves6,StoreLeaves6,SelectStoreLeaves6; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5]);
+    define_storage_scan_host!(scan_storage7,S7,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>,storage_scan_s7,multi_add_prefix_s7,LoadLeaves7,LoadMutLeaves7,StoreLeaves7,SelectStoreLeaves7; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6]);
+    define_storage_scan_host!(scan_storage8,S8,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,Last<O7>>>>>>>>,storage_scan_s8,multi_add_prefix_s8,LoadLeaves8,LoadMutLeaves8,StoreLeaves8,SelectStoreLeaves8; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6,O7:input7:output7:sum7:prefix7]);
+    define_storage_scan_host!(scan_storage9,S9,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,Last<O8>>>>>>>>>,storage_scan_s9,multi_add_prefix_s9,LoadLeaves9,LoadMutLeaves9,StoreLeaves9,SelectStoreLeaves9; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6,O7:input7:output7:sum7:prefix7,O8:input8:output8:sum8:prefix8]);
+    define_storage_scan_host!(scan_storage10,S10,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,More<O8,Last<O9>>>>>>>>>>,storage_scan_s10,multi_add_prefix_s10,LoadLeaves10,LoadMutLeaves10,StoreLeaves10,SelectStoreLeaves10; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6,O7:input7:output7:sum7:prefix7,O8:input8:output8:sum8:prefix8,O9:input9:output9:sum9:prefix9]);
+    define_storage_scan_host!(scan_storage11,S11,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,More<O8,More<O9,Last<O10>>>>>>>>>>>,storage_scan_s11,multi_add_prefix_s11,LoadLeaves11,LoadMutLeaves11,StoreLeaves11,SelectStoreLeaves11; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6,O7:input7:output7:sum7:prefix7,O8:input8:output8:sum8:prefix8,O9:input9:output9:sum9:prefix9,O10:input10:output10:sum10:prefix10]);
+    define_storage_scan_host!(scan_storage12,S12,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,More<O8,More<O9,More<O10,Last<O11>>>>>>>>>>>>,storage_scan_s12,multi_add_prefix_s12,LoadLeaves12,LoadMutLeaves12,StoreLeaves12,SelectStoreLeaves12; [O0:input0:output0:sum0:prefix0,O1:input1:output1:sum1:prefix1,O2:input2:output2:sum2:prefix2,O3:input3:output3:sum3:prefix3,O4:input4:output4:sum4:prefix4,O5:input5:output5:sum5:prefix5,O6:input6:output6:sum6:prefix6,O7:input7:output7:sum7:prefix7,O8:input8:output8:sum8:prefix8,O9:input9:output9:sum9:prefix9,O10:input10:output10:sum10:prefix10,O11:input11:output11:sum11:prefix11]);
+}
+
+#[cubecl::cube(launch_unchecked, explicit_define)]
+#[allow(clippy::too_many_arguments)]
+fn add_block_prefix_padded12<
+    Item: CubeType + Send + Sync + 'static,
+    O0: CubePrimitive,
+    O1: CubePrimitive,
+    O2: CubePrimitive,
+    O3: CubePrimitive,
+    O4: CubePrimitive,
+    O5: CubePrimitive,
+    O6: CubePrimitive,
+    O7: CubePrimitive,
+    O8: CubePrimitive,
+    O9: CubePrimitive,
+    O10: CubePrimitive,
+    O11: CubePrimitive,
+    Leaves: LoadPadded12<
+            O0 = O0,
+            O1 = O1,
+            O2 = O2,
+            O3 = O3,
+            O4 = O4,
+            O5 = O5,
+            O6 = O6,
+            O7 = O7,
+            O8 = O8,
+            O9 = O9,
+            O10 = O10,
+            O11 = O11,
+        > + LoadMutPadded12<
+            O0 = O0,
+            O1 = O1,
+            O2 = O2,
+            O3 = O3,
+            O4 = O4,
+            O5 = O5,
+            O6 = O6,
+            O7 = O7,
+            O8 = O8,
+            O9 = O9,
+            O10 = O10,
+            O11 = O11,
+        > + Send
+        + Sync
+        + 'static,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+>(
+    prefix0: &[O0],
+    prefix1: &[O1],
+    prefix2: &[O2],
+    prefix3: &[O3],
+    prefix4: &[O4],
+    prefix5: &[O5],
+    prefix6: &[O6],
+    prefix7: &[O7],
+    prefix8: &[O8],
+    prefix9: &[O9],
+    prefix10: &[O10],
+    prefix11: &[O11],
+    len: &[u32],
+    prefix_offsets: &[u32],
+    output_offsets: &[u32],
+    output0: &mut [O0],
+    output1: &mut [O1],
+    output2: &mut [O2],
+    output3: &mut [O3],
+    output4: &mut [O4],
+    output5: &mut [O5],
+    output6: &mut [O6],
+    output7: &mut [O7],
+    output8: &mut [O8],
+    output9: &mut [O9],
+    output10: &mut [O10],
+    output11: &mut [O11],
+) {
+    let block = CUBE_POS as usize;
+    let index = block * BLOCK_SIZE as usize + UNIT_POS as usize;
+    if block > 0usize && index < len[0] as usize {
+        let prefix = Layout::recompose(Leaves::load_padded(
+            prefix0,
+            prefix1,
+            prefix2,
+            prefix3,
+            prefix4,
+            prefix5,
+            prefix6,
+            prefix7,
+            prefix8,
+            prefix9,
+            prefix10,
+            prefix11,
+            prefix_offsets,
+            block - 1usize,
+        ));
+        let value = Layout::recompose(Leaves::load_mut_padded(
+            output0,
+            output1,
+            output2,
+            output3,
+            output4,
+            output5,
+            output6,
+            output7,
+            output8,
+            output9,
+            output10,
+            output11,
+            output_offsets,
+            index,
+        ));
+        Layout::decompose(Op::apply(prefix, value)).store_padded(
+            output0,
+            output1,
+            output2,
+            output3,
+            output4,
+            output5,
+            output6,
+            output7,
+            output8,
+            output9,
+            output10,
+            output11,
+            output_offsets,
+            index,
+        );
+    }
+}
 
 #[doc(hidden)]
 pub trait InclusiveScanDispatch<R, Input, Output, Item, ReadSlots, WriteSlots, Op>
@@ -628,68 +857,141 @@ where
     fn run(exec: &Executor<R>, input: &Input, op: Op, output: &Output) -> Result<(), Error>;
 }
 
-macro_rules! impl_scalar_scan_dispatch {
-    ($arity:ty,$eval:ident,$kernel:ident; [$( $leaf:ident:$index:literal ),+],$env:ty) => {
-        impl<R, Input, Output, Item, Op, $( $leaf ),+>
-            InclusiveScanDispatch<R, Input, Output, Item, $env, Env1<Item>, Op>
-            for Dispatch<$arity, S1>
-        where
-            R: Runtime,
-            Item: MStorageElement + StorageLayout<StorageArity = S1>,
-            Op: ReductionOp<Item>,
-            $( $leaf: MStorageElement, )+
-            Input: ReadExpression<Item = Item>
-                + LowerReadExpression<Slots = $env>
-                + StageRead<R, Env0>,
-            Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Output: OutputExpression<Item = Item, StorageArity = S1>
-                + LowerOutputExpression<Slots = Env1<Item>>
-                + StageOutput<R, Env0>,
-        {
-            fn run(
-                exec: &Executor<R>,
-                input: &Input,
-                op: Op,
-                output: &Output,
-            ) -> Result<(), Error> {
-                let len = input.logical_len()?;
-                let output_len = output.logical_len()?;
-                if output_len != len {
-                    return Err(Error::LengthMismatch { left: len, right: output_len });
-                }
-                if len == 0 { return Ok(()); }
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
-                let blocks = len.div_ceil(BLOCK_SIZE as usize);
-                let block_sums = exec.alloc_column::<Item>(blocks);
-                let mut reads = StagedBindings::new();
-                input.stage_at(exec.client(), exec.id(), &mut reads)?;
-                let mut writes = OutputBindings::new();
-                output.stage_output(exec.id(), &mut writes)?;
-                let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
-                let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
-                let count = cube_count_1d(blocks)?;
+#[doc(hidden)]
+pub trait InclusiveScanPassDispatch<R, Input, Output, Partials, Item, ReadSlots, WriteSlots, Op>
+where
+    R: Runtime,
+{
+    fn run_pass(
+        exec: &Executor<R>,
+        input: &Input,
+        output: &Output,
+        partials: &Partials,
+    ) -> Result<(), Error>;
+}
+
+#[cfg(any())]
+mod legacy_output_host {
+    use super::*;
+
+    pub trait ScanOutputHost<R: Runtime, Item: StorageLayout>: PaddedOutputSlots {
+        type Partials;
+
+        fn allocate(exec: &Executor<R>, blocks: usize) -> (Self::Partials, OutputBindings);
+
+        fn finish<Op: ReductionOp<Item>>(
+            exec: &Executor<R>,
+            partials: &Self::Partials,
+            op: Op,
+            blocks: usize,
+            count: CubeCount,
+            len_handle: cubecl::server::Handle,
+            zero_offsets: cubecl::server::Handle,
+            output_offsets: cubecl::server::Handle,
+            output: &OutputBindings,
+        ) -> Result<(), Error>;
+    }
+
+    #[cfg(any())]
+    impl<R, Item> ScanOutputHost<R, Item> for Env1<Item>
+    where
+        R: Runtime,
+        Item: MStorageElement + StorageLayout<StorageArity = S1, StorageLeaves = Last<Item>>,
+    {
+        type Partials = DeviceVec<R, Item>;
+
+        fn allocate(exec: &Executor<R>, blocks: usize) -> (Self::Partials, OutputBindings) {
+            let partials = exec.alloc_column::<Item>(blocks);
+            let mut bindings = OutputBindings::new();
+            bindings.push(partials.handle.clone(), blocks, 0);
+            bindings.pad_to_twelve(exec.client());
+            (partials, bindings)
+        }
+
+        fn finish<Op: ReductionOp<Item>>(
+            exec: &Executor<R>,
+            partials: &Self::Partials,
+            op: Op,
+            blocks: usize,
+            count: CubeCount,
+            len_handle: cubecl::server::Handle,
+            _zero_offsets: cubecl::server::Handle,
+            output_offsets: cubecl::server::Handle,
+            output: &OutputBindings,
+        ) -> Result<(), Error> {
+            if blocks > 1 {
+                let prefixes = exec.alloc_column::<Item>(blocks);
+                scan_scalar_column::<R, Item, Op>(exec, partials, op, &prefixes)?;
                 unsafe {
-                    $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
-                        exec.client(), count.clone(), CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
-                        BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle.clone(), 1),
-                        BufferArg::from_raw_parts(write_offsets.clone(), writes.offsets.len()),
-                        BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
-                        BufferArg::from_raw_parts(block_sums.handle.clone(), blocks),
+                    scalar_add_block_prefix_kernel::launch_unchecked::<Item, Op, R>(
+                        exec.client(),
+                        count,
+                        CubeDim::new_1d(BLOCK_SIZE),
+                        BufferArg::from_raw_parts(prefixes.handle.clone(), blocks),
+                        BufferArg::from_raw_parts(len_handle, 1),
+                        BufferArg::from_raw_parts(output_offsets, output.offsets.len()),
+                        BufferArg::from_raw_parts(output.slots[0].0.clone(), output.slots[0].1),
                     );
                 }
+            }
+            Ok(())
+        }
+    }
+
+    macro_rules! impl_scan_output_host {
+    (
+        $env:ty, $arity:ty, $leaves:ty, $host_scan:ident, $prefix_kernel:ident;
+        [$( $out:ident:$index:tt:$partial:ident:$prefix:ident ),+]
+    ) => {
+        impl<R, Item, $( $out ),+> ScanOutputHost<R, Item> for $env
+        where
+            R: Runtime,
+            Item: StorageLayout<StorageArity = $arity, StorageLeaves = $leaves>
+                + Send + Sync + 'static,
+            Item::DeviceLayout: Recompose<Item, Leaves = $leaves>,
+            $( $out: MStorageElement, )+
+            $leaves: Send + Sync + 'static,
+        {
+            type Partials = ($( DeviceVec<R, $out>, )+);
+
+            fn allocate(exec: &Executor<R>, blocks: usize) -> (Self::Partials, OutputBindings) {
+                $( let $partial = exec.alloc_column::<$out>(blocks); )+
+                let mut bindings = OutputBindings::new();
+                $( bindings.push($partial.handle.clone(), blocks, 0); )+
+                bindings.pad_to_twelve(exec.client());
+                (($( $partial, )+), bindings)
+            }
+
+            fn finish<Op: ReductionOp<Item>>(
+                exec: &Executor<R>,
+                partials: &Self::Partials,
+                _op: Op,
+                blocks: usize,
+                count: CubeCount,
+                len_handle: cubecl::server::Handle,
+                zero_offsets: cubecl::server::Handle,
+                output_offsets: cubecl::server::Handle,
+                output: &OutputBindings,
+            ) -> Result<(), Error> {
                 if blocks > 1 {
-                    let block_prefixes = exec.alloc_column::<Item>(blocks);
-                    scan_scalar_column::<R, Item, Op>(exec, &block_sums, op, &block_prefixes)?;
+                    $( let $prefix = exec.alloc_column::<$out>(blocks); )+
+                    $host_scan::<R, Item, Op, $( $out ),+>(
+                        exec,
+                        $( &partials.$index, )+
+                        $( &$prefix, )+
+                    )?;
                     unsafe {
-                        scalar_add_block_prefix_kernel::launch_unchecked::<Item, Op, R>(
-                            exec.client(), count, CubeDim::new_1d(BLOCK_SIZE),
-                            BufferArg::from_raw_parts(block_prefixes.handle.clone(), blocks),
+                        $prefix_kernel::launch_unchecked::<
+                            Item, $( $out, )+ $leaves, Item::DeviceLayout, Op, R,
+                        >(
+                            exec.client(),
+                            count,
+                            CubeDim::new_1d(BLOCK_SIZE),
+                            $( BufferArg::from_raw_parts($prefix.handle.clone(), blocks), )+
                             BufferArg::from_raw_parts(len_handle, 1),
-                            BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
-                            BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
+                            BufferArg::from_raw_parts(zero_offsets, output.offsets.len()),
+                            BufferArg::from_raw_parts(output_offsets, output.offsets.len()),
+                            $( BufferArg::from_raw_parts(output.slots[$index].0.clone(), output.slots[$index].1), )+
                         );
                     }
                 }
@@ -699,50 +1001,94 @@ macro_rules! impl_scalar_scan_dispatch {
     };
 }
 
-impl_scalar_scan_dispatch!(A1,Eval1,scalar_scan_a1; [L0:0],Env1<L0>);
-impl_scalar_scan_dispatch!(A2,Eval2,scalar_scan_a2; [L0:0,L1:1],Env2<L0,L1>);
-impl_scalar_scan_dispatch!(A3,Eval3,scalar_scan_a3; [L0:0,L1:1,L2:2],Env3<L0,L1,L2>);
-impl_scalar_scan_dispatch!(A4,Eval4,scalar_scan_a4; [L0:0,L1:1,L2:2,L3:3],Env4<L0,L1,L2,L3>);
-impl_scalar_scan_dispatch!(A5,Eval5,scalar_scan_a5; [L0:0,L1:1,L2:2,L3:3,L4:4],Env5<L0,L1,L2,L3,L4>);
-impl_scalar_scan_dispatch!(A6,Eval6,scalar_scan_a6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5],Env6<L0,L1,L2,L3,L4,L5>);
-impl_scalar_scan_dispatch!(A7,Eval7,scalar_scan_a7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6],Env7<L0,L1,L2,L3,L4,L5,L6>);
-impl_scalar_scan_dispatch!(A8,Eval8,scalar_scan_a8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7],Env8<L0,L1,L2,L3,L4,L5,L6,L7>);
+    #[cfg(any())]
+    impl_scan_output_host!(Env2<O0,O1>,S2,More<O0,Last<O1>>,scan_storage2,multi_add_prefix_s2; [O0:0:p0:q0,O1:1:p1:q1]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env3<O0,O1,O2>,S3,More<O0,More<O1,Last<O2>>>,scan_storage3,multi_add_prefix_s3; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env4<O0,O1,O2,O3>,S4,More<O0,More<O1,More<O2,Last<O3>>>>,scan_storage4,multi_add_prefix_s4; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env5<O0,O1,O2,O3,O4>,S5,More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>,scan_storage5,multi_add_prefix_s5; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env6<O0,O1,O2,O3,O4,O5>,S6,More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>,scan_storage6,multi_add_prefix_s6; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env7<O0,O1,O2,O3,O4,O5,O6>,S7,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>,scan_storage7,multi_add_prefix_s7; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5,O6:6:p6:q6]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env8<O0,O1,O2,O3,O4,O5,O6,O7>,S8,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,Last<O7>>>>>>>>,scan_storage8,multi_add_prefix_s8; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5,O6:6:p6:q6,O7:7:p7:q7]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env9<O0,O1,O2,O3,O4,O5,O6,O7,O8>,S9,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,Last<O8>>>>>>>>>,scan_storage9,multi_add_prefix_s9; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5,O6:6:p6:q6,O7:7:p7:q7,O8:8:p8:q8]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env10<O0,O1,O2,O3,O4,O5,O6,O7,O8,O9>,S10,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,More<O8,Last<O9>>>>>>>>>>,scan_storage10,multi_add_prefix_s10; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5,O6:6:p6:q6,O7:7:p7:q7,O8:8:p8:q8,O9:9:p9:q9]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env11<O0,O1,O2,O3,O4,O5,O6,O7,O8,O9,O10>,S11,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,More<O8,More<O9,Last<O10>>>>>>>>>>>,scan_storage11,multi_add_prefix_s11; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5,O6:6:p6:q6,O7:7:p7:q7,O8:8:p8:q8,O9:9:p9:q9,O10:10:p10:q10]);
+    #[cfg(any())]
+    impl_scan_output_host!(Env12<O0,O1,O2,O3,O4,O5,O6,O7,O8,O9,O10,O11>,S12,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,More<O6,More<O7,More<O8,More<O9,More<O10,Last<O11>>>>>>>>>>>>,scan_storage12,multi_add_prefix_s12; [O0:0:p0:q0,O1:1:p1:q1,O2:2:p2:q2,O3:3:p3:q3,O4:4:p4:q4,O5:5:p5:q5,O6:6:p6:q6,O7:7:p7:q7,O8:8:p8:q8,O9:9:p9:q9,O10:10:p10:q10,O11:11:p11:q11]);
+}
 
-macro_rules! impl_multi_scan_dispatch {
+macro_rules! impl_padded_scan_dispatch {
     (
-        $arity:ty,$eval:ident,$kernel:ident,$storage:ty,$read_env:ty,$out_env:ty,
-        $leaves:ty,$host_scan:ident,$prefix_kernel:ident;
-        [$( $leaf:ident:$read_index:literal ),+];
-        [$( $out_ty:ident:$out_index:literal:$block_sum:ident:$prefix:ident ),+]
+        $arity:ty, $eval:ident, $kernel:ident, $env:ty;
+        [$( $leaf:ident:$index:literal ),+]
     ) => {
-        impl<R, Input, Output, Item, Op, $( $leaf, )+ $( $out_ty ),+>
-            InclusiveScanDispatch<R, Input, Output, Item, $read_env, $out_env, Op>
-            for Dispatch<$arity, $storage>
+        impl<
+            R, Input, Output, Partials, Item, Op,
+            O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11,
+            $( $leaf ),+
+        > InclusiveScanPassDispatch<
+            R,
+            Input,
+            Output,
+            Partials,
+            Item,
+            $env,
+            Env12<O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11>,
+            Op,
+        >
+            for Dispatch<$arity, S12>
         where
             R: Runtime,
-            Item: StorageLayout<StorageArity = $storage, StorageLeaves = $leaves>
-                + Send
-                + Sync
-                + 'static,
-            Item::DeviceLayout: Recompose<Item, Leaves = $leaves>,
+            Item: StorageLayout + Send + Sync + 'static,
+            Item::DeviceLayout: Recompose<Item, Leaves = Item::StorageLeaves>,
             Op: ReductionOp<Item>,
             $( $leaf: MStorageElement, )+
-            $( $out_ty: MStorageElement, )+
-            Input: ReadExpression<Item = Item>
-                + LowerReadExpression<Slots = $read_env>
-                + StageRead<R, Env0>,
+            O0: MStorageElement,
+            O1: MStorageElement,
+            O2: MStorageElement,
+            O3: MStorageElement,
+            O4: MStorageElement,
+            O5: MStorageElement,
+            O6: MStorageElement,
+            O7: MStorageElement,
+            O8: MStorageElement,
+            O9: MStorageElement,
+            O10: MStorageElement,
+            O11: MStorageElement,
+            Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+            Input::Slots: PaddedReadSlots<
+                L0 = L0, L1 = L1, L2 = L2, L3 = L3, L4 = L4, L5 = L5, L6 = L6,
+                L7 = L7, L8 = L8, L9 = L9, L10 = L10, L11 = L11, L12 = L12,
+            >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Output: OutputExpression<StorageArity = $storage>
-                + LowerOutputExpression<Slots = $out_env>
-                + StageOutput<R, Env0>,
-            Output::Item: WriteFrom<Item>,
-            $leaves: Send + Sync + 'static,
+            Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+            Output::Item: WritableFrom<Item>,
+            Output::Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>,
+            Partials: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+            Partials::Item: WritableFrom<Item>,
+            Partials::Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>,
+            Item::StorageLeaves: SharedLeaves
+                + MutableLeaves
+                + PlaneShuffleLeaves
+                + StorePadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >
+                + Send + Sync + 'static,
         {
-            fn run(
+            fn run_pass(
                 exec: &Executor<R>,
                 input: &Input,
-                op: Op,
                 output: &Output,
+                partials: &Partials,
             ) -> Result<(), Error> {
                 let len = input.logical_len()?;
                 let output_len = output.logical_len()?;
@@ -752,69 +1098,71 @@ macro_rules! impl_multi_scan_dispatch {
                 if len == 0 {
                     return Ok(());
                 }
-                let _ = op;
-                let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let blocks = len.div_ceil(BLOCK_SIZE as usize);
-                $( let $block_sum = exec.alloc_column::<$out_ty>(blocks); )+
+                let partial_len = partials.logical_len()?;
+                if partial_len != blocks {
+                    return Err(Error::LengthMismatch { left: blocks, right: partial_len });
+                }
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
+                reads.pad_to_thirteen(exec.client());
                 let mut writes = OutputBindings::new();
                 output.stage_output(exec.id(), &mut writes)?;
+                writes.pad_to_twelve(exec.client());
+                let mut partial_bindings = OutputBindings::new();
+                partials.stage_output(exec.id(), &mut partial_bindings)?;
+                partial_bindings.pad_to_twelve(exec.client());
                 let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
-                let zero_offsets = vec![$( { let _ = stringify!($out_ty); 0u32 } ),+];
-                let zero_offsets_handle = exec.client().create_from_slice(u32::as_bytes(&zero_offsets));
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
-                let count = cube_count_1d(blocks)?;
+                let zero_values = [0u32; 12];
+                let zero_offsets = exec.client().create_from_slice(u32::as_bytes(&zero_values));
+                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[
+                    u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?
+                ]));
                 unsafe {
                     $kernel::launch_unchecked::<
                         Item,
                         $( $leaf, )+
-                        $( $out_ty, )+
-                        $leaves,
-                        Input::DeviceExpr,
+                        O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11,
+                        Item::StorageLeaves,
                         Item::DeviceLayout,
+                        Input::DeviceExpr,
                         Op,
                         R,
                     >(
                         exec.client(),
-                        count.clone(),
+                        cube_count_1d(blocks)?,
                         CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(reads.slots[$read_index].0.clone(), reads.slots[$read_index].1), )+
+                        $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
                         BufferArg::from_raw_parts(len_handle.clone(), 1),
-                        BufferArg::from_raw_parts(zero_offsets_handle.clone(), zero_offsets.len()),
+                        BufferArg::from_raw_parts(zero_offsets.clone(), 12),
                         BufferArg::from_raw_parts(write_offsets.clone(), writes.offsets.len()),
-                        $( BufferArg::from_raw_parts(writes.slots[$out_index].0.clone(), writes.slots[$out_index].1), )+
-                        $( BufferArg::from_raw_parts($block_sum.handle.clone(), blocks), )+
+                        BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
+                        BufferArg::from_raw_parts(writes.slots[1].0.clone(), writes.slots[1].1),
+                        BufferArg::from_raw_parts(writes.slots[2].0.clone(), writes.slots[2].1),
+                        BufferArg::from_raw_parts(writes.slots[3].0.clone(), writes.slots[3].1),
+                        BufferArg::from_raw_parts(writes.slots[4].0.clone(), writes.slots[4].1),
+                        BufferArg::from_raw_parts(writes.slots[5].0.clone(), writes.slots[5].1),
+                        BufferArg::from_raw_parts(writes.slots[6].0.clone(), writes.slots[6].1),
+                        BufferArg::from_raw_parts(writes.slots[7].0.clone(), writes.slots[7].1),
+                        BufferArg::from_raw_parts(writes.slots[8].0.clone(), writes.slots[8].1),
+                        BufferArg::from_raw_parts(writes.slots[9].0.clone(), writes.slots[9].1),
+                        BufferArg::from_raw_parts(writes.slots[10].0.clone(), writes.slots[10].1),
+                        BufferArg::from_raw_parts(writes.slots[11].0.clone(), writes.slots[11].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[0].0.clone(), partial_bindings.slots[0].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[1].0.clone(), partial_bindings.slots[1].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[2].0.clone(), partial_bindings.slots[2].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[3].0.clone(), partial_bindings.slots[3].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[4].0.clone(), partial_bindings.slots[4].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[5].0.clone(), partial_bindings.slots[5].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[6].0.clone(), partial_bindings.slots[6].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[7].0.clone(), partial_bindings.slots[7].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[8].0.clone(), partial_bindings.slots[8].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[9].0.clone(), partial_bindings.slots[9].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[10].0.clone(), partial_bindings.slots[10].1),
+                        BufferArg::from_raw_parts(partial_bindings.slots[11].0.clone(), partial_bindings.slots[11].1),
                     );
-                }
-                if blocks > 1 {
-                    $( let $prefix = exec.alloc_column::<$out_ty>(blocks); )+
-                    $host_scan::<R, Item, Op, $( $out_ty ),+>(
-                        exec,
-                        $( &$block_sum, )+
-                        $( &$prefix, )+
-                    )?;
-                    unsafe {
-                        $prefix_kernel::launch_unchecked::<
-                            Item,
-                            $( $out_ty, )+
-                            $leaves,
-                            Item::DeviceLayout,
-                            Op,
-                            R,
-                        >(
-                            exec.client(),
-                            count,
-                            CubeDim::new_1d(BLOCK_SIZE),
-                            $( BufferArg::from_raw_parts($prefix.handle.clone(), blocks), )+
-                            BufferArg::from_raw_parts(len_handle, 1),
-                            BufferArg::from_raw_parts(zero_offsets_handle, zero_offsets.len()),
-                            BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
-                            $( BufferArg::from_raw_parts(writes.slots[$out_index].0.clone(), writes.slots[$out_index].1), )+
-                        );
-                    }
                 }
                 Ok(())
             }
@@ -822,30 +1170,341 @@ macro_rules! impl_multi_scan_dispatch {
     };
 }
 
-macro_rules! impl_multi_scan_dispatches_for_eval {
-    (
-        $arity:ty,$eval:ident,$read_env:ty;
-        [$( $leaf:ident:$read_index:literal ),+];
-        [$k2:ident,$k3:ident,$k4:ident,$k5:ident,$k6:ident,$k7:ident]
-    ) => {
-        impl_multi_scan_dispatch!($arity,$eval,$k2,S2,$read_env,Env2<O0,O1>,More<O0,Last<O1>>,scan_storage2,multi_add_prefix_s2; [$($leaf:$read_index),+]; [O0:0:sum0:prefix0,O1:1:sum1:prefix1]);
-        impl_multi_scan_dispatch!($arity,$eval,$k3,S3,$read_env,Env3<O0,O1,O2>,More<O0,More<O1,Last<O2>>>,scan_storage3,multi_add_prefix_s3; [$($leaf:$read_index),+]; [O0:0:sum0:prefix0,O1:1:sum1:prefix1,O2:2:sum2:prefix2]);
-        impl_multi_scan_dispatch!($arity,$eval,$k4,S4,$read_env,Env4<O0,O1,O2,O3>,More<O0,More<O1,More<O2,Last<O3>>>>,scan_storage4,multi_add_prefix_s4; [$($leaf:$read_index),+]; [O0:0:sum0:prefix0,O1:1:sum1:prefix1,O2:2:sum2:prefix2,O3:3:sum3:prefix3]);
-        impl_multi_scan_dispatch!($arity,$eval,$k5,S5,$read_env,Env5<O0,O1,O2,O3,O4>,More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>,scan_storage5,multi_add_prefix_s5; [$($leaf:$read_index),+]; [O0:0:sum0:prefix0,O1:1:sum1:prefix1,O2:2:sum2:prefix2,O3:3:sum3:prefix3,O4:4:sum4:prefix4]);
-        impl_multi_scan_dispatch!($arity,$eval,$k6,S6,$read_env,Env6<O0,O1,O2,O3,O4,O5>,More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>,scan_storage6,multi_add_prefix_s6; [$($leaf:$read_index),+]; [O0:0:sum0:prefix0,O1:1:sum1:prefix1,O2:2:sum2:prefix2,O3:3:sum3:prefix3,O4:4:sum4:prefix4,O5:5:sum5:prefix5]);
-        impl_multi_scan_dispatch!($arity,$eval,$k7,S7,$read_env,Env7<O0,O1,O2,O3,O4,O5,O6>,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>,scan_storage7,multi_add_prefix_s7; [$($leaf:$read_index),+]; [O0:0:sum0:prefix0,O1:1:sum1:prefix1,O2:2:sum2:prefix2,O3:3:sum3:prefix3,O4:4:sum4:prefix4,O5:5:sum5:prefix5,O6:6:sum6:prefix6]);
-    };
+impl_padded_scan_dispatch!(A13,Eval13,padded_scan_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
+
+fn scan_pass<R, Input, Output, Partials, Item, Op>(
+    exec: &Executor<R>,
+    input: &Input,
+    output: &Output,
+    partials: &Partials,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression<Item = Item>
+        + LowerReadExpression<Slots: PaddedReadSlots>
+        + StageRead<R, Env0>,
+    Output:
+        OutputExpression + LowerOutputExpression<Slots: PaddedOutputSlots> + StageOutput<R, Env0>,
+    Output::Item: WritableFrom<Item>,
+    Partials:
+        OutputExpression + LowerOutputExpression<Slots: PaddedOutputSlots> + StageOutput<R, Env0>,
+    Partials::Item: WritableFrom<Item>,
+    Item: StorageLayout,
+    Op: ReductionOp<Item>,
+    Dispatch<A13, S12>: InclusiveScanPassDispatch<
+            R,
+            Input,
+            Output,
+            Partials,
+            Item,
+            KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+            Op,
+        >,
+{
+    <Dispatch<A13, S12> as InclusiveScanPassDispatch<
+        R,
+        Input,
+        Output,
+        Partials,
+        Item,
+        KernelReadSlots<Input::Slots>,
+        crate::output::KernelOutputSlots<Output::Slots>,
+        Op,
+    >>::run_pass(exec, input, output, partials)
 }
 
-impl_multi_scan_dispatches_for_eval!(A1,Eval1,Env1<L0>; [L0:0]; [multi_scan_a1_s2,multi_scan_a1_s3,multi_scan_a1_s4,multi_scan_a1_s5,multi_scan_a1_s6,multi_scan_a1_s7]);
-impl_multi_scan_dispatches_for_eval!(A2,Eval2,Env2<L0,L1>; [L0:0,L1:1]; [multi_scan_a2_s2,multi_scan_a2_s3,multi_scan_a2_s4,multi_scan_a2_s5,multi_scan_a2_s6,multi_scan_a2_s7]);
-impl_multi_scan_dispatches_for_eval!(A3,Eval3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]; [multi_scan_a3_s2,multi_scan_a3_s3,multi_scan_a3_s4,multi_scan_a3_s5,multi_scan_a3_s6,multi_scan_a3_s7]);
-impl_multi_scan_dispatches_for_eval!(A4,Eval4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]; [multi_scan_a4_s2,multi_scan_a4_s3,multi_scan_a4_s4,multi_scan_a4_s5,multi_scan_a4_s6,multi_scan_a4_s7]);
-impl_multi_scan_dispatches_for_eval!(A5,Eval5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]; [multi_scan_a5_s2,multi_scan_a5_s3,multi_scan_a5_s4,multi_scan_a5_s5,multi_scan_a5_s6,multi_scan_a5_s7]);
-impl_multi_scan_dispatches_for_eval!(A6,Eval6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]; [multi_scan_a6_s2,multi_scan_a6_s3,multi_scan_a6_s4,multi_scan_a6_s5,multi_scan_a6_s6,multi_scan_a6_s7]);
-impl_multi_scan_dispatches_for_eval!(A7,Eval7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]; [multi_scan_a7_s2,multi_scan_a7_s3,multi_scan_a7_s4,multi_scan_a7_s5,multi_scan_a7_s6,multi_scan_a7_s7]);
-impl_multi_scan_dispatches_for_eval!(A8,Eval8,Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7]; [multi_scan_a8_s2,multi_scan_a8_s3,multi_scan_a8_s4,multi_scan_a8_s5,multi_scan_a8_s6,multi_scan_a8_s7]);
+fn add_fixed_prefixes<R, Output, Item, Op>(
+    exec: &Executor<R>,
+    prefixes: &FixedScanStorage<R, Item>,
+    output: &Output,
+    len: usize,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>,
+    Op: ReductionOp<Item>,
+    Output: OutputExpression
+        + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
+        + StageOutput<R, Env0>,
+    Output::Item: WritableFrom<Item>,
+{
+    if len == 0 {
+        return Ok(());
+    }
+    let blocks = len.div_ceil(BLOCK_SIZE as usize);
+    let prefix_len = prefixes.len()?;
+    if prefix_len != blocks {
+        return Err(Error::LengthMismatch {
+            left: blocks,
+            right: prefix_len,
+        });
+    }
 
+    let prefix_read = prefixes.read();
+    let mut prefix_bindings = StagedBindings::new();
+    prefix_read.stage_at(exec.client(), exec.id(), &mut prefix_bindings)?;
+    prefix_bindings.pad_to_thirteen(exec.client());
+    let mut output_bindings = OutputBindings::new();
+    output.stage_output(exec.id(), &mut output_bindings)?;
+    output_bindings.pad_to_twelve(exec.client());
+
+    let prefix_offsets = exec
+        .client()
+        .create_from_slice(u32::as_bytes(&prefix_bindings.offsets));
+    let output_offsets = exec
+        .client()
+        .create_from_slice(u32::as_bytes(&output_bindings.offsets));
+    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[
+        u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?
+    ]));
+
+    unsafe {
+        add_block_prefix_padded12::launch_unchecked::<
+            Item,
+            <Item::StorageLeaves as StorePadded12>::O0,
+            <Item::StorageLeaves as StorePadded12>::O1,
+            <Item::StorageLeaves as StorePadded12>::O2,
+            <Item::StorageLeaves as StorePadded12>::O3,
+            <Item::StorageLeaves as StorePadded12>::O4,
+            <Item::StorageLeaves as StorePadded12>::O5,
+            <Item::StorageLeaves as StorePadded12>::O6,
+            <Item::StorageLeaves as StorePadded12>::O7,
+            <Item::StorageLeaves as StorePadded12>::O8,
+            <Item::StorageLeaves as StorePadded12>::O9,
+            <Item::StorageLeaves as StorePadded12>::O10,
+            <Item::StorageLeaves as StorePadded12>::O11,
+            Item::StorageLeaves,
+            Item::DeviceLayout,
+            Op,
+            R,
+        >(
+            exec.client(),
+            cube_count_1d(blocks)?,
+            CubeDim::new_1d(BLOCK_SIZE),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[0].0.clone(),
+                prefix_bindings.slots[0].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[1].0.clone(),
+                prefix_bindings.slots[1].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[2].0.clone(),
+                prefix_bindings.slots[2].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[3].0.clone(),
+                prefix_bindings.slots[3].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[4].0.clone(),
+                prefix_bindings.slots[4].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[5].0.clone(),
+                prefix_bindings.slots[5].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[6].0.clone(),
+                prefix_bindings.slots[6].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[7].0.clone(),
+                prefix_bindings.slots[7].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[8].0.clone(),
+                prefix_bindings.slots[8].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[9].0.clone(),
+                prefix_bindings.slots[9].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[10].0.clone(),
+                prefix_bindings.slots[10].1,
+            ),
+            BufferArg::from_raw_parts(
+                prefix_bindings.slots[11].0.clone(),
+                prefix_bindings.slots[11].1,
+            ),
+            BufferArg::from_raw_parts(len_handle, 1),
+            BufferArg::from_raw_parts(prefix_offsets, prefix_bindings.offsets.len()),
+            BufferArg::from_raw_parts(output_offsets, output_bindings.offsets.len()),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[0].0.clone(),
+                output_bindings.slots[0].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[1].0.clone(),
+                output_bindings.slots[1].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[2].0.clone(),
+                output_bindings.slots[2].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[3].0.clone(),
+                output_bindings.slots[3].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[4].0.clone(),
+                output_bindings.slots[4].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[5].0.clone(),
+                output_bindings.slots[5].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[6].0.clone(),
+                output_bindings.slots[6].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[7].0.clone(),
+                output_bindings.slots[7].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[8].0.clone(),
+                output_bindings.slots[8].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[9].0.clone(),
+                output_bindings.slots[9].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[10].0.clone(),
+                output_bindings.slots[10].1,
+            ),
+            BufferArg::from_raw_parts(
+                output_bindings.slots[11].0.clone(),
+                output_bindings.slots[11].1,
+            ),
+        );
+    }
+    Ok(())
+}
+
+fn scan_fixed_storage<R, Item, Op>(
+    exec: &Executor<R>,
+    input: &FixedScanStorage<R, Item>,
+    output: &FixedScanStorage<R, Item>,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>,
+    Op: ReductionOp<Item>,
+    Dispatch<A13, S12>: InclusiveScanPassDispatch<
+            R,
+            FixedScanRead<R, Item>,
+            FixedScanOutput<R, Item>,
+            FixedScanOutput<R, Item>,
+            Item,
+            KernelReadSlots<<FixedScanRead<R, Item> as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<
+                <FixedScanOutput<R, Item> as LowerOutputExpression>::Slots,
+            >,
+            Op,
+        >,
+{
+    let len = input.len()?;
+    let output_len = output.len()?;
+    if output_len != len {
+        return Err(Error::LengthMismatch {
+            left: len,
+            right: output_len,
+        });
+    }
+    if len == 0 {
+        return Ok(());
+    }
+
+    let blocks = len.div_ceil(BLOCK_SIZE as usize);
+    let partials = exec.alloc_canonical::<Item>(blocks);
+    let input_read = FixedScanRead::<R, Item>::new(input.read());
+    let output_write = FixedScanOutput::<R, Item>::new(output.write());
+    let partial_write = FixedScanOutput::<R, Item>::new(partials.write());
+    scan_pass::<R, _, _, _, Item, Op>(exec, &input_read, &output_write, &partial_write)?;
+
+    if blocks > 1 {
+        let prefixes = exec.alloc_canonical::<Item>(blocks);
+        scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
+        add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, &output_write, len)?;
+    }
+    Ok(())
+}
+
+impl<R, Input, Output, Item, Op, ReadSlots, WriteSlots>
+    InclusiveScanDispatch<R, Input, Output, Item, ReadSlots, WriteSlots, Op> for Dispatch<A13, S12>
+where
+    R: Runtime,
+    Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+    Output: OutputExpression
+        + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
+        + StageOutput<R, Env0>,
+    Output::Item: WritableFrom<Item>,
+    Item: crate::api::iter::MItem<R>,
+    Op: ReductionOp<Item>,
+    Dispatch<A13, S12>: InclusiveScanPassDispatch<
+            R,
+            Input,
+            Output,
+            FixedScanOutput<R, Item>,
+            Item,
+            ReadSlots,
+            WriteSlots,
+            Op,
+        > + InclusiveScanPassDispatch<
+            R,
+            FixedScanRead<R, Item>,
+            FixedScanOutput<R, Item>,
+            FixedScanOutput<R, Item>,
+            Item,
+            KernelReadSlots<<FixedScanRead<R, Item> as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<
+                <FixedScanOutput<R, Item> as LowerOutputExpression>::Slots,
+            >,
+            Op,
+        >,
+{
+    fn run(exec: &Executor<R>, input: &Input, _op: Op, output: &Output) -> Result<(), Error> {
+        let len = input.logical_len()?;
+        let output_len = output.logical_len()?;
+        if output_len != len {
+            return Err(Error::LengthMismatch {
+                left: len,
+                right: output_len,
+            });
+        }
+        if len == 0 {
+            return Ok(());
+        }
+
+        let blocks = len.div_ceil(BLOCK_SIZE as usize);
+        let partials = exec.alloc_canonical::<Item>(blocks);
+        let partial_write = FixedScanOutput::<R, Item>::new(partials.write());
+        <Dispatch<A13, S12> as InclusiveScanPassDispatch<
+            R,
+            Input,
+            Output,
+            FixedScanOutput<R, Item>,
+            Item,
+            ReadSlots,
+            WriteSlots,
+            Op,
+        >>::run_pass(exec, input, output, &partial_write)?;
+
+        if blocks > 1 {
+            let prefixes = exec.alloc_canonical::<Item>(blocks);
+            scan_fixed_storage::<R, Item, Op>(exec, &partials, &prefixes)?;
+            add_fixed_prefixes::<R, _, Item, Op>(exec, &prefixes, output, len)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(any())]
 fn scan_scalar_column<R, Item, Op>(
     exec: &Executor<R>,
     input: &DeviceVec<R, Item>,
@@ -856,23 +1515,23 @@ where
     R: Runtime,
     Item: MStorageElement + StorageLayout<StorageArity = S1>,
     Op: ReductionOp<Item>,
-    Dispatch<A1, S1>: InclusiveScanDispatch<
+    Dispatch<A13, S12>: InclusiveScanDispatch<
             R,
             crate::Column<Item>,
             DeviceSliceMut<Item>,
             Item,
-            Env1<Item>,
-            Env1<Item>,
+            KernelReadSlots<Env1<Item>>,
+            crate::output::KernelOutputSlots<Env1<Item>>,
             Op,
         >,
 {
-    <Dispatch<A1, S1> as InclusiveScanDispatch<
+    <Dispatch<A13, S12> as InclusiveScanDispatch<
         R,
         crate::Column<Item>,
         DeviceSliceMut<Item>,
         Item,
-        Env1<Item>,
-        Env1<Item>,
+        KernelReadSlots<Env1<Item>>,
+        crate::output::KernelOutputSlots<Env1<Item>>,
         Op,
     >>::run(exec, &input.column(), op, &output.slice_mut(..))
 }
@@ -889,16 +1548,24 @@ where
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Op: ReductionOp<Input::Item>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Dispatch<Input::ReadArity, Output::StorageArity>:
-        InclusiveScanDispatch<R, Input, Output, Input::Item, Input::Slots, Output::Slots, Op>,
+    Output::Slots: PaddedOutputSlots,
+    Dispatch<A13, S12>: InclusiveScanDispatch<
+            R,
+            Input,
+            Output,
+            Input::Item,
+            KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+            Op,
+        >,
 {
-    <Dispatch<Input::ReadArity, Output::StorageArity> as InclusiveScanDispatch<
+    <Dispatch<A13, S12> as InclusiveScanDispatch<
         R,
         Input,
         Output,
         Input::Item,
-        Input::Slots,
-        Output::Slots,
+        KernelReadSlots<Input::Slots>,
+        crate::output::KernelOutputSlots<Output::Slots>,
         Op,
     >>::run(exec, &input, op, &output)
 }
@@ -918,15 +1585,15 @@ where
     Adjacent<Input, Op>:
         ReadExpression<Item = Input::Item> + LowerReadExpression + StageRead<R, Env0>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: WriteFrom<Input::Item>,
-    Dispatch<<Adjacent<Input, Op> as ReadExpression>::ReadArity, Output::StorageArity>:
-        MaterializeDispatch<
-                R,
-                Adjacent<Input, Op>,
-                Output,
-                <Adjacent<Input, Op> as LowerReadExpression>::Slots,
-                Output::Slots,
-            >,
+    Output::Item: WritableFrom<Input::Item>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Adjacent<Input, Op>,
+            Output,
+            crate::read::KernelReadSlots<<Adjacent<Input, Op> as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+        >,
+    Output::Slots: PaddedOutputSlots,
 {
     materialize(exec, Adjacent::new(input, op), output)
 }
@@ -947,22 +1614,28 @@ impl<R, Input, Output, Op> ExclusiveScanInput<R, Output, Op> for Input
 where
     R: Runtime,
     Input: PrependInput<R>,
-    Input::Item: CanonicalAlloc<R, CanonicalStorage = Input::Storage>,
-    Input::Storage: CanonicalStorage<R>,
+    Input::Item: crate::api::iter::MItem<R>
+        + CanonicalAlloc<R, CanonicalStorage = Input::Storage>,
+    <Input::Item as StorageLayout>::StorageLeaves:
+        StorePadded12 + crate::core::facade::KernelValue,
+    Input::Storage: CanonicalStorage<R, Item = <Input::Item as CanonicalAlloc<R>>::CanonicalItem>,
     Input::SemanticRead: LowerReadExpression + StageRead<R, Env0>,
     <Input::Storage as CanonicalStorage<R>>::Write: LowerOutputExpression + StageOutput<R, Env0>,
     <<Input::Storage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
-        WriteFrom<Input::Item>,
-    Dispatch<
-        <Input::SemanticRead as ReadExpression>::ReadArity,
-        <<Input::Storage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity,
-    >: InclusiveScanDispatch<
+        WritableFrom<Input::Item>,
+    Dispatch<A13, S12>: InclusiveScanDispatch<
             R,
             Input::SemanticRead,
-            <Input::Storage as CanonicalStorage<R>>::Write,
+            crate::output::ReassociatedOutput<
+                <Input::Storage as CanonicalStorage<R>>::Write,
+                Input::Item,
+                <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+            >,
             Input::Item,
-            <Input::SemanticRead as LowerReadExpression>::Slots,
-            <<Input::Storage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
+            KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<
+                <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+            >,
             Op,
         >,
     <Input::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
@@ -978,7 +1651,12 @@ where
         let prefixed = self.prepend(exec, init)?;
         let prefixed_len = prefixed.len()?;
         let scanned = exec.alloc_canonical::<Input::Item>(prefixed_len);
-        inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned.write())?;
+        let scanned_output = crate::output::ReassociatedOutput::<
+            _,
+            Input::Item,
+            <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+        >::new(scanned.write());
+        inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned_output)?;
         crate::indexed::gather_direct(
             exec,
             scanned.read(),

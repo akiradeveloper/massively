@@ -96,6 +96,117 @@ where
     Ok(flags)
 }
 
+/// Runs an ordered multiset operation on two canonical payloads.
+///
+/// `mode` is 0 for union, 1 for intersection, and 2 for left difference.
+pub(crate) fn set_canonical<R, Item, Less, Output>(
+    exec: &Executor<R>,
+    left: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+    right: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+    _less: Less,
+    output: Output,
+    mode: u8,
+) -> Result<u32, Error>
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>,
+    Less: crate::op::BinaryPredicateOp<Item>,
+    Item::StorageLeaves: crate::core::facade::KernelValue,
+    <Item as crate::CanonicalAlloc<R>>::CanonicalStorage: crate::CanonicalStorage<R>,
+    <<Item as crate::CanonicalAlloc<R>>::CanonicalStorage as crate::CanonicalStorage<R>>::Item:
+        crate::WritableFrom<Item>,
+    Output: crate::output::OutputExpression<Item = Item>
+        + crate::output::LowerOutputExpression<
+            Slots = <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+        > + crate::output::StageOutput<R, crate::read::Env0>
+        + SliceOutput,
+{
+    let left_read =
+        crate::read::FixedReassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
+    let right_read =
+        crate::read::FixedReassociate::<_, Item>::new(crate::CanonicalStorage::read(right));
+
+    if mode == 0 {
+        let merge =
+            crate::merge::merge_control_fixed(exec, left_read.clone(), right_read.clone(), _less)?;
+        let right_own_lower = crate::search::lower_bounds_typed::<R, _, _, Less>(
+            exec,
+            right_read.clone(),
+            right_read.clone(),
+        )?;
+        let left_lower = crate::search::lower_bounds_typed::<R, _, _, Less>(
+            exec,
+            left_read.clone(),
+            right_read.clone(),
+        )?;
+        let left_upper = crate::search::upper_bounds_typed::<R, _, _, Less>(
+            exec,
+            left_read.clone(),
+            right_read.clone(),
+        )?;
+        let right_extra =
+            occurrence_flags::<R, UnionExtra>(exec, &right_own_lower, &left_lower, &left_upper)?;
+
+        let total = merge.left_len + merge.right_len;
+        let conceptual_flags = exec.alloc_canonical::<u32>(total);
+        crate::selection::fill(exec, 1u32, conceptual_flags.slice_mut(..merge.left_len))?;
+        crate::materialize(
+            exec,
+            right_extra.column(),
+            conceptual_flags.slice_mut(merge.left_len..),
+        )?;
+        let merged_flags = exec.alloc_canonical::<u32>(total);
+        crate::indexed::gather_direct(
+            exec,
+            conceptual_flags.column(),
+            merge.permutation.column(),
+            merged_flags.slice_mut(..),
+        )?;
+        let selection = SelectionControl::from_flags(exec, merged_flags)?;
+        let count = selection.count();
+        let selected_permutation = exec.alloc_canonical::<u32>(count as usize);
+        crate::indexed::gather_direct(
+            exec,
+            merge.permutation.column(),
+            selection.indices().column(),
+            selected_permutation.slice_mut(..),
+        )?;
+        let selected = MergeControl {
+            permutation: selected_permutation,
+            left_len: merge.left_len,
+            right_len: merge.right_len,
+        };
+        crate::merge::apply_canonical(
+            exec,
+            left,
+            right,
+            &selected,
+            output.slice_output(..count as usize),
+        )?;
+        return Ok(count);
+    }
+
+    let left_lower = crate::search::lower_bounds_typed::<R, _, _, Less>(
+        exec,
+        left_read.clone(),
+        left_read.clone(),
+    )?;
+    let right_lower = crate::search::lower_bounds_typed::<R, _, _, Less>(
+        exec,
+        right_read.clone(),
+        left_read.clone(),
+    )?;
+    let right_upper =
+        crate::search::upper_bounds_typed::<R, _, _, Less>(exec, right_read, left_read.clone())?;
+    let flags = if mode == 1 {
+        occurrence_flags::<R, IntersectionKeep>(exec, &left_lower, &right_lower, &right_upper)?
+    } else {
+        occurrence_flags::<R, DifferenceKeep>(exec, &left_lower, &right_lower, &right_upper)?
+    };
+    let control = SelectionControl::from_flags(exec, flags)?;
+    left_read.copy_selected(exec, &control, output)
+}
+
 /// Multiset union of two sorted ranges.
 pub(crate) fn set_union<R, Left, Right, Less, Output>(
     exec: &Executor<R>,
@@ -224,7 +335,7 @@ mod tests {
         let right = exec.to_device(&[2_u32, 2, 3, 4, 4]);
 
         let union = exec.to_device(&[0_u32; 10]);
-        let union_len = set_union(
+        let union_len = crate::api::algorithm::set_union_into(
             &exec,
             left.column(),
             right.column(),
@@ -238,7 +349,7 @@ mod tests {
         );
 
         let intersection = exec.to_device(&[0_u32; 5]);
-        let intersection_len = set_intersection(
+        let intersection_len = crate::api::algorithm::set_intersection_into(
             &exec,
             left.column(),
             right.column(),
@@ -253,7 +364,7 @@ mod tests {
         );
 
         let difference = exec.to_device(&[0_u32; 5]);
-        let difference_len = set_difference(
+        let difference_len = crate::api::algorithm::set_difference_into(
             &exec,
             left.column(),
             right.column(),

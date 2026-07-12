@@ -71,12 +71,12 @@ impl<R: Runtime> TraversalControl<R> {
         InputOffsets: MIter<R, Item = MIndex>,
         Vertices: MIter<R, Item = MIndex>,
     {
-        let destinations = destinations.materialize_u32(exec)?;
-        let input_offsets = input_offsets.materialize_u32(exec)?;
+        let destinations = crate::api::iter::materialize_indices(exec, destinations)?;
+        let input_offsets = crate::api::iter::materialize_indices(exec, input_offsets)?;
         if input_offsets.is_empty() {
             return Err(Error::LengthMismatch { left: 1, right: 0 });
         }
-        let vertices = vertices.materialize_u32(exec)?;
+        let vertices = crate::api::iter::materialize_indices(exec, vertices)?;
         let source_count = vertices.len();
         let vertex_count = input_offsets.len() - 1;
         let source_count_index = MIndex::try_from(source_count)

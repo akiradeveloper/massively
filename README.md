@@ -216,13 +216,16 @@ again.
 
 ### Multi-column Values
 
-The `zip2` through `zip7` helpers combine slices or lazy iterators into one
+The `zip2` through `zip12` helpers combine slices or lazy iterators into one
 logical row stream. For example, `zip3(a, b, c)` has item type
 `Tuple3<A, B, C>`.
-The matching `Tuple2` through `Tuple7` aliases and `tuple2` through `tuple7`
-constructors create fixed-arity values. `flatten3` through `flatten7` destructure
-them without exposing the internal binary-tree representation. These helpers
-can be called directly from a user-defined CubeCL operation.
+The matching `unzip2` through `unzip12` helpers consume a `Zip` and recover its
+individual children. When used on a returned multi-column `MVec`, this moves
+out the owning `DeviceVec` columns without copying or reallocating device data.
+The `Tuple2` through `Tuple12` aliases and `tuple2` through `tuple12`
+constructors create fixed-arity values. `flatten3` through `flatten12`
+destructure them without exposing the internal binary-tree representation.
+The tuple helpers can be called directly from a user-defined CubeCL operation.
 
 Conceptually:
 
@@ -230,6 +233,7 @@ Conceptually:
 DeviceSlice<T>                         = MIter<Item = T>
 zip2(a, b)                             = MIter<Item = Tuple2<A, B>>
 zip3(a, b, c)                          = MIter<Item = Tuple3<A, B, C>>
+unzip3(zip3(a, b, c))                  = (a, b, c)
 zip2(out_a, out_b)                     = MIterMut<Item = Tuple2<A, B>>
 tuple3(a, b, c)                        = Tuple3<A, B, C>
 flatten3(value)                        = (A, B, C)
@@ -241,7 +245,7 @@ lazy::reverse(input)                    = lazy reversed view
 General input and output items support up to seven columns. By-key algorithms
 support up to three key columns and seven value columns. Output iterators are
 always created before an algorithm runs. If the ordered leaf types match,
-`WriteFrom` lets an algorithm write a compatible tuple value without the user
+`WritableFrom` lets an algorithm write a compatible tuple value without the user
 manually matching its internal association.
 
 ### Lazy Iterators

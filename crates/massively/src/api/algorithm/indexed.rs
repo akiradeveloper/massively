@@ -1,6 +1,8 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom};
+use crate::{
+    Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
+};
 
 /// Gathers `values[indices[i]]` into owned device storage.
 ///
@@ -17,19 +19,19 @@ use crate::{Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10, 20]);
 /// ```
-pub fn gather<R, Values, Indices>(
+pub fn gather<R, Values, Item, Indices>(
     exec: &Executor<R>,
     values: Values,
     indices: Indices,
-) -> Result<MVec<R, Values::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: MCanonical<R>,
+    Values: MIter<R, Item = Item>,
+    Item: Materializable<R>,
     Indices: MIter<R, Item = MIndex>,
 {
     let len = indices.len()? as usize;
-    let output = exec.alloc_mvec::<Values::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     gather_into(exec, values, indices, output.slice_mut(..))?;
     Ok(output)
 }
@@ -47,10 +49,14 @@ where
     Values: MIter<R>,
     Indices: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
 {
-    let indices = indices.materialize_u32(exec)?;
-    values.indexed_with(exec, indices.column(), None, false, output)
+    crate::indexed::gather_direct(
+        exec,
+        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower::<R, _>(indices),
+        output.lower_output_from::<Values::Item>(),
+    )
 }
 
 /// Gathers selected rows while preserving other output rows.
@@ -93,16 +99,14 @@ where
     Indices: MIter<R, Item = MIndex>,
     Stencil: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
 {
-    let indices = indices.materialize_u32(exec)?;
-    let stencil = stencil.materialize_u32(exec)?;
-    values.indexed_with(
+    crate::indexed::gather_where_direct(
         exec,
-        indices.column(),
-        Some(stencil.column()),
-        false,
-        output,
+        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower::<R, _>(indices),
+        crate::api::iter::lower::<R, _>(stencil),
+        output.lower_output_from::<Values::Item>(),
     )
 }
 
@@ -120,17 +124,14 @@ where
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![4, 3, 2, 1]);
 /// ```
-pub fn reverse<R, Values>(
-    exec: &Executor<R>,
-    values: Values,
-) -> Result<MVec<R, Values::Item>, Error>
+pub fn reverse<R, Values, Item>(exec: &Executor<R>, values: Values) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Values: MIter<R>,
-    Values::Item: MCanonical<R>,
+    Values: MIter<R, Item = Item>,
+    Item: Materializable<R>,
 {
     let len = values.len()? as usize;
-    let output = exec.alloc_mvec::<Values::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     reverse_into(exec, values, output.slice_mut(..))?;
     Ok(output)
 }
@@ -146,7 +147,13 @@ where
     R: Runtime,
     Values: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
 {
-    values.reverse_with(exec, output)
+    let len = values.len()? as usize;
+    crate::indexed::gather(
+        exec,
+        crate::api::iter::lower::<R, _>(values),
+        crate::ReverseCounting::new(len),
+        output.lower_output_from::<Values::Item>(),
+    )
 }

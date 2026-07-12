@@ -17,3 +17,14 @@ cubecl = { git = "https://github.com/tracel-ai/cubecl.git", branch = "main", def
     "std",
     "stdlib",
 ] }
+
+# The arity-indexed CubeCL kernels deliberately cover the full read/storage
+# product. Debug metadata and concurrent rustc processes multiply the peak
+# memory of that generated code without affecting runtime diagnostics.
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false

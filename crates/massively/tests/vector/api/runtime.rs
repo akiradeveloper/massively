@@ -1,13 +1,13 @@
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::*;
-use static_assertions::{assert_impl_all, assert_not_impl_any};
+use static_assertions::assert_impl_all;
 
 type LeftAssociatedOutput = Zip<Zip<DeviceSliceMut<u32>, DeviceSliceMut<u32>>, DeviceSliceMut<u32>>;
 type RightAssociatedOutput =
     Zip<DeviceSliceMut<u32>, Zip<DeviceSliceMut<u32>, DeviceSliceMut<u32>>>;
 
 assert_impl_all!(LeftAssociatedOutput: MIterMut<WgpuRuntime>);
-assert_not_impl_any!(RightAssociatedOutput: MIterMut<WgpuRuntime>);
+assert_impl_all!(RightAssociatedOutput: MIterMut<WgpuRuntime>);
 
 #[test]
 fn public_device_slice_methods_return_public_view_types() {

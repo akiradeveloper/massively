@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec, WriteFrom, op::BinaryPredicateOp};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec, WritableFrom, op::BinaryPredicateOp};
 
 /// Finds the first source item equal to any needle.
 ///
@@ -40,7 +40,20 @@ where
     Needles: MIter<R, Item = Source::Item>,
     Equal: BinaryPredicateOp<Source::Item>,
 {
-    source.find_first_of_with(exec, needles, equal)
+    let source =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(source))?;
+    let needles =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(needles))?;
+    crate::search::find_first_of(
+        exec,
+        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
+            &source,
+        )),
+        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
+            &needles,
+        )),
+        equal,
+    )
 }
 
 /// Finds the lower bound of each value.
@@ -102,10 +115,24 @@ where
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<MIndex>,
+    Output::Item: WritableFrom<MIndex>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    source.bounds_with(exec, values, less, false, output)
+    let source =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(source))?;
+    let values =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(values))?;
+    let bounds = crate::search::lower_bounds_storage(
+        exec,
+        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
+            &source,
+        )),
+        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
+            &values,
+        )),
+        less,
+    )?;
+    crate::transform::materialize(exec, bounds.column(), output.lower_output())
 }
 
 /// Finds the upper bound of each value.
@@ -167,10 +194,24 @@ where
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<MIndex>,
+    Output::Item: WritableFrom<MIndex>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    source.bounds_with(exec, values, less, true, output)
+    let source =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(source))?;
+    let values =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(values))?;
+    let bounds = crate::search::upper_bounds_storage(
+        exec,
+        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
+            &source,
+        )),
+        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
+            &values,
+        )),
+        less,
+    )?;
+    crate::transform::materialize(exec, bounds.column(), output.lower_output())
 }
 
 /// Returns whether two ranges contain equal items.
@@ -209,7 +250,14 @@ where
     Right: MIter<R, Item = Left::Item>,
     Equal: BinaryPredicateOp<Left::Item>,
 {
-    left.equal_with(exec, right, equal)
+    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
+    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
+    crate::search::equal(
+        exec,
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        equal,
+    )
 }
 
 /// Returns the first mismatch.
@@ -248,7 +296,14 @@ where
     Right: MIter<R, Item = Left::Item>,
     Equal: BinaryPredicateOp<Left::Item>,
 {
-    left.mismatch_with(exec, right, equal)
+    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
+    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
+    crate::search::mismatch(
+        exec,
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        equal,
+    )
 }
 
 /// Lexicographically compares two ranges.
@@ -289,5 +344,12 @@ where
     Right: MIter<R, Item = Left::Item>,
     Less: BinaryPredicateOp<Left::Item>,
 {
-    left.lexicographical_with(exec, right, less)
+    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
+    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
+    crate::search::lexicographical_compare(
+        exec,
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        less,
+    )
 }

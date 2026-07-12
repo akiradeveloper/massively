@@ -1,30 +1,30 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
     op::BinaryPredicateOp,
 };
 
 macro_rules! set_api {
     ($name:ident, $into_name:ident, $mode:literal, $capacity:expr, $doc:literal) => {
         #[doc = $doc]
-        pub fn $name<R, Left, Right, Less>(
+        pub fn $name<R, Left, Right, Item, Less>(
             exec: &Executor<R>,
             left: Left,
             right: Right,
             less: Less,
-        ) -> Result<MVec<R, Left::Item>, Error>
+        ) -> Result<MVec<R, Item>, Error>
         where
             R: Runtime,
-            Left: MIter<R>,
-            Left::Item: MCanonical<R>,
-            Right: MIter<R, Item = Left::Item>,
-            Less: BinaryPredicateOp<Left::Item>,
+            Left: MIter<R, Item = Item>,
+            Right: MIter<R, Item = Item>,
+            Item: Materializable<R>,
+            Less: BinaryPredicateOp<Item>,
         {
             let left_len = left.len()? as usize;
             let right_len = right.len()? as usize;
             let capacity = ($capacity)(left_len, right_len)?;
-            let mut output = exec.alloc_mvec::<Left::Item>(capacity);
+            let mut output = exec.alloc_mvec::<Item>(capacity);
             let len = $into_name(exec, left, right, less, output.slice_mut(..))?;
             output.truncate(len);
             Ok(output)
@@ -45,9 +45,20 @@ macro_rules! set_api {
             Right: MIter<R, Item = Left::Item>,
             Less: BinaryPredicateOp<Left::Item>,
             Output: MIterMut<R>,
-            Output::Item: WriteFrom<Left::Item>,
+            Output::Item: WritableFrom<Left::Item>,
         {
-            left.set_with(exec, right, less, output, $mode)
+            let left =
+                crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
+            let right =
+                crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
+            crate::core::set::set_canonical(
+                exec,
+                &left,
+                &right,
+                less,
+                output.lower_output_from::<Left::Item>(),
+                $mode,
+            )
         }
     };
 }

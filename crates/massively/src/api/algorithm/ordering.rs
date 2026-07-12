@@ -1,7 +1,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
     op::BinaryPredicateOp,
 };
 
@@ -29,19 +29,19 @@ use crate::{
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```
-pub fn sort<R, Input, Less>(
+pub fn sort<R, Input, Item, Less>(
     exec: &Executor<R>,
     input: Input,
     less: Less,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
-    Less: BinaryPredicateOp<Input::Item>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Less: BinaryPredicateOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Input::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     sort_into(exec, input, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -58,10 +58,17 @@ where
     R: Runtime,
     Input: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    input.sort_with(exec, less, output)
+    let input = crate::api::iter::lower::<R, _>(input);
+    let permutation = crate::ordering::sort_control_with(exec, input.clone(), less)?;
+    crate::indexed::apply_permutation(
+        exec,
+        input,
+        permutation.column(),
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Finds the first accepted adjacent pair.
@@ -97,7 +104,7 @@ where
     Input: MIter<R>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
-    input.adjacent_find_with(exec, equal)
+    crate::ordering::adjacent_find(exec, crate::api::iter::lower::<R, _>(input), equal)
 }
 
 /// Removes consecutive duplicates.
@@ -125,19 +132,19 @@ where
 /// assert_eq!(output.len(), 3);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```
-pub fn unique<R, Input, Equal>(
+pub fn unique<R, Input, Item, Equal>(
     exec: &Executor<R>,
     input: Input,
     equal: Equal,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
-    Equal: BinaryPredicateOp<Input::Item>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Equal: BinaryPredicateOp<Item>,
 {
     let capacity = input.len()? as usize;
-    let mut output = exec.alloc_mvec::<Input::Item>(capacity);
+    let mut output = exec.alloc_mvec::<Item>(capacity);
     let len = unique_into(exec, input, equal, output.slice_mut(..))?;
     output.truncate(len);
     Ok(output)
@@ -157,10 +164,15 @@ where
     R: Runtime,
     Input: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
-    input.unique_with(exec, equal, output)
+    crate::ordering::unique(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        equal,
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Returns the first index at which the input ceases to be sorted.
@@ -196,7 +208,7 @@ where
     Input: MIter<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    input.is_sorted_until_with(exec, less)
+    crate::ordering::is_sorted_until(exec, crate::api::iter::lower::<R, _>(input), less)
 }
 
 /// Returns whether the input is sorted.
@@ -232,11 +244,11 @@ where
     Input: MIter<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    input.is_sorted_with(exec, less)
+    crate::ordering::is_sorted(exec, crate::api::iter::lower::<R, _>(input), less)
 }
 
 macro_rules! extremum_api {
-    ($name:ident, $method:ident, $output:ty, $doc:literal) => {
+    ($name:ident, $output:ty, $doc:literal) => {
         #[doc = $doc]
         pub fn $name<R, Input, Less>(
             exec: &Executor<R>,
@@ -248,14 +260,13 @@ macro_rules! extremum_api {
             Input: MIter<R>,
             Less: BinaryPredicateOp<Input::Item>,
         {
-            input.$method(exec, less)
+            crate::ordering::$name(exec, crate::api::iter::lower::<R, _>(input), less)
         }
     };
 }
 
 extremum_api!(
     min_element,
-    min_element_with,
     Option<MIndex>,
     r#"Returns the first minimum element index.
 
@@ -284,7 +295,6 @@ assert_eq!(min_element(&exec, input.slice(..), Less).unwrap(), Some(1));
 );
 extremum_api!(
     max_element,
-    max_element_with,
     Option<MIndex>,
     r#"Returns the first maximum element index.
 
@@ -313,7 +323,6 @@ assert_eq!(max_element(&exec, input.slice(..), Less).unwrap(), Some(0));
 );
 extremum_api!(
     minmax_element,
-    minmax_element_with,
     Option<(MIndex, MIndex)>,
     r#"Returns the minimum and maximum element indices.
 

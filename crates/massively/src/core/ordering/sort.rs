@@ -10,17 +10,23 @@ use cubecl::prelude::*;
 use crate::{
     CanonicalAlloc, CanonicalStorage, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     StorageLayout,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7},
+    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, Eval9, Eval10, Eval11, Eval12},
     launch::cube_count_1d,
     output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
-    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression, Reassociate},
+    read::{
+        Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, Env9, Env10, Env11, Env12,
+        LowerReadExpression, Reassociate,
+    },
     reduce::{StageRead, StagedBindings},
     storage::{
         Decompose, Last, LoadLeaves1, LoadLeaves2, LoadLeaves3, LoadLeaves4, LoadLeaves5,
-        LoadLeaves6, LoadLeaves7, More, Recompose, StoreLeaves1, StoreLeaves1Expand, StoreLeaves2,
+        LoadLeaves6, LoadLeaves7, LoadLeaves8, LoadLeaves9, LoadLeaves10, LoadLeaves11,
+        LoadLeaves12, More, Recompose, StoreLeaves1, StoreLeaves1Expand, StoreLeaves2,
         StoreLeaves2Expand, StoreLeaves3, StoreLeaves3Expand, StoreLeaves4, StoreLeaves4Expand,
         StoreLeaves5, StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand, StoreLeaves7,
-        StoreLeaves7Expand,
+        StoreLeaves7Expand, StoreLeaves8, StoreLeaves8Expand, StoreLeaves9, StoreLeaves9Expand,
+        StoreLeaves10, StoreLeaves10Expand, StoreLeaves11, StoreLeaves11Expand, StoreLeaves12,
+        StoreLeaves12Expand,
     },
 };
 
@@ -487,6 +493,11 @@ define_sort_kernels!(block_sort_s4, merge_runs_s4, Eval4, eval4; [L0:slot0:out0:
 define_sort_kernels!(block_sort_s5, merge_runs_s5, Eval5, eval5; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4]; More<L0,More<L1,More<L2,More<L3,Last<L4>>>>>, LoadLeaves5, StoreLeaves5; 8usize);
 define_sort_kernels!(block_sort_s6, merge_runs_s6, Eval6, eval6; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5]; More<L0,More<L1,More<L2,More<L3,More<L4,Last<L5>>>>>>, LoadLeaves6, StoreLeaves6; 8usize);
 define_sort_kernels!(block_sort_s7, merge_runs_s7, Eval7, eval7; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5,L6:slot6:out6:shared_a6:shared_b6]; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,Last<L6>>>>>>>, LoadLeaves7, StoreLeaves7; 4usize);
+define_sort_kernels!(block_sort_s8, merge_runs_s8, Eval8, eval8; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5,L6:slot6:out6:shared_a6:shared_b6,L7:slot7:out7:shared_a7:shared_b7]; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,Last<L7>>>>>>>>, LoadLeaves8, StoreLeaves8; 4usize);
+define_sort_kernels!(block_sort_s9, merge_runs_s9, Eval9, eval9; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5,L6:slot6:out6:shared_a6:shared_b6,L7:slot7:out7:shared_a7:shared_b7,L8:slot8:out8:shared_a8:shared_b8]; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,Last<L8>>>>>>>>>, LoadLeaves9, StoreLeaves9; 4usize);
+define_sort_kernels!(block_sort_s10, merge_runs_s10, Eval10, eval10; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5,L6:slot6:out6:shared_a6:shared_b6,L7:slot7:out7:shared_a7:shared_b7,L8:slot8:out8:shared_a8:shared_b8,L9:slot9:out9:shared_a9:shared_b9]; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,Last<L9>>>>>>>>>>, LoadLeaves10, StoreLeaves10; 4usize);
+define_sort_kernels!(block_sort_s11, merge_runs_s11, Eval11, eval11; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5,L6:slot6:out6:shared_a6:shared_b6,L7:slot7:out7:shared_a7:shared_b7,L8:slot8:out8:shared_a8:shared_b8,L9:slot9:out9:shared_a9:shared_b9,L10:slot10:out10:shared_a10:shared_b10]; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,Last<L10>>>>>>>>>>>, LoadLeaves11, StoreLeaves11; 4usize);
+define_sort_kernels!(block_sort_s12, merge_runs_s12, Eval12, eval12; [L0:slot0:out0:shared_a0:shared_b0,L1:slot1:out1:shared_a1:shared_b1,L2:slot2:out2:shared_a2:shared_b2,L3:slot3:out3:shared_a3:shared_b3,L4:slot4:out4:shared_a4:shared_b4,L5:slot5:out5:shared_a5:shared_b5,L6:slot6:out6:shared_a6:shared_b6,L7:slot7:out7:shared_a7:shared_b7,L8:slot8:out8:shared_a8:shared_b8,L9:slot9:out9:shared_a9:shared_b9,L10:slot10:out10:shared_a10:shared_b10,L11:slot11:out11:shared_a11:shared_b11]; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,More<L10,Last<L11>>>>>>>>>>>>, LoadLeaves12, StoreLeaves12; 4usize);
 
 trait SortPassDispatch<R, Input, Output, Item, ReadSlots, WriteSlots, Less>
 where
@@ -661,6 +672,11 @@ impl_sort_pass_dispatch!(crate::A4, crate::S4, Eval4, block_sort_s4, merge_runs_
 impl_sort_pass_dispatch!(crate::A5, crate::S5, Eval5, block_sort_s5, merge_runs_s5; [L0:0,L1:1,L2:2,L3:3,L4:4], Env5<L0,L1,L2,L3,L4>; More<L0,More<L1,More<L2,More<L3,Last<L4>>>>>; 8usize);
 impl_sort_pass_dispatch!(crate::A6, crate::S6, Eval6, block_sort_s6, merge_runs_s6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5], Env6<L0,L1,L2,L3,L4,L5>; More<L0,More<L1,More<L2,More<L3,More<L4,Last<L5>>>>>>; 8usize);
 impl_sort_pass_dispatch!(crate::A7, crate::S7, Eval7, block_sort_s7, merge_runs_s7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6], Env7<L0,L1,L2,L3,L4,L5,L6>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,Last<L6>>>>>>>; 4usize);
+impl_sort_pass_dispatch!(crate::A8, crate::S8, Eval8, block_sort_s8, merge_runs_s8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7], Env8<L0,L1,L2,L3,L4,L5,L6,L7>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,Last<L7>>>>>>>>; 4usize);
+impl_sort_pass_dispatch!(crate::A9, crate::S9, Eval9, block_sort_s9, merge_runs_s9; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8], Env9<L0,L1,L2,L3,L4,L5,L6,L7,L8>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,Last<L8>>>>>>>>>; 4usize);
+impl_sort_pass_dispatch!(crate::A10, crate::S10, Eval10, block_sort_s10, merge_runs_s10; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9], Env10<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,Last<L9>>>>>>>>>>; 4usize);
+impl_sort_pass_dispatch!(crate::A11, crate::S11, Eval11, block_sort_s11, merge_runs_s11; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10], Env11<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,Last<L10>>>>>>>>>>>; 4usize);
+impl_sort_pass_dispatch!(crate::A12, crate::S12, Eval12, block_sort_s12, merge_runs_s12; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11], Env12<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,More<L10,Last<L11>>>>>>>>>>>>; 4usize);
 
 /// Capability for sorting an owned canonical storage value.
 pub(crate) trait SortStorageItem<R: Runtime, Less>: CanonicalAlloc<R> + Sized {

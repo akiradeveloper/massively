@@ -3,79 +3,189 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, Dispatch, Error, Executor, MStorageElement, ReadExpression, S1,
-    S2, S3, S4, S5, S6, S7, StorageLayout, Transform, WriteFrom,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    A13, Dispatch, Error, Executor, MStorageElement, ReadExpression, S12, StorageLayout, Transform,
+    WritableFrom,
+    eval::Eval13,
     op::UnaryOp,
-    output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
-    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression},
-    reduce::{StageRead, StagedBindings},
-    storage::{
-        Decompose, Last, More, StoreLeaves1, StoreLeaves1Expand, StoreLeaves2, StoreLeaves2Expand,
-        StoreLeaves3, StoreLeaves3Expand, StoreLeaves4, StoreLeaves4Expand, StoreLeaves5,
-        StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand, StoreLeaves7, StoreLeaves7Expand,
+    output::{
+        LowerOutputExpression, OutputBindings, OutputExpression, PaddedOutputSlots, StageOutput,
     },
+    read::{Env0, Env12, Env13, KernelReadSlots, LowerReadExpression, PaddedReadSlots},
+    reduce::{StageRead, StagedBindings},
+    storage::{Decompose, StorePadded12, StorePadded12Expand},
 };
 
 const BLOCK_SIZE: u32 = 256;
 
-macro_rules! define_materialize_kernel {
-    (
-        $name:ident, $eval:ident, $method:ident;
-        [$( $leaf:ident : $slot:ident ),+];
-        [$( $output:ident : $out:ident ),+];
-        $leaves:ty
-    ) => {
+macro_rules! define_padded_materialize_kernel {
+    ($name:ident, $eval:ident, $method:ident; [$( $leaf:ident : $slot:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Source: CubeType + Send + Sync + 'static,
-            Target: WriteFrom<Source> + Send + Sync + 'static,
+            Target: WritableFrom<Source> + Send + Sync + 'static,
             $( $leaf: CubePrimitive, )+
-            $( $output: CubePrimitive, )+
+            O0: CubePrimitive,
+            O1: CubePrimitive,
+            O2: CubePrimitive,
+            O3: CubePrimitive,
+            O4: CubePrimitive,
+            O5: CubePrimitive,
+            O6: CubePrimitive,
+            O7: CubePrimitive,
+            O8: CubePrimitive,
+            O9: CubePrimitive,
+            O10: CubePrimitive,
+            O11: CubePrimitive,
+            Leaves: CubeType + Send + Sync + 'static
+                + StorePadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >,
             Expr: $eval<Source, $( $leaf ),+>,
-            Layout: Decompose<Target, Leaves = $leaves>,
+            Layout: Decompose<Target, Leaves = Leaves>,
         >(
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
             len: &[u32],
-            $( $out: &mut [$output], )+
+            out0: &mut [O0],
+            out1: &mut [O1],
+            out2: &mut [O2],
+            out3: &mut [O3],
+            out4: &mut [O4],
+            out5: &mut [O5],
+            out6: &mut [O6],
+            out7: &mut [O7],
+            out8: &mut [O8],
+            out9: &mut [O9],
+            out10: &mut [O10],
+            out11: &mut [O11],
             write_offsets: &[u32],
         ) {
             let index = ABSOLUTE_POS as usize;
             if index < len[0] as usize {
                 let source = Expr::$method($( $slot, )+ read_offsets, index);
                 let target = Target::write_from(source);
-                let leaves = Layout::decompose(target);
-                leaves.store($( $out, )+ write_offsets, index);
+                Layout::decompose(target).store_padded(
+                    out0, out1, out2, out3, out4, out5, out6, out7, out8, out9, out10, out11,
+                    write_offsets, index,
+                );
             }
         }
     };
 }
 
-macro_rules! define_materialize_kernels_for_eval {
-    (
-        $eval:ident, $method:ident;
-        [$( $leaf:ident : $slot:ident ),+];
-        [$k1:ident, $k2:ident, $k3:ident, $k4:ident, $k5:ident, $k6:ident, $k7:ident]
-    ) => {
-        define_materialize_kernel!($k1, $eval, $method; [$($leaf:$slot),+]; [O0:out0]; Last<O0>);
-        define_materialize_kernel!($k2, $eval, $method; [$($leaf:$slot),+]; [O0:out0,O1:out1]; More<O0,Last<O1>>);
-        define_materialize_kernel!($k3, $eval, $method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2]; More<O0,More<O1,Last<O2>>>);
-        define_materialize_kernel!($k4, $eval, $method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3]; More<O0,More<O1,More<O2,Last<O3>>>>);
-        define_materialize_kernel!($k5, $eval, $method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4]; More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>);
-        define_materialize_kernel!($k6, $eval, $method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4,O5:out5]; More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>);
-        define_materialize_kernel!($k7, $eval, $method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4,O5:out5,O6:out6]; More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>);
-    };
-}
+define_padded_materialize_kernel!(materialize_a13, Eval13, eval13; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12]);
 
-define_materialize_kernels_for_eval!(Eval1, eval1; [L0:slot0]; [materialize_a1_s1, materialize_a1_s2, materialize_a1_s3, materialize_a1_s4, materialize_a1_s5, materialize_a1_s6, materialize_a1_s7]);
-define_materialize_kernels_for_eval!(Eval2, eval2; [L0:slot0,L1:slot1]; [materialize_a2_s1, materialize_a2_s2, materialize_a2_s3, materialize_a2_s4, materialize_a2_s5, materialize_a2_s6, materialize_a2_s7]);
-define_materialize_kernels_for_eval!(Eval3, eval3; [L0:slot0,L1:slot1,L2:slot2]; [materialize_a3_s1, materialize_a3_s2, materialize_a3_s3, materialize_a3_s4, materialize_a3_s5, materialize_a3_s6, materialize_a3_s7]);
-define_materialize_kernels_for_eval!(Eval4, eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]; [materialize_a4_s1, materialize_a4_s2, materialize_a4_s3, materialize_a4_s4, materialize_a4_s5, materialize_a4_s6, materialize_a4_s7]);
-define_materialize_kernels_for_eval!(Eval5, eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]; [materialize_a5_s1, materialize_a5_s2, materialize_a5_s3, materialize_a5_s4, materialize_a5_s5, materialize_a5_s6, materialize_a5_s7]);
-define_materialize_kernels_for_eval!(Eval6, eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]; [materialize_a6_s1, materialize_a6_s2, materialize_a6_s3, materialize_a6_s4, materialize_a6_s5, materialize_a6_s6, materialize_a6_s7]);
-define_materialize_kernels_for_eval!(Eval7, eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]; [materialize_a7_s1, materialize_a7_s2, materialize_a7_s3, materialize_a7_s4, materialize_a7_s5, materialize_a7_s6, materialize_a7_s7]);
-define_materialize_kernels_for_eval!(Eval8, eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]; [materialize_a8_s1, materialize_a8_s2, materialize_a8_s3, materialize_a8_s4, materialize_a8_s5, materialize_a8_s6, materialize_a8_s7]);
+pub(crate) fn materialize_fixed<R, Input, Output>(
+    exec: &Executor<R>,
+    input: &Input,
+    output: &Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Input::Item: StorageLayout,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
+    Output::Item: StorageLayout + WritableFrom<Input::Item>,
+    <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+{
+    let input_len = input.logical_len()?;
+    let output_len = output.logical_len()?;
+    if output_len < input_len {
+        return Err(Error::OutputTooShort {
+            input: input_len,
+            output: output_len,
+        });
+    }
+    if input_len == 0 {
+        return Ok(());
+    }
+    let len = u32::try_from(input_len).map_err(|_| Error::LengthTooLarge { len: input_len })?;
+    let mut reads = StagedBindings::new();
+    input.stage_at(exec.client(), exec.id(), &mut reads)?;
+    reads.pad_to_thirteen(exec.client());
+    let mut writes = OutputBindings::new();
+    output.stage_output(exec.id(), &mut writes)?;
+    writes.pad_to_twelve(exec.client());
+    let read_offsets = exec
+        .client()
+        .create_from_slice(u32::as_bytes(&reads.offsets));
+    let write_offsets = exec
+        .client()
+        .create_from_slice(u32::as_bytes(&writes.offsets));
+    let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
+    let cubes = crate::launch::cube_count_1d((len as usize).div_ceil(BLOCK_SIZE as usize))?;
+    unsafe {
+        materialize_a13::launch_unchecked::<
+            Input::Item,
+            Output::Item,
+            <Input::Slots as PaddedReadSlots>::L0,
+            <Input::Slots as PaddedReadSlots>::L1,
+            <Input::Slots as PaddedReadSlots>::L2,
+            <Input::Slots as PaddedReadSlots>::L3,
+            <Input::Slots as PaddedReadSlots>::L4,
+            <Input::Slots as PaddedReadSlots>::L5,
+            <Input::Slots as PaddedReadSlots>::L6,
+            <Input::Slots as PaddedReadSlots>::L7,
+            <Input::Slots as PaddedReadSlots>::L8,
+            <Input::Slots as PaddedReadSlots>::L9,
+            <Input::Slots as PaddedReadSlots>::L10,
+            <Input::Slots as PaddedReadSlots>::L11,
+            <Input::Slots as PaddedReadSlots>::L12,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O0,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O1,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O2,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O3,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O4,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O5,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O6,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O7,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O8,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O9,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O10,
+            <<Output::Item as StorageLayout>::StorageLeaves as StorePadded12>::O11,
+            <Output::Item as StorageLayout>::StorageLeaves,
+            Input::DeviceExpr,
+            <Output::Item as StorageLayout>::DeviceLayout,
+            R,
+        >(
+            exec.client(),
+            cubes,
+            CubeDim::new_1d(BLOCK_SIZE),
+            BufferArg::from_raw_parts(reads.slots[0].0.clone(), reads.slots[0].1),
+            BufferArg::from_raw_parts(reads.slots[1].0.clone(), reads.slots[1].1),
+            BufferArg::from_raw_parts(reads.slots[2].0.clone(), reads.slots[2].1),
+            BufferArg::from_raw_parts(reads.slots[3].0.clone(), reads.slots[3].1),
+            BufferArg::from_raw_parts(reads.slots[4].0.clone(), reads.slots[4].1),
+            BufferArg::from_raw_parts(reads.slots[5].0.clone(), reads.slots[5].1),
+            BufferArg::from_raw_parts(reads.slots[6].0.clone(), reads.slots[6].1),
+            BufferArg::from_raw_parts(reads.slots[7].0.clone(), reads.slots[7].1),
+            BufferArg::from_raw_parts(reads.slots[8].0.clone(), reads.slots[8].1),
+            BufferArg::from_raw_parts(reads.slots[9].0.clone(), reads.slots[9].1),
+            BufferArg::from_raw_parts(reads.slots[10].0.clone(), reads.slots[10].1),
+            BufferArg::from_raw_parts(reads.slots[11].0.clone(), reads.slots[11].1),
+            BufferArg::from_raw_parts(reads.slots[12].0.clone(), reads.slots[12].1),
+            BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
+            BufferArg::from_raw_parts(len_handle, 1),
+            BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
+            BufferArg::from_raw_parts(writes.slots[1].0.clone(), writes.slots[1].1),
+            BufferArg::from_raw_parts(writes.slots[2].0.clone(), writes.slots[2].1),
+            BufferArg::from_raw_parts(writes.slots[3].0.clone(), writes.slots[3].1),
+            BufferArg::from_raw_parts(writes.slots[4].0.clone(), writes.slots[4].1),
+            BufferArg::from_raw_parts(writes.slots[5].0.clone(), writes.slots[5].1),
+            BufferArg::from_raw_parts(writes.slots[6].0.clone(), writes.slots[6].1),
+            BufferArg::from_raw_parts(writes.slots[7].0.clone(), writes.slots[7].1),
+            BufferArg::from_raw_parts(writes.slots[8].0.clone(), writes.slots[8].1),
+            BufferArg::from_raw_parts(writes.slots[9].0.clone(), writes.slots[9].1),
+            BufferArg::from_raw_parts(writes.slots[10].0.clone(), writes.slots[10].1),
+            BufferArg::from_raw_parts(writes.slots[11].0.clone(), writes.slots[11].1),
+            BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
+        );
+    }
+    Ok(())
+}
 
 #[doc(hidden)]
 pub trait MaterializeDispatch<R, Input, Output, ReadSlots, WriteSlots>
@@ -85,104 +195,71 @@ where
     fn run(exec: &Executor<R>, input: &Input, output: &Output) -> Result<(), Error>;
 }
 
-macro_rules! impl_materialize_dispatch {
-    (
-        $arity:ty, $storage:ty, $eval:ident, $kernel:ident;
-        [$( $leaf:ident : $read_index:literal ),+], $read_env:ty;
-        [$( $output:ident : $write_index:literal ),+], $write_env:ty;
-        $leaves:ty
-    ) => {
-        impl<R, Input, Output, Source, $( $leaf, )+ $( $output, )+>
-            MaterializeDispatch<R, Input, Output, $read_env, $write_env>
-            for Dispatch<$arity, $storage>
+macro_rules! impl_padded_materialize_dispatch {
+    ($arity:ty, $eval:ident, $kernel:ident; [$( $leaf:ident : $read_index:literal ),+], $read_env:ty) => {
+        impl<
+            R, Input, Output, Source, Leaves,
+            O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11,
+            $( $leaf, )+
+        > MaterializeDispatch<
+            R,
+            Input,
+            Output,
+            $read_env,
+            Env12<O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11>,
+        >
+            for Dispatch<$arity, S12>
         where
             R: Runtime,
             $( $leaf: MStorageElement, )+
-            $( $output: MStorageElement, )+
+            O0: MStorageElement,
+            O1: MStorageElement,
+            O2: MStorageElement,
+            O3: MStorageElement,
+            O4: MStorageElement,
+            O5: MStorageElement,
+            O6: MStorageElement,
+            O7: MStorageElement,
+            O8: MStorageElement,
+            O9: MStorageElement,
+            O10: MStorageElement,
+            O11: MStorageElement,
             Source: StorageLayout + Send + Sync + 'static,
-            Input: ReadExpression<Item = Source>
-                + LowerReadExpression<Slots = $read_env>
-                + StageRead<R, Env0>,
+            Leaves: CubeType + Send + Sync + 'static + StorePadded12<
+                O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+            >,
+            Output::Slots: PaddedOutputSlots<Leaves = Leaves>,
+            Input: ReadExpression<Item = Source> + LowerReadExpression + StageRead<R, Env0>,
+            Input::Slots: PaddedReadSlots<
+                L0 = L0,
+                L1 = L1,
+                L2 = L2,
+                L3 = L3,
+                L4 = L4,
+                L5 = L5,
+                L6 = L6,
+                L7 = L7,
+                L8 = L8,
+                L9 = L9,
+                L10 = L10,
+                L11 = L11,
+                L12 = L12,
+            >,
             Input::DeviceExpr: $eval<Source, $( $leaf ),+>,
-            Output: OutputExpression<StorageArity = $storage>
-                + LowerOutputExpression<Slots = $write_env>
-                + StageOutput<R, Env0>,
-            Output::Item: StorageLayout<StorageArity = $storage, StorageLeaves = $leaves>
-                + WriteFrom<Source>,
+            Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+            Output::Item: StorageLayout<StorageLeaves = Leaves> + WritableFrom<Source>,
             <Output::Item as StorageLayout>::DeviceLayout:
-                Decompose<Output::Item, Leaves = $leaves>,
+                Decompose<Output::Item, Leaves = Leaves>,
         {
             fn run(exec: &Executor<R>, input: &Input, output: &Output) -> Result<(), Error> {
-                let input_len = input.logical_len()?;
-                let output_len = output.logical_len()?;
-                if output_len < input_len {
-                    return Err(Error::OutputTooShort { input: input_len, output: output_len });
-                }
-                if input_len == 0 {
-                    return Ok(());
-                }
-                let len = u32::try_from(input_len)
-                    .map_err(|_| Error::LengthTooLarge { len: input_len })?;
-                let mut reads = StagedBindings::new();
-                input.stage_at(exec.client(), exec.id(), &mut reads)?;
-                let mut writes = OutputBindings::new();
-                output.stage_output(exec.id(), &mut writes)?;
-                let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
-                let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
-                let cubes = crate::launch::cube_count_1d(
-                    (len as usize).div_ceil(BLOCK_SIZE as usize),
-                )?;
-                unsafe {
-                    $kernel::launch_unchecked::<
-                        Source,
-                        Output::Item,
-                        $( $leaf, )+
-                        $( $output, )+
-                        Input::DeviceExpr,
-                        <Output::Item as StorageLayout>::DeviceLayout,
-                        R,
-                    >(
-                        exec.client(),
-                        cubes,
-                        CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(reads.slots[$read_index].0.clone(), reads.slots[$read_index].1), )+
-                        BufferArg::from_raw_parts(read_offsets, reads.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle, 1),
-                        $( BufferArg::from_raw_parts(writes.slots[$write_index].0.clone(), writes.slots[$write_index].1), )+
-                        BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
-                    );
-                }
-                Ok(())
+                materialize_fixed(exec, input, output)
             }
         }
     };
 }
 
-macro_rules! impl_all_storage_for_read {
-    (
-        $arity:ty, $eval:ident;
-        [$( $leaf:ident : $read_index:literal ),+], $read_env:ty;
-        [$k1:ident, $k2:ident, $k3:ident, $k4:ident, $k5:ident, $k6:ident, $k7:ident]
-    ) => {
-        impl_materialize_dispatch!($arity,S1,$eval,$k1; [$($leaf:$read_index),+],$read_env; [O0:0],Env1<O0>; Last<O0>);
-        impl_materialize_dispatch!($arity,S2,$eval,$k2; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1],Env2<O0,O1>; More<O0,Last<O1>>);
-        impl_materialize_dispatch!($arity,S3,$eval,$k3; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2],Env3<O0,O1,O2>; More<O0,More<O1,Last<O2>>>);
-        impl_materialize_dispatch!($arity,S4,$eval,$k4; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3],Env4<O0,O1,O2,O3>; More<O0,More<O1,More<O2,Last<O3>>>>);
-        impl_materialize_dispatch!($arity,S5,$eval,$k5; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4],Env5<O0,O1,O2,O3,O4>; More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>);
-        impl_materialize_dispatch!($arity,S6,$eval,$k6; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4,O5:5],Env6<O0,O1,O2,O3,O4,O5>; More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>);
-        impl_materialize_dispatch!($arity,S7,$eval,$k7; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4,O5:5,O6:6],Env7<O0,O1,O2,O3,O4,O5,O6>; More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>);
-    };
-}
-
-impl_all_storage_for_read!(A1,Eval1; [L0:0],Env1<L0>; [materialize_a1_s1,materialize_a1_s2,materialize_a1_s3,materialize_a1_s4,materialize_a1_s5,materialize_a1_s6,materialize_a1_s7]);
-impl_all_storage_for_read!(A2,Eval2; [L0:0,L1:1],Env2<L0,L1>; [materialize_a2_s1,materialize_a2_s2,materialize_a2_s3,materialize_a2_s4,materialize_a2_s5,materialize_a2_s6,materialize_a2_s7]);
-impl_all_storage_for_read!(A3,Eval3; [L0:0,L1:1,L2:2],Env3<L0,L1,L2>; [materialize_a3_s1,materialize_a3_s2,materialize_a3_s3,materialize_a3_s4,materialize_a3_s5,materialize_a3_s6,materialize_a3_s7]);
-impl_all_storage_for_read!(A4,Eval4; [L0:0,L1:1,L2:2,L3:3],Env4<L0,L1,L2,L3>; [materialize_a4_s1,materialize_a4_s2,materialize_a4_s3,materialize_a4_s4,materialize_a4_s5,materialize_a4_s6,materialize_a4_s7]);
-impl_all_storage_for_read!(A5,Eval5; [L0:0,L1:1,L2:2,L3:3,L4:4],Env5<L0,L1,L2,L3,L4>; [materialize_a5_s1,materialize_a5_s2,materialize_a5_s3,materialize_a5_s4,materialize_a5_s5,materialize_a5_s6,materialize_a5_s7]);
-impl_all_storage_for_read!(A6,Eval6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5],Env6<L0,L1,L2,L3,L4,L5>; [materialize_a6_s1,materialize_a6_s2,materialize_a6_s3,materialize_a6_s4,materialize_a6_s5,materialize_a6_s6,materialize_a6_s7]);
-impl_all_storage_for_read!(A7,Eval7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6],Env7<L0,L1,L2,L3,L4,L5,L6>; [materialize_a7_s1,materialize_a7_s2,materialize_a7_s3,materialize_a7_s4,materialize_a7_s5,materialize_a7_s6,materialize_a7_s7]);
-impl_all_storage_for_read!(A8,Eval8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7],Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [materialize_a8_s1,materialize_a8_s2,materialize_a8_s3,materialize_a8_s4,materialize_a8_s5,materialize_a8_s6,materialize_a8_s7]);
+impl_padded_materialize_dispatch!(A13, Eval13, materialize_a13; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12], Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>);
 
 /// Evaluates a lazy read expression and writes it to a preallocated output tree.
 pub(crate) fn materialize<R, Input, Output>(
@@ -195,16 +272,22 @@ where
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Input::Item: StorageLayout,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: WriteFrom<Input::Item>,
-    Dispatch<Input::ReadArity, Output::StorageArity>:
-        MaterializeDispatch<R, Input, Output, Input::Slots, Output::Slots>,
+    Output::Slots: PaddedOutputSlots,
+    Output::Item: WritableFrom<Input::Item>,
+    Dispatch<A13, S12>: MaterializeDispatch<
+            R,
+            Input,
+            Output,
+            KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+        >,
 {
-    <Dispatch<Input::ReadArity, Output::StorageArity> as MaterializeDispatch<
+    <Dispatch<A13, S12> as MaterializeDispatch<
         R,
         Input,
         Output,
-        Input::Slots,
-        Output::Slots,
+        KernelReadSlots<Input::Slots>,
+        crate::output::KernelOutputSlots<Output::Slots>,
     >>::run(exec, &input, &output)
 }
 
@@ -223,17 +306,42 @@ where
         ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
     Op::Output: StorageLayout,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
-    Dispatch<<Transform<Input, Op> as ReadExpression>::ReadArity, Output::StorageArity>:
-        MaterializeDispatch<
-                R,
-                Transform<Input, Op>,
-                Output,
-                <Transform<Input, Op> as LowerReadExpression>::Slots,
-                Output::Slots,
-            >,
+    Output::Slots: PaddedOutputSlots,
+    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Dispatch<A13, S12>: MaterializeDispatch<
+            R,
+            Transform<Input, Op>,
+            Output,
+            KernelReadSlots<<Transform<Input, Op> as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+        >,
 {
     materialize(exec, Transform::new(input, op), output)
+}
+
+/// Applies a unary operation through the fixed thirteen-read/twelve-write ABI
+/// without selecting an arity-specific dispatch implementation.
+pub(crate) fn transform_fixed<R, Input, Output, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression,
+    Op: UnaryOp<Input::Item>,
+    Transform<Input, Op>:
+        ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
+    Op::Output: StorageLayout,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
+    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
+    <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
+{
+    let input = Transform::new(input, op);
+    materialize_fixed(exec, &input, &output)
 }
 
 #[cfg(test)]

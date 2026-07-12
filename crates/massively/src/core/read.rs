@@ -6,16 +6,17 @@ use std::ops::{Bound, RangeBounds};
 
 use crate::{
     Zip,
-    arity::{A1, A2, A3, A4, A5, A6, A7, A8, AddArity, ReadArity},
+    arity::{A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, A11, A12, A13, AddArity, ReadArity},
     eval::{
         AdjacentExpr, AdjacentIndexedTransformExpr, Broadcast, Count, DeviceExpr, Direct, Eval1,
-        Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, IndexedTransformExpr, PermuteExpr,
-        ReassociateExpr, ReverseCount, Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7,
-        TransformExpr, ZipExpr,
+        Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, Eval9, Eval10, Eval11, Eval12, Eval13,
+        IndexedTransformExpr, PermuteExpr, ReassociateExpr, ReverseCount, Slot0, Slot1, Slot2,
+        Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, TransformExpr,
+        ZipExpr,
     },
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
-    storage::{StorageLayout, WriteFrom},
+    storage::{StorageLayout, WritableFrom},
     value::MStorageElement,
 };
 
@@ -503,7 +504,7 @@ impl<Input, Output> ReadExpression for Reassociate<Input, Output>
 where
     Input: ReadExpression,
     Input::Item: StorageLayout,
-    Output: StorageLayout + WriteFrom<Input::Item> + 'static,
+    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
 {
     type Item = Output;
     type ReadArity = Input::ReadArity;
@@ -672,7 +673,7 @@ impl<Input, Output> SliceExpression for Reassociate<Input, Output>
 where
     Input: SliceExpression,
     Input::Item: StorageLayout,
-    Output: StorageLayout + WriteFrom<Input::Item> + 'static,
+    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
         Reassociate::new(self.input.slice_expression(start, len))
@@ -708,6 +709,21 @@ pub struct Env7<L0, L1, L2, L3, L4, L5, L6>(PhantomData<fn() -> (L0, L1, L2, L3,
 #[doc(hidden)]
 pub struct Env8<L0, L1, L2, L3, L4, L5, L6, L7>(
     PhantomData<fn() -> (L0, L1, L2, L3, L4, L5, L6, L7)>,
+);
+pub struct Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8>(
+    PhantomData<fn() -> (L0, L1, L2, L3, L4, L5, L6, L7, L8)>,
+);
+pub struct Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>(
+    PhantomData<fn() -> (L0, L1, L2, L3, L4, L5, L6, L7, L8, L9)>,
+);
+pub struct Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>(
+    PhantomData<fn() -> (L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10)>,
+);
+pub struct Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>(
+    PhantomData<fn() -> (L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11)>,
+);
+pub struct Env13<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>(
+    PhantomData<fn() -> (L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12)>,
 );
 
 /// Binds an expression's leaves to consecutive slots, starting at `Env`.
@@ -758,6 +774,11 @@ impl_leaf_binding!(impl <L0, L1, L2, L3> Env4<L0, L1, L2, L3> => Env5<L0, L1, L2
 impl_leaf_binding!(impl <L0, L1, L2, L3, L4> Env5<L0, L1, L2, L3, L4> => Env6<L0, L1, L2, L3, L4, T>, Env6<L0, L1, L2, L3, L4, u32>, Slot5);
 impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5> Env6<L0, L1, L2, L3, L4, L5> => Env7<L0, L1, L2, L3, L4, L5, T>, Env7<L0, L1, L2, L3, L4, L5, u32>, Slot6);
 impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6> Env7<L0, L1, L2, L3, L4, L5, L6> => Env8<L0, L1, L2, L3, L4, L5, L6, T>, Env8<L0, L1, L2, L3, L4, L5, L6, u32>, Slot7);
+impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7> Env8<L0, L1, L2, L3, L4, L5, L6, L7> => Env9<L0, L1, L2, L3, L4, L5, L6, L7, T>, Env9<L0, L1, L2, L3, L4, L5, L6, L7, u32>, Slot8);
+impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8> Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8> => Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, T>, Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, u32>, Slot9);
+impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> => Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T>, Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, u32>, Slot10);
+impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> => Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, T>, Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, u32>, Slot11);
+impl_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11> Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11> => Env13<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, T>, Env13<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, u32>, Slot12);
 
 impl<Source, Env> BindSlots<Env> for Taken<Source>
 where
@@ -843,7 +864,7 @@ impl<Input, Output, Env> BindSlots<Env> for Reassociate<Input, Output>
 where
     Input: ReadExpression + BindSlots<Env>,
     Input::Item: StorageLayout,
-    Output: StorageLayout + WriteFrom<Input::Item> + 'static,
+    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
 {
     type Expr = ReassociateExpr<
         Input::Expr,
@@ -892,6 +913,31 @@ impl<L0, L1, L2, L3, L4, L5, L6> SlotEnvironment for Env7<L0, L1, L2, L3, L4, L5
 }
 impl<L0, L1, L2, L3, L4, L5, L6, L7> SlotEnvironment for Env8<L0, L1, L2, L3, L4, L5, L6, L7> {
     type Arity = A8;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8> SlotEnvironment
+    for Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8>
+{
+    type Arity = A9;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> SlotEnvironment
+    for Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>
+{
+    type Arity = A10;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> SlotEnvironment
+    for Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>
+{
+    type Arity = A11;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11> SlotEnvironment
+    for Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>
+{
+    type Arity = A12;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12> SlotEnvironment
+    for Env13<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>
+{
+    type Arity = A13;
 }
 
 /// Connects a final slot environment to its arity-specific evaluator.
@@ -985,24 +1031,382 @@ where
     Expr: Eval8<Item, L0, L1, L2, L3, L4, L5, L6, L7>,
 {
 }
+impl<Expr, Item, L0, L1, L2, L3, L4, L5, L6, L7, L8> EvalEnvironment<Expr, Item>
+    for Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8>
+where
+    Item: CubeType,
+    L0: MStorageElement,
+    L1: MStorageElement,
+    L2: MStorageElement,
+    L3: MStorageElement,
+    L4: MStorageElement,
+    L5: MStorageElement,
+    L6: MStorageElement,
+    L7: MStorageElement,
+    L8: MStorageElement,
+    Expr: Eval9<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8>,
+{
+}
+impl<Expr, Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> EvalEnvironment<Expr, Item>
+    for Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>
+where
+    Item: CubeType,
+    L0: MStorageElement,
+    L1: MStorageElement,
+    L2: MStorageElement,
+    L3: MStorageElement,
+    L4: MStorageElement,
+    L5: MStorageElement,
+    L6: MStorageElement,
+    L7: MStorageElement,
+    L8: MStorageElement,
+    L9: MStorageElement,
+    Expr: Eval10<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>,
+{
+}
+impl<Expr, Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> EvalEnvironment<Expr, Item>
+    for Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>
+where
+    Item: CubeType,
+    L0: MStorageElement,
+    L1: MStorageElement,
+    L2: MStorageElement,
+    L3: MStorageElement,
+    L4: MStorageElement,
+    L5: MStorageElement,
+    L6: MStorageElement,
+    L7: MStorageElement,
+    L8: MStorageElement,
+    L9: MStorageElement,
+    L10: MStorageElement,
+    Expr: Eval11<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>,
+{
+}
+impl<Expr, Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11> EvalEnvironment<Expr, Item>
+    for Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>
+where
+    Item: CubeType,
+    L0: MStorageElement,
+    L1: MStorageElement,
+    L2: MStorageElement,
+    L3: MStorageElement,
+    L4: MStorageElement,
+    L5: MStorageElement,
+    L6: MStorageElement,
+    L7: MStorageElement,
+    L8: MStorageElement,
+    L9: MStorageElement,
+    L10: MStorageElement,
+    L11: MStorageElement,
+    Expr: Eval12<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>,
+{
+}
+impl<Expr, Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12> EvalEnvironment<Expr, Item>
+    for Env13<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>
+where
+    Item: CubeType,
+    L0: MStorageElement,
+    L1: MStorageElement,
+    L2: MStorageElement,
+    L3: MStorageElement,
+    L4: MStorageElement,
+    L5: MStorageElement,
+    L6: MStorageElement,
+    L7: MStorageElement,
+    L8: MStorageElement,
+    L9: MStorageElement,
+    L10: MStorageElement,
+    L11: MStorageElement,
+    L12: MStorageElement,
+    Expr: Eval13<Item, L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>,
+{
+}
+
+/// Pads an actual read environment to the fixed thirteen-buffer kernel ABI.
+/// Unused slots are typed as `u32`; device expressions never reference them.
+#[doc(hidden)]
+pub trait PaddedReadSlots: SlotEnvironment {
+    type L0: MStorageElement;
+    type L1: MStorageElement;
+    type L2: MStorageElement;
+    type L3: MStorageElement;
+    type L4: MStorageElement;
+    type L5: MStorageElement;
+    type L6: MStorageElement;
+    type L7: MStorageElement;
+    type L8: MStorageElement;
+    type L9: MStorageElement;
+    type L10: MStorageElement;
+    type L11: MStorageElement;
+    type L12: MStorageElement;
+}
+
+#[doc(hidden)]
+pub type KernelReadSlots<Slots> = Env13<
+    <Slots as PaddedReadSlots>::L0,
+    <Slots as PaddedReadSlots>::L1,
+    <Slots as PaddedReadSlots>::L2,
+    <Slots as PaddedReadSlots>::L3,
+    <Slots as PaddedReadSlots>::L4,
+    <Slots as PaddedReadSlots>::L5,
+    <Slots as PaddedReadSlots>::L6,
+    <Slots as PaddedReadSlots>::L7,
+    <Slots as PaddedReadSlots>::L8,
+    <Slots as PaddedReadSlots>::L9,
+    <Slots as PaddedReadSlots>::L10,
+    <Slots as PaddedReadSlots>::L11,
+    <Slots as PaddedReadSlots>::L12,
+>;
+
+/// Erases an expression's physical read arity behind the fixed thirteen-slot ABI.
+/// The wrapped device expression still evaluates only its real leaves.
+#[doc(hidden)]
+#[derive(Clone)]
+pub struct FixedRead<Input>(pub Input);
+
+impl<Input> FixedRead<Input> {
+    pub fn new(input: Input) -> Self {
+        Self(input)
+    }
+}
+
+impl<Input> ReadExpression for FixedRead<Input>
+where
+    Input: LowerReadExpression,
+{
+    type Item = Input::Item;
+    type ReadArity = A13;
+}
+
+impl<Input> BindSlots<Env0> for FixedRead<Input>
+where
+    Input: LowerReadExpression,
+{
+    type Expr = Input::DeviceExpr;
+    type NextEnv = KernelReadSlots<Input::Slots>;
+}
+
+impl<R, Input> crate::reduce::StageRead<R, Env0> for FixedRead<Input>
+where
+    R: cubecl::prelude::Runtime,
+    Input: LowerReadExpression + crate::reduce::StageRead<R, Env0>,
+{
+    fn logical_len(&self) -> Result<usize, crate::Error> {
+        crate::reduce::StageRead::logical_len(&self.0)
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut crate::reduce::StagedBindings,
+    ) -> Result<(), crate::Error> {
+        crate::reduce::StageRead::stage_at(&self.0, client, owner, bindings)?;
+        bindings.pad_to_thirteen(client);
+        Ok(())
+    }
+}
+
+/// Reassociates a canonical storage item to its semantic item while erasing
+/// the physical input arity behind the fixed thirteen-slot kernel ABI.
+///
+/// Keeping both operations at this boundary avoids asking the type solver to
+/// reconstruct the canonical read arity through the reassociation wrapper.
+#[doc(hidden)]
+pub struct FixedReassociate<Input, Output> {
+    input: Input,
+    _output: PhantomData<fn() -> Output>,
+}
+
+impl<Input: Clone, Output> Clone for FixedReassociate<Input, Output> {
+    fn clone(&self) -> Self {
+        Self::new(self.input.clone())
+    }
+}
+
+impl<Input, Output> FixedReassociate<Input, Output> {
+    pub fn new(input: Input) -> Self {
+        Self {
+            input,
+            _output: PhantomData,
+        }
+    }
+}
+
+impl<Input, Output> ReadExpression for FixedReassociate<Input, Output>
+where
+    Input: LowerReadExpression,
+    Input::Item: StorageLayout,
+    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
+{
+    type Item = Output;
+    type ReadArity = A13;
+}
+
+impl<Input, Output> BindSlots<Env0> for FixedReassociate<Input, Output>
+where
+    Input: LowerReadExpression,
+    Input::Item: StorageLayout,
+    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
+{
+    type Expr = ReassociateExpr<
+        Input::DeviceExpr,
+        Input::Item,
+        Output,
+        <Input::Item as StorageLayout>::DeviceLayout,
+        <Output as StorageLayout>::DeviceLayout,
+    >;
+    type NextEnv = KernelReadSlots<Input::Slots>;
+}
+
+impl<R, Input, Output> crate::reduce::StageRead<R, Env0> for FixedReassociate<Input, Output>
+where
+    R: cubecl::prelude::Runtime,
+    Input: LowerReadExpression + crate::reduce::StageRead<R, Env0>,
+    Input::Item: StorageLayout,
+    Output: StorageLayout + WritableFrom<Input::Item> + 'static,
+{
+    fn logical_len(&self) -> Result<usize, crate::Error> {
+        crate::reduce::StageRead::logical_len(&self.input)
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut crate::reduce::StagedBindings,
+    ) -> Result<(), crate::Error> {
+        crate::reduce::StageRead::stage_at(&self.input, client, owner, bindings)?;
+        bindings.pad_to_thirteen(client);
+        Ok(())
+    }
+}
+
+macro_rules! impl_padded_read_slots {
+    ($env:ty; [$($actual:ident),+]; [$($padded:ty),+]) => {
+        impl<$($actual: MStorageElement),+> PaddedReadSlots for $env {
+            type L0 = impl_padded_read_slots!(@at 0; $($padded),+);
+            type L1 = impl_padded_read_slots!(@at 1; $($padded),+);
+            type L2 = impl_padded_read_slots!(@at 2; $($padded),+);
+            type L3 = impl_padded_read_slots!(@at 3; $($padded),+);
+            type L4 = impl_padded_read_slots!(@at 4; $($padded),+);
+            type L5 = impl_padded_read_slots!(@at 5; $($padded),+);
+            type L6 = impl_padded_read_slots!(@at 6; $($padded),+);
+            type L7 = impl_padded_read_slots!(@at 7; $($padded),+);
+            type L8 = impl_padded_read_slots!(@at 8; $($padded),+);
+            type L9 = impl_padded_read_slots!(@at 9; $($padded),+);
+            type L10 = impl_padded_read_slots!(@at 10; $($padded),+);
+            type L11 = impl_padded_read_slots!(@at 11; $($padded),+);
+            type L12 = impl_padded_read_slots!(@at 12; $($padded),+);
+        }
+    };
+    (@at 0; $head:ty $(, $tail:ty)*) => { $head };
+    (@at 1; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 0; $($tail),+) };
+    (@at 2; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 1; $($tail),+) };
+    (@at 3; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 2; $($tail),+) };
+    (@at 4; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 3; $($tail),+) };
+    (@at 5; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 4; $($tail),+) };
+    (@at 6; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 5; $($tail),+) };
+    (@at 7; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 6; $($tail),+) };
+    (@at 8; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 7; $($tail),+) };
+    (@at 9; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 8; $($tail),+) };
+    (@at 10; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 9; $($tail),+) };
+    (@at 11; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 10; $($tail),+) };
+    (@at 12; $head:ty, $($tail:ty),+) => { impl_padded_read_slots!(@at 11; $($tail),+) };
+}
+
+impl_padded_read_slots!(Env1<L0>; [L0]; [L0,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env2<L0,L1>; [L0,L1]; [L0,L1,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env3<L0,L1,L2>; [L0,L1,L2]; [L0,L1,L2,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env4<L0,L1,L2,L3>; [L0,L1,L2,L3]; [L0,L1,L2,L3,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env5<L0,L1,L2,L3,L4>; [L0,L1,L2,L3,L4]; [L0,L1,L2,L3,L4,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env6<L0,L1,L2,L3,L4,L5>; [L0,L1,L2,L3,L4,L5]; [L0,L1,L2,L3,L4,L5,u32,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env7<L0,L1,L2,L3,L4,L5,L6>; [L0,L1,L2,L3,L4,L5,L6]; [L0,L1,L2,L3,L4,L5,L6,u32,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0,L1,L2,L3,L4,L5,L6,L7]; [L0,L1,L2,L3,L4,L5,L6,L7,u32,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env9<L0,L1,L2,L3,L4,L5,L6,L7,L8>; [L0,L1,L2,L3,L4,L5,L6,L7,L8]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,u32,u32,u32,u32]);
+impl_padded_read_slots!(Env10<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,u32,u32,u32]);
+impl_padded_read_slots!(Env11<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,u32,u32]);
+impl_padded_read_slots!(Env12<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,u32]);
+impl_padded_read_slots!(Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12]);
+
+/// Proves that an expression can be evaluated through the fixed read ABI.
+#[doc(hidden)]
+pub trait FixedEvalEnvironment<Expr, Item: CubeType>: PaddedReadSlots {}
+
+macro_rules! impl_fixed_eval_environment {
+    ($env:ty; [$($actual:ident),+]; [$($padded:ty),+]) => {
+        impl<Expr, Item, $($actual),+> FixedEvalEnvironment<Expr, Item> for $env
+        where
+            Item: CubeType,
+            $($actual: MStorageElement,)+
+            Expr: Eval13<Item, $($padded),+>,
+        {}
+    };
+}
+
+impl_fixed_eval_environment!(Env1<L0>; [L0]; [L0,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env2<L0,L1>; [L0,L1]; [L0,L1,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env3<L0,L1,L2>; [L0,L1,L2]; [L0,L1,L2,u32,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env4<L0,L1,L2,L3>; [L0,L1,L2,L3]; [L0,L1,L2,L3,u32,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env5<L0,L1,L2,L3,L4>; [L0,L1,L2,L3,L4]; [L0,L1,L2,L3,L4,u32,u32,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env6<L0,L1,L2,L3,L4,L5>; [L0,L1,L2,L3,L4,L5]; [L0,L1,L2,L3,L4,L5,u32,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env7<L0,L1,L2,L3,L4,L5,L6>; [L0,L1,L2,L3,L4,L5,L6]; [L0,L1,L2,L3,L4,L5,L6,u32,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0,L1,L2,L3,L4,L5,L6,L7]; [L0,L1,L2,L3,L4,L5,L6,L7,u32,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env9<L0,L1,L2,L3,L4,L5,L6,L7,L8>; [L0,L1,L2,L3,L4,L5,L6,L7,L8]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,u32,u32,u32,u32]);
+impl_fixed_eval_environment!(Env10<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,u32,u32,u32]);
+impl_fixed_eval_environment!(Env11<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,u32,u32]);
+impl_fixed_eval_environment!(Env12<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,u32]);
+impl_fixed_eval_environment!(Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12]; [L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12]);
 
 /// Fully bound form of a read expression.
 ///
 /// This is the bridge from recursively computed [`ReadArity`] to the matching
 /// `EvalN` trait and ordered leaf types.
 #[doc(hidden)]
-pub trait LowerReadExpression: ReadExpression {
-    type DeviceExpr: DeviceExpr<Self::Item>;
-    type Slots: SlotEnvironment<Arity = Self::ReadArity>
-        + EvalEnvironment<Self::DeviceExpr, Self::Item>;
+pub trait LowerReadExpression:
+    ReadExpression + BindSlots<Env0, NextEnv = Self::Slots, Expr = Self::DeviceExpr>
+{
+    type Slots: SlotEnvironment<Arity = Self::ReadArity> + PaddedReadSlots;
+    type DeviceExpr: DeviceExpr<Self::Item>
+        + Eval13<
+            Self::Item,
+            <Self::Slots as PaddedReadSlots>::L0,
+            <Self::Slots as PaddedReadSlots>::L1,
+            <Self::Slots as PaddedReadSlots>::L2,
+            <Self::Slots as PaddedReadSlots>::L3,
+            <Self::Slots as PaddedReadSlots>::L4,
+            <Self::Slots as PaddedReadSlots>::L5,
+            <Self::Slots as PaddedReadSlots>::L6,
+            <Self::Slots as PaddedReadSlots>::L7,
+            <Self::Slots as PaddedReadSlots>::L8,
+            <Self::Slots as PaddedReadSlots>::L9,
+            <Self::Slots as PaddedReadSlots>::L10,
+            <Self::Slots as PaddedReadSlots>::L11,
+            <Self::Slots as PaddedReadSlots>::L12,
+        >;
 }
 
 impl<Input> LowerReadExpression for Input
 where
     Input: ReadExpression + BindSlots<Env0>,
-    Input::Expr: DeviceExpr<<Input as ReadExpression>::Item>,
-    Input::NextEnv: SlotEnvironment<Arity = <Input as ReadExpression>::ReadArity>
-        + EvalEnvironment<Input::Expr, <Input as ReadExpression>::Item>,
+    Input::NextEnv: SlotEnvironment<Arity = <Input as ReadExpression>::ReadArity> + PaddedReadSlots,
+    Input::Expr: DeviceExpr<<Input as ReadExpression>::Item>
+        + Eval13<
+            <Input as ReadExpression>::Item,
+            <Input::NextEnv as PaddedReadSlots>::L0,
+            <Input::NextEnv as PaddedReadSlots>::L1,
+            <Input::NextEnv as PaddedReadSlots>::L2,
+            <Input::NextEnv as PaddedReadSlots>::L3,
+            <Input::NextEnv as PaddedReadSlots>::L4,
+            <Input::NextEnv as PaddedReadSlots>::L5,
+            <Input::NextEnv as PaddedReadSlots>::L6,
+            <Input::NextEnv as PaddedReadSlots>::L7,
+            <Input::NextEnv as PaddedReadSlots>::L8,
+            <Input::NextEnv as PaddedReadSlots>::L9,
+            <Input::NextEnv as PaddedReadSlots>::L10,
+            <Input::NextEnv as PaddedReadSlots>::L11,
+            <Input::NextEnv as PaddedReadSlots>::L12,
+        >,
 {
     type DeviceExpr = Input::Expr;
     type Slots = Input::NextEnv;
@@ -1015,7 +1419,7 @@ mod tests {
         eval::*,
         op::{Identity, UnaryOp},
     };
-    use static_assertions::{assert_impl_all, assert_not_impl_any};
+    use static_assertions::assert_impl_all;
 
     type Seven = Zip<
         Column<u8>,
@@ -1026,7 +1430,11 @@ mod tests {
     >;
     type SevenItem = (u8, (u16, (u32, (u64, (i8, (i16, i32))))));
     type Lazified = Transform<Permute<Seven, Counting>, Identity>;
-    type Unsupported9 = Transform<Permute<Lazified, Counting>, Identity>;
+    type Nine = Transform<Permute<Lazified, Counting>, Identity>;
+    type Ten = Transform<Permute<Nine, Counting>, Identity>;
+    type Eleven = Transform<Permute<Ten, Counting>, Identity>;
+    type Twelve = Transform<Permute<Eleven, Counting>, Identity>;
+    type Thirteen = Transform<Permute<Twelve, Counting>, Identity>;
     type One = Column<u8>;
     type Two = Zip<Column<u8>, Column<u16>>;
     type Three = Zip<Two, Column<u32>>;
@@ -1261,6 +1669,10 @@ mod tests {
     assert_impl_all!(Six: ReadExpression, LowerReadExpression);
     assert_impl_all!(Seven: ReadExpression, LowerReadExpression);
     assert_impl_all!(Lazified: ReadExpression, LowerReadExpression);
+    assert_impl_all!(Nine: ReadExpression, LowerReadExpression);
+    assert_impl_all!(Ten: ReadExpression, LowerReadExpression);
+    assert_impl_all!(Eleven: ReadExpression, LowerReadExpression);
+    assert_impl_all!(Twelve: ReadExpression, LowerReadExpression);
+    assert_impl_all!(Thirteen: ReadExpression, LowerReadExpression);
     assert_impl_all!(Transform<Zip<Column<u32>, Column<u32>>, AddPair>: ReadExpression, LowerReadExpression);
-    assert_not_impl_any!(Unsupported9: ReadExpression, LowerReadExpression);
 }

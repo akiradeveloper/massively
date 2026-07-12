@@ -6,7 +6,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Error, Executor, MAlloc, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    Allocable, Canonicalizable, Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec,
+    Materializable, WritableFrom,
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
@@ -118,7 +119,10 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: MAlloc<R> + MCanonical<R, Canonical = Map::Output> + Copy,
+    Map::Output: Allocable<R>
+        + Canonicalizable<Canonical = Map::Output>
+        + Materializable<R, Materialized = Map::Output>
+        + Copy,
 {
     /// Returns one mapped item per traversed edge.
     pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
@@ -131,7 +135,7 @@ where
     fn emit_into<Output>(self, exec: &Executor<R>, output: Output) -> Result<(), Error>
     where
         Output: MIterMut<R>,
-        Output::Item: WriteFrom<Map::Output>,
+        Output::Item: WritableFrom<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         crate::vector::transform_into(exec, input.slice(..), self.map, output)
@@ -162,12 +166,12 @@ where
     ) -> Result<(), Error>
     where
         Output: MIterMut<R>,
-        Output::Item: WriteFrom<Map::Output>,
+        Output::Item: WritableFrom<Map::Output>,
         ReduceOp: ReductionOp<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         let mapped =
-            <Map::Output as MAlloc<R>>::alloc(exec, self.traversal.control.output_len as usize);
+            <Map::Output as Allocable<R>>::alloc(exec, self.traversal.control.output_len as usize);
         crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
         ForEachSegment(Reduce(reduce, init)).run_into(
             exec,
@@ -208,7 +212,7 @@ where
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         let mapped =
-            <Map::Output as MAlloc<R>>::alloc(exec, self.traversal.control.output_len as usize);
+            <Map::Output as Allocable<R>>::alloc(exec, self.traversal.control.output_len as usize);
         crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
         crate::vector::scatter_reduce(
             exec,
@@ -254,6 +258,7 @@ where
         Map: UnaryOp<Expr::Item, Output = MIndex>,
         State: MIter<R, Item = MIndex>,
         StateOutput: MIterMut<R, Item = MIndex>,
+        MIndex: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, MIndex>>,
     {
         let capacity = self.traversal.control.output_len as usize;
         let mut next = exec.alloc_mvec::<MIndex>(capacity);
@@ -282,6 +287,7 @@ where
         State: MIter<R, Item = MIndex>,
         StateOutput: MIterMut<R, Item = MIndex>,
         Next: MIterMut<R, Item = MIndex>,
+        MIndex: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, MIndex>>,
     {
         let edge_count = self.traversal.control.output_len;
         if edge_count == 0 {

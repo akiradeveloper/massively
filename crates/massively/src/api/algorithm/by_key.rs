@@ -1,7 +1,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
     op::BinaryPredicateOp, op::ReductionOp,
 };
 
@@ -37,23 +37,23 @@ use crate::{
 /// assert_eq!(exec.to_host(&key_output).unwrap(), vec![1, 2, 3]);
 /// assert_eq!(exec.to_host(&value_output).unwrap(), vec![10, 20, 30]);
 /// ```
-pub fn sort_by_key<R, Keys, Values, Less>(
+pub fn sort_by_key<R, Keys, Values, KeyItem, ValueItem, Less>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     less: Less,
-) -> Result<(MVec<R, Keys::Item>, MVec<R, Values::Item>), Error>
+) -> Result<(MVec<R, KeyItem>, MVec<R, ValueItem>), Error>
 where
     R: Runtime,
-    Keys: MIter<R>,
-    Keys::Item: MCanonical<R>,
-    Values: MIter<R>,
-    Values::Item: MCanonical<R>,
-    Less: BinaryPredicateOp<Keys::Item>,
+    Keys: MIter<R, Item = KeyItem>,
+    KeyItem: Materializable<R>,
+    Values: MIter<R, Item = ValueItem>,
+    ValueItem: Materializable<R>,
+    Less: BinaryPredicateOp<KeyItem>,
 {
     let len = keys.len()? as usize;
-    let key_output = exec.alloc_mvec::<Keys::Item>(len);
-    let value_output = exec.alloc_mvec::<Values::Item>(len);
+    let key_output = exec.alloc_mvec::<KeyItem>(len);
+    let value_output = exec.alloc_mvec::<ValueItem>(len);
     sort_by_key_into(
         exec,
         keys,
@@ -81,11 +81,33 @@ where
     Values: MIter<R>,
     Less: BinaryPredicateOp<Keys::Item>,
     KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WriteFrom<Keys::Item>,
+    KeyOutput::Item: WritableFrom<Keys::Item>,
     ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WriteFrom<Values::Item>,
+    ValueOutput::Item: WritableFrom<Values::Item>,
 {
-    keys.sort_by_key_with(exec, values, less, key_output, value_output)
+    let key_len = keys.len()?;
+    let value_len = values.len()?;
+    if key_len != value_len {
+        return Err(Error::LengthMismatch {
+            left: key_len as usize,
+            right: value_len as usize,
+        });
+    }
+    let keys = crate::api::iter::lower::<R, _>(keys);
+    let values = crate::api::iter::lower::<R, _>(values);
+    let permutation = crate::ordering::sort_control_with(exec, keys.clone(), less)?;
+    crate::indexed::apply_permutation(
+        exec,
+        keys,
+        permutation.column(),
+        key_output.lower_output_from::<Keys::Item>(),
+    )?;
+    crate::indexed::apply_permutation(
+        exec,
+        values,
+        permutation.column(),
+        value_output.lower_output_from::<Values::Item>(),
+    )
 }
 
 /// Computes an inclusive scan within each adjacent equal-key segment.
@@ -139,7 +161,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: MCanonical<R>,
+    Values::Item: Materializable<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
@@ -166,9 +188,16 @@ where
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
 {
-    keys.scan_by_key_with(exec, values, equal, None, op, output)
+    crate::core::by_key::inclusive_scan_by_key_lowered(
+        exec,
+        crate::api::iter::lower::<R, _>(keys),
+        crate::api::iter::lower::<R, _>(values),
+        equal,
+        op,
+        output.lower_output_from::<Values::Item>(),
+    )
 }
 
 /// Computes an exclusive scan within each adjacent equal-key segment.
@@ -224,7 +253,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
-    Values::Item: MCanonical<R>,
+    Values::Item: Materializable<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
 {
@@ -252,9 +281,17 @@ where
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
 {
-    keys.scan_by_key_with(exec, values, equal, Some(init), op, output)
+    crate::core::by_key::exclusive_scan_by_key_lowered(
+        exec,
+        crate::api::iter::lower::<R, _>(keys),
+        crate::api::iter::lower::<R, _>(values),
+        equal,
+        init,
+        op,
+        output.lower_output_from::<Values::Item>(),
+    )
 }
 
 /// Reduces each adjacent equal-key segment.
@@ -299,26 +336,26 @@ where
 /// assert_eq!(exec.to_host(&key_output).unwrap(), vec![1, 2]);
 /// assert_eq!(exec.to_host(&value_output).unwrap(), vec![30, 70]);
 /// ```
-pub fn reduce_by_key<R, Keys, Values, Equal, Op>(
+pub fn reduce_by_key<R, Keys, Values, KeyItem, ValueItem, Equal, Op>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     equal: Equal,
-    init: Values::Item,
+    init: ValueItem,
     op: Op,
-) -> Result<(MVec<R, Keys::Item>, MVec<R, Values::Item>), Error>
+) -> Result<(MVec<R, KeyItem>, MVec<R, ValueItem>), Error>
 where
     R: Runtime,
-    Keys: MIter<R>,
-    Keys::Item: MCanonical<R>,
-    Values: MIter<R>,
-    Values::Item: MCanonical<R>,
-    Equal: BinaryPredicateOp<Keys::Item>,
-    Op: ReductionOp<Values::Item>,
+    Keys: MIter<R, Item = KeyItem>,
+    KeyItem: Materializable<R>,
+    Values: MIter<R, Item = ValueItem>,
+    ValueItem: Materializable<R>,
+    Equal: BinaryPredicateOp<KeyItem>,
+    Op: ReductionOp<ValueItem>,
 {
     let capacity = keys.len()? as usize;
-    let mut key_output = exec.alloc_mvec::<Keys::Item>(capacity);
-    let mut value_output = exec.alloc_mvec::<Values::Item>(capacity);
+    let mut key_output = exec.alloc_mvec::<KeyItem>(capacity);
+    let mut value_output = exec.alloc_mvec::<ValueItem>(capacity);
     let len = reduce_by_key_into(
         exec,
         keys,
@@ -353,11 +390,20 @@ where
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
     KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WriteFrom<Keys::Item>,
+    KeyOutput::Item: WritableFrom<Keys::Item>,
     ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WriteFrom<Values::Item>,
+    ValueOutput::Item: WritableFrom<Values::Item>,
 {
-    keys.reduce_by_key_with(exec, values, equal, init, op, key_output, value_output)
+    crate::core::by_key::reduce_by_key_lowered(
+        exec,
+        crate::api::iter::lower::<R, _>(keys),
+        crate::api::iter::lower::<R, _>(values),
+        equal,
+        init,
+        op,
+        key_output.lower_output_from::<Keys::Item>(),
+        value_output.lower_output_from::<Values::Item>(),
+    )
 }
 
 /// Keeps the first key and value of every adjacent equal-key run.
@@ -398,23 +444,23 @@ where
 ///     vec![10, 20, 30],
 /// );
 /// ```
-pub fn unique_by_key<R, Keys, Values, Equal>(
+pub fn unique_by_key<R, Keys, Values, KeyItem, ValueItem, Equal>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     equal: Equal,
-) -> Result<(MVec<R, Keys::Item>, MVec<R, Values::Item>), Error>
+) -> Result<(MVec<R, KeyItem>, MVec<R, ValueItem>), Error>
 where
     R: Runtime,
-    Keys: MIter<R>,
-    Keys::Item: MCanonical<R>,
-    Values: MIter<R>,
-    Values::Item: MCanonical<R>,
-    Equal: BinaryPredicateOp<Keys::Item>,
+    Keys: MIter<R, Item = KeyItem>,
+    KeyItem: Materializable<R>,
+    Values: MIter<R, Item = ValueItem>,
+    ValueItem: Materializable<R>,
+    Equal: BinaryPredicateOp<KeyItem>,
 {
     let capacity = keys.len()? as usize;
-    let mut key_output = exec.alloc_mvec::<Keys::Item>(capacity);
-    let mut value_output = exec.alloc_mvec::<Values::Item>(capacity);
+    let mut key_output = exec.alloc_mvec::<KeyItem>(capacity);
+    let mut value_output = exec.alloc_mvec::<ValueItem>(capacity);
     let len = unique_by_key_into(
         exec,
         keys,
@@ -444,9 +490,16 @@ where
     Values: MIter<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WriteFrom<Keys::Item>,
+    KeyOutput::Item: WritableFrom<Keys::Item>,
     ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WriteFrom<Values::Item>,
+    ValueOutput::Item: WritableFrom<Values::Item>,
 {
-    keys.unique_by_key_with(exec, values, equal, key_output, value_output)
+    crate::core::by_key::unique_by_key(
+        exec,
+        crate::api::iter::lower::<R, _>(keys),
+        crate::api::iter::lower::<R, _>(values),
+        equal,
+        key_output.lower_output_from::<Keys::Item>(),
+        value_output.lower_output_from::<Values::Item>(),
+    )
 }

@@ -3,20 +3,15 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, CanonicalAlloc, CanonicalStorage, Dispatch, Error, Executor,
-    MStorageElement, Permute, ReadExpression, ReverseCounting, S1, S2, S3, S4, S5, S6, S7,
-    StorageLayout, WriteFrom,
+    CanonicalAlloc, CanonicalStorage, Dispatch, Error, Executor, Permute, ReadExpression,
+    ReverseCounting, StorageLayout,
     allocation::NormalizeInput,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
-    masked::MaskedCopyInput,
-    output::{LowerOutputExpression, OutputBindings, OutputExpression, StageOutput},
-    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression},
-    reduce::{StageRead, StagedBindings},
-    storage::{
-        Decompose, Last, More, StoreLeaves1, StoreLeaves1Expand, StoreLeaves2, StoreLeaves2Expand,
-        StoreLeaves3, StoreLeaves3Expand, StoreLeaves4, StoreLeaves4Expand, StoreLeaves5,
-        StoreLeaves5Expand, StoreLeaves6, StoreLeaves6Expand, StoreLeaves7, StoreLeaves7Expand,
+    masked::{MaskedCopyDispatch, MaskedCopyInput},
+    output::{
+        KernelOutputSlots, LowerOutputExpression, OutputExpression, PaddedOutputSlots, StageOutput,
     },
+    read::{Env0, KernelReadSlots, LowerReadExpression},
+    reduce::StageRead,
     transform::{MaterializeDispatch, materialize},
 };
 
@@ -29,24 +24,27 @@ pub trait GatherInput<R: Runtime, Indices, Output>: ReadExpression + Sized {
 impl<R, Values, Indices, Output> GatherInput<R, Indices, Output> for Values
 where
     R: Runtime,
-    Values: ReadExpression,
-    Values::Item: StorageLayout,
-    Indices: ReadExpression<Item = u32>,
-    Permute<Values, Indices>:
-        ReadExpression<Item = Values::Item> + LowerReadExpression + StageRead<R, Env0>,
+    Values: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Indices: crate::selection::FlagInput<R>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: crate::WriteFrom<Values::Item>,
-    Dispatch<<Permute<Values, Indices> as ReadExpression>::ReadArity, Output::StorageArity>:
-        MaterializeDispatch<
-                R,
-                Permute<Values, Indices>,
-                Output,
-                <Permute<Values, Indices> as LowerReadExpression>::Slots,
-                Output::Slots,
-            >,
+    Output::Slots: PaddedOutputSlots,
+    Dispatch<crate::A13, crate::S12>: MaskedCopyDispatch<
+            R,
+            Values,
+            Output,
+            KernelReadSlots<Values::Slots>,
+            KernelOutputSlots<Output::Slots>,
+        >,
 {
     fn gather(self, exec: &Executor<R>, indices: Indices, output: Output) -> Result<(), Error> {
-        materialize(exec, Permute::new(self, indices), output)
+        let indices = indices.materialize_flags(exec)?;
+        <Dispatch<crate::A13, crate::S12> as MaskedCopyDispatch<
+            R,
+            Values,
+            Output,
+            KernelReadSlots<Values::Slots>,
+            KernelOutputSlots<Output::Slots>,
+        >>::run(exec, &self, Some(&indices), true, None, &output)
     }
 }
 
@@ -63,108 +61,158 @@ where
     values.gather(exec, indices, output)
 }
 
-const PERMUTATION_BLOCK_SIZE: u32 = 256;
+/// Fixed-ABI masked gather used by the public iterator facade.
+pub(crate) fn gather_where_direct<R, Values, Indices, Stencil, Output>(
+    exec: &Executor<R>,
+    values: Values,
+    indices: Indices,
+    stencil: Stencil,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Values: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Indices: crate::selection::FlagInput<R>,
+    Stencil: crate::selection::FlagInput<R>,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Slots: PaddedOutputSlots,
+    Dispatch<crate::A13, crate::S12>: MaskedCopyDispatch<
+            R,
+            Values,
+            Output,
+            KernelReadSlots<Values::Slots>,
+            KernelOutputSlots<Output::Slots>,
+        >,
+{
+    let indices = indices.materialize_flags(exec)?;
+    let flags = stencil.materialize_flags(exec)?;
+    <Dispatch<crate::A13, crate::S12> as MaskedCopyDispatch<
+        R,
+        Values,
+        Output,
+        KernelReadSlots<Values::Slots>,
+        KernelOutputSlots<Output::Slots>,
+    >>::run(exec, &values, Some(&indices), true, Some(&flags), &output)
+}
 
-macro_rules! define_permutation_kernel {
-    (
-        $name:ident, $eval:ident, $method:ident;
-        [$( $leaf:ident : $slot:ident ),+];
-        [$( $output:ident : $out:ident ),+];
-        $leaves:ty
-    ) => {
+#[cfg(any())]
+mod direct_permutation {
+    use super::*;
+
+    const PERMUTATION_BLOCK_SIZE: u32 = 256;
+
+    macro_rules! define_padded_permutation_kernel {
+    ($name:ident, $eval:ident, $method:ident; [$( $leaf:ident : $slot:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Source: CubeType + Send + Sync + 'static,
-            Target: WriteFrom<Source> + Send + Sync + 'static,
+            Target: WritableFrom<Source> + Send + Sync + 'static,
             $( $leaf: CubePrimitive, )+
-            $( $output: CubePrimitive, )+
+            O0: CubePrimitive,
+            O1: CubePrimitive,
+            O2: CubePrimitive,
+            O3: CubePrimitive,
+            O4: CubePrimitive,
+            O5: CubePrimitive,
+            O6: CubePrimitive,
+            O7: CubePrimitive,
+            O8: CubePrimitive,
+            O9: CubePrimitive,
+            O10: CubePrimitive,
+            O11: CubePrimitive,
+            Leaves: CubeType + Send + Sync + 'static
+                + StorePadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >,
             Expr: $eval<Source, $( $leaf ),+>,
-            Layout: Decompose<Target, Leaves = $leaves>,
+            Layout: Decompose<Target, Leaves = Leaves>,
         >(
             $( $slot: &[$leaf], )+
             read_offsets: &[u32],
             indices: &[u32],
             index_offset: &[u32],
             len: &[u32],
-            $( $out: &mut [$output], )+
+            out0: &mut [O0],
+            out1: &mut [O1],
+            out2: &mut [O2],
+            out3: &mut [O3],
+            out4: &mut [O4],
+            out5: &mut [O5],
+            out6: &mut [O6],
+            out7: &mut [O7],
+            out8: &mut [O8],
+            out9: &mut [O9],
+            out10: &mut [O10],
+            out11: &mut [O11],
             write_offsets: &[u32],
         ) {
             let index = ABSOLUTE_POS as usize;
             if index < len[0] as usize {
                 let source_index = indices[index_offset[0] as usize + index] as usize;
                 let source = Expr::$method($( $slot, )+ read_offsets, source_index);
-                Layout::decompose(Target::write_from(source)).store(
-                    $( $out, )+ write_offsets, index,
+                Layout::decompose(Target::write_from(source)).store_padded(
+                    out0, out1, out2, out3, out4, out5, out6, out7, out8, out9, out10, out11,
+                    write_offsets, index,
                 );
             }
         }
     };
 }
 
-macro_rules! define_permutation_kernels_for_eval {
-    (
-        $eval:ident, $method:ident;
-        [$( $leaf:ident : $slot:ident ),+];
-        [$k1:ident, $k2:ident, $k3:ident, $k4:ident, $k5:ident, $k6:ident, $k7:ident]
-    ) => {
-        define_permutation_kernel!($k1,$eval,$method; [$($leaf:$slot),+]; [O0:out0]; Last<O0>);
-        define_permutation_kernel!($k2,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1]; More<O0,Last<O1>>);
-        define_permutation_kernel!($k3,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2]; More<O0,More<O1,Last<O2>>>);
-        define_permutation_kernel!($k4,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3]; More<O0,More<O1,More<O2,Last<O3>>>>);
-        define_permutation_kernel!($k5,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4]; More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>);
-        define_permutation_kernel!($k6,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4,O5:out5]; More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>);
-        define_permutation_kernel!($k7,$eval,$method; [$($leaf:$slot),+]; [O0:out0,O1:out1,O2:out2,O3:out3,O4:out4,O5:out5,O6:out6]; More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>);
-    };
-}
+    define_padded_permutation_kernel!(permutation_a1, Eval1, eval1; [L0:slot0]);
+    define_padded_permutation_kernel!(permutation_a2, Eval2, eval2; [L0:slot0,L1:slot1]);
+    define_padded_permutation_kernel!(permutation_a3, Eval3, eval3; [L0:slot0,L1:slot1,L2:slot2]);
+    define_padded_permutation_kernel!(permutation_a4, Eval4, eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]);
+    define_padded_permutation_kernel!(permutation_a5, Eval5, eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]);
+    define_padded_permutation_kernel!(permutation_a6, Eval6, eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]);
+    define_padded_permutation_kernel!(permutation_a7, Eval7, eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]);
+    define_padded_permutation_kernel!(permutation_a8, Eval8, eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]);
+    define_padded_permutation_kernel!(permutation_a9, Eval9, eval9; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8]);
+    define_padded_permutation_kernel!(permutation_a10, Eval10, eval10; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9]);
+    define_padded_permutation_kernel!(permutation_a11, Eval11, eval11; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10]);
+    define_padded_permutation_kernel!(permutation_a12, Eval12, eval12; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11]);
+    define_padded_permutation_kernel!(permutation_a13, Eval13, eval13; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12]);
 
-define_permutation_kernels_for_eval!(Eval1,eval1; [L0:slot0]; [permutation_a1_s1,permutation_a1_s2,permutation_a1_s3,permutation_a1_s4,permutation_a1_s5,permutation_a1_s6,permutation_a1_s7]);
-define_permutation_kernels_for_eval!(Eval2,eval2; [L0:slot0,L1:slot1]; [permutation_a2_s1,permutation_a2_s2,permutation_a2_s3,permutation_a2_s4,permutation_a2_s5,permutation_a2_s6,permutation_a2_s7]);
-define_permutation_kernels_for_eval!(Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]; [permutation_a3_s1,permutation_a3_s2,permutation_a3_s3,permutation_a3_s4,permutation_a3_s5,permutation_a3_s6,permutation_a3_s7]);
-define_permutation_kernels_for_eval!(Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]; [permutation_a4_s1,permutation_a4_s2,permutation_a4_s3,permutation_a4_s4,permutation_a4_s5,permutation_a4_s6,permutation_a4_s7]);
-define_permutation_kernels_for_eval!(Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]; [permutation_a5_s1,permutation_a5_s2,permutation_a5_s3,permutation_a5_s4,permutation_a5_s5,permutation_a5_s6,permutation_a5_s7]);
-define_permutation_kernels_for_eval!(Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]; [permutation_a6_s1,permutation_a6_s2,permutation_a6_s3,permutation_a6_s4,permutation_a6_s5,permutation_a6_s6,permutation_a6_s7]);
-define_permutation_kernels_for_eval!(Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]; [permutation_a7_s1,permutation_a7_s2,permutation_a7_s3,permutation_a7_s4,permutation_a7_s5,permutation_a7_s6,permutation_a7_s7]);
-define_permutation_kernels_for_eval!(Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]; [permutation_a8_s1,permutation_a8_s2,permutation_a8_s3,permutation_a8_s4,permutation_a8_s5,permutation_a8_s6,permutation_a8_s7]);
+    #[doc(hidden)]
+    pub trait PermutationDispatch<R, Input, Output, ReadSlots, WriteSlots>
+    where
+        R: Runtime,
+    {
+        fn run(
+            exec: &Executor<R>,
+            input: &Input,
+            indices: &crate::Column<u32>,
+            output: &Output,
+        ) -> Result<(), Error>;
+    }
 
-#[doc(hidden)]
-pub trait PermutationDispatch<R, Input, Output, ReadSlots, WriteSlots>
-where
-    R: Runtime,
-{
-    fn run(
-        exec: &Executor<R>,
-        input: &Input,
-        indices: &crate::Column<u32>,
-        output: &Output,
-    ) -> Result<(), Error>;
-}
-
-macro_rules! impl_permutation_dispatch {
-    (
-        $arity:ty, $storage:ty, $eval:ident, $kernel:ident;
-        [$( $leaf:ident : $read_index:literal ),+], $read_env:ty;
-        [$( $output:ident : $write_index:literal ),+], $write_env:ty;
-        $leaves:ty
-    ) => {
-        impl<R, Input, Output, Source, $( $leaf, )+ $( $output, )+>
-            PermutationDispatch<R, Input, Output, $read_env, $write_env>
-            for Dispatch<$arity, $storage>
+    macro_rules! impl_padded_permutation_dispatch {
+    ($arity:ty, $eval:ident, $kernel:ident; [$( $leaf:ident : $read_index:literal ),+], $read_env:ty) => {
+        impl<R, Input, Output, Source, Leaves, WriteSlots, $( $leaf, )+>
+            PermutationDispatch<R, Input, Output, $read_env, WriteSlots>
+            for Dispatch<$arity, S12>
         where
             R: Runtime,
             $( $leaf: MStorageElement, )+
-            $( $output: MStorageElement, )+
             Source: StorageLayout + Send + Sync + 'static,
+            Leaves: CubeType + Send + Sync + 'static + StorePadded12<
+                O0 = WriteSlots::O0, O1 = WriteSlots::O1, O2 = WriteSlots::O2,
+                O3 = WriteSlots::O3, O4 = WriteSlots::O4, O5 = WriteSlots::O5,
+                O6 = WriteSlots::O6, O7 = WriteSlots::O7, O8 = WriteSlots::O8,
+                O9 = WriteSlots::O9, O10 = WriteSlots::O10, O11 = WriteSlots::O11,
+            >,
+            WriteSlots: PaddedOutputSlots,
             Input: ReadExpression<Item = Source>
                 + LowerReadExpression<Slots = $read_env>
                 + StageRead<R, Env0>,
             Input::DeviceExpr: $eval<Source, $( $leaf ),+>,
-            Output: OutputExpression<StorageArity = $storage>
-                + LowerOutputExpression<Slots = $write_env>
+            Output: OutputExpression
+                + LowerOutputExpression<Slots = WriteSlots>
                 + StageOutput<R, Env0>,
-            Output::Item: StorageLayout<StorageArity = $storage, StorageLeaves = $leaves>
-                + WriteFrom<Source>,
+            Output::Item: StorageLayout<StorageLeaves = Leaves> + WritableFrom<Source>,
             <Output::Item as StorageLayout>::DeviceLayout:
-                Decompose<Output::Item, Leaves = $leaves>,
+                Decompose<Output::Item, Leaves = Leaves>,
         {
             fn run(
                 exec: &Executor<R>,
@@ -185,13 +233,11 @@ macro_rules! impl_permutation_dispatch {
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
                 let mut index_reads = StagedBindings::new();
                 <crate::Column<u32> as StageRead<R, Env0>>::stage_at(
-                    indices,
-                    exec.client(),
-                    exec.id(),
-                    &mut index_reads,
+                    indices, exec.client(), exec.id(), &mut index_reads,
                 )?;
                 let mut writes = OutputBindings::new();
                 output.stage_output(exec.id(), &mut writes)?;
+                writes.pad_to_twelve(exec.client());
                 let read_offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let index_offset = exec.client().create_from_slice(u32::as_bytes(&index_reads.offsets));
                 let write_offsets = exec.client().create_from_slice(u32::as_bytes(&writes.offsets));
@@ -201,7 +247,10 @@ macro_rules! impl_permutation_dispatch {
                         Source,
                         Output::Item,
                         $( $leaf, )+
-                        $( $output, )+
+                        WriteSlots::O0, WriteSlots::O1, WriteSlots::O2, WriteSlots::O3,
+                        WriteSlots::O4, WriteSlots::O5, WriteSlots::O6, WriteSlots::O7,
+                        WriteSlots::O8, WriteSlots::O9, WriteSlots::O10, WriteSlots::O11,
+                        Leaves,
                         Input::DeviceExpr,
                         <Output::Item as StorageLayout>::DeviceLayout,
                         R,
@@ -214,7 +263,18 @@ macro_rules! impl_permutation_dispatch {
                         BufferArg::from_raw_parts(index_reads.slots[0].0.clone(), index_reads.slots[0].1),
                         BufferArg::from_raw_parts(index_offset, 1),
                         BufferArg::from_raw_parts(len_handle, 1),
-                        $( BufferArg::from_raw_parts(writes.slots[$write_index].0.clone(), writes.slots[$write_index].1), )+
+                        BufferArg::from_raw_parts(writes.slots[0].0.clone(), writes.slots[0].1),
+                        BufferArg::from_raw_parts(writes.slots[1].0.clone(), writes.slots[1].1),
+                        BufferArg::from_raw_parts(writes.slots[2].0.clone(), writes.slots[2].1),
+                        BufferArg::from_raw_parts(writes.slots[3].0.clone(), writes.slots[3].1),
+                        BufferArg::from_raw_parts(writes.slots[4].0.clone(), writes.slots[4].1),
+                        BufferArg::from_raw_parts(writes.slots[5].0.clone(), writes.slots[5].1),
+                        BufferArg::from_raw_parts(writes.slots[6].0.clone(), writes.slots[6].1),
+                        BufferArg::from_raw_parts(writes.slots[7].0.clone(), writes.slots[7].1),
+                        BufferArg::from_raw_parts(writes.slots[8].0.clone(), writes.slots[8].1),
+                        BufferArg::from_raw_parts(writes.slots[9].0.clone(), writes.slots[9].1),
+                        BufferArg::from_raw_parts(writes.slots[10].0.clone(), writes.slots[10].1),
+                        BufferArg::from_raw_parts(writes.slots[11].0.clone(), writes.slots[11].1),
                         BufferArg::from_raw_parts(write_offsets, writes.offsets.len()),
                     );
                 }
@@ -224,30 +284,20 @@ macro_rules! impl_permutation_dispatch {
     };
 }
 
-macro_rules! impl_all_permutation_storage_for_read {
-    (
-        $arity:ty, $eval:ident;
-        [$( $leaf:ident : $read_index:literal ),+], $read_env:ty;
-        [$k1:ident, $k2:ident, $k3:ident, $k4:ident, $k5:ident, $k6:ident, $k7:ident]
-    ) => {
-        impl_permutation_dispatch!($arity,S1,$eval,$k1; [$($leaf:$read_index),+],$read_env; [O0:0],Env1<O0>; Last<O0>);
-        impl_permutation_dispatch!($arity,S2,$eval,$k2; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1],Env2<O0,O1>; More<O0,Last<O1>>);
-        impl_permutation_dispatch!($arity,S3,$eval,$k3; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2],Env3<O0,O1,O2>; More<O0,More<O1,Last<O2>>>);
-        impl_permutation_dispatch!($arity,S4,$eval,$k4; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3],Env4<O0,O1,O2,O3>; More<O0,More<O1,More<O2,Last<O3>>>>);
-        impl_permutation_dispatch!($arity,S5,$eval,$k5; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4],Env5<O0,O1,O2,O3,O4>; More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>);
-        impl_permutation_dispatch!($arity,S6,$eval,$k6; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4,O5:5],Env6<O0,O1,O2,O3,O4,O5>; More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>);
-        impl_permutation_dispatch!($arity,S7,$eval,$k7; [$($leaf:$read_index),+],$read_env; [O0:0,O1:1,O2:2,O3:3,O4:4,O5:5,O6:6],Env7<O0,O1,O2,O3,O4,O5,O6>; More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>);
-    };
+    impl_padded_permutation_dispatch!(A1, Eval1, permutation_a1; [L0:0], Env1<L0>);
+    impl_padded_permutation_dispatch!(A2, Eval2, permutation_a2; [L0:0,L1:1], Env2<L0,L1>);
+    impl_padded_permutation_dispatch!(A3, Eval3, permutation_a3; [L0:0,L1:1,L2:2], Env3<L0,L1,L2>);
+    impl_padded_permutation_dispatch!(A4, Eval4, permutation_a4; [L0:0,L1:1,L2:2,L3:3], Env4<L0,L1,L2,L3>);
+    impl_padded_permutation_dispatch!(A5, Eval5, permutation_a5; [L0:0,L1:1,L2:2,L3:3,L4:4], Env5<L0,L1,L2,L3,L4>);
+    impl_padded_permutation_dispatch!(A6, Eval6, permutation_a6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5], Env6<L0,L1,L2,L3,L4,L5>);
+    impl_padded_permutation_dispatch!(A7, Eval7, permutation_a7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6], Env7<L0,L1,L2,L3,L4,L5,L6>);
+    impl_padded_permutation_dispatch!(A8, Eval8, permutation_a8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7], Env8<L0,L1,L2,L3,L4,L5,L6,L7>);
+    impl_padded_permutation_dispatch!(A9, Eval9, permutation_a9; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8], Env9<L0,L1,L2,L3,L4,L5,L6,L7,L8>);
+    impl_padded_permutation_dispatch!(A10, Eval10, permutation_a10; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9], Env10<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9>);
+    impl_padded_permutation_dispatch!(A11, Eval11, permutation_a11; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10], Env11<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>);
+    impl_padded_permutation_dispatch!(A12, Eval12, permutation_a12; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11], Env12<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>);
+    impl_padded_permutation_dispatch!(A13, Eval13, permutation_a13; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12], Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>);
 }
-
-impl_all_permutation_storage_for_read!(A1,Eval1; [L0:0],Env1<L0>; [permutation_a1_s1,permutation_a1_s2,permutation_a1_s3,permutation_a1_s4,permutation_a1_s5,permutation_a1_s6,permutation_a1_s7]);
-impl_all_permutation_storage_for_read!(A2,Eval2; [L0:0,L1:1],Env2<L0,L1>; [permutation_a2_s1,permutation_a2_s2,permutation_a2_s3,permutation_a2_s4,permutation_a2_s5,permutation_a2_s6,permutation_a2_s7]);
-impl_all_permutation_storage_for_read!(A3,Eval3; [L0:0,L1:1,L2:2],Env3<L0,L1,L2>; [permutation_a3_s1,permutation_a3_s2,permutation_a3_s3,permutation_a3_s4,permutation_a3_s5,permutation_a3_s6,permutation_a3_s7]);
-impl_all_permutation_storage_for_read!(A4,Eval4; [L0:0,L1:1,L2:2,L3:3],Env4<L0,L1,L2,L3>; [permutation_a4_s1,permutation_a4_s2,permutation_a4_s3,permutation_a4_s4,permutation_a4_s5,permutation_a4_s6,permutation_a4_s7]);
-impl_all_permutation_storage_for_read!(A5,Eval5; [L0:0,L1:1,L2:2,L3:3,L4:4],Env5<L0,L1,L2,L3,L4>; [permutation_a5_s1,permutation_a5_s2,permutation_a5_s3,permutation_a5_s4,permutation_a5_s5,permutation_a5_s6,permutation_a5_s7]);
-impl_all_permutation_storage_for_read!(A6,Eval6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5],Env6<L0,L1,L2,L3,L4,L5>; [permutation_a6_s1,permutation_a6_s2,permutation_a6_s3,permutation_a6_s4,permutation_a6_s5,permutation_a6_s6,permutation_a6_s7]);
-impl_all_permutation_storage_for_read!(A7,Eval7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6],Env7<L0,L1,L2,L3,L4,L5,L6>; [permutation_a7_s1,permutation_a7_s2,permutation_a7_s3,permutation_a7_s4,permutation_a7_s5,permutation_a7_s6,permutation_a7_s7]);
-impl_all_permutation_storage_for_read!(A8,Eval8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7],Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [permutation_a8_s1,permutation_a8_s2,permutation_a8_s3,permutation_a8_s4,permutation_a8_s5,permutation_a8_s6,permutation_a8_s7]);
 
 pub(crate) fn apply_permutation<R, Input, Output>(
     exec: &Executor<R>,
@@ -257,18 +307,9 @@ pub(crate) fn apply_permutation<R, Input, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Dispatch<Input::ReadArity, Output::StorageArity>:
-        PermutationDispatch<R, Input, Output, Input::Slots, Output::Slots>,
+    Input: GatherNormalized<R, crate::Column<u32>, Output>,
 {
-    <Dispatch<Input::ReadArity, Output::StorageArity> as PermutationDispatch<
-        R,
-        Input,
-        Output,
-        Input::Slots,
-        Output::Slots,
-    >>::run(exec, &input, &indices, &output)
+    gather(exec, input, indices, output)
 }
 
 /// Internal public-API capability that normalizes values and indices
@@ -288,11 +329,8 @@ where
     R: Runtime,
     Values: NormalizeInput<R>,
     Values::Storage: CanonicalStorage<R>,
-    Indices: NormalizeInput<R> + ReadExpression<Item = u32>,
-    Indices::Storage: CanonicalStorage<R>,
-    <Indices::Storage as CanonicalStorage<R>>::Read: ReadExpression<Item = u32>,
-    <Values::Storage as CanonicalStorage<R>>::Read:
-        GatherInput<R, <Indices::Storage as CanonicalStorage<R>>::Read, Output>,
+    Indices: crate::selection::FlagInput<R>,
+    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Indices, Output>,
 {
     fn gather_normalized(
         self,
@@ -301,8 +339,7 @@ where
         output: Output,
     ) -> Result<(), Error> {
         let values = self.normalize(exec)?;
-        let indices = indices.normalize(exec)?;
-        gather_direct(exec, values.read(), indices.read(), output)
+        gather_direct(exec, values.read(), indices, output)
     }
 }
 
@@ -339,12 +376,10 @@ where
     Values::Item: CanonicalAlloc<R>,
     Values::Storage: CanonicalStorage<R>,
     <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    Indices: NormalizeInput<R> + ReadExpression<Item = u32>,
-    Indices::Storage: CanonicalStorage<R>,
-    <Indices::Storage as CanonicalStorage<R>>::Read: ReadExpression<Item = u32>,
+    Indices: crate::selection::FlagInput<R>,
     <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<
             R,
-            <Indices::Storage as CanonicalStorage<R>>::Read,
+            Indices,
             <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
         >,
     <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read:
@@ -368,9 +403,8 @@ where
             });
         }
         let values = self.normalize(exec)?;
-        let indices = indices.normalize(exec)?;
         let gathered = exec.alloc_canonical::<Values::Item>(output_len);
-        gather_direct(exec, values.read(), indices.read(), gathered.write())?;
+        gather_direct(exec, values.read(), indices, gathered.write())?;
         let flags = stencil.materialize_flags(exec)?;
         gathered.read().masked_copy(exec, &flags, output)
     }
@@ -405,15 +439,17 @@ where
     Permute<Values, ReverseCounting>:
         ReadExpression<Item = Values::Item> + LowerReadExpression + StageRead<R, Env0>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: crate::WriteFrom<Values::Item>,
-    Dispatch<<Permute<Values, ReverseCounting> as ReadExpression>::ReadArity, Output::StorageArity>:
-        MaterializeDispatch<
-                R,
-                Permute<Values, ReverseCounting>,
-                Output,
+    Output::Item: crate::WritableFrom<Values::Item>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Permute<Values, ReverseCounting>,
+            Output,
+            crate::read::KernelReadSlots<
                 <Permute<Values, ReverseCounting> as LowerReadExpression>::Slots,
-                Output::Slots,
             >,
+            crate::output::KernelOutputSlots<Output::Slots>,
+        >,
+    Output::Slots: PaddedOutputSlots,
 {
     fn reverse(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
         let len = self.logical_len()?;

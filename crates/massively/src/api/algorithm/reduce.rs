@@ -38,5 +38,5 @@ where
     Input: MIter<R>,
     Op: ReductionOp<Input::Item>,
 {
-    input.reduce_with(exec, init, op)
+    crate::reduce::reduce(exec, crate::api::iter::lower::<R, _>(input), init, op)
 }

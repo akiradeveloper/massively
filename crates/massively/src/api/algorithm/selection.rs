@@ -1,7 +1,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
     op::PredicateOp, op::UnaryOp,
 };
 
@@ -21,19 +21,19 @@ use crate::{
 /// assert_eq!(output.len(), 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 30]);
 /// ```
-pub fn copy_where<R, Input, Stencil>(
+pub fn copy_where<R, Input, Item, Stencil>(
     exec: &Executor<R>,
     input: Input,
     stencil: Stencil,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
     Stencil: MIter<R, Item = MIndex>,
 {
     let capacity = input.len()? as usize;
-    let mut output = exec.alloc_mvec::<Input::Item>(capacity);
+    let mut output = exec.alloc_mvec::<Item>(capacity);
     let len = copy_where_into(exec, input, stencil, output.slice_mut(..))?;
     output.truncate(len);
     Ok(output)
@@ -52,10 +52,14 @@ where
     Input: MIter<R>,
     Stencil: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
-    let stencil = stencil.materialize_u32(exec)?;
-    input.select_with_flags(exec, stencil.column(), false, output)
+    crate::selection::copy_where(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower::<R, _>(stencil),
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Copies rows whose stencil is zero.
@@ -74,19 +78,19 @@ where
 /// assert_eq!(output.len(), 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![20, 40]);
 /// ```
-pub fn remove_where<R, Input, Stencil>(
+pub fn remove_where<R, Input, Item, Stencil>(
     exec: &Executor<R>,
     input: Input,
     stencil: Stencil,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
     Stencil: MIter<R, Item = MIndex>,
 {
     let capacity = input.len()? as usize;
-    let mut output = exec.alloc_mvec::<Input::Item>(capacity);
+    let mut output = exec.alloc_mvec::<Item>(capacity);
     let len = remove_where_into(exec, input, stencil, output.slice_mut(..))?;
     output.truncate(len);
     Ok(output)
@@ -105,10 +109,14 @@ where
     Input: MIter<R>,
     Stencil: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
-    let stencil = stencil.materialize_u32(exec)?;
-    input.select_with_flags(exec, stencil.column(), true, output)
+    crate::selection::remove_where(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower::<R, _>(stencil),
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Stably partitions passing items before failing items.
@@ -138,19 +146,19 @@ where
 /// assert_eq!(boundary, 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 1, 3]);
 /// ```
-pub fn partition<R, Input, Pred>(
+pub fn partition<R, Input, Item, Pred>(
     exec: &Executor<R>,
     input: Input,
     pred: Pred,
-) -> Result<(MVec<R, Input::Item>, MIndex), Error>
+) -> Result<(MVec<R, Item>, MIndex), Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
-    Pred: PredicateOp<Input::Item>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Pred: PredicateOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Input::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     let boundary = partition_into(exec, input, pred, output.slice_mut(..))?;
     Ok((output, boundary))
 }
@@ -167,10 +175,15 @@ where
     R: Runtime,
     Input: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Pred: PredicateOp<Input::Item>,
 {
-    input.partition_with(exec, pred, output)
+    crate::selection::partition(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        pred,
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Fills every output item with one value.
@@ -189,10 +202,10 @@ where
 pub fn fill<R, Item>(exec: &Executor<R>, len: usize, value: Item) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Item: MCanonical<R>,
+    Item: Materializable<R>,
 {
     let output = exec.alloc_mvec::<Item>(len);
-    let value = <Item::Canonical as WriteFrom<Item>>::write_from(value);
+    let value = <Item::Materialized as WritableFrom<Item>>::write_from(value);
     fill_into(exec, value, output.slice_mut(..))?;
     Ok(output)
 }
@@ -244,8 +257,11 @@ where
     Stencil: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
 {
-    let stencil = stencil.materialize_u32(exec)?;
-    output.replace_with_flags(exec, value, stencil.column())
+    let flags = crate::selection::FlagInput::materialize_flags(
+        crate::api::iter::lower::<R, _>(stencil),
+        exec,
+    )?;
+    output.replace_with_flags(exec, value, flags.column())
 }
 
 /// Applies an operation where the stencil is nonzero.
@@ -299,8 +315,16 @@ where
     Stencil: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
 {
-    let stencil = stencil.materialize_u32(exec)?;
-    input.transform_where_with(exec, op, stencil.column(), output)
+    let flags = crate::selection::FlagInput::materialize_flags(
+        crate::api::iter::lower::<R, _>(stencil),
+        exec,
+    )?;
+    crate::masked::MaskedCopyInput::masked_copy(
+        crate::Transform::new(crate::api::iter::lower::<R, _>(input), op),
+        exec,
+        &flags,
+        output.lower_output(),
+    )
 }
