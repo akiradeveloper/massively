@@ -1,8 +1,11 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
+use crate::{
+    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    op::BinaryPredicateOp,
+};
 
-/// Stably sorts an input into preallocated output storage.
+/// Stably sorts an input and returns owned device storage.
 ///
 /// # Examples
 ///
@@ -22,13 +25,30 @@ use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredi
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[3_u32, 1, 2]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// sort(&exec, input.slice(..), Less, output.slice_mut(..)).unwrap();
+/// let output = sort(&exec, input.slice(..), Less).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```
-pub fn sort<R, Input, Output, Less>(
+pub fn sort<R, Input, Less>(
+    exec: &Executor<R>,
+    input: Input,
+    less: Less,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Less: BinaryPredicateOp<Input::Item>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc_mvec::<Input::Item>(len);
+    sort_into(exec, input, less, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Stably sorts an input into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn sort_into<R, Input, Output, Less>(
     exec: &Executor<R>,
     input: Input,
     less: Less,
@@ -82,8 +102,6 @@ where
 
 /// Removes consecutive duplicates.
 ///
-/// The return value is the number of items written at the beginning of `output`.
-///
 /// # Examples
 ///
 /// ```
@@ -102,14 +120,34 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 1, 2, 2, 3]);
-/// let output = exec.alloc::<u32>(input.len());
+/// let output = unique(&exec, input.slice(..), Equal).unwrap();
 ///
-/// let len = unique(&exec, input.slice(..), Equal, output.slice_mut(..)).unwrap();
-///
-/// assert_eq!(len, 3);
-/// assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![1, 2, 3]);
+/// assert_eq!(output.len(), 3);
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```
-pub fn unique<R, Input, Output, Equal>(
+pub fn unique<R, Input, Equal>(
+    exec: &Executor<R>,
+    input: Input,
+    equal: Equal,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Equal: BinaryPredicateOp<Input::Item>,
+{
+    let capacity = input.len()? as usize;
+    let mut output = exec.alloc_mvec::<Input::Item>(capacity);
+    let len = unique_into(exec, input, equal, output.slice_mut(..))?;
+    output.truncate(len);
+    Ok(output)
+}
+
+/// Removes consecutive duplicates into caller-provided storage.
+///
+/// Returns the number of items written at the beginning of `output`.
+#[doc(hidden)]
+pub(crate) fn unique_into<R, Input, Output, Equal>(
     exec: &Executor<R>,
     input: Input,
     equal: Equal,

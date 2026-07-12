@@ -26,24 +26,10 @@ pub fn solve<R: Runtime>(
     let distance = exec.to_device(&distance);
     let device_graph = DeviceGraph::new(exec, graph);
     let mut frontier = exec.to_device(&[source]);
-    let mut frontier_len = 1u32;
-
-    while frontier_len != 0 {
-        let next = exec.alloc::<u32>(graph.vertex_count());
-        frontier_len = graph::traverse(
-            exec,
-            device_graph.csr(),
-            frontier.slice(..frontier_len as usize),
-        )?
-        .map(graph::source(distance.slice(..)), AddOne)
-        .relax_min_by_destination(
-            exec,
-            u32::MAX,
-            distance.slice(..),
-            distance.slice_mut(..),
-            next.slice_mut(..),
-        )?;
-        frontier = next;
+    while !frontier.is_empty() {
+        frontier = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+            .map(graph::source(distance.slice(..)), AddOne)
+            .relax_min_by_destination(exec, u32::MAX, distance.slice(..), distance.slice_mut(..))?;
     }
 
     exec.to_host(&distance)

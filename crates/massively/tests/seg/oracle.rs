@@ -6,7 +6,7 @@ use cubecl::prelude::*;
 use massively::seg::{
     AdjacentDifference, AllOf, AnyOf, CountIf, ExclusiveScan, Filter, ForEachSegment,
     InclusiveScan, IsSorted, IsSortedUntil, Map, MapLikeExecutable, NoneOf, Reduce,
-    ReduceLikeExecutable, Reverse, Segmented, SegmentedMut, Sort, Unique, UniqueLikeExecutable,
+    ReduceLikeExecutable, Reverse, Segmented, Sort, Unique, UniqueLikeExecutable,
 };
 use massively::{op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp, zip2};
 use oracle_ref::seg as oracle;
@@ -45,15 +45,12 @@ macro_rules! map_like_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = exec.alloc::<u32>(values.len());
-
-                ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    output.slice_mut(..),
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
@@ -74,28 +71,17 @@ macro_rules! unique_like_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output_values = exec.alloc::<u32>(values.len());
-                let output_offsets = exec.alloc::<u32>(offsets.len());
-
-                let written = ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    SegmentedMut::new(
-                        output_values.slice_mut(..),
-                        output_offsets.slice_mut(..),
-                    ),
                 ).unwrap();
 
                 let (expected_values, expected_offsets) = flatten(&$oracle(&segments));
-                prop_assert_eq!(written as usize, expected_values.len());
-                prop_assert_eq!(
-                    exec.to_host(&output_values.slice(..written as usize)).unwrap(),
-                    expected_values,
-                );
-                prop_assert_eq!(exec.to_host(&output_offsets).unwrap(), expected_offsets);
+                prop_assert_eq!(exec.to_host(output.values()).unwrap(), expected_values);
+                prop_assert_eq!(exec.to_host(output.offsets()).unwrap(), expected_offsets);
             }
         }
     };
@@ -111,15 +97,12 @@ macro_rules! reduce_like_case {
                 let (values, offsets) = flatten(&segments);
                 let values_gpu = exec.to_device(&values);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = exec.alloc::<u32>(segments.len());
-
-                ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    output.slice_mut(..),
                 ).unwrap();
 
                 prop_assert_eq!(exec.to_host(&output).unwrap(), $oracle(&segments));
@@ -294,23 +277,19 @@ macro_rules! pair_map_like_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output_first = exec.alloc::<u32>(rows.len());
-                let output_second = exec.alloc::<u32>(rows.len());
-
-                ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    zip2(output_first.slice_mut(..), output_second.slice_mut(..)),
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output_first).unwrap(),
-                        exec.to_host(&output_second).unwrap(),
+                        exec.to_host(&output.0).unwrap(),
+                        exec.to_host(&output.1).unwrap(),
                     ),
                     expected,
                 );
@@ -332,32 +311,23 @@ macro_rules! pair_unique_like_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output_first = exec.alloc::<u32>(rows.len());
-                let output_second = exec.alloc::<u32>(rows.len());
-                let output_offsets = exec.alloc::<u32>(offsets.len());
-
-                let written = ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    SegmentedMut::new(
-                        zip2(output_first.slice_mut(..), output_second.slice_mut(..)),
-                        output_offsets.slice_mut(..),
-                    ),
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
-                prop_assert_eq!(written as usize, expected.len());
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output_first.slice(..written as usize)).unwrap(),
-                        exec.to_host(&output_second.slice(..written as usize)).unwrap(),
+                        exec.to_host(&output.values().0).unwrap(),
+                        exec.to_host(&output.values().1).unwrap(),
                     ),
                     expected,
                 );
-                prop_assert_eq!(exec.to_host(&output_offsets).unwrap(), expected_offsets);
+                prop_assert_eq!(exec.to_host(output.offsets()).unwrap(), expected_offsets);
             }
         }
     };
@@ -375,22 +345,18 @@ macro_rules! pair_item_reduce_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output_first = exec.alloc::<u32>(segments.len());
-                let output_second = exec.alloc::<u32>(segments.len());
-
-                ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    zip2(output_first.slice_mut(..), output_second.slice_mut(..)),
                 ).unwrap();
 
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output_first).unwrap(),
-                        exec.to_host(&output_second).unwrap(),
+                        exec.to_host(&output.0).unwrap(),
+                        exec.to_host(&output.1).unwrap(),
                     ),
                     $oracle(&segments),
                 );
@@ -411,15 +377,12 @@ macro_rules! pair_flag_reduce_case {
                 let first_gpu = exec.to_device(&first);
                 let second_gpu = exec.to_device(&second);
                 let offsets_gpu = exec.to_device(&offsets);
-                let output = exec.alloc::<u32>(segments.len());
-
-                ForEachSegment($algorithm).run(
+                let output = ForEachSegment($algorithm).run(
                     &exec,
                     Segmented::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
-                    output.slice_mut(..),
                 ).unwrap();
 
                 prop_assert_eq!(exec.to_host(&output).unwrap(), $oracle(&segments));

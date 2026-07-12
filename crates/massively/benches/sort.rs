@@ -20,23 +20,19 @@ fn bench_sort_by_key(c: &mut Criterion) {
     for &len in common::SORT_SIZES {
         let keys = exec.to_device(&common::shuffled_u32(len));
         let values = exec.to_device(&common::dense_f32(len));
-        let out_keys = exec.alloc::<u32>(len);
-        let out_values = exec.alloc::<f32>(len);
         exec.sync().unwrap();
 
         group.bench_function(BenchmarkId::new("gpu", len), |b| {
             b.iter(|| {
-                sort_by_key(
+                let output = sort_by_key(
                     &exec,
                     black_box(keys.slice(..)),
                     black_box(values.slice(..)),
                     Less,
-                    black_box(out_keys.slice_mut(..)),
-                    black_box(out_values.slice_mut(..)),
                 )
                 .unwrap();
                 exec.sync().unwrap();
-                black_box((&out_keys, &out_values));
+                black_box(output);
             })
         });
     }
@@ -57,21 +53,17 @@ fn bench_sort_by_key(c: &mut Criterion) {
     for (name, input) in patterns {
         let keys = exec.to_device(&input);
         let values = exec.to_device(&common::dense_f32(len));
-        let out_keys = exec.alloc::<u32>(len);
-        let out_values = exec.alloc::<f32>(len);
         pattern_group.bench_function(name, |b| {
             b.iter(|| {
-                sort_by_key(
+                let output = sort_by_key(
                     &exec,
                     black_box(keys.slice(..)),
                     black_box(values.slice(..)),
                     Less,
-                    black_box(out_keys.slice_mut(..)),
-                    black_box(out_values.slice_mut(..)),
                 )
                 .unwrap();
                 exec.sync().unwrap();
-                black_box((&out_keys, &out_values));
+                black_box(output);
             })
         });
     }

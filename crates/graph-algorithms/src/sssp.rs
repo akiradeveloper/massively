@@ -36,30 +36,16 @@ pub fn solve<R: Runtime>(
     distance[source as usize] = 0;
     let distance = exec.to_device(&distance);
     let mut frontier = exec.to_device(&[source]);
-    let mut frontier_len = 1u32;
-
-    while frontier_len != 0 {
-        let next = exec.alloc::<u32>(n);
-        frontier_len = graph::traverse(
-            exec,
-            device_graph.csr(),
-            frontier.slice(..frontier_len as usize),
-        )?
-        .map(
-            zip2(
-                graph::source(distance.slice(..)),
-                graph::edge(weights.slice(..)),
-            ),
-            AddDistance,
-        )
-        .relax_min_by_destination(
-            exec,
-            INF,
-            distance.slice(..),
-            distance.slice_mut(..),
-            next.slice_mut(..),
-        )?;
-        frontier = next;
+    while !frontier.is_empty() {
+        frontier = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+            .map(
+                zip2(
+                    graph::source(distance.slice(..)),
+                    graph::edge(weights.slice(..)),
+                ),
+                AddDistance,
+            )
+            .relax_min_by_destination(exec, INF, distance.slice(..), distance.slice_mut(..))?;
     }
 
     exec.to_host(&distance)

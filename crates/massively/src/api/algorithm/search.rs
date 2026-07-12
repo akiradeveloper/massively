@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec, WriteFrom, op::BinaryPredicateOp};
 
 /// Finds the first source item equal to any needle.
 ///
@@ -66,20 +66,31 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let source = exec.to_device(&[1_u32, 3, 5, 7]);
 /// let values = exec.to_device(&[0_u32, 3, 6, 8]);
-/// let output = exec.alloc::<u32>(values.len());
-///
-/// lower_bound(
-///     &exec,
-///     source.slice(..),
-///     values.slice(..),
-///     Less,
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
+/// let output = lower_bound(&exec, source.slice(..), values.slice(..), Less).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 3, 4]);
 /// ```
-pub fn lower_bound<R, Source, Values, Output, Less>(
+pub fn lower_bound<R, Source, Values, Less>(
+    exec: &Executor<R>,
+    source: Source,
+    values: Values,
+    less: Less,
+) -> Result<MVec<R, MIndex>, Error>
+where
+    R: Runtime,
+    Source: MIter<R>,
+    Values: MIter<R, Item = Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    let len = values.len()? as usize;
+    let output = exec.alloc_mvec::<MIndex>(len);
+    lower_bound_into(exec, source, values, less, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Finds lower bounds into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn lower_bound_into<R, Source, Values, Output, Less>(
     exec: &Executor<R>,
     source: Source,
     values: Values,
@@ -120,20 +131,31 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let source = exec.to_device(&[1_u32, 3, 5, 7]);
 /// let values = exec.to_device(&[0_u32, 3, 6, 8]);
-/// let output = exec.alloc::<u32>(values.len());
-///
-/// upper_bound(
-///     &exec,
-///     source.slice(..),
-///     values.slice(..),
-///     Less,
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
+/// let output = upper_bound(&exec, source.slice(..), values.slice(..), Less).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![0, 2, 3, 4]);
 /// ```
-pub fn upper_bound<R, Source, Values, Output, Less>(
+pub fn upper_bound<R, Source, Values, Less>(
+    exec: &Executor<R>,
+    source: Source,
+    values: Values,
+    less: Less,
+) -> Result<MVec<R, MIndex>, Error>
+where
+    R: Runtime,
+    Source: MIter<R>,
+    Values: MIter<R, Item = Source::Item>,
+    Less: BinaryPredicateOp<Source::Item>,
+{
+    let len = values.len()? as usize;
+    let output = exec.alloc_mvec::<MIndex>(len);
+    upper_bound_into(exec, source, values, less, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Finds upper bounds into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn upper_bound_into<R, Source, Values, Output, Less>(
     exec: &Executor<R>,
     source: Source,
     values: Values,

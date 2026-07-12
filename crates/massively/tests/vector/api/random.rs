@@ -9,8 +9,7 @@ fn materialize_u32<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<u32
 where
     Input: MIter<WgpuRuntime, Item = u32>,
 {
-    let output = exec.to_device(&vec![0_u32; input.len().unwrap() as usize]);
-    transform(exec, input, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -18,8 +17,7 @@ fn materialize_u64<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<u64
 where
     Input: MIter<WgpuRuntime, Item = u64>,
 {
-    let output = exec.to_device(&vec![0_u64; input.len().unwrap() as usize]);
-    transform(exec, input, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -27,8 +25,7 @@ fn materialize_f32<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<f32
 where
     Input: MIter<WgpuRuntime, Item = f32>,
 {
-    let output = exec.to_device(&vec![0_f32; input.len().unwrap() as usize]);
-    transform(exec, input, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 
@@ -36,8 +33,7 @@ fn materialize_f64<Input>(exec: &Executor<WgpuRuntime>, input: Input) -> Vec<f64
 where
     Input: MIter<WgpuRuntime, Item = f64>,
 {
-    let output = exec.to_device(&vec![0_f64; input.len().unwrap() as usize]);
-    transform(exec, input, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(exec, input, massively::op::Identity).unwrap();
     exec.to_host(&output).unwrap()
 }
 

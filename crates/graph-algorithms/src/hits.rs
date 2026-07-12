@@ -36,18 +36,16 @@ pub fn solve<R: Runtime>(
 
     for _ in 0..iterations {
         let hubs_gpu = exec.to_device(&hubs);
-        let authority_gpu = exec.full(n, 0.0f32)?;
-        graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+        let authority_gpu = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
             .map(graph::source(hubs_gpu.slice(..)), Identity)
-            .reduce_by_destination(exec, 0.0, SumF32, authority_gpu.slice_mut(..))?;
+            .reduce_by_destination(exec, 0.0, SumF32)?;
         authorities = exec.to_host(&authority_gpu)?;
         normalize(&mut authorities);
 
         let authority_gpu = exec.to_device(&authorities);
-        let hub_gpu = exec.alloc::<f32>(n);
-        graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+        let hub_gpu = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
             .map(graph::destination(authority_gpu.slice(..)), Identity)
-            .reduce_by_source(exec, 0.0, SumF32, hub_gpu.slice_mut(..))?;
+            .reduce_by_source(exec, 0.0, SumF32)?;
         hubs = exec.to_host(&hub_gpu)?;
         normalize(&mut hubs);
     }

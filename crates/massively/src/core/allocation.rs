@@ -2,12 +2,12 @@
 
 use std::ops::RangeBounds;
 
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{CubeType, Runtime};
 
 use crate::{
     Column, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     S1, StorageLayout, Zip,
-    api::iter::{MAlloc, MStorage},
+    api::iter::{MAlloc, MCanonical, MStorage},
     output::{LowerOutputExpression, OutputExpression, StageOutput},
     read::{Env0, LowerReadExpression, Reassociate},
     reduce::StageRead,
@@ -15,6 +15,40 @@ use crate::{
     storage::{Last, More, WriteFrom},
     transform::{MaterializeDispatch, materialize},
 };
+
+#[doc(hidden)]
+pub trait CanonicalLeaves {
+    type Item;
+}
+
+#[doc(hidden)]
+pub trait FoldCanonical<Accumulator> {
+    type Item;
+}
+
+impl<Item: CubeType> CanonicalLeaves for Last<Item> {
+    type Item = Item;
+}
+
+impl<Head, Tail> CanonicalLeaves for More<Head, Tail>
+where
+    Head: CubeType,
+    Tail: CubeType + FoldCanonical<Head>,
+{
+    type Item = Tail::Item;
+}
+
+impl<Accumulator, Item: CubeType> FoldCanonical<Accumulator> for Last<Item> {
+    type Item = (Accumulator, Item);
+}
+
+impl<Accumulator, Head, Tail> FoldCanonical<Accumulator> for More<Head, Tail>
+where
+    Head: CubeType,
+    Tail: CubeType + FoldCanonical<(Accumulator, Head)>,
+{
+    type Item = Tail::Item;
+}
 
 /// Owned storage that can produce read and mutable output trees.
 pub trait CanonicalStorage<R: Runtime> {
@@ -299,6 +333,16 @@ where
     }
 }
 
+impl<R, Item> MCanonical<R> for Item
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>,
+    Item::StorageLeaves: CanonicalLeaves,
+    <Item::StorageLeaves as CanonicalLeaves>::Item: MAlloc<R> + crate::WriteFrom<Item>,
+{
+    type Canonical = <Item::StorageLeaves as CanonicalLeaves>::Item;
+}
+
 #[doc(hidden)]
 impl<R, Item> MAlloc<R> for Item
 where
@@ -358,6 +402,10 @@ where
         crate::MIndex::try_from(self.len()).map_err(|_| Error::LengthTooLarge { len: self.len() })
     }
 
+    fn truncate(&mut self, len: crate::MIndex) {
+        DeviceVec::truncate(self, len as usize);
+    }
+
     fn slice<Bounds>(
         &self,
         range: Bounds,
@@ -387,6 +435,8 @@ where
 impl<R, Left, Right> MStorage<R> for Zip<Left, Right>
 where
     R: Runtime,
+    Left: MStorage<R>,
+    Right: MStorage<R>,
     Self: CanonicalStorage<R>,
     <Self as CanonicalStorage<R>>::Item: MAlloc<R, Storage = Self>,
     <Self as CanonicalStorage<R>>::Read:
@@ -399,6 +449,11 @@ where
     fn len(&self) -> Result<crate::MIndex, Error> {
         let len = CanonicalStorage::len(self)?;
         crate::MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    }
+
+    fn truncate(&mut self, len: crate::MIndex) {
+        self.0.truncate(len);
+        self.1.truncate(len);
     }
 
     fn slice<Bounds>(
@@ -427,6 +482,17 @@ where
 }
 
 impl<R: Runtime> Executor<R> {
+    /// Allocates canonical owned device storage for a semantic item type.
+    ///
+    /// Unlike [`Self::alloc`], this method accepts any supported tuple nesting
+    /// and normalizes the returned [`crate::MVec`] to a left-associated SoA.
+    pub fn alloc_mvec<Item>(&self, len: usize) -> crate::MVec<R, Item>
+    where
+        Item: MCanonical<R>,
+    {
+        <Item::Canonical as MAlloc<R>>::alloc(self, len)
+    }
+
     /// Allocates uninitialized canonical device storage for `len` logical items.
     ///
     /// The storage must be completely written before it is read.
@@ -435,11 +501,17 @@ impl<R: Runtime> Executor<R> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, vector::fill};
+    /// use massively::{Executor, lazy, vector::{fill, scatter}};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let output = exec.alloc::<u32>(4);
-    /// fill(&exec, 7, output.slice_mut(..)).unwrap();
+    /// let values = fill(&exec, 4, 7_u32).unwrap();
+    /// scatter(
+    ///     &exec,
+    ///     values.slice(..),
+    ///     lazy::counting(0).take(4),
+    ///     output.slice_mut(..),
+    /// ).unwrap();
     ///
     /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7, 7]);
     /// ```
@@ -615,5 +687,24 @@ mod tests {
         assert_eq!(exec.to_host(&storage.1).unwrap(), vec![-1, -2, -3]);
         let sliced = CanonicalStorage::slice(&storage, 1..);
         assert_eq!(sliced.0.0.len(), 2);
+    }
+
+    #[test]
+    fn mvec_maps_semantic_shape_and_truncates_every_column() {
+        type Semantic = (u32, (f32, i32));
+
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let mut storage: crate::MVec<WgpuRuntime, Semantic> = exec.alloc_mvec::<Semantic>(4);
+
+        let _: &Zip<
+            Zip<DeviceVec<WgpuRuntime, u32>, DeviceVec<WgpuRuntime, f32>>,
+            DeviceVec<WgpuRuntime, i32>,
+        > = &storage;
+        MStorage::truncate(&mut storage, 2);
+
+        assert_eq!(MStorage::len(&storage).unwrap(), 2);
+        assert_eq!(storage.0.0.len(), 2);
+        assert_eq!(storage.0.1.len(), 2);
+        assert_eq!(storage.1.len(), 2);
     }
 }

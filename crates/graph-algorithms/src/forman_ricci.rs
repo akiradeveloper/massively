@@ -6,7 +6,7 @@ use massively::Executor;
 use super::common::{self, CsrGraph};
 
 pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> common::Result<Vec<i32>> {
-    let degree = common::degrees(exec, graph)?;
+    let degree = exec.to_host(&common::degrees(exec, graph)?)?;
     Ok(graph
         .edge_sources()
         .into_iter()

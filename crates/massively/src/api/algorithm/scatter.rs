@@ -5,7 +5,7 @@ use crate::{
     op::ReductionOp,
 };
 
-use super::{reduce_by_key, sort_by_key};
+use super::{reduce_by_key_into, sort_by_key_into};
 
 struct IndexLess;
 
@@ -184,7 +184,7 @@ where
     let len_usize = len as usize;
     let sorted_indices = exec.alloc::<MIndex>(len_usize);
     let sorted_values = <Values::Item as MAlloc<R>>::alloc(exec, len_usize);
-    sort_by_key(
+    sort_by_key_into(
         exec,
         indices,
         values,
@@ -195,7 +195,7 @@ where
 
     let unique_indices = exec.alloc::<MIndex>(len_usize);
     let reduced_values = <Values::Item as MAlloc<R>>::alloc(exec, len_usize);
-    let unique_len = reduce_by_key(
+    let unique_len = reduce_by_key_into(
         exec,
         sorted_indices.slice(..),
         sorted_values.slice(..),

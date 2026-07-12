@@ -6,7 +6,7 @@ use massively::Executor;
 use super::common::{self, CsrGraph};
 
 pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> common::Result<Vec<u32>> {
-    let mut current_degree = common::degrees(exec, graph)?;
+    let mut current_degree = exec.to_host(&common::degrees(exec, graph)?)?;
     let mut removed = vec![false; graph.vertex_count()];
     let mut core = vec![0u32; graph.vertex_count()];
     let mut running_core = 0u32;

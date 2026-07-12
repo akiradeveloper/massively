@@ -391,6 +391,107 @@ macro_rules! input_seed {
     };
 }
 
+macro_rules! mvec_column {
+    (1, $output:expr, 0) => {
+        &$output
+    };
+    (2, $output:expr, 0) => {
+        &$output.0
+    };
+    (2, $output:expr, 1) => {
+        &$output.1
+    };
+    (3, $output:expr, 0) => {
+        &$output.0.0
+    };
+    (3, $output:expr, 1) => {
+        &$output.0.1
+    };
+    (3, $output:expr, 2) => {
+        &$output.1
+    };
+    (4, $output:expr, 0) => {
+        &$output.0.0.0
+    };
+    (4, $output:expr, 1) => {
+        &$output.0.0.1
+    };
+    (4, $output:expr, 2) => {
+        &$output.0.1
+    };
+    (4, $output:expr, 3) => {
+        &$output.1
+    };
+    (5, $output:expr, 0) => {
+        &$output.0.0.0.0
+    };
+    (5, $output:expr, 1) => {
+        &$output.0.0.0.1
+    };
+    (5, $output:expr, 2) => {
+        &$output.0.0.1
+    };
+    (5, $output:expr, 3) => {
+        &$output.0.1
+    };
+    (5, $output:expr, 4) => {
+        &$output.1
+    };
+    (6, $output:expr, 0) => {
+        &$output.0.0.0.0.0
+    };
+    (6, $output:expr, 1) => {
+        &$output.0.0.0.0.1
+    };
+    (6, $output:expr, 2) => {
+        &$output.0.0.0.1
+    };
+    (6, $output:expr, 3) => {
+        &$output.0.0.1
+    };
+    (6, $output:expr, 4) => {
+        &$output.0.1
+    };
+    (6, $output:expr, 5) => {
+        &$output.1
+    };
+    (7, $output:expr, 0) => {
+        &$output.0.0.0.0.0.0
+    };
+    (7, $output:expr, 1) => {
+        &$output.0.0.0.0.0.1
+    };
+    (7, $output:expr, 2) => {
+        &$output.0.0.0.0.1
+    };
+    (7, $output:expr, 3) => {
+        &$output.0.0.0.1
+    };
+    (7, $output:expr, 4) => {
+        &$output.0.0.1
+    };
+    (7, $output:expr, 5) => {
+        &$output.0.1
+    };
+    (7, $output:expr, 6) => {
+        &$output.1
+    };
+}
+
+macro_rules! assert_project_columns {
+    (1, $exec:expr, $output:expr, $seeds:expr) => { assert_project_columns!(@one 1, 0, $exec, $output, $seeds) };
+    (2, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(@one 2, 0, $exec, $output, $seeds); assert_project_columns!(@one 2, 1, $exec, $output, $seeds); }};
+    (3, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(2, $exec, $output.0, $seeds); assert_project_columns!(@one 3, 2, $exec, $output, $seeds); }};
+    (4, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(3, $exec, $output.0, $seeds); assert_project_columns!(@one 4, 3, $exec, $output, $seeds); }};
+    (5, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(4, $exec, $output.0, $seeds); assert_project_columns!(@one 5, 4, $exec, $output, $seeds); }};
+    (6, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(5, $exec, $output.0, $seeds); assert_project_columns!(@one 6, 5, $exec, $output, $seeds); }};
+    (7, $exec:expr, $output:expr, $seeds:expr) => {{ assert_project_columns!(6, $exec, $output.0, $seeds); assert_project_columns!(@one 7, 6, $exec, $output, $seeds); }};
+    (@one $arity:tt, $column:tt, $exec:expr, $output:expr, $seeds:expr) => {{
+        let expected: Vec<_> = $seeds.iter().map(|seed| project(*seed, $column)).collect();
+        prop_assert_eq!($exec.to_host(mvec_column!($arity, $output, $column)).unwrap(), expected);
+    }};
+}
+
 macro_rules! transform_arity_case {
     ($name:ident, $input_arity:tt, $output_arity:tt, $op:ident) => {
         proptest! {
@@ -403,26 +504,16 @@ macro_rules! transform_arity_case {
                     .iter()
                     .map(|column| exec.to_device(column))
                     .collect();
-                let output: Vec<_> = (0..$output_arity)
-                    .map(|_| exec.to_device(&vec![0_u32; seed.len()]))
-                    .collect();
-
-                massively::vector::transform(&exec, input_expr!($input_arity, device),
+                let output = massively::vector::transform(
+                    &exec,
+                    input_expr!($input_arity, device),
                     $op,
-                    output_expr!($output_arity, output),
-                )
-                .unwrap();
+                ).unwrap();
 
                 let seeds: Vec<_> = (0..seed.len())
                     .map(|index| input_seed!($input_arity, columns, index))
                     .collect();
-                for (column, actual) in output.iter().enumerate() {
-                    let expected: Vec<_> = seeds
-                        .iter()
-                        .map(|seed| project(*seed, column))
-                        .collect();
-                    prop_assert_eq!(exec.to_host(actual).unwrap(), expected);
-                }
+                assert_project_columns!($output_arity, exec, output, seeds);
             }
         }
     };
@@ -637,25 +728,14 @@ proptest! {
             ))
         };
 
-        let output: Vec<_> = (0..7)
-            .map(|_| exec.to_device(&vec![0_u32; seed.len()]))
-            .collect();
-        massively::vector::transform(&exec, input(),
-            IdentitySeven,
-            zip7(
-                output[0].slice_mut(..),
-                output[1].slice_mut(..),
-                output[2].slice_mut(..),
-                output[3].slice_mut(..),
-                output[4].slice_mut(..),
-                output[5].slice_mut(..),
-                output[6].slice_mut(..),
-            ),
-        )
-        .unwrap();
-        for (actual, expected) in output.iter().zip(columns.iter()) {
-            prop_assert_eq!(exec.to_host(actual).unwrap(), expected.clone());
-        }
+        let output = massively::vector::transform(&exec, input(), IdentitySeven).unwrap();
+        prop_assert_eq!(exec.to_host(&output.0.0.0.0.0.0).unwrap(), columns[0].clone());
+        prop_assert_eq!(exec.to_host(&output.0.0.0.0.0.1).unwrap(), columns[1].clone());
+        prop_assert_eq!(exec.to_host(&output.0.0.0.0.1).unwrap(), columns[2].clone());
+        prop_assert_eq!(exec.to_host(&output.0.0.0.1).unwrap(), columns[3].clone());
+        prop_assert_eq!(exec.to_host(&output.0.0.1).unwrap(), columns[4].clone());
+        prop_assert_eq!(exec.to_host(&output.0.1).unwrap(), columns[5].clone());
+        prop_assert_eq!(exec.to_host(&output.1).unwrap(), columns[6].clone());
 
         let zero: Seven = ((((((0, 0), 0), 0), 0), 0), 0);
         prop_assert_eq!(

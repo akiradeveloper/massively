@@ -3,7 +3,7 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
     Executor, Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, flatten3, flatten4, flatten5,
     flatten6, flatten7, op::UnaryOp, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7,
-    vector::transform, zip7,
+    vector::transform,
 };
 
 struct CanonicalTuple;
@@ -114,26 +114,19 @@ fn flatten_helpers_destructure_public_tuple_values_on_the_host() {
 fn flatten_helpers_hide_tuple_representation_in_cube_ops() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[10_u32, 20]);
-    let outputs: Vec<_> = (0..7).map(|_| exec.to_device(&[0_u32; 2])).collect();
-
-    transform(
-        &exec,
-        input.slice(..),
-        FlattenTuples,
-        zip7(
-            outputs[0].slice_mut(..),
-            outputs[1].slice_mut(..),
-            outputs[2].slice_mut(..),
-            outputs[3].slice_mut(..),
-            outputs[4].slice_mut(..),
-            outputs[5].slice_mut(..),
-            outputs[6].slice_mut(..),
-        ),
-    )
-    .unwrap();
+    let outputs = transform(&exec, input.slice(..), FlattenTuples).unwrap();
 
     let offsets = [2_u32, 3, 4, 5, 6, 0, 0];
-    for (column, offset) in outputs.iter().zip(offsets) {
+    let outputs = [
+        &outputs.0.0.0.0.0.0,
+        &outputs.0.0.0.0.0.1,
+        &outputs.0.0.0.0.1,
+        &outputs.0.0.0.1,
+        &outputs.0.0.1,
+        &outputs.0.1,
+        &outputs.1,
+    ];
+    for (column, offset) in outputs.into_iter().zip(offsets) {
         assert_eq!(
             exec.to_host(column).unwrap(),
             vec![10 + offset, 20 + offset]
@@ -145,25 +138,18 @@ fn flatten_helpers_hide_tuple_representation_in_cube_ops() {
 fn tuple_aliases_and_constructors_are_canonical_in_cube_ops() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[10_u32, 20]);
-    let outputs: Vec<_> = (0..7).map(|_| exec.to_device(&[0_u32; 2])).collect();
+    let outputs = transform(&exec, input.slice(..), CanonicalTuple).unwrap();
 
-    transform(
-        &exec,
-        input.slice(..),
-        CanonicalTuple,
-        zip7(
-            outputs[0].slice_mut(..),
-            outputs[1].slice_mut(..),
-            outputs[2].slice_mut(..),
-            outputs[3].slice_mut(..),
-            outputs[4].slice_mut(..),
-            outputs[5].slice_mut(..),
-            outputs[6].slice_mut(..),
-        ),
-    )
-    .unwrap();
-
-    for (column, offset) in outputs.iter().zip(0_u32..) {
+    let outputs = [
+        &outputs.0.0.0.0.0.0,
+        &outputs.0.0.0.0.0.1,
+        &outputs.0.0.0.0.1,
+        &outputs.0.0.0.1,
+        &outputs.0.0.1,
+        &outputs.0.1,
+        &outputs.1,
+    ];
+    for (column, offset) in outputs.into_iter().zip(0_u32..) {
         assert_eq!(
             exec.to_host(column).unwrap(),
             vec![10 + offset, 20 + offset]

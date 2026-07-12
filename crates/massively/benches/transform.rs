@@ -19,17 +19,10 @@ fn bench_transform(c: &mut Criterion) {
     let mut group = c.benchmark_group("transform");
     for &len in common::SIZES {
         let input = exec.to_device(&common::dense_f32(len));
-        let output = exec.alloc::<f32>(len);
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("gpu", len), |b| {
             b.iter(|| {
-                transform(
-                    &exec,
-                    black_box(input.slice(..)),
-                    MulTwo,
-                    output.slice_mut(..),
-                )
-                .unwrap();
+                black_box(transform(&exec, black_box(input.slice(..)), MulTwo).unwrap());
                 exec.sync().unwrap();
             })
         });

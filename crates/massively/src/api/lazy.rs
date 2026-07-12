@@ -69,9 +69,8 @@ impl crate::read::TakenSource for Counting {
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-/// let output = exec.alloc::<u32>(3);
 /// let repeated = lazy::constant(7_u32).take(3);
-/// transform(&exec, repeated, Identity, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, repeated, Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7]);
 /// ```
@@ -91,9 +90,8 @@ pub fn constant<T>(value: T) -> Constant<T> {
 /// use massively::{lazy, op::Identity};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-/// let output = exec.alloc::<u32>(4);
 /// let indices = lazy::counting(5).take(4);
-/// transform(&exec, indices, Identity, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, indices, Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![5, 6, 7, 8]);
 /// ```
@@ -126,9 +124,8 @@ pub fn counting(start: MIndex) -> Counting {
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = exec.alloc::<u32>(input.len());
 /// let doubled = lazy::transform(input.slice(..), Double);
-/// transform(&exec, doubled, Identity, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, doubled, Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 6]);
 /// ```
@@ -148,9 +145,8 @@ pub fn transform<Input, Op>(input: Input, op: Op) -> Transform<Input, Op> {
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0]);
-/// let output = exec.alloc::<u32>(indices.len());
 /// let permuted = lazy::permute(values.slice(..), indices.slice(..));
-/// transform(&exec, permuted, Identity, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, permuted, Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10]);
 /// ```
@@ -171,15 +167,7 @@ pub fn permute<Values, Indices>(values: Values, indices: Indices) -> Permute<Val
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// transform(
-///     &exec,
-///     lazy::reverse(input.slice(..)),
-///     Identity,
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
+/// let output = transform(&exec, lazy::reverse(input.slice(..)), Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 20, 10]);
 /// ```
@@ -200,14 +188,7 @@ pub fn reverse<Values>(values: Values) -> Reverse<Values> {
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = exec.alloc::<u32>(input.len());
-/// transform(
-///     &exec,
-///     lazy::identity(input.slice(..)),
-///     Identity,
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
+/// let output = transform(&exec, lazy::identity(input.slice(..)), Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```

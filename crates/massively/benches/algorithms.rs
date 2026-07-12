@@ -74,13 +74,7 @@ fn bench_linear_algorithms(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::new("transform", len), |b| {
             b.iter(|| {
-                transform(
-                    &exec,
-                    black_box(values.slice(..)),
-                    MulTwo,
-                    black_box(output.slice_mut(..)),
-                )
-                .unwrap();
+                black_box(transform(&exec, black_box(values.slice(..)), MulTwo).unwrap());
                 exec.sync().unwrap();
             })
         });
@@ -89,32 +83,18 @@ fn bench_linear_algorithms(c: &mut Criterion) {
         });
         group.bench_function(BenchmarkId::new("inclusive_scan", len), |b| {
             b.iter(|| {
-                inclusive_scan(&exec, values.slice(..), SumF32, output.slice_mut(..)).unwrap();
+                black_box(inclusive_scan(&exec, values.slice(..), SumF32).unwrap());
                 exec.sync().unwrap();
             })
         });
         group.bench_function(BenchmarkId::new("copy_where_half", len), |b| {
             b.iter(|| {
-                black_box(
-                    copy_where(
-                        &exec,
-                        values.slice(..),
-                        flags.slice(..),
-                        output.slice_mut(..),
-                    )
-                    .unwrap(),
-                );
+                black_box(copy_where(&exec, values.slice(..), flags.slice(..)).unwrap());
             })
         });
         group.bench_function(BenchmarkId::new("gather_reverse", len), |b| {
             b.iter(|| {
-                gather(
-                    &exec,
-                    values.slice(..),
-                    indices.slice(..),
-                    output.slice_mut(..),
-                )
-                .unwrap();
+                black_box(gather(&exec, values.slice(..), indices.slice(..)).unwrap());
                 exec.sync().unwrap();
             })
         });
@@ -141,20 +121,10 @@ fn bench_ordering_and_by_key(c: &mut Criterion) {
     for &len in SORT_SIZES {
         let keys = exec.to_device(&shuffled_u32(len));
         let values = exec.to_device(&dense_f32(len));
-        let out_keys = exec.alloc::<u32>(len);
-        let out_values = exec.alloc::<f32>(len);
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("sort_by_key", len), |b| {
             b.iter(|| {
-                sort_by_key(
-                    &exec,
-                    keys.slice(..),
-                    values.slice(..),
-                    LessU32,
-                    out_keys.slice_mut(..),
-                    out_values.slice_mut(..),
-                )
-                .unwrap();
+                black_box(sort_by_key(&exec, keys.slice(..), values.slice(..), LessU32).unwrap());
                 exec.sync().unwrap();
             })
         });
@@ -163,20 +133,19 @@ fn bench_ordering_and_by_key(c: &mut Criterion) {
     for &len in SIZES {
         let keys = exec.to_device(&(0..len).map(|index| (index / 8) as u32).collect::<Vec<_>>());
         let values = exec.to_device(&dense_f32(len));
-        let out_keys = exec.alloc::<u32>(len);
-        let out_values = exec.alloc::<f32>(len);
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("inclusive_scan_by_key", len), |b| {
             b.iter(|| {
-                inclusive_scan_by_key(
-                    &exec,
-                    keys.slice(..),
-                    values.slice(..),
-                    EqualU32,
-                    SumF32,
-                    out_values.slice_mut(..),
-                )
-                .unwrap();
+                black_box(
+                    inclusive_scan_by_key(
+                        &exec,
+                        keys.slice(..),
+                        values.slice(..),
+                        EqualU32,
+                        SumF32,
+                    )
+                    .unwrap(),
+                );
                 exec.sync().unwrap();
             })
         });
@@ -190,8 +159,6 @@ fn bench_ordering_and_by_key(c: &mut Criterion) {
                         EqualU32,
                         0.0,
                         SumF32,
-                        out_keys.slice_mut(..),
-                        out_values.slice_mut(..),
                     )
                     .unwrap(),
                 );

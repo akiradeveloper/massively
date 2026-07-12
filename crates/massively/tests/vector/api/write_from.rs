@@ -60,21 +60,11 @@ fn inclusive_scan_writes_right_associated_items_to_left_associated_output() {
     let a = exec.to_device(&[1_u32, 2, 3]);
     let b = exec.to_device(&[10_u32, 20, 30]);
     let c = exec.to_device(&[100_u32, 200, 300]);
-    let oa = exec.to_device(&[0_u32; 3]);
-    let ob = exec.to_device(&[0_u32; 3]);
-    let oc = exec.to_device(&[0_u32; 3]);
+    let output = inclusive_scan(&exec, right_input(&a, &b, &c), SumRight).unwrap();
 
-    inclusive_scan(
-        &exec,
-        right_input(&a, &b, &c),
-        SumRight,
-        zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
-    )
-    .unwrap();
-
-    assert_eq!(exec.to_host(&oa).unwrap(), vec![1, 3, 6]);
-    assert_eq!(exec.to_host(&ob).unwrap(), vec![10, 30, 60]);
-    assert_eq!(exec.to_host(&oc).unwrap(), vec![100, 300, 600]);
+    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![1, 3, 6]);
+    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![10, 30, 60]);
+    assert_eq!(exec.to_host(&output.1).unwrap(), vec![100, 300, 600]);
 }
 
 #[test]
@@ -83,21 +73,11 @@ fn sort_writes_right_associated_items_to_left_associated_output() {
     let a = exec.to_device(&[3_u32, 1, 2]);
     let b = exec.to_device(&[30_u32, 10, 20]);
     let c = exec.to_device(&[300_u32, 100, 200]);
-    let oa = exec.to_device(&[0_u32; 3]);
-    let ob = exec.to_device(&[0_u32; 3]);
-    let oc = exec.to_device(&[0_u32; 3]);
+    let output = sort(&exec, right_input(&a, &b, &c), LessRight).unwrap();
 
-    sort(
-        &exec,
-        right_input(&a, &b, &c),
-        LessRight,
-        zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
-    )
-    .unwrap();
-
-    assert_eq!(exec.to_host(&oa).unwrap(), vec![1, 2, 3]);
-    assert_eq!(exec.to_host(&ob).unwrap(), vec![10, 20, 30]);
-    assert_eq!(exec.to_host(&oc).unwrap(), vec![100, 200, 300]);
+    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![10, 20, 30]);
+    assert_eq!(exec.to_host(&output.1).unwrap(), vec![100, 200, 300]);
 }
 
 #[test]
@@ -107,22 +87,11 @@ fn copy_where_writes_right_associated_items_to_left_associated_output() {
     let b = exec.to_device(&[10_u32, 20, 30, 40]);
     let c = exec.to_device(&[100_u32, 200, 300, 400]);
     let flags = exec.to_device(&[0_u32, 1, 1, 0]);
-    let oa = exec.to_device(&[0_u32; 4]);
-    let ob = exec.to_device(&[0_u32; 4]);
-    let oc = exec.to_device(&[0_u32; 4]);
+    let output = copy_where(&exec, right_input(&a, &b, &c), flags.slice(..)).unwrap();
 
-    let count = copy_where(
-        &exec,
-        right_input(&a, &b, &c),
-        flags.slice(..),
-        zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
-    )
-    .unwrap();
-
-    assert_eq!(count, 2);
-    assert_eq!(exec.to_host(&oa.slice(..2)).unwrap(), vec![2, 3]);
-    assert_eq!(exec.to_host(&ob.slice(..2)).unwrap(), vec![20, 30]);
-    assert_eq!(exec.to_host(&oc.slice(..2)).unwrap(), vec![200, 300]);
+    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![2, 3]);
+    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![20, 30]);
+    assert_eq!(exec.to_host(&output.1).unwrap(), vec![200, 300]);
 }
 
 #[test]
@@ -132,21 +101,11 @@ fn gather_writes_right_associated_items_to_left_associated_output() {
     let b = exec.to_device(&[10_u32, 20, 30]);
     let c = exec.to_device(&[100_u32, 200, 300]);
     let indices = exec.to_device(&[2_u32, 0]);
-    let oa = exec.to_device(&[0_u32; 2]);
-    let ob = exec.to_device(&[0_u32; 2]);
-    let oc = exec.to_device(&[0_u32; 2]);
+    let output = gather(&exec, right_input(&a, &b, &c), indices.slice(..)).unwrap();
 
-    gather(
-        &exec,
-        right_input(&a, &b, &c),
-        indices.slice(..),
-        zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
-    )
-    .unwrap();
-
-    assert_eq!(exec.to_host(&oa).unwrap(), vec![3, 1]);
-    assert_eq!(exec.to_host(&ob).unwrap(), vec![30, 10]);
-    assert_eq!(exec.to_host(&oc).unwrap(), vec![300, 100]);
+    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![3, 1]);
+    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![30, 10]);
+    assert_eq!(exec.to_host(&output.1).unwrap(), vec![300, 100]);
 }
 
 #[test]
@@ -158,22 +117,17 @@ fn merge_writes_right_associated_items_to_left_associated_output() {
     let ra = exec.to_device(&[2_u32, 4]);
     let rb = exec.to_device(&[20_u32, 40]);
     let rc = exec.to_device(&[200_u32, 400]);
-    let oa = exec.to_device(&[0_u32; 4]);
-    let ob = exec.to_device(&[0_u32; 4]);
-    let oc = exec.to_device(&[0_u32; 4]);
-
-    merge(
+    let output = merge(
         &exec,
         right_input(&la, &lb, &lc),
         right_input(&ra, &rb, &rc),
         LessRight,
-        zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
     )
     .unwrap();
 
-    assert_eq!(exec.to_host(&oa).unwrap(), vec![1, 2, 3, 4]);
-    assert_eq!(exec.to_host(&ob).unwrap(), vec![10, 20, 30, 40]);
-    assert_eq!(exec.to_host(&oc).unwrap(), vec![100, 200, 300, 400]);
+    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![1, 2, 3, 4]);
+    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![10, 20, 30, 40]);
+    assert_eq!(exec.to_host(&output.1).unwrap(), vec![100, 200, 300, 400]);
 }
 
 #[test]
@@ -183,25 +137,13 @@ fn sort_by_key_reassociates_value_output() {
     let a = exec.to_device(&[30_u32, 10, 20]);
     let b = exec.to_device(&[300_u32, 100, 200]);
     let c = exec.to_device(&[3_000_u32, 1_000, 2_000]);
-    let out_keys = exec.to_device(&[0_u32; 3]);
-    let oa = exec.to_device(&[0_u32; 3]);
-    let ob = exec.to_device(&[0_u32; 3]);
-    let oc = exec.to_device(&[0_u32; 3]);
-
-    sort_by_key(
-        &exec,
-        keys.slice(..),
-        right_input(&a, &b, &c),
-        LessU32,
-        out_keys.slice_mut(..),
-        zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
-    )
-    .unwrap();
+    let (out_keys, output) =
+        sort_by_key(&exec, keys.slice(..), right_input(&a, &b, &c), LessU32).unwrap();
 
     assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 3]);
-    assert_eq!(exec.to_host(&oa).unwrap(), vec![10, 20, 30]);
-    assert_eq!(exec.to_host(&ob).unwrap(), vec![100, 200, 300]);
-    assert_eq!(exec.to_host(&oc).unwrap(), vec![1_000, 2_000, 3_000]);
+    assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![10, 20, 30]);
+    assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![100, 200, 300]);
+    assert_eq!(exec.to_host(&output.1).unwrap(), vec![1_000, 2_000, 3_000]);
 }
 
 #[test]

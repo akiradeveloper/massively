@@ -3,11 +3,9 @@
 //! A [`Segmented`] value combines a flat [`MIter`] with offsets. Segment `i` is
 //! the half-open range `offsets[i]..offsets[i + 1]` in the flat values.
 //!
-//! Segment algorithms have three output contracts:
-//!
-//! - [`MapLikeExecutable`] preserves the flat length and reuses the input offsets.
-//! - [`UniqueLikeExecutable`] may change each segment's length and writes new offsets.
-//! - [`ReduceLikeExecutable`] writes one item per segment.
+//! Segment algorithms return owned device storage. Length-preserving algorithms
+//! return flat values, length-changing algorithms return values with rebuilt
+//! offsets, and reductions return one value per segment.
 
 pub(crate) mod control;
 
@@ -15,7 +13,7 @@ use cubecl::prelude::*;
 use std::marker::PhantomData;
 
 use crate::{
-    Error, Executor, MAlloc, MIndex, MItem, MIter, MIterMut, MStorage, WriteFrom,
+    Error, Executor, MAlloc, MCanonical, MIndex, MItem, MIter, MIterMut, MStorage, MVec, WriteFrom,
     op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
 };
 
@@ -50,29 +48,19 @@ impl<Values, Offsets> Segmented<Values, Offsets> {
 
 /// Mutable flat values and offsets for a length-changing segmented result.
 #[derive(Debug)]
-pub struct SegmentedMut<Values, Offsets> {
+pub(crate) struct SegmentedMut<Values, Offsets> {
     values: Values,
     offsets: Offsets,
 }
 
 impl<Values, Offsets> SegmentedMut<Values, Offsets> {
     /// Combines preallocated flat value and offset outputs.
-    pub const fn new(values: Values, offsets: Offsets) -> Self {
+    pub(crate) const fn new(values: Values, offsets: Offsets) -> Self {
         Self { values, offsets }
     }
 
-    /// Returns the flat value output.
-    pub const fn values(&self) -> &Values {
-        &self.values
-    }
-
-    /// Returns the offset output.
-    pub const fn offsets(&self) -> &Offsets {
-        &self.offsets
-    }
-
     /// Decomposes this output into its flat values and offsets.
-    pub fn into_parts(self) -> (Values, Offsets) {
+    pub(crate) fn into_parts(self) -> (Values, Offsets) {
         (self.values, self.offsets)
     }
 }
@@ -145,7 +133,8 @@ pub struct IsSortedUntil<Less>(pub Less);
 ///
 /// The output contains only flat values. Its segment offsets are the input
 /// offsets and therefore do not need to be copied.
-pub trait MapLikeExecutable<R, Input, InputOffsets, Output>: Sized
+#[doc(hidden)]
+pub(crate) trait MapLikeExecutableInto<R, Input, InputOffsets, Output>: Sized
 where
     R: Runtime,
     Input: MIter<R>,
@@ -153,7 +142,7 @@ where
     Output: MIterMut<R>,
 {
     /// Executes the algorithm for every segment.
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -165,7 +154,9 @@ where
 ///
 /// The caller provides capacity for both the flat values and the rebuilt
 /// offsets. The returned index is the total number of flat values written.
-pub trait UniqueLikeExecutable<R, Input, InputOffsets, Output, OutputOffsets>: Sized
+#[doc(hidden)]
+pub(crate) trait UniqueLikeExecutableInto<R, Input, InputOffsets, Output, OutputOffsets>:
+    Sized
 where
     R: Runtime,
     Input: MIter<R>,
@@ -174,7 +165,7 @@ where
     OutputOffsets: MIterMut<R, Item = MIndex>,
 {
     /// Executes the algorithm for every segment.
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -183,7 +174,8 @@ where
 }
 
 /// Execution contract for segment algorithms that write one item per segment.
-pub trait ReduceLikeExecutable<R, Input, InputOffsets, Output>: Sized
+#[doc(hidden)]
+pub(crate) trait ReduceLikeExecutableInto<R, Input, InputOffsets, Output>: Sized
 where
     R: Runtime,
     Input: MIter<R>,
@@ -191,7 +183,7 @@ where
     Output: MIterMut<R>,
 {
     /// Executes the algorithm for every segment.
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -199,7 +191,77 @@ where
     ) -> Result<(), Error>;
 }
 
-impl<R, Input, InputOffsets, Output, Op> MapLikeExecutable<R, Input, InputOffsets, Output>
+/// Owned-result execution contract for segment algorithms that preserve flat length.
+pub trait MapLikeExecutable<R, Input, InputOffsets>: Sized
+where
+    R: Runtime,
+    Input: MIter<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+{
+    type OutputItem: MCanonical<R>;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error>;
+}
+
+/// Owned-result execution contract for length-changing segment algorithms.
+pub trait UniqueLikeExecutable<R, Input, InputOffsets>: Sized
+where
+    R: Runtime,
+    Input: MIter<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+{
+    type OutputItem: MCanonical<R>;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<Segmented<MVec<R, Self::OutputItem>, MVec<R, MIndex>>, Error>;
+}
+
+/// Owned-result execution contract for algorithms that return one item per segment.
+pub trait ReduceLikeExecutable<R, Input, InputOffsets>: Sized
+where
+    R: Runtime,
+    Input: MIter<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+{
+    type OutputItem: MCanonical<R>;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error>;
+}
+
+impl<R, Input, InputOffsets, Op> MapLikeExecutable<R, Input, InputOffsets>
+    for ForEachSegment<Map<Op>>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+    Op: UnaryOp<Input::Item>,
+    Op::Output: MCanonical<R>,
+{
+    type OutputItem = Op::Output;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error> {
+        let output = exec.alloc_mvec::<Self::OutputItem>(input.values().len()? as usize);
+        MapLikeExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
+        Ok(output)
+    }
+}
+
+impl<R, Input, InputOffsets, Output, Op> MapLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<Map<Op>>
 where
     R: Runtime,
@@ -209,7 +271,7 @@ where
     Op: UnaryOp<Input::Item>,
     Output::Item: WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -221,7 +283,7 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output, Less> MapLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output, Less> MapLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<Sort<Less>>
 where
     R: Runtime,
@@ -231,7 +293,7 @@ where
     Less: BinaryPredicateOp<Input::Item>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -277,7 +339,7 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output, Op> MapLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output, Op> MapLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<AdjacentDifference<Op>>
 where
     R: Runtime,
@@ -289,7 +351,7 @@ where
     <Output::SliceMut as MIterMut<R>>::Item: WriteFrom<Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -310,7 +372,7 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output, Op> MapLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output, Op> MapLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<InclusiveScan<Op>>
 where
     R: Runtime,
@@ -320,7 +382,7 @@ where
     Op: ReductionOp<Input::Item>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -336,7 +398,7 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output, Op, Init> MapLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output, Op, Init> MapLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<ExclusiveScan<Op, Init>>
 where
     R: Runtime,
@@ -347,7 +409,7 @@ where
     Op: ReductionOp<Input::Item>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -367,7 +429,7 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output> MapLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output> MapLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<Reverse>
 where
     R: Runtime,
@@ -376,7 +438,7 @@ where
     Output: MIterMut<R>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -390,7 +452,7 @@ where
 }
 
 impl<R, Input, InputOffsets, Output, OutputOffsets, Equal>
-    UniqueLikeExecutable<R, Input, InputOffsets, Output, OutputOffsets>
+    UniqueLikeExecutableInto<R, Input, InputOffsets, Output, OutputOffsets>
     for ForEachSegment<Unique<Equal>>
 where
     R: Runtime,
@@ -401,7 +463,7 @@ where
     Equal: BinaryPredicateOp<Input::Item>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -526,7 +588,7 @@ where
 }
 
 impl<R, Input, InputOffsets, Output, OutputOffsets, Pred>
-    UniqueLikeExecutable<R, Input, InputOffsets, Output, OutputOffsets>
+    UniqueLikeExecutableInto<R, Input, InputOffsets, Output, OutputOffsets>
     for ForEachSegment<Filter<Pred>>
 where
     R: Runtime,
@@ -537,7 +599,7 @@ where
     Pred: PredicateOp<Input::Item>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -559,8 +621,8 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output, Op, Init> ReduceLikeExecutable<R, Input, InputOffsets, Output>
-    for ForEachSegment<Reduce<Op, Init>>
+impl<R, Input, InputOffsets, Output, Op, Init>
+    ReduceLikeExecutableInto<R, Input, InputOffsets, Output> for ForEachSegment<Reduce<Op, Init>>
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
@@ -570,7 +632,7 @@ where
     Op: ReductionOp<Input::Item>,
     Output::Item: WriteFrom<Input::Item>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -584,7 +646,7 @@ where
 macro_rules! impl_predicate_reduce_like {
     ($algorithm:ident, $map:ident, $reducer:expr, $init:expr) => {
         impl<R, Input, InputOffsets, Output, Pred>
-            ReduceLikeExecutable<R, Input, InputOffsets, Output>
+            ReduceLikeExecutableInto<R, Input, InputOffsets, Output>
             for ForEachSegment<$algorithm<Pred>>
         where
             R: Runtime,
@@ -594,7 +656,7 @@ macro_rules! impl_predicate_reduce_like {
             Pred: PredicateOp<Input::Item>,
             Output::Item: WriteFrom<MIndex>,
         {
-            fn run(
+            fn run_into(
                 self,
                 exec: &Executor<R>,
                 input: Segmented<Input, InputOffsets>,
@@ -621,7 +683,7 @@ impl_predicate_reduce_like!(AllOf, PredicateMap, control::MinU32, 1u32);
 impl_predicate_reduce_like!(AnyOf, PredicateMap, control::MaxU32, 0u32);
 impl_predicate_reduce_like!(NoneOf, NegatedPredicateMap, control::MinU32, 1u32);
 
-impl<R, Input, InputOffsets, Output, Less> ReduceLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output, Less> ReduceLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<IsSorted<Less>>
 where
     R: Runtime,
@@ -631,7 +693,7 @@ where
     Less: BinaryPredicateOp<Input::Item>,
     Output::Item: WriteFrom<MIndex>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -662,7 +724,7 @@ where
     }
 }
 
-impl<R, Input, InputOffsets, Output, Less> ReduceLikeExecutable<R, Input, InputOffsets, Output>
+impl<R, Input, InputOffsets, Output, Less> ReduceLikeExecutableInto<R, Input, InputOffsets, Output>
     for ForEachSegment<IsSortedUntil<Less>>
 where
     R: Runtime,
@@ -672,7 +734,7 @@ where
     Less: BinaryPredicateOp<Input::Item>,
     Output::Item: WriteFrom<MIndex>,
 {
-    fn run(
+    fn run_into(
         self,
         exec: &Executor<R>,
         input: Segmented<Input, InputOffsets>,
@@ -703,3 +765,206 @@ where
             .transform_into(exec, crate::op::Identity, output)
     }
 }
+
+macro_rules! impl_owned_map_input {
+    ($algorithm:ty, $( $bound:tt )+) => {
+        impl<R, Input, InputOffsets, Op> MapLikeExecutable<R, Input, InputOffsets>
+            for ForEachSegment<$algorithm>
+        where
+            R: Runtime,
+            Input: MIter<R>,
+            Input::Item: MCanonical<R>,
+            InputOffsets: MIter<R, Item = MIndex>,
+            $( $bound )+
+        {
+            type OutputItem = Input::Item;
+
+            fn run(
+                self,
+                exec: &Executor<R>,
+                input: Segmented<Input, InputOffsets>,
+            ) -> Result<MVec<R, Self::OutputItem>, Error> {
+                let output = exec.alloc_mvec::<Self::OutputItem>(input.values().len()? as usize);
+                MapLikeExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
+                Ok(output)
+            }
+        }
+    };
+}
+
+impl_owned_map_input!(Sort<Op>, Op: BinaryPredicateOp<Input::Item>);
+impl_owned_map_input!(InclusiveScan<Op>, Op: ReductionOp<Input::Item>);
+
+impl<R, Input, InputOffsets, Op, Init> MapLikeExecutable<R, Input, InputOffsets>
+    for ForEachSegment<ExclusiveScan<Op, Init>>
+where
+    R: Runtime,
+    Input: MIter<R, Item = Init>,
+    Input::Item: MCanonical<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+    Init: CubeType,
+    Op: ReductionOp<Input::Item>,
+{
+    type OutputItem = Input::Item;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error> {
+        let output = exec.alloc_mvec::<Self::OutputItem>(input.values().len()? as usize);
+        MapLikeExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
+        Ok(output)
+    }
+}
+
+impl<R, Input, InputOffsets> MapLikeExecutable<R, Input, InputOffsets> for ForEachSegment<Reverse>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+{
+    type OutputItem = Input::Item;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error> {
+        let output = exec.alloc_mvec::<Self::OutputItem>(input.values().len()? as usize);
+        MapLikeExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
+        Ok(output)
+    }
+}
+
+impl<R, Input, InputOffsets, Op> MapLikeExecutable<R, Input, InputOffsets>
+    for ForEachSegment<AdjacentDifference<Op>>
+where
+    R: Runtime,
+    Input: MIter<R> + Clone,
+    Input::Item: MCanonical<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+    Op: ReductionOp<Input::Item>,
+{
+    type OutputItem = Input::Item;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error> {
+        let AdjacentDifference(op) = self.0;
+        let (values, offsets) = input.into_parts();
+        let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
+        let output = crate::vector::adjacent_difference(exec, values.clone(), op)?;
+        crate::vector::transform_where(
+            exec,
+            values,
+            crate::op::Identity,
+            control.heads.column(),
+            output.slice_mut(..),
+        )?;
+        Ok(output)
+    }
+}
+
+macro_rules! impl_owned_unique_like {
+    ($algorithm:ty, $( $bound:tt )+) => {
+        impl<R, Input, InputOffsets, Op> UniqueLikeExecutable<R, Input, InputOffsets>
+            for ForEachSegment<$algorithm>
+        where
+            R: Runtime,
+            Input: MIter<R> + Clone,
+            Input::Item: MCanonical<R>,
+            InputOffsets: MIter<R, Item = MIndex>,
+            $( $bound )+
+        {
+            type OutputItem = Input::Item;
+
+            fn run(
+                self,
+                exec: &Executor<R>,
+                input: Segmented<Input, InputOffsets>,
+            ) -> Result<Segmented<MVec<R, Self::OutputItem>, MVec<R, MIndex>>, Error> {
+                let mut values =
+                    exec.alloc_mvec::<Self::OutputItem>(input.values().len()? as usize);
+                let offsets = exec.alloc_mvec::<MIndex>(input.offsets().len()? as usize);
+                let written = UniqueLikeExecutableInto::run_into(
+                    self,
+                    exec,
+                    input,
+                    SegmentedMut::new(values.slice_mut(..), offsets.slice_mut(..)),
+                )?;
+                values.truncate(written);
+                Ok(Segmented::new(values, offsets))
+            }
+        }
+    };
+}
+
+impl_owned_unique_like!(Unique<Op>, Op: BinaryPredicateOp<Input::Item>);
+impl_owned_unique_like!(Filter<Op>, Op: PredicateOp<Input::Item>);
+
+impl<R, Input, InputOffsets, Op, Init> ReduceLikeExecutable<R, Input, InputOffsets>
+    for ForEachSegment<Reduce<Op, Init>>
+where
+    R: Runtime,
+    Input: MIter<R, Item = Init>,
+    Input::Item: MCanonical<R>,
+    InputOffsets: MIter<R, Item = MIndex>,
+    Init: CubeType + MAlloc<R> + Copy,
+    Op: ReductionOp<Input::Item>,
+{
+    type OutputItem = Input::Item;
+
+    fn run(
+        self,
+        exec: &Executor<R>,
+        input: Segmented<Input, InputOffsets>,
+    ) -> Result<MVec<R, Self::OutputItem>, Error> {
+        let offset_len = input.offsets().len()? as usize;
+        let segment_count = offset_len
+            .checked_sub(1)
+            .ok_or(Error::LengthMismatch { left: 1, right: 0 })?;
+        let output = exec.alloc_mvec::<Self::OutputItem>(segment_count);
+        ReduceLikeExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
+        Ok(output)
+    }
+}
+
+macro_rules! impl_owned_reduce_index {
+    ($algorithm:ty, $( $bound:tt )+) => {
+        impl<R, Input, InputOffsets, Op> ReduceLikeExecutable<R, Input, InputOffsets>
+            for ForEachSegment<$algorithm>
+        where
+            R: Runtime,
+            Input: MIter<R>,
+            InputOffsets: MIter<R, Item = MIndex>,
+            $( $bound )+
+        {
+            type OutputItem = MIndex;
+
+            fn run(
+                self,
+                exec: &Executor<R>,
+                input: Segmented<Input, InputOffsets>,
+            ) -> Result<MVec<R, Self::OutputItem>, Error> {
+                let offset_len = input.offsets().len()? as usize;
+                let segment_count = offset_len
+                    .checked_sub(1)
+                    .ok_or(Error::LengthMismatch { left: 1, right: 0 })?;
+                let output = exec.alloc_mvec::<MIndex>(segment_count);
+                ReduceLikeExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
+                Ok(output)
+            }
+        }
+    };
+}
+
+impl_owned_reduce_index!(CountIf<Op>, Op: PredicateOp<Input::Item>);
+impl_owned_reduce_index!(AllOf<Op>, Op: PredicateOp<Input::Item>);
+impl_owned_reduce_index!(AnyOf<Op>, Op: PredicateOp<Input::Item>);
+impl_owned_reduce_index!(NoneOf<Op>, Op: PredicateOp<Input::Item>);
+impl_owned_reduce_index!(IsSorted<Op>, Op: BinaryPredicateOp<Input::Item>);
+impl_owned_reduce_index!(IsSortedUntil<Op>, Op: BinaryPredicateOp<Input::Item>);

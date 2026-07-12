@@ -139,8 +139,7 @@ impl<R: Runtime> Executor<R> {
     /// use massively::{Executor, vector::fill};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    /// let output = exec.alloc::<u32>(4);
-    /// fill(&exec, 7, output.slice_mut(..)).unwrap();
+    /// let output = fill(&exec, 4, 7_u32).unwrap();
     /// exec.sync().unwrap();
     /// ```
     pub fn sync(&self) -> Result<(), Error> {
@@ -178,6 +177,19 @@ impl<R: Runtime, T> DeviceVec<R, T> {
         self.len == 0
     }
 
+    /// Shrinks the logical length without copying or reallocating device memory.
+    ///
+    /// The underlying allocation remains unchanged and returns to the runtime's
+    /// memory pool at its original size when the final handle is dropped.
+    pub fn truncate(&mut self, len: usize) {
+        assert!(
+            len <= self.len,
+            "cannot truncate a DeviceVec of length {} to {len}",
+            self.len,
+        );
+        self.len = len;
+    }
+
     /// Creates an internal read-expression leaf over the whole allocation.
     pub(crate) fn column(&self) -> Column<T> {
         Column::from_handle(self.handle.clone(), self.len, 0, self.owner, self.len)
@@ -210,11 +222,11 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, vector::fill};
+    /// use massively::{Executor, lazy, vector::replace_where};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4]);
-    /// fill(&exec, 9, values.slice_mut(1..3)).unwrap();
+    /// replace_where(&exec, 9, lazy::constant(1_u32).take(2), values.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 9, 9, 4]);
     /// ```
@@ -329,12 +341,12 @@ impl<T> DeviceSliceMut<T> {
     ///
     /// ```
     /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-    /// use massively::{Executor, vector::fill};
+    /// use massively::{Executor, lazy, vector::replace_where};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4, 5]);
     /// let writable = values.slice_mut(1..5);
-    /// fill(&exec, 9, writable.slice_mut(1..3)).unwrap();
+    /// replace_where(&exec, 9, lazy::constant(1_u32).take(2), writable.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 2, 9, 9, 5]);
     /// ```

@@ -103,34 +103,31 @@ mod tests {
         let destinations = exec.to_device(&[1_u32, 2, 2, 0, 1]);
         let frontier = exec.to_device(&[2_u32, 0]);
 
-        let emitted = exec.alloc::<u32>(4);
-        traverse(
+        let emitted = traverse(
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
         )
         .unwrap()
         .map(destination_id(), Identity)
-        .emit(&exec, emitted.slice_mut(..))
+        .emit(&exec)
         .unwrap();
         assert_eq!(exec.to_host(&emitted).unwrap(), vec![0, 1, 1, 2]);
 
         let edge_values = exec.to_device(&[10_u32, 20, 30, 40, 50]);
-        let source_reduced = exec.alloc::<u32>(2);
-        traverse(
+        let source_reduced = traverse(
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
         )
         .unwrap()
         .map(edge(edge_values.slice(..)), Identity)
-        .reduce_by_source(&exec, 0, Add, source_reduced.slice_mut(..))
+        .reduce_by_source(&exec, 0, Add)
         .unwrap();
         assert_eq!(exec.to_host(&source_reduced).unwrap(), vec![90, 30]);
 
         let vertex_values = exec.to_device(&[1_u32, 10, 100]);
-        let destination_reduced = exec.full(3, 0_u32).unwrap();
-        traverse(
+        let destination_reduced = traverse(
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             frontier.slice(..),
@@ -140,7 +137,7 @@ mod tests {
             zip2(source(vertex_values.slice(..)), edge_id()),
             SourcePlusEdge,
         )
-        .reduce_by_destination(&exec, 0, Add, destination_reduced.slice_mut(..))
+        .reduce_by_destination(&exec, 0, Add)
         .unwrap();
         assert_eq!(
             exec.to_host(&destination_reduced).unwrap(),
@@ -171,25 +168,17 @@ mod tests {
 
         let distance = exec.to_device(&[0_u32, u32::MAX, u32::MAX]);
         let single_source = exec.to_device(&[0_u32]);
-        let next = exec.alloc::<u32>(3);
-        let next_len = traverse(
+        let next = traverse(
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             single_source.slice(..),
         )
         .unwrap()
         .map(source(distance.slice(..)), AddOne)
-        .relax_min_by_destination(
-            &exec,
-            u32::MAX,
-            distance.slice(..),
-            distance.slice_mut(..),
-            next.slice_mut(..),
-        )
+        .relax_min_by_destination(&exec, u32::MAX, distance.slice(..), distance.slice_mut(..))
         .unwrap();
-        assert_eq!(next_len, 2);
         assert_eq!(exec.to_host(&distance).unwrap(), vec![0, 1, 1]);
-        assert_eq!(exec.to_host(&next.slice(..2)).unwrap(), vec![1, 2]);
+        assert_eq!(exec.to_host(&next).unwrap(), vec![1, 2]);
     }
 
     #[test]
@@ -199,14 +188,11 @@ mod tests {
         let destinations = exec.to_device(&[1_u32, 2, 2, 0, 1]);
         let sources = exec.to_device(&[0_u32, 1]);
         let targets = exec.to_device(&[1_u32, 2]);
-        let counts = exec.alloc::<u32>(2);
-
-        intersect_count(
+        let counts = intersect_count(
             &exec,
             Csr::new(destinations.slice(..), offsets.slice(..)),
             sources.slice(..),
             targets.slice(..),
-            counts.slice_mut(..),
         )
         .unwrap();
 

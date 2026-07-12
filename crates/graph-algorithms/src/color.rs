@@ -6,7 +6,7 @@ use massively::Executor;
 use super::common::{self, CsrGraph};
 
 pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> common::Result<Vec<u32>> {
-    let degree = common::degrees(exec, graph)?;
+    let degree = exec.to_host(&common::degrees(exec, graph)?)?;
     let mut order: Vec<usize> = (0..graph.vertex_count()).collect();
     order.sort_by_key(|&vertex| std::cmp::Reverse(degree[vertex]));
 

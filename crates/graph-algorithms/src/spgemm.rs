@@ -43,16 +43,12 @@ pub fn solve<R: Runtime>(
         let traversal = graph::traverse(exec, rhs.csr(), frontier.slice(..))?;
         let edge_count = traversal.edge_count() as usize;
         if edge_count != 0 {
-            let emitted = exec.alloc::<u32>(edge_count);
-            traversal
+            let emitted = traversal
                 .map(graph::destination_id(), Identity)
-                .emit(exec, emitted.slice_mut(..))?;
-            let sorted = exec.alloc::<u32>(edge_count);
-            massively::vector::sort(exec, emitted.slice(..), LessU32, sorted.slice_mut(..))?;
-            let unique = exec.alloc::<u32>(edge_count);
-            let len =
-                massively::vector::unique(exec, sorted.slice(..), EqualU32, unique.slice_mut(..))?;
-            neighbors.extend(exec.to_host(&unique.slice(..len as usize))?);
+                .emit(exec)?;
+            let sorted = massively::vector::sort(exec, emitted.slice(..), LessU32)?;
+            let unique = massively::vector::unique(exec, sorted.slice(..), EqualU32)?;
+            neighbors.extend(exec.to_host(&unique)?);
         }
         offsets.push(neighbors.len() as u32);
     }

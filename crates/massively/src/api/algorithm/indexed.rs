@@ -1,8 +1,8 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom};
+use crate::{Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom};
 
-/// Gathers `values[indices[i]]` into preallocated output storage.
+/// Gathers `values[indices[i]]` into owned device storage.
 ///
 /// # Examples
 ///
@@ -13,19 +13,30 @@ use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom};
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = exec.to_device(&[10_u32, 20, 30]);
 /// let indices = exec.to_device(&[2_u32, 0, 1]);
-/// let output = exec.alloc::<u32>(3);
-///
-/// gather(
-///     &exec,
-///     values.slice(..),
-///     indices.slice(..),
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
+/// let output = gather(&exec, values.slice(..), indices.slice(..)).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![30, 10, 20]);
 /// ```
-pub fn gather<R, Values, Indices, Output>(
+pub fn gather<R, Values, Indices>(
+    exec: &Executor<R>,
+    values: Values,
+    indices: Indices,
+) -> Result<MVec<R, Values::Item>, Error>
+where
+    R: Runtime,
+    Values: MIter<R>,
+    Values::Item: MCanonical<R>,
+    Indices: MIter<R, Item = MIndex>,
+{
+    let len = indices.len()? as usize;
+    let output = exec.alloc_mvec::<Values::Item>(len);
+    gather_into(exec, values, indices, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Gathers values into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn gather_into<R, Values, Indices, Output>(
     exec: &Executor<R>,
     values: Values,
     indices: Indices,
@@ -95,7 +106,7 @@ where
     )
 }
 
-/// Reverses values into preallocated output storage.
+/// Reverses values into owned device storage.
 ///
 /// # Examples
 ///
@@ -105,13 +116,28 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// reverse(&exec, input.slice(..), output.slice_mut(..)).unwrap();
+/// let output = reverse(&exec, input.slice(..)).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![4, 3, 2, 1]);
 /// ```
-pub fn reverse<R, Values, Output>(
+pub fn reverse<R, Values>(
+    exec: &Executor<R>,
+    values: Values,
+) -> Result<MVec<R, Values::Item>, Error>
+where
+    R: Runtime,
+    Values: MIter<R>,
+    Values::Item: MCanonical<R>,
+{
+    let len = values.len()? as usize;
+    let output = exec.alloc_mvec::<Values::Item>(len);
+    reverse_into(exec, values, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Reverses values into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn reverse_into<R, Values, Output>(
     exec: &Executor<R>,
     values: Values,
     output: Output,

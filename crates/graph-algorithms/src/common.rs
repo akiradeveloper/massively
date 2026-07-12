@@ -100,14 +100,15 @@ pub(crate) fn all_vertices<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> 
     exec.to_device(&(0..graph.vertex_count() as u32).collect::<Vec<_>>())
 }
 
-pub(crate) fn degrees<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> Result<Vec<u32>> {
+pub(crate) fn degrees<R: Runtime>(
+    exec: &Executor<R>,
+    graph: &CsrGraph,
+) -> Result<DeviceVec<R, u32>> {
     let device_graph = DeviceGraph::new(exec, graph);
     let frontier = all_vertices(exec, graph);
-    let output = exec.alloc::<u32>(graph.vertex_count());
     graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
         .map(graph::edge_id(), One)
-        .reduce_by_source(exec, 0, SumU32, output.slice_mut(..))?;
-    exec.to_host(&output)
+        .reduce_by_source(exec, 0, SumU32)
 }
 
 #[cfg(test)]

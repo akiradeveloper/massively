@@ -1,8 +1,10 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::ReductionOp};
+use crate::{
+    Error, Executor, MCanonical, MIter, MIterMut, MStorage, MVec, WriteFrom, op::ReductionOp,
+};
 
-/// Computes an inclusive scan into preallocated output storage.
+/// Computes an inclusive scan and returns owned device storage.
 ///
 /// # Examples
 ///
@@ -22,13 +24,30 @@ use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::ReductionOp};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// inclusive_scan(&exec, input.slice(..), Add, output.slice_mut(..)).unwrap();
+/// let output = inclusive_scan(&exec, input.slice(..), Add).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 6, 10]);
 /// ```
-pub fn inclusive_scan<R, Input, Output, Op>(
+pub fn inclusive_scan<R, Input, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Op: ReductionOp<Input::Item>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc_mvec::<Input::Item>(len);
+    inclusive_scan_into(exec, input, op, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Computes an inclusive scan into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn inclusive_scan_into<R, Input, Output, Op>(
     exec: &Executor<R>,
     input: Input,
     op: Op,
@@ -64,13 +83,30 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// adjacent_difference(&exec, input.slice(..), Add, output.slice_mut(..)).unwrap();
+/// let output = adjacent_difference(&exec, input.slice(..), Add).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 5, 7]);
 /// ```
-pub fn adjacent_difference<R, Input, Output, Op>(
+pub fn adjacent_difference<R, Input, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Op: ReductionOp<Input::Item>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc_mvec::<Input::Item>(len);
+    adjacent_difference_into(exec, input, op, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Computes adjacent reductions into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn adjacent_difference_into<R, Input, Output, Op>(
     exec: &Executor<R>,
     input: Input,
     op: Op,
@@ -86,7 +122,7 @@ where
     input.adjacent_difference_with(exec, op, output)
 }
 
-/// Computes an exclusive scan into preallocated output storage.
+/// Computes an exclusive scan and returns owned device storage.
 ///
 /// # Examples
 ///
@@ -106,13 +142,31 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// exclusive_scan(&exec, input.slice(..), 0, Add, output.slice_mut(..)).unwrap();
+/// let output = exclusive_scan(&exec, input.slice(..), 0, Add).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 3, 6]);
 /// ```
-pub fn exclusive_scan<R, Input, Output, Op>(
+pub fn exclusive_scan<R, Input, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    init: Input::Item,
+    op: Op,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Op: ReductionOp<Input::Item>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc_mvec::<Input::Item>(len);
+    exclusive_scan_into(exec, input, init, op, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Computes an exclusive scan into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn exclusive_scan_into<R, Input, Output, Op>(
     exec: &Executor<R>,
     input: Input,
     init: Input::Item,

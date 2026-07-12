@@ -16,6 +16,11 @@ pub trait MStorage<R: Runtime>: Sized {
         Ok(self.len()? == 0)
     }
 
+    /// Shrinks the logical length without copying or reallocating device memory.
+    ///
+    /// Multi-column storage truncates every physical column to the same length.
+    fn truncate(&mut self, len: MIndex);
+
     fn slice<Bounds>(&self, range: Bounds) -> impl MIter<R, Item = Self::Item> + '_
     where
         Bounds: RangeBounds<MIndex>;
@@ -32,6 +37,21 @@ pub trait MAlloc<R: Runtime>: MItem<R> {
     #[doc(hidden)]
     fn alloc(exec: &Executor<R>, len: usize) -> <Self as MAlloc<R>>::Storage;
 }
+
+/// Maps a semantic item shape to its canonical left-associated owned item type.
+///
+/// Input expression trees preserve their semantic tuple nesting. Owned output
+/// storage instead has one stable left-associated shape for each ordered leaf
+/// sequence. This type-level map connects those two representations.
+pub trait MCanonical<R: Runtime>: MItem<R> {
+    type Canonical: MAlloc<R> + WriteFrom<Self>;
+}
+
+/// Owned canonical device storage for a logical item type.
+///
+/// A scalar item maps to one [`crate::DeviceVec`]. A multi-column item maps to
+/// a left-associated [`Zip`] tree of `DeviceVec`s.
+pub type MVec<R, Item> = <<Item as MCanonical<R>>::Canonical as MAlloc<R>>::Storage;
 
 pub(crate) fn resolve_iter_range<Bounds>(len: MIndex, range: Bounds) -> (usize, usize)
 where
@@ -89,8 +109,7 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let values = lazy::counting(10).take(5);
 /// let middle = values.slice(1..4);
-/// let output = exec.alloc::<u32>(middle.len().unwrap() as usize);
-/// transform(&exec, middle, Identity, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, middle, Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![11, 12, 13]);
 /// ```
@@ -1431,9 +1450,8 @@ use crate::core::facade as private;
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let left = exec.to_device(&[1_u32, 2, 3]);
 /// let right = exec.to_device(&[10_u32, 20, 30]);
-/// let output = exec.alloc::<u32>(3);
 /// let input = zip2(left.slice(..), right.slice(..));
-/// transform(&exec, input, AddPair, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, input, AddPair).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![11, 22, 33]);
 /// ```

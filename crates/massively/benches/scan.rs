@@ -28,46 +28,34 @@ fn bench_scan(c: &mut Criterion) {
     for &len in common::SIZES {
         let values = exec.to_device(&common::dense_f32(len));
         let keys = exec.to_device(&common::run_keys(len, 8));
-        let output = exec.alloc::<f32>(len);
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("inclusive", len), |b| {
             b.iter(|| {
-                inclusive_scan(&exec, values.slice(..), Sum, output.slice_mut(..)).unwrap();
+                std::hint::black_box(inclusive_scan(&exec, values.slice(..), Sum).unwrap());
                 exec.sync().unwrap();
             })
         });
         group.bench_function(BenchmarkId::new("exclusive", len), |b| {
             b.iter(|| {
-                exclusive_scan(&exec, values.slice(..), 0.0, Sum, output.slice_mut(..)).unwrap();
+                std::hint::black_box(exclusive_scan(&exec, values.slice(..), 0.0, Sum).unwrap());
                 exec.sync().unwrap();
             })
         });
         group.bench_function(BenchmarkId::new("inclusive_by_key", len), |b| {
             b.iter(|| {
-                inclusive_scan_by_key(
-                    &exec,
-                    keys.slice(..),
-                    values.slice(..),
-                    Equal,
-                    Sum,
-                    output.slice_mut(..),
-                )
-                .unwrap();
+                std::hint::black_box(
+                    inclusive_scan_by_key(&exec, keys.slice(..), values.slice(..), Equal, Sum)
+                        .unwrap(),
+                );
                 exec.sync().unwrap();
             })
         });
         group.bench_function(BenchmarkId::new("exclusive_by_key", len), |b| {
             b.iter(|| {
-                exclusive_scan_by_key(
-                    &exec,
-                    keys.slice(..),
-                    values.slice(..),
-                    Equal,
-                    0.0,
-                    Sum,
-                    output.slice_mut(..),
-                )
-                .unwrap();
+                std::hint::black_box(
+                    exclusive_scan_by_key(&exec, keys.slice(..), values.slice(..), Equal, 0.0, Sum)
+                        .unwrap(),
+                );
                 exec.sync().unwrap();
             })
         });

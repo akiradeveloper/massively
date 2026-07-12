@@ -24,7 +24,7 @@ pub fn solve<R: Runtime>(
     assert_eq!(initial.len(), graph.vertex_count());
     assert_eq!(known.len(), graph.vertex_count());
 
-    let degree = common::degrees(exec, graph)?;
+    let degree = exec.to_host(&common::degrees(exec, graph)?)?;
     let device_graph = DeviceGraph::new(exec, graph);
     let frontier = common::all_vertices(exec, graph);
     let mut coordinates = initial.to_vec();
@@ -32,9 +32,7 @@ pub fn solve<R: Runtime>(
     for _ in 0..iterations {
         let xs = exec.to_device(&coordinates.iter().map(|value| value.0).collect::<Vec<_>>());
         let ys = exec.to_device(&coordinates.iter().map(|value| value.1).collect::<Vec<_>>());
-        let sum_x = exec.alloc::<f32>(graph.vertex_count());
-        let sum_y = exec.alloc::<f32>(graph.vertex_count());
-        graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+        let sums = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
             .map(
                 zip2(
                     graph::destination(xs.slice(..)),
@@ -42,15 +40,10 @@ pub fn solve<R: Runtime>(
                 ),
                 Identity,
             )
-            .reduce_by_source(
-                exec,
-                (0.0, 0.0),
-                SumCoordinates,
-                zip2(sum_x.slice_mut(..), sum_y.slice_mut(..)),
-            )?;
+            .reduce_by_source(exec, (0.0, 0.0), SumCoordinates)?;
 
-        let sum_x = exec.to_host(&sum_x)?;
-        let sum_y = exec.to_host(&sum_y)?;
+        let sum_x = exec.to_host(&sums.0)?;
+        let sum_y = exec.to_host(&sums.1)?;
         for vertex in 0..coordinates.len() {
             if !known[vertex] && degree[vertex] != 0 {
                 coordinates[vertex] = (

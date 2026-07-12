@@ -6,11 +6,11 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Error, Executor, MAlloc, MIndex, MIter, MIterMut, MStorage, WriteFrom,
+    Error, Executor, MAlloc, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
-    seg::{ForEachSegment, Reduce, ReduceLikeExecutable, Segmented},
+    seg::{ForEachSegment, Reduce, ReduceLikeExecutableInto, Segmented},
 };
 
 use super::{Csr, EdgeExpr, control::TraversalControl, expr::EdgeExprImpl};
@@ -118,20 +118,42 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: MAlloc<R> + Copy,
+    Map::Output: MAlloc<R> + MCanonical<R, Canonical = Map::Output> + Copy,
 {
-    /// Writes one mapped item per traversed edge.
-    pub fn emit<Output>(self, exec: &Executor<R>, output: Output) -> Result<(), Error>
+    /// Returns one mapped item per traversed edge.
+    pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
+        let output = exec.alloc_mvec::<Map::Output>(self.traversal.control.output_len as usize);
+        self.emit_into(exec, output.slice_mut(..))?;
+        Ok(output)
+    }
+
+    /// Writes one mapped item per traversed edge into caller-provided storage.
+    fn emit_into<Output>(self, exec: &Executor<R>, output: Output) -> Result<(), Error>
     where
         Output: MIterMut<R>,
         Output::Item: WriteFrom<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        crate::vector::transform(exec, input.slice(..), self.map, output)
+        crate::vector::transform_into(exec, input.slice(..), self.map, output)
     }
 
     /// Maps every selected edge and reduces results independently for each input source.
-    pub fn reduce_by_source<Output, ReduceOp>(
+    pub fn reduce_by_source<ReduceOp>(
+        self,
+        exec: &Executor<R>,
+        init: Map::Output,
+        reduce: ReduceOp,
+    ) -> Result<MVec<R, Map::Output>, Error>
+    where
+        ReduceOp: ReductionOp<Map::Output>,
+    {
+        let output = exec.alloc_mvec::<Map::Output>(self.traversal.control.source_count as usize);
+        self.reduce_by_source_into(exec, init, reduce, output.slice_mut(..))?;
+        Ok(output)
+    }
+
+    /// Reduces independently for each input source into caller-provided storage.
+    fn reduce_by_source_into<Output, ReduceOp>(
         self,
         exec: &Executor<R>,
         init: Map::Output,
@@ -146,8 +168,8 @@ where
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         let mapped =
             <Map::Output as MAlloc<R>>::alloc(exec, self.traversal.control.output_len as usize);
-        crate::vector::transform(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
-        ForEachSegment(Reduce(reduce, init)).run(
+        crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
+        ForEachSegment(Reduce(reduce, init)).run_into(
             exec,
             Segmented::new(
                 mapped.slice(..),
@@ -158,7 +180,22 @@ where
     }
 
     /// Maps every selected edge and reduces colliding results by destination vertex.
-    pub fn reduce_by_destination<Output, ReduceOp>(
+    pub fn reduce_by_destination<ReduceOp>(
+        self,
+        exec: &Executor<R>,
+        init: Map::Output,
+        reduce: ReduceOp,
+    ) -> Result<MVec<R, Map::Output>, Error>
+    where
+        ReduceOp: ReductionOp<Map::Output>,
+    {
+        let output = crate::vector::fill(exec, self.traversal.control.vertex_count as usize, init)?;
+        self.reduce_by_destination_into(exec, init, reduce, output.slice_mut(..))?;
+        Ok(output)
+    }
+
+    /// Reduces by destination into caller-provided initialized storage.
+    fn reduce_by_destination_into<Output, ReduceOp>(
         self,
         exec: &Executor<R>,
         init: Map::Output,
@@ -172,7 +209,7 @@ where
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         let mapped =
             <Map::Output as MAlloc<R>>::alloc(exec, self.traversal.control.output_len as usize);
-        crate::vector::transform(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
+        crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
         crate::vector::scatter_reduce(
             exec,
             mapped.slice(..),
@@ -199,14 +236,40 @@ where
         StateOutput: MIterMut<R, Item = Map::Output>,
         ReduceOp: ReductionOp<Map::Output>,
     {
-        self.reduce_by_destination(exec, proposal_init, reduce, state_output)
+        self.reduce_by_destination_into(exec, proposal_init, reduce, state_output)
     }
 
     /// Applies minimum proposals by destination and emits vertices whose state decreased.
     ///
     /// The generic lowering sorts proposals to guarantee one writer per destination. A future
     /// atomic-min lowering can preserve this contract without changing traversal programs.
-    pub fn relax_min_by_destination<State, StateOutput, Next>(
+    pub fn relax_min_by_destination<State, StateOutput>(
+        self,
+        exec: &Executor<R>,
+        infinity: MIndex,
+        state: State,
+        state_output: StateOutput,
+    ) -> Result<MVec<R, MIndex>, Error>
+    where
+        Map: UnaryOp<Expr::Item, Output = MIndex>,
+        State: MIter<R, Item = MIndex>,
+        StateOutput: MIterMut<R, Item = MIndex>,
+    {
+        let capacity = self.traversal.control.output_len as usize;
+        let mut next = exec.alloc_mvec::<MIndex>(capacity);
+        let len = self.relax_min_by_destination_into(
+            exec,
+            infinity,
+            state,
+            state_output,
+            next.slice_mut(..),
+        )?;
+        next.truncate(len);
+        Ok(next)
+    }
+
+    /// Stateful caller-provided output variant of [`Self::relax_min_by_destination`].
+    fn relax_min_by_destination_into<State, StateOutput, Next>(
         self,
         exec: &Executor<R>,
         infinity: MIndex,
@@ -227,11 +290,11 @@ where
 
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         let proposals = exec.alloc_column::<MIndex>(edge_count as usize);
-        crate::vector::transform(exec, input.slice(..), self.map, proposals.slice_mut(..))?;
+        crate::vector::transform_into(exec, input.slice(..), self.map, proposals.slice_mut(..))?;
 
         let sorted_destinations = exec.alloc_column::<MIndex>(edge_count as usize);
         let sorted_proposals = exec.alloc_column::<MIndex>(edge_count as usize);
-        crate::vector::sort_by_key(
+        crate::vector::sort_by_key_into(
             exec,
             self.traversal.control.destinations.slice(..),
             proposals.slice(..),
@@ -242,7 +305,7 @@ where
 
         let unique_destinations = exec.alloc_column::<MIndex>(edge_count as usize);
         let reduced_proposals = exec.alloc_column::<MIndex>(edge_count as usize);
-        let unique_len = crate::vector::reduce_by_key(
+        let unique_len = crate::vector::reduce_by_key_into(
             exec,
             sorted_destinations.slice(..),
             sorted_proposals.slice(..),
@@ -254,7 +317,7 @@ where
         )?;
 
         let old_state = exec.alloc_column::<MIndex>(unique_len as usize);
-        crate::vector::gather(
+        crate::vector::gather_into(
             exec,
             state,
             unique_destinations.slice(..unique_len as usize),
@@ -268,10 +331,10 @@ where
             )
         };
         let flags = exec.alloc_column::<MIndex>(unique_len as usize);
-        crate::vector::transform(exec, state_and_proposal(), LoweredU32, flags.slice_mut(..))?;
+        crate::vector::transform_into(exec, state_and_proposal(), LoweredU32, flags.slice_mut(..))?;
 
         let new_state = exec.alloc_column::<MIndex>(unique_len as usize);
-        crate::vector::transform(
+        crate::vector::transform_into(
             exec,
             state_and_proposal(),
             ApplyMinU32,
@@ -284,7 +347,7 @@ where
             state_output,
         )?;
 
-        crate::vector::copy_where(
+        crate::vector::copy_where_into(
             exec,
             unique_destinations.slice(..unique_len as usize),
             flags.slice(..),

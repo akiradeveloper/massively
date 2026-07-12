@@ -1,10 +1,11 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::PredicateOp, op::UnaryOp};
+use crate::{
+    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    op::PredicateOp, op::UnaryOp,
+};
 
 /// Copies rows whose stencil is nonzero.
-///
-/// The return value is the number of items written at the beginning of `output`.
 ///
 /// # Examples
 ///
@@ -15,20 +16,32 @@ use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::PredicateOp
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30, 40]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
-/// let output = exec.alloc::<u32>(input.len());
+/// let output = copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
 ///
-/// let len = copy_where(
-///     &exec,
-///     input.slice(..),
-///     stencil.slice(..),
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
-///
-/// assert_eq!(len, 2);
-/// assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![10, 30]);
+/// assert_eq!(output.len(), 2);
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 30]);
 /// ```
-pub fn copy_where<R, Input, Stencil, Output>(
+pub fn copy_where<R, Input, Stencil>(
+    exec: &Executor<R>,
+    input: Input,
+    stencil: Stencil,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Stencil: MIter<R, Item = MIndex>,
+{
+    let capacity = input.len()? as usize;
+    let mut output = exec.alloc_mvec::<Input::Item>(capacity);
+    let len = copy_where_into(exec, input, stencil, output.slice_mut(..))?;
+    output.truncate(len);
+    Ok(output)
+}
+
+/// Copies rows whose stencil is nonzero into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn copy_where_into<R, Input, Stencil, Output>(
     exec: &Executor<R>,
     input: Input,
     stencil: Stencil,
@@ -47,8 +60,6 @@ where
 
 /// Copies rows whose stencil is zero.
 ///
-/// The return value is the number of items written at the beginning of `output`.
-///
 /// # Examples
 ///
 /// ```
@@ -58,20 +69,32 @@ where
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[10_u32, 20, 30, 40]);
 /// let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
-/// let output = exec.alloc::<u32>(input.len());
+/// let output = remove_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
 ///
-/// let len = remove_where(
-///     &exec,
-///     input.slice(..),
-///     stencil.slice(..),
-///     output.slice_mut(..),
-/// )
-/// .unwrap();
-///
-/// assert_eq!(len, 2);
-/// assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![20, 40]);
+/// assert_eq!(output.len(), 2);
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![20, 40]);
 /// ```
-pub fn remove_where<R, Input, Stencil, Output>(
+pub fn remove_where<R, Input, Stencil>(
+    exec: &Executor<R>,
+    input: Input,
+    stencil: Stencil,
+) -> Result<MVec<R, Input::Item>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Stencil: MIter<R, Item = MIndex>,
+{
+    let capacity = input.len()? as usize;
+    let mut output = exec.alloc_mvec::<Input::Item>(capacity);
+    let len = remove_where_into(exec, input, stencil, output.slice_mut(..))?;
+    output.truncate(len);
+    Ok(output)
+}
+
+/// Copies rows whose stencil is zero into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn remove_where_into<R, Input, Stencil, Output>(
     exec: &Executor<R>,
     input: Input,
     stencil: Stencil,
@@ -110,14 +133,31 @@ where
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3, 4]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// let boundary = partition(&exec, input.slice(..), Even, output.slice_mut(..)).unwrap();
+/// let (output, boundary) = partition(&exec, input.slice(..), Even).unwrap();
 ///
 /// assert_eq!(boundary, 2);
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 1, 3]);
 /// ```
-pub fn partition<R, Input, Output, Pred>(
+pub fn partition<R, Input, Pred>(
+    exec: &Executor<R>,
+    input: Input,
+    pred: Pred,
+) -> Result<(MVec<R, Input::Item>, MIndex), Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Input::Item: MCanonical<R>,
+    Pred: PredicateOp<Input::Item>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc_mvec::<Input::Item>(len);
+    let boundary = partition_into(exec, input, pred, output.slice_mut(..))?;
+    Ok((output, boundary))
+}
+
+/// Stably partitions into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn partition_into<R, Input, Output, Pred>(
     exec: &Executor<R>,
     input: Input,
     pred: Pred,
@@ -142,13 +182,28 @@ where
 /// use massively::{Executor, vector::fill};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-/// let output = exec.alloc::<u32>(4);
-///
-/// fill(&exec, 7, output.slice_mut(..)).unwrap();
+/// let output = fill(&exec, 4, 7_u32).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![7, 7, 7, 7]);
 /// ```
-pub fn fill<R, Output>(exec: &Executor<R>, value: Output::Item, output: Output) -> Result<(), Error>
+pub fn fill<R, Item>(exec: &Executor<R>, len: usize, value: Item) -> Result<MVec<R, Item>, Error>
+where
+    R: Runtime,
+    Item: MCanonical<R>,
+{
+    let output = exec.alloc_mvec::<Item>(len);
+    let value = <Item::Canonical as WriteFrom<Item>>::write_from(value);
+    fill_into(exec, value, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Fills caller-provided storage with one value.
+#[doc(hidden)]
+pub(crate) fn fill_into<R, Output>(
+    exec: &Executor<R>,
+    value: Output::Item,
+    output: Output,
+) -> Result<(), Error>
 where
     R: Runtime,
     Output: MIterMut<R>,

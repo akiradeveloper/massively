@@ -215,27 +215,18 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::Identity, vector::transform, zip2, zip3};
+/// use massively::{Executor, op::Identity, vector::transform, zip2};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let a = exec.to_device(&[1_u32, 2]);
 /// let b = exec.to_device(&[10_u32, 20]);
 /// let c = exec.to_device(&[100_u32, 200]);
-/// let out_a = exec.alloc::<u32>(2);
-/// let out_b = exec.alloc::<u32>(2);
-/// let out_c = exec.alloc::<u32>(2);
-///
 /// let input = zip2(a.slice(..), zip2(b.slice(..), c.slice(..)));
-/// let output = zip3(
-///     out_a.slice_mut(..),
-///     out_b.slice_mut(..),
-///     out_c.slice_mut(..),
-/// );
-/// transform(&exec, input, Identity, output).unwrap();
+/// let output = transform(&exec, input, Identity).unwrap();
 ///
-/// assert_eq!(exec.to_host(&out_a).unwrap(), vec![1, 2]);
-/// assert_eq!(exec.to_host(&out_b).unwrap(), vec![10, 20]);
-/// assert_eq!(exec.to_host(&out_c).unwrap(), vec![100, 200]);
+/// assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![1, 2]);
+/// assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![10, 20]);
+/// assert_eq!(exec.to_host(&output.1).unwrap(), vec![100, 200]);
 /// ```
 #[cubecl::cube]
 pub trait WriteFrom<Source: CubeType>: CubeType {

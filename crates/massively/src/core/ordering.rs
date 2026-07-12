@@ -45,8 +45,7 @@ const BLOCK_SIZE: u32 = 256;
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[3_u32, 1, 2]);
-/// let output = exec.alloc::<u32>(input.len());
-/// sort(&exec, input.slice(..), Less, output.slice_mut(..)).unwrap();
+/// let output = sort(&exec, input.slice(..), Less).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```

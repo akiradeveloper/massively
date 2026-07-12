@@ -27,8 +27,7 @@ use crate::StorageLayout;
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[2_u32, 3, 4]);
-/// let output = exec.alloc::<u32>(input.len());
-/// transform(&exec, input.slice(..), Square, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, input.slice(..), Square).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![4, 9, 16]);
 /// ```
@@ -68,8 +67,7 @@ pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = exec.alloc::<u32>(input.len());
-/// transform(&exec, input.slice(..), Identity, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, input.slice(..), Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```

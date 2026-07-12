@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut};
+use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec};
 
 use super::Csr;
 
@@ -48,7 +48,27 @@ fn intersect_count_kernel(
 /// Every CSR row must be sorted by destination. One result is written per `(source, target)` pair.
 /// The current lowering assigns one thread per pair; future schedulers may select warp-, block-,
 /// binary-search-, or bitmap-based intersection without changing this contract.
-pub fn intersect_count<R, Destinations, Offsets, Sources, Targets, Output>(
+pub fn intersect_count<R, Destinations, Offsets, Sources, Targets>(
+    exec: &Executor<R>,
+    graph: Csr<Destinations, Offsets>,
+    sources: Sources,
+    targets: Targets,
+) -> Result<MVec<R, MIndex>, Error>
+where
+    R: Runtime,
+    Destinations: MIter<R, Item = MIndex>,
+    Offsets: MIter<R, Item = MIndex>,
+    Sources: MIter<R, Item = MIndex>,
+    Targets: MIter<R, Item = MIndex>,
+{
+    let pair_count = sources.len()? as usize;
+    let output = exec.alloc_mvec::<MIndex>(pair_count);
+    intersect_count_into(exec, graph, sources, targets, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Counts common destinations into caller-provided storage.
+fn intersect_count_into<R, Destinations, Offsets, Sources, Targets, Output>(
     exec: &Executor<R>,
     graph: Csr<Destinations, Offsets>,
     sources: Sources,
@@ -100,5 +120,5 @@ where
             BufferArg::from_raw_parts(counts.handle.clone(), counts.len()),
         );
     }
-    crate::vector::transform(exec, counts.slice(..), crate::op::Identity, output)
+    crate::vector::transform_into(exec, counts.slice(..), crate::op::Identity, output)
 }

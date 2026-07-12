@@ -492,6 +492,115 @@ macro_rules! assert_output {
     }};
 }
 
+macro_rules! mvec_column {
+    (1, $output:expr, 0) => {
+        &$output
+    };
+    (2, $output:expr, 0) => {
+        &$output.0
+    };
+    (2, $output:expr, 1) => {
+        &$output.1
+    };
+    (3, $output:expr, 0) => {
+        &$output.0.0
+    };
+    (3, $output:expr, 1) => {
+        &$output.0.1
+    };
+    (3, $output:expr, 2) => {
+        &$output.1
+    };
+    (4, $output:expr, 0) => {
+        &$output.0.0.0
+    };
+    (4, $output:expr, 1) => {
+        &$output.0.0.1
+    };
+    (4, $output:expr, 2) => {
+        &$output.0.1
+    };
+    (4, $output:expr, 3) => {
+        &$output.1
+    };
+    (5, $output:expr, 0) => {
+        &$output.0.0.0.0
+    };
+    (5, $output:expr, 1) => {
+        &$output.0.0.0.1
+    };
+    (5, $output:expr, 2) => {
+        &$output.0.0.1
+    };
+    (5, $output:expr, 3) => {
+        &$output.0.1
+    };
+    (5, $output:expr, 4) => {
+        &$output.1
+    };
+    (6, $output:expr, 0) => {
+        &$output.0.0.0.0.0
+    };
+    (6, $output:expr, 1) => {
+        &$output.0.0.0.0.1
+    };
+    (6, $output:expr, 2) => {
+        &$output.0.0.0.1
+    };
+    (6, $output:expr, 3) => {
+        &$output.0.0.1
+    };
+    (6, $output:expr, 4) => {
+        &$output.0.1
+    };
+    (6, $output:expr, 5) => {
+        &$output.1
+    };
+    (7, $output:expr, 0) => {
+        &$output.0.0.0.0.0.0
+    };
+    (7, $output:expr, 1) => {
+        &$output.0.0.0.0.0.1
+    };
+    (7, $output:expr, 2) => {
+        &$output.0.0.0.0.1
+    };
+    (7, $output:expr, 3) => {
+        &$output.0.0.0.1
+    };
+    (7, $output:expr, 4) => {
+        &$output.0.0.1
+    };
+    (7, $output:expr, 5) => {
+        &$output.0.1
+    };
+    (7, $output:expr, 6) => {
+        &$output.1
+    };
+}
+
+macro_rules! assert_mvec {
+    ($arity:tt, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let expected = &$expected;
+        assert_mvec_columns!($arity, $exec, $output, expected, $len);
+    }};
+}
+
+macro_rules! assert_mvec_columns {
+    (1, $exec:expr, $output:expr, $expected:expr, $len:expr) => { assert_mvec_columns!(@one 1, 0, $exec, $output, $expected, $len) };
+    (2, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 2, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 2, 1, $exec, $output, $expected, $len); }};
+    (3, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 3, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 3, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 3, 2, $exec, $output, $expected, $len); }};
+    (4, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 4, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 4, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 4, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 4, 3, $exec, $output, $expected, $len); }};
+    (5, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 5, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 3, $exec, $output, $expected, $len); assert_mvec_columns!(@one 5, 4, $exec, $output, $expected, $len); }};
+    (6, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 6, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 3, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 4, $exec, $output, $expected, $len); assert_mvec_columns!(@one 6, 5, $exec, $output, $expected, $len); }};
+    (7, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{ assert_mvec_columns!(@one 7, 0, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 1, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 2, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 3, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 4, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 5, $exec, $output, $expected, $len); assert_mvec_columns!(@one 7, 6, $exec, $output, $expected, $len); }};
+    (@one $arity:tt, $column:tt, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
+        let actual = $exec.to_host(mvec_column!($arity, $output, $column)).unwrap();
+        let expected_column = row_column!($arity, $expected, $column);
+        prop_assert_eq!(&actual[..$len], &expected_column[..$len]);
+    }};
+}
+
 macro_rules! assert_one_column {
     ($arity:tt, $column:tt, $exec:expr, $output:expr, $expected:expr, $len:expr) => {{
         let actual = $exec.to_host(&$output[$column]).unwrap();
@@ -573,36 +682,36 @@ macro_rules! value_case {
         prop_assert_eq!(massively::vector::reduce(&exec, input_expr!($arity, device), zero, MaxItem).unwrap(), oracle::reduce(&input, zero, MaxItem));
     }};
     (inclusive_scan, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len());
-        massively::vector::inclusive_scan(&exec, input_expr!($arity, device), MaxItem, output_expr!($arity, output)).unwrap();
-        assert_output!($arity, exec, output, oracle::inclusive_scan(&input, MaxItem), input.len());
+        setup!($arity, $seed; exec, input, device, columns);
+        let output = massively::vector::inclusive_scan(&exec, input_expr!($arity, device), MaxItem).unwrap();
+        assert_mvec!($arity, exec, output, oracle::inclusive_scan(&input, MaxItem), input.len());
     }};
     (exclusive_scan, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len()); let zero = splat!($arity, 0u32);
-        massively::vector::exclusive_scan(&exec, input_expr!($arity, device), zero, MaxItem, output_expr!($arity, output)).unwrap();
-        assert_output!($arity, exec, output, oracle::exclusive_scan(&input, zero, MaxItem), input.len());
+        setup!($arity, $seed; exec, input, device, columns); let zero = splat!($arity, 0u32);
+        let output = massively::vector::exclusive_scan(&exec, input_expr!($arity, device), zero, MaxItem).unwrap();
+        assert_mvec!($arity, exec, output, oracle::exclusive_scan(&input, zero, MaxItem), input.len());
     }};
     (adjacent_difference, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len());
-        massively::vector::adjacent_difference(&exec, input_expr!($arity, device), MaxItem, output_expr!($arity, output)).unwrap();
-        assert_output!($arity, exec, output, oracle::adjacent_difference(&input, MaxItem), input.len());
+        setup!($arity, $seed; exec, input, device, columns);
+        let output = massively::vector::adjacent_difference(&exec, input_expr!($arity, device), MaxItem).unwrap();
+        assert_mvec!($arity, exec, output, oracle::adjacent_difference(&input, MaxItem), input.len());
     }};
     ($case:ident, $arity:tt, $seed:expr) => {{ value_case_other!($case, $arity, $seed) }};
 }
 
 macro_rules! value_case_other {
     (copy_where, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = empty_output!(exec, $arity, input.len());
-        let len = massively::vector::copy_where(&exec, input_expr!($arity, device), lazify(flags_gpu.slice(..)), output_expr!($arity, output)).unwrap() as usize;
-        let expected = oracle::copy_where(&input, &flags); prop_assert_eq!(len, expected.len()); assert_output!($arity, exec, output, expected, len);
+        setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags);
+        let output = massively::vector::copy_where(&exec, input_expr!($arity, device), lazify(flags_gpu.slice(..))).unwrap();
+        let expected = oracle::copy_where(&input, &flags); let len = massively::MStorage::len(&output).unwrap() as usize; prop_assert_eq!(len, expected.len()); assert_mvec!($arity, exec, output, expected, len);
     }};
     (remove_where, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = empty_output!(exec, $arity, input.len());
-        let len = massively::vector::remove_where(&exec, input_expr!($arity, device), lazify(flags_gpu.slice(..)), output_expr!($arity, output)).unwrap() as usize;
-        let expected = oracle::remove_where(&input, &flags); prop_assert_eq!(len, expected.len()); assert_output!($arity, exec, output, expected, len);
+        setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags);
+        let output = massively::vector::remove_where(&exec, input_expr!($arity, device), lazify(flags_gpu.slice(..))).unwrap();
+        let expected = oracle::remove_where(&input, &flags); let len = massively::MStorage::len(&output).unwrap() as usize; prop_assert_eq!(len, expected.len()); assert_mvec!($arity, exec, output, expected, len);
     }};
     (reverse, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len()); massively::vector::reverse(&exec, input_expr!($arity, device), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, oracle::reverse(&input), input.len());
+        setup!($arity, $seed; exec, input, device, columns); let output = massively::vector::reverse(&exec, input_expr!($arity, device)).unwrap(); assert_mvec!($arity, exec, output, oracle::reverse(&input), input.len());
     }};
     (count_if, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::count_if(&exec, input_expr!($arity, device), EvenItem).unwrap() as usize, oracle::count_if(&input, EvenItem)); }};
     (all_of, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::all_of(&exec, input_expr!($arity, device), EvenItem).unwrap(), oracle::all_of(&input, EvenItem)); }};
@@ -611,20 +720,20 @@ macro_rules! value_case_other {
     (find_if, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::find_if(&exec, input_expr!($arity, device), EvenItem).unwrap().map(|v| v as usize), oracle::find_if(&input, EvenItem)); }};
     (is_partitioned, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::is_partitioned(&exec, input_expr!($arity, device), EvenItem).unwrap(), oracle::is_partitioned(&input, EvenItem)); }};
     (partition, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len()); let boundary = massively::vector::partition(&exec, input_expr!($arity, device), EvenItem, output_expr!($arity, output)).unwrap() as usize;
-        let (mut selected, rejected) = oracle::partition(&input, EvenItem); prop_assert_eq!(boundary, selected.len()); selected.extend(rejected); assert_output!($arity, exec, output, selected, input.len());
+        setup!($arity, $seed; exec, input, device, columns); let (output, boundary) = massively::vector::partition(&exec, input_expr!($arity, device), EvenItem).unwrap(); let boundary = boundary as usize;
+        let (mut selected, rejected) = oracle::partition(&input, EvenItem); prop_assert_eq!(boundary, selected.len()); selected.extend(rejected); assert_mvec!($arity, exec, output, selected, input.len());
     }};
     (permute, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let output = empty_output!(exec, $arity, input.len()); let mut expected = vec![splat!($arity, 0u32); input.len()]; oracle::gather(&input, &indices, &mut expected);
+        setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let mut expected = vec![splat!($arity, 0u32); input.len()]; oracle::gather(&input, &indices, &mut expected);
         let permuted = lazy::identity(lazy::permute(
             raw_input_expr!($arity, device),
             indices_gpu.slice(..),
         ));
-        massively::vector::transform(&exec, permuted, Identity, output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
+        let output = massively::vector::transform(&exec, permuted, Identity).unwrap(); assert_mvec!($arity, exec, output, expected, input.len());
     }};
     (gather, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let output = empty_output!(exec, $arity, input.len()); let mut expected = vec![splat!($arity, 0u32); input.len()]; oracle::gather(&input, &indices, &mut expected);
-        massively::vector::gather(&exec, input_expr!($arity, device), lazify(indices_gpu.slice(..)), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
+        setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let mut expected = vec![splat!($arity, 0u32); input.len()]; oracle::gather(&input, &indices, &mut expected);
+        let output = massively::vector::gather(&exec, input_expr!($arity, device), lazify(indices_gpu.slice(..))).unwrap(); assert_mvec!($arity, exec, output, expected, input.len());
     }};
     (gather_where, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = device_rows!($arity, exec, input); let mut expected = input.clone(); oracle::gather_where(&input, &indices, &flags, &mut expected);
@@ -642,33 +751,33 @@ macro_rules! value_case_other {
     (mismatch, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let mut other = input.clone(); if let Some(last) = other.last_mut() { *last = splat!($arity, 999u32); } let other_device = device_rows!($arity, exec, other); prop_assert_eq!(massively::vector::mismatch(&exec, input_expr!($arity, device), input_expr!($arity, other_device), EqualItem).unwrap().map(|v| v as usize), oracle::mismatch(&input, &other, EqualItem)); }};
     (adjacent_find, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::adjacent_find(&exec, input_expr!($arity, device), EqualItem).unwrap().map(|v| v as usize), oracle::adjacent_find(&input, EqualItem)); }};
     (find_first_of, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let needles: Vec<_> = input.iter().step_by(3).copied().collect(); let needles_device = device_rows!($arity, exec, needles); prop_assert_eq!(massively::vector::find_first_of(&exec, input_expr!($arity, device), input_expr!($arity, needles_device), EqualItem).unwrap().map(|v| v as usize), oracle::find_first_of(&input, &needles, EqualItem)); }};
-    (fill, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len()); let value = splat!($arity, 42u32); massively::vector::fill(&exec, value, output_expr!($arity, output)).unwrap(); let mut expected = vec![splat!($arity, 0u32); input.len()]; oracle::fill(value, &mut expected); assert_output!($arity, exec, output, expected, input.len()); }};
+    (fill, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let value = splat!($arity, 42u32); let output = massively::vector::fill(&exec, input.len(), value).unwrap(); let mut expected = vec![splat!($arity, 0u32); input.len()]; oracle::fill(value, &mut expected); assert_mvec!($arity, exec, output, expected, input.len()); }};
     (replace_where, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = device_rows!($arity, exec, input); let value = splat!($arity, 42u32); massively::vector::replace_where(&exec, value, lazify(flags_gpu.slice(..)), output_expr!($arity, output)).unwrap(); let mut expected = input.clone(); oracle::replace_where(value, &flags, &mut expected); assert_output!($arity, exec, output, expected, input.len()); }};
     ($case:ident, $arity:tt, $seed:expr) => {{ ordering_case!($case, $arity, $seed) }};
 }
 
 macro_rules! ordering_case {
-    (sort, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let output = empty_output!(exec, $arity, input.len()); massively::vector::sort(&exec, input_expr!($arity, device), LessItem, output_expr!($arity, output)).unwrap(); let expected = oracle::sort(&input, LessItem); assert_output!($arity, exec, output, expected, input.len()); }};
-    (merge, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let left = oracle::sort(&input[..input.len()/2], LessItem); let right = oracle::sort(&input[input.len()/2..], LessItem); let left_device = device_rows!($arity, exec, left); let right_device = device_rows!($arity, exec, right); let output = empty_output!(exec, $arity, input.len()); massively::vector::merge(&exec, input_expr!($arity, left_device), input_expr!($arity, right_device), LessItem, output_expr!($arity, output)).unwrap(); let expected = oracle::merge(&left, &right, LessItem); assert_output!($arity, exec, output, expected, input.len()); }};
+    (sort, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let output = massively::vector::sort(&exec, input_expr!($arity, device), LessItem).unwrap(); let expected = oracle::sort(&input, LessItem); assert_mvec!($arity, exec, output, expected, input.len()); }};
+    (merge, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let left = oracle::sort(&input[..input.len()/2], LessItem); let right = oracle::sort(&input[input.len()/2..], LessItem); let left_device = device_rows!($arity, exec, left); let right_device = device_rows!($arity, exec, right); let output = massively::vector::merge(&exec, input_expr!($arity, left_device), input_expr!($arity, right_device), LessItem).unwrap(); let expected = oracle::merge(&left, &right, LessItem); assert_mvec!($arity, exec, output, expected, input.len()); }};
     (is_sorted, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::is_sorted(&exec, input_expr!($arity, device), LessItem).unwrap(), oracle::is_sorted(&input, LessItem)); }};
     (is_sorted_until, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::is_sorted_until(&exec, input_expr!($arity, device), LessItem).unwrap() as usize, oracle::is_sorted_until(&input, LessItem)); }};
     (lexicographical_compare, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let mut other = input.clone(); other.reverse(); let other_device = device_rows!($arity, exec, other); prop_assert_eq!(massively::vector::lexicographical_compare(&exec, input_expr!($arity, device), input_expr!($arity, other_device), LessItem).unwrap(), oracle::lexicographical_compare(&input, &other, LessItem)); }};
     (min_element, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::min_element(&exec, input_expr!($arity, device), LessItem).unwrap().map(|v| v as usize), oracle::min_element(&input, LessItem)); }};
     (max_element, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::max_element(&exec, input_expr!($arity, device), LessItem).unwrap().map(|v| v as usize), oracle::max_element(&input, LessItem)); }};
     (minmax_element, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::minmax_element(&exec, input_expr!($arity, device), LessItem).unwrap().map(|(a,b)| (a as usize,b as usize)), oracle::minmax_element(&input, LessItem)); }};
-    (lower_bound, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let sorted = oracle::sort(&input, LessItem); let sorted_device = device_rows!($arity, exec, sorted); let output = exec.to_device(&vec![0u32; input.len()]); massively::vector::lower_bound(&exec, input_expr!($arity, sorted_device), input_expr!($arity, device), LessItem, output.slice_mut(..)).unwrap(); prop_assert_eq!(exec.to_host(&output).unwrap(), oracle::lower_bound(&sorted, &input, LessItem)); }};
-    (upper_bound, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let sorted = oracle::sort(&input, LessItem); let sorted_device = device_rows!($arity, exec, sorted); let output = exec.to_device(&vec![0u32; input.len()]); massively::vector::upper_bound(&exec, input_expr!($arity, sorted_device), input_expr!($arity, device), LessItem, output.slice_mut(..)).unwrap(); prop_assert_eq!(exec.to_host(&output).unwrap(), oracle::upper_bound(&sorted, &input, LessItem)); }};
-    (unique, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let sorted = oracle::sort(&input, LessItem); let sorted_device = device_rows!($arity, exec, sorted); let output = empty_output!(exec, $arity, input.len()); let len = massively::vector::unique(&exec, input_expr!($arity, sorted_device), EqualItem, output_expr!($arity, output)).unwrap() as usize; let expected = oracle::unique(&sorted, EqualItem); prop_assert_eq!(len, expected.len()); assert_output!($arity, exec, output, expected, len); }};
-    (set_union, $arity:tt, $seed:expr) => {{ set_case!(set_union, $arity, $seed) }};
-    (set_intersection, $arity:tt, $seed:expr) => {{ set_case!(set_intersection, $arity, $seed) }};
-    (set_difference, $arity:tt, $seed:expr) => {{ set_case!(set_difference, $arity, $seed) }};
+    (lower_bound, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let sorted = oracle::sort(&input, LessItem); let sorted_device = device_rows!($arity, exec, sorted); let output = massively::vector::lower_bound(&exec, input_expr!($arity, sorted_device), input_expr!($arity, device), LessItem).unwrap(); prop_assert_eq!(exec.to_host(&output).unwrap(), oracle::lower_bound(&sorted, &input, LessItem)); }};
+    (upper_bound, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let sorted = oracle::sort(&input, LessItem); let sorted_device = device_rows!($arity, exec, sorted); let output = massively::vector::upper_bound(&exec, input_expr!($arity, sorted_device), input_expr!($arity, device), LessItem).unwrap(); prop_assert_eq!(exec.to_host(&output).unwrap(), oracle::upper_bound(&sorted, &input, LessItem)); }};
+    (unique, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let sorted = oracle::sort(&input, LessItem); let sorted_device = device_rows!($arity, exec, sorted); let output = massively::vector::unique(&exec, input_expr!($arity, sorted_device), EqualItem).unwrap(); let expected = oracle::unique(&sorted, EqualItem); let len = massively::MStorage::len(&output).unwrap() as usize; prop_assert_eq!(len, expected.len()); assert_mvec!($arity, exec, output, expected, len); }};
+    (set_union, $arity:tt, $seed:expr) => {{ set_case!(set_union, set_union, $arity, $seed) }};
+    (set_intersection, $arity:tt, $seed:expr) => {{ set_case!(set_intersection, set_intersection, $arity, $seed) }};
+    (set_difference, $arity:tt, $seed:expr) => {{ set_case!(set_difference, set_difference, $arity, $seed) }};
 }
 
 macro_rules! set_case {
-    ($algorithm:ident, $arity:tt, $seed:expr) => {{
-        setup!($arity, $seed; exec, input, device, columns); let split = input.len()/2; let left = oracle::sort(&input[..split], LessItem); let right = oracle::sort(&input[split..], LessItem); let left_device = device_rows!($arity, exec, left); let right_device = device_rows!($arity, exec, right); let output = empty_output!(exec, $arity, input.len());
-        let len = massively::vector::$algorithm(&exec, input_expr!($arity, left_device), input_expr!($arity, right_device), LessItem, output_expr!($arity, output)).unwrap() as usize;
-        let expected = oracle::$algorithm(&left, &right, LessItem); prop_assert_eq!(len, expected.len()); assert_output!($arity, exec, output, expected, len);
+    ($algorithm:ident, $oracle:ident, $arity:tt, $seed:expr) => {{
+        setup!($arity, $seed; exec, input, device, columns); let split = input.len()/2; let left = oracle::sort(&input[..split], LessItem); let right = oracle::sort(&input[split..], LessItem); let left_device = device_rows!($arity, exec, left); let right_device = device_rows!($arity, exec, right);
+        let output = massively::vector::$algorithm(&exec, input_expr!($arity, left_device), input_expr!($arity, right_device), LessItem).unwrap();
+        let expected = oracle::$oracle(&left, &right, LessItem); let len = massively::MStorage::len(&output).unwrap() as usize; prop_assert_eq!(len, expected.len()); assert_mvec!($arity, exec, output, expected, len);
     }};
 }
 
@@ -756,49 +865,44 @@ macro_rules! by_key_setup {
 macro_rules! by_key_case {
     (sort_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let key_output = empty_output!(exec, $key_arity, keys.len());
-        let value_output = empty_output!(exec, $value_arity, values.len());
-        massively::vector::sort_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), LessItem, output_expr!($key_arity, key_output), output_expr!($value_arity, value_output)).unwrap();
+        let (key_output, value_output) = massively::vector::sort_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), LessItem).unwrap();
         let (expected_keys, expected_values) = oracle::sort_by_key(&keys, &values, LessItem);
-        assert_output!($key_arity, exec, key_output, expected_keys, keys.len());
-        assert_output!($value_arity, exec, value_output, expected_values, values.len());
+        assert_mvec!($key_arity, exec, key_output, expected_keys, keys.len());
+        assert_mvec!($value_arity, exec, value_output, expected_values, values.len());
     }};
     (inclusive_scan_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let output = empty_output!(exec, $value_arity, values.len());
-        massively::vector::inclusive_scan_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, MaxItem, output_expr!($value_arity, output)).unwrap();
+        let output = massively::vector::inclusive_scan_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, MaxItem).unwrap();
         let expected = oracle::inclusive_scan_by_key(&keys, &values, EqualItem, MaxItem);
-        assert_output!($value_arity, exec, output, expected, values.len());
+        assert_mvec!($value_arity, exec, output, expected, values.len());
     }};
     (exclusive_scan_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let output = empty_output!(exec, $value_arity, values.len()); let zero = splat!($value_arity, 0u32);
-        massively::vector::exclusive_scan_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, zero, MaxItem, output_expr!($value_arity, output)).unwrap();
+        let zero = splat!($value_arity, 0u32);
+        let output = massively::vector::exclusive_scan_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, zero, MaxItem).unwrap();
         let expected = oracle::exclusive_scan_by_key(&keys, &values, EqualItem, zero, MaxItem);
-        assert_output!($value_arity, exec, output, expected, values.len());
+        assert_mvec!($value_arity, exec, output, expected, values.len());
     }};
     (reduce_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let key_output = empty_output!(exec, $key_arity, keys.len()); let value_output = empty_output!(exec, $value_arity, values.len()); let zero = splat!($value_arity, 0u32);
-        let len = massively::vector::reduce_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, zero, MaxItem, output_expr!($key_arity, key_output), output_expr!($value_arity, value_output)).unwrap() as usize;
-        let (expected_keys, expected_values) = oracle::reduce_by_key(&keys, &values, EqualItem, zero, MaxItem); prop_assert_eq!(len, expected_keys.len());
-        assert_output!($key_arity, exec, key_output, expected_keys, len); assert_output!($value_arity, exec, value_output, expected_values, len);
+        let zero = splat!($value_arity, 0u32);
+        let (key_output, value_output) = massively::vector::reduce_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, zero, MaxItem).unwrap();
+        let (expected_keys, expected_values) = oracle::reduce_by_key(&keys, &values, EqualItem, zero, MaxItem); let len = expected_keys.len(); prop_assert_eq!(massively::MStorage::len(&key_output).unwrap() as usize, len);
+        assert_mvec!($key_arity, exec, key_output, expected_keys, len); assert_mvec!($value_arity, exec, value_output, expected_values, len);
     }};
     (unique_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let key_output = empty_output!(exec, $key_arity, keys.len()); let value_output = empty_output!(exec, $value_arity, values.len());
-        let len = massively::vector::unique_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem, output_expr!($key_arity, key_output), output_expr!($value_arity, value_output)).unwrap() as usize;
-        let (expected_keys, expected_values) = oracle::unique_by_key(&keys, &values, EqualItem); prop_assert_eq!(len, expected_keys.len());
-        assert_output!($key_arity, exec, key_output, expected_keys, len); assert_output!($value_arity, exec, value_output, expected_values, len);
+        let (key_output, value_output) = massively::vector::unique_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem).unwrap();
+        let (expected_keys, expected_values) = oracle::unique_by_key(&keys, &values, EqualItem); let len = expected_keys.len(); prop_assert_eq!(massively::MStorage::len(&key_output).unwrap() as usize, len);
+        assert_mvec!($key_arity, exec, key_output, expected_keys, len); assert_mvec!($value_arity, exec, value_output, expected_values, len);
     }};
     (merge_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
         let split = keys.len()/2; let (left_keys, left_values) = oracle::sort_by_key(&keys[..split], &values[..split], LessItem); let (right_keys, right_values) = oracle::sort_by_key(&keys[split..], &values[split..], LessItem);
         let left_key_device = device_rows!($key_arity, exec, left_keys); let right_key_device = device_rows!($key_arity, exec, right_keys); let left_value_device = device_rows!($value_arity, exec, left_values); let right_value_device = device_rows!($value_arity, exec, right_values);
-        let key_output = empty_output!(exec, $key_arity, keys.len()); let value_output = empty_output!(exec, $value_arity, values.len());
-        massively::vector::merge_by_key(&exec, input_expr!($key_arity, left_key_device), input_expr!($value_arity, left_value_device), input_expr!($key_arity, right_key_device), input_expr!($value_arity, right_value_device), LessItem, output_expr!($key_arity, key_output), output_expr!($value_arity, value_output)).unwrap();
+        let (key_output, value_output) = massively::vector::merge_by_key(&exec, input_expr!($key_arity, left_key_device), input_expr!($value_arity, left_value_device), input_expr!($key_arity, right_key_device), input_expr!($value_arity, right_value_device), LessItem).unwrap();
         let (expected_keys, expected_values) = oracle::merge_by_key(&left_keys, &left_values, &right_keys, &right_values, LessItem);
-        assert_output!($key_arity, exec, key_output, expected_keys, keys.len()); assert_output!($value_arity, exec, value_output, expected_values, values.len());
+        assert_mvec!($key_arity, exec, key_output, expected_keys, keys.len()); assert_mvec!($value_arity, exec, value_output, expected_values, values.len());
     }};
 }
 

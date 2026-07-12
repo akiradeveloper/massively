@@ -1,0 +1,187 @@
+use cubecl::prelude::*;
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use massively::{
+    Executor,
+    op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp},
+    vector,
+};
+
+struct AddOne;
+struct Triple;
+struct Add;
+struct Less;
+struct Equal;
+struct Even;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for AddOne {
+    type Output = u32;
+
+    fn apply(value: u32) -> u32 {
+        value + 1
+    }
+}
+
+#[cubecl::cube]
+impl UnaryOp<u32> for Triple {
+    type Output = (u32, (u32, u32));
+
+    fn apply(value: u32) -> Self::Output {
+        (value, (value + 10, value + 20))
+    }
+}
+
+#[cubecl::cube]
+impl ReductionOp<u32> for Add {
+    fn apply(lhs: u32, rhs: u32) -> u32 {
+        lhs + rhs
+    }
+}
+
+#[cubecl::cube]
+impl BinaryPredicateOp<u32> for Less {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs < rhs
+    }
+}
+
+#[cubecl::cube]
+impl BinaryPredicateOp<u32> for Equal {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs == rhs
+    }
+}
+
+#[cubecl::cube]
+impl PredicateOp<u32> for Even {
+    fn apply(value: u32) -> bool {
+        value % 2 == 0
+    }
+}
+
+#[test]
+fn owned_vector_apis_return_device_storage() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = exec.to_device(&[3_u32, 1, 2, 2]);
+    let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
+    let indices = exec.to_device(&[1_u32, 3, 0]);
+
+    let transformed = vector::transform(&exec, input.slice(..), AddOne).unwrap();
+    assert_eq!(exec.to_host(&transformed).unwrap(), vec![4, 2, 3, 3]);
+
+    let inclusive = vector::inclusive_scan(&exec, input.slice(..), Add).unwrap();
+    let exclusive = vector::exclusive_scan(&exec, input.slice(..), 0, Add).unwrap();
+    let adjacent = vector::adjacent_difference(&exec, input.slice(..), Add).unwrap();
+    assert_eq!(exec.to_host(&inclusive).unwrap(), vec![3, 4, 6, 8]);
+    assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0, 3, 4, 6]);
+    assert_eq!(exec.to_host(&adjacent).unwrap(), vec![3, 4, 3, 4]);
+
+    let gathered = vector::gather(&exec, input.slice(..), indices.slice(..)).unwrap();
+    let reversed = vector::reverse(&exec, input.slice(..)).unwrap();
+    assert_eq!(exec.to_host(&gathered).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(&reversed).unwrap(), vec![2, 2, 1, 3]);
+
+    let sorted = vector::sort(&exec, input.slice(..), Less).unwrap();
+    let unique = vector::unique(&exec, sorted.slice(..), Equal).unwrap();
+    assert_eq!(exec.to_host(&sorted).unwrap(), vec![1, 2, 2, 3]);
+    assert_eq!(unique.len(), 3);
+    assert_eq!(exec.to_host(&unique).unwrap(), vec![1, 2, 3]);
+
+    let copied = vector::copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
+    let removed = vector::remove_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
+    let (partitioned, boundary) = vector::partition(&exec, input.slice(..), Even).unwrap();
+    let filled = vector::fill(&exec, 3, 7_u32).unwrap();
+    assert_eq!(exec.to_host(&copied).unwrap(), vec![3, 2]);
+    assert_eq!(exec.to_host(&removed).unwrap(), vec![1, 2]);
+    assert_eq!(boundary, 2);
+    assert_eq!(exec.to_host(&partitioned).unwrap(), vec![2, 2, 3, 1]);
+    assert_eq!(exec.to_host(&filled).unwrap(), vec![7, 7, 7]);
+
+    let left = exec.to_device(&[1_u32, 2, 2]);
+    let right = exec.to_device(&[2_u32, 3]);
+    let merged = vector::merge(&exec, left.slice(..), right.slice(..), Less).unwrap();
+    let union = vector::set_union(&exec, left.slice(..), right.slice(..), Less).unwrap();
+    let intersection =
+        vector::set_intersection(&exec, left.slice(..), right.slice(..), Less).unwrap();
+    let difference = vector::set_difference(&exec, left.slice(..), right.slice(..), Less).unwrap();
+    assert_eq!(exec.to_host(&merged).unwrap(), vec![1, 2, 2, 2, 3]);
+    assert_eq!(exec.to_host(&union).unwrap(), vec![1, 2, 2, 3]);
+    assert_eq!(exec.to_host(&intersection).unwrap(), vec![2]);
+    assert_eq!(exec.to_host(&difference).unwrap(), vec![1, 2]);
+
+    let queries = exec.to_device(&[0_u32, 2, 4]);
+    let lower = vector::lower_bound(&exec, sorted.slice(..), queries.slice(..), Less).unwrap();
+    let upper = vector::upper_bound(&exec, sorted.slice(..), queries.slice(..), Less).unwrap();
+    assert_eq!(exec.to_host(&lower).unwrap(), vec![0, 1, 4]);
+    assert_eq!(exec.to_host(&upper).unwrap(), vec![0, 3, 4]);
+}
+
+#[test]
+fn owned_by_key_and_canonical_tuple_results() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = exec.to_device(&[1_u32, 2]);
+    let triples = vector::transform(&exec, input.slice(..), Triple).unwrap();
+    assert_eq!(exec.to_host(&triples.0.0).unwrap(), vec![1, 2]);
+    assert_eq!(exec.to_host(&triples.0.1).unwrap(), vec![11, 12]);
+    assert_eq!(exec.to_host(&triples.1).unwrap(), vec![21, 22]);
+
+    let keys = exec.to_device(&[2_u32, 1, 1, 3]);
+    let values = exec.to_device(&[20_u32, 10, 11, 30]);
+    let (sorted_keys, sorted_values) =
+        vector::sort_by_key(&exec, keys.slice(..), values.slice(..), Less).unwrap();
+    assert_eq!(exec.to_host(&sorted_keys).unwrap(), vec![1, 1, 2, 3]);
+    assert_eq!(exec.to_host(&sorted_values).unwrap(), vec![10, 11, 20, 30]);
+
+    let scanned = vector::inclusive_scan_by_key(
+        &exec,
+        sorted_keys.slice(..),
+        sorted_values.slice(..),
+        Equal,
+        Add,
+    )
+    .unwrap();
+    let exclusive = vector::exclusive_scan_by_key(
+        &exec,
+        sorted_keys.slice(..),
+        sorted_values.slice(..),
+        Equal,
+        0,
+        Add,
+    )
+    .unwrap();
+    assert_eq!(exec.to_host(&scanned).unwrap(), vec![10, 21, 20, 30]);
+    assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0, 10, 0, 0]);
+
+    let (reduced_keys, reduced_values) = vector::reduce_by_key(
+        &exec,
+        sorted_keys.slice(..),
+        sorted_values.slice(..),
+        Equal,
+        0,
+        Add,
+    )
+    .unwrap();
+    let (unique_keys, unique_values) =
+        vector::unique_by_key(&exec, sorted_keys.slice(..), sorted_values.slice(..), Equal)
+            .unwrap();
+    assert_eq!(exec.to_host(&reduced_keys).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(&reduced_values).unwrap(), vec![21, 20, 30]);
+    assert_eq!(exec.to_host(&unique_keys).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(&unique_values).unwrap(), vec![10, 20, 30]);
+
+    let left_keys = exec.to_device(&[1_u32, 3]);
+    let left_values = exec.to_device(&[10_u32, 30]);
+    let right_keys = exec.to_device(&[2_u32, 4]);
+    let right_values = exec.to_device(&[20_u32, 40]);
+    let (merged_keys, merged_values) = vector::merge_by_key(
+        &exec,
+        left_keys.slice(..),
+        left_values.slice(..),
+        right_keys.slice(..),
+        right_values.slice(..),
+        Less,
+    )
+    .unwrap();
+    assert_eq!(exec.to_host(&merged_keys).unwrap(), vec![1, 2, 3, 4]);
+    assert_eq!(exec.to_host(&merged_values).unwrap(), vec![10, 20, 30, 40]);
+}

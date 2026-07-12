@@ -69,16 +69,8 @@ pub fn solve<R: Runtime>(
 
     let weights = exec.to_device(&edges.iter().map(|edge| edge.2).collect::<Vec<_>>());
     let ids = exec.to_device(&(0..edges.len() as u32).collect::<Vec<_>>());
-    let sorted_weights = exec.alloc::<f32>(edges.len());
-    let sorted_ids = exec.alloc::<u32>(edges.len());
-    massively::vector::sort_by_key(
-        exec,
-        weights.slice(..),
-        ids.slice(..),
-        LessF32,
-        sorted_weights.slice_mut(..),
-        sorted_ids.slice_mut(..),
-    )?;
+    let (_sorted_weights, sorted_ids) =
+        massively::vector::sort_by_key(exec, weights.slice(..), ids.slice(..), LessF32)?;
 
     let sorted_ids = exec.to_host(&sorted_ids)?;
     let mut sets = DisjointSet::new(graph.graph.vertex_count());

@@ -1,12 +1,13 @@
 use cubecl::prelude::*;
+use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Error, Executor, MIter, MIterMut,
+    Executor,
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
     seg::{
-        ForEachSegment, Map, MapLikeExecutable, Reduce, ReduceLikeExecutable, Segmented,
-        SegmentedMut, Unique, UniqueLikeExecutable,
+        ForEachSegment, Map, MapLikeExecutable, Reduce, ReduceLikeExecutable, Segmented, Unique,
+        UniqueLikeExecutable,
     },
 };
 
@@ -39,61 +40,33 @@ impl ReductionOp<u32> for Add {
     }
 }
 
-#[allow(dead_code)]
-fn map_interface<R, Input, InputOffsets, Output>(
-    exec: &Executor<R>,
-    input: Segmented<Input, InputOffsets>,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Input: MIter<R, Item = u32>,
-    InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = u64>,
-{
-    ForEachSegment(Map(Transform)).run(exec, input, output)
-}
-
-#[allow(dead_code)]
-fn unique_interface<R, Input, InputOffsets, Output, OutputOffsets>(
-    exec: &Executor<R>,
-    input: Segmented<Input, InputOffsets>,
-    output: SegmentedMut<Output, OutputOffsets>,
-) -> Result<u32, Error>
-where
-    R: Runtime,
-    Input: MIter<R, Item = u32>,
-    InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = u32>,
-    OutputOffsets: MIterMut<R, Item = u32>,
-{
-    ForEachSegment(Unique(Equal)).run(exec, input, output)
-}
-
-#[allow(dead_code)]
-fn reduce_interface<R, Input, InputOffsets, Output>(
-    exec: &Executor<R>,
-    input: Segmented<Input, InputOffsets>,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Input: MIter<R, Item = u32>,
-    InputOffsets: MIter<R, Item = u32>,
-    Output: MIterMut<R, Item = u32>,
-{
-    ForEachSegment(Reduce(Add, 0)).run(exec, input, output)
-}
-
 #[test]
 fn segmented_wrappers_expose_their_parts() {
     let input = Segmented::new([1_u32, 2], [0_u32, 2]);
     assert_eq!(input.values(), &[1, 2]);
     assert_eq!(input.offsets(), &[0, 2]);
     assert_eq!(input.into_parts(), ([1, 2], [0, 2]));
+}
 
-    let output = SegmentedMut::new([0_u32; 2], [0_u32; 2]);
-    assert_eq!(output.values(), &[0, 0]);
-    assert_eq!(output.offsets(), &[0, 0]);
-    assert_eq!(output.into_parts(), ([0, 0], [0, 0]));
+#[test]
+fn segmented_algorithms_return_owned_device_results() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let values = exec.to_device(&[1_u32, 1, 2, 3, 3]);
+    let offsets = exec.to_device(&[0_u32, 3, 5]);
+
+    let mapped = ForEachSegment(Map(Transform))
+        .run(&exec, Segmented::new(values.slice(..), offsets.slice(..)))
+        .unwrap();
+    assert_eq!(exec.to_host(&mapped).unwrap(), vec![1_u64, 1, 2, 3, 3]);
+
+    let unique = ForEachSegment(Unique(Equal))
+        .run(&exec, Segmented::new(values.slice(..), offsets.slice(..)))
+        .unwrap();
+    assert_eq!(exec.to_host(unique.values()).unwrap(), vec![1, 2, 3]);
+    assert_eq!(exec.to_host(unique.offsets()).unwrap(), vec![0, 2, 3]);
+
+    let reduced = ForEachSegment(Reduce(Add, 0))
+        .run(&exec, Segmented::new(values.slice(..), offsets.slice(..)))
+        .unwrap();
+    assert_eq!(exec.to_host(&reduced).unwrap(), vec![4, 6]);
 }

@@ -60,8 +60,7 @@ or `hip`, together with the matching CubeCL feature.
 
 ## Quick Example
 
-This example doubles a device vector and writes the result into preallocated
-output storage.
+This example doubles a device vector and returns owned device storage.
 
 ```rust
 use cubecl::prelude::*;
@@ -82,9 +81,7 @@ impl UnaryOp<u32> for Double {
 fn main() -> Result<(), massively::Error> {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2, 3, 4]);
-    let output = exec.alloc::<u32>(input.len());
-
-    transform(&exec, input.slice(..), Double, output.slice_mut(..))?;
+    let output = transform(&exec, input.slice(..), Double)?;
 
     assert_eq!(exec.to_host(&output)?, vec![2, 4, 6, 8]);
     Ok(())
@@ -196,12 +193,14 @@ The same `Executor<R>` drives device allocation, transfers, synchronization,
 and algorithms for that runtime. An attempt to use storage with a different
 executor is rejected with `Error::ForeignExecutor`.
 
-Algorithms are ordinary functions. Their public constraints describe only
-logical iterators, outputs, and operations; kernel lowering and dispatch remain
-private implementation details.
+Algorithms are ordinary functions. Their public constraints describe logical
+iterators and operations; kernel lowering and dispatch remain private
+implementation details. Algorithms that naturally produce a new sequence return
+an `MVec`. Algorithms whose semantics require an existing destination, such as
+`scatter`, take that destination as an argument.
 
 ```rust
-transform(&exec, input, op, output)?;
+let output = transform(&exec, input, op)?;
 let sum = reduce(&exec, input, zero, sum_op)?;
 ```
 

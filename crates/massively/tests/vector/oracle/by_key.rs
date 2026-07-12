@@ -26,14 +26,12 @@ macro_rules! by_key_case {
 by_key_case!(
     inclusive_scan_by_key,
     |exec, keys, values, key_gpu, value_gpu| {
-        let output = exec.to_device(&vec![0_u32; keys.len()]);
-        massively::vector::inclusive_scan_by_key(
+        let output = massively::vector::inclusive_scan_by_key(
             &exec,
             lazify(key_gpu.slice(..)),
             lazify(value_gpu.slice(..)),
             Equal,
             Sum,
-            output.slice_mut(..),
         )
         .unwrap();
         prop_assert_eq!(
@@ -46,15 +44,13 @@ by_key_case!(
 by_key_case!(
     exclusive_scan_by_key,
     |exec, keys, values, key_gpu, value_gpu| {
-        let output = exec.to_device(&vec![0_u32; keys.len()]);
-        massively::vector::exclusive_scan_by_key(
+        let output = massively::vector::exclusive_scan_by_key(
             &exec,
             lazify(key_gpu.slice(..)),
             lazify(value_gpu.slice(..)),
             Equal,
             7,
             Sum,
-            output.slice_mut(..),
         )
         .unwrap();
         prop_assert_eq!(
@@ -65,65 +61,39 @@ by_key_case!(
 );
 
 by_key_case!(reduce_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let out_keys = exec.to_device(&vec![0_u32; keys.len()]);
-    let out_values = exec.to_device(&vec![0_u32; keys.len()]);
-    let len = massively::vector::reduce_by_key(
+    let (out_keys, out_values) = massively::vector::reduce_by_key(
         &exec,
         lazify(key_gpu.slice(..)),
         lazify(value_gpu.slice(..)),
         Equal,
         7,
         Sum,
-        out_keys.slice_mut(..),
-        out_values.slice_mut(..),
     )
     .unwrap();
     let (expected_keys, expected_values) = oracle::reduce_by_key(keys, values, Equal, 7, Sum);
-    prop_assert_eq!(len as usize, expected_keys.len());
-    prop_assert_eq!(
-        exec.to_host(&out_keys.slice(..len as usize)).unwrap(),
-        expected_keys,
-    );
-    prop_assert_eq!(
-        exec.to_host(&out_values.slice(..len as usize)).unwrap(),
-        expected_values,
-    );
+    prop_assert_eq!(exec.to_host(&out_keys).unwrap(), expected_keys);
+    prop_assert_eq!(exec.to_host(&out_values).unwrap(), expected_values);
 });
 
 by_key_case!(unique_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let out_keys = exec.to_device(&vec![0_u32; keys.len()]);
-    let out_values = exec.to_device(&vec![0_u32; keys.len()]);
-    let len = massively::vector::unique_by_key(
+    let (out_keys, out_values) = massively::vector::unique_by_key(
         &exec,
         lazify(key_gpu.slice(..)),
         lazify(value_gpu.slice(..)),
         Equal,
-        out_keys.slice_mut(..),
-        out_values.slice_mut(..),
     )
     .unwrap();
     let (expected_keys, expected_values) = oracle::unique_by_key(keys, values, Equal);
-    prop_assert_eq!(len as usize, expected_keys.len());
-    prop_assert_eq!(
-        exec.to_host(&out_keys.slice(..len as usize)).unwrap(),
-        expected_keys,
-    );
-    prop_assert_eq!(
-        exec.to_host(&out_values.slice(..len as usize)).unwrap(),
-        expected_values,
-    );
+    prop_assert_eq!(exec.to_host(&out_keys).unwrap(), expected_keys);
+    prop_assert_eq!(exec.to_host(&out_values).unwrap(), expected_values);
 });
 
 by_key_case!(sort_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let out_keys = exec.to_device(&vec![0_u32; keys.len()]);
-    let out_values = exec.to_device(&vec![0_u32; keys.len()]);
-    massively::vector::sort_by_key(
+    let (out_keys, out_values) = massively::vector::sort_by_key(
         &exec,
         lazify(key_gpu.slice(..)),
         lazify(value_gpu.slice(..)),
         Less,
-        out_keys.slice_mut(..),
-        out_values.slice_mut(..),
     )
     .unwrap();
     let (expected_keys, expected_values) = oracle::sort_by_key(keys, values, Less);
@@ -139,17 +109,13 @@ by_key_case!(merge_by_key, |exec, keys, values, _key_gpu, _value_gpu| {
     let left_values_gpu = exec.to_device(&left_values);
     let right_keys_gpu = exec.to_device(&right_keys);
     let right_values_gpu = exec.to_device(&right_values);
-    let out_keys = exec.to_device(&vec![0_u32; keys.len()]);
-    let out_values = exec.to_device(&vec![0_u32; keys.len()]);
-    massively::vector::merge_by_key(
+    let (out_keys, out_values) = massively::vector::merge_by_key(
         &exec,
         lazify(left_keys_gpu.slice(..)),
         lazify(left_values_gpu.slice(..)),
         lazify(right_keys_gpu.slice(..)),
         lazify(right_values_gpu.slice(..)),
         Less,
-        out_keys.slice_mut(..),
-        out_values.slice_mut(..),
     )
     .unwrap();
     let (expected_keys, expected_values) =

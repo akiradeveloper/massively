@@ -140,7 +140,7 @@ where
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
         let output = <Values::Item as MAlloc<R>>::alloc(exec, control.output_len as usize);
-        crate::vector::gather(
+        crate::vector::gather_into(
             exec,
             self.0,
             control.sources.slice(..),
@@ -164,7 +164,7 @@ where
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
         let output = <Values::Item as MAlloc<R>>::alloc(exec, control.output_len as usize);
-        crate::vector::gather(
+        crate::vector::gather_into(
             exec,
             self.0,
             control.destinations.slice(..),
@@ -188,7 +188,7 @@ where
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
         let output = <Values::Item as MAlloc<R>>::alloc(exec, control.output_len as usize);
-        crate::vector::gather(exec, self.0, control.edges.slice(..), output.slice_mut(..))?;
+        crate::vector::gather_into(exec, self.0, control.edges.slice(..), output.slice_mut(..))?;
         Ok(output)
     }
 }

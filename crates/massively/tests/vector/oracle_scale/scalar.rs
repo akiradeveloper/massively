@@ -29,14 +29,8 @@ fn inclusive_scan() {
     let input = scale_input();
     let exec = exec();
     let device = exec.to_device(&input);
-    let output = exec.to_device(&vec![0_u32; input.len()]);
-    massively::vector::inclusive_scan(
-        &exec,
-        lazify(device.slice(..)),
-        MaxU32,
-        output.slice_mut(..),
-    )
-    .unwrap();
+    let output =
+        massively::vector::inclusive_scan(&exec, lazify(device.slice(..)), MaxU32).unwrap();
     assert_eq!(
         exec.to_host(&output).unwrap(),
         oracle::inclusive_scan(&input, MaxU32),

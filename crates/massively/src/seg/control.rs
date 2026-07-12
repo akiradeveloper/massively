@@ -196,7 +196,7 @@ impl<R: Runtime> SegmentControl<R> {
 
         let ids = exec.alloc::<u32>(value_len);
         if value_len != 0 {
-            crate::vector::inclusive_scan(exec, heads.slice(..), MaxU32, ids.slice_mut(..))?;
+            crate::vector::inclusive_scan_into(exec, heads.slice(..), MaxU32, ids.slice_mut(..))?;
         }
 
         Ok(Self {

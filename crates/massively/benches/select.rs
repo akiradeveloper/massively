@@ -20,41 +20,26 @@ fn bench_select(c: &mut Criterion) {
     for &len in common::SIZES {
         let host = common::dense_f32(len);
         let input = exec.to_device(&host);
-        let output = exec.alloc::<f32>(len);
         for &rate in &[0usize, 50, 100] {
             let flags = exec.to_device(&common::flags(len, rate));
             group.bench_function(BenchmarkId::new(format!("copy_where_{rate}"), len), |b| {
                 b.iter(|| {
                     criterion::black_box(
-                        copy_where(
-                            &exec,
-                            input.slice(..),
-                            flags.slice(..),
-                            output.slice_mut(..),
-                        )
-                        .unwrap(),
+                        copy_where(&exec, input.slice(..), flags.slice(..)).unwrap(),
                     );
                 })
             });
             group.bench_function(BenchmarkId::new(format!("remove_where_{rate}"), len), |b| {
                 b.iter(|| {
                     criterion::black_box(
-                        remove_where(
-                            &exec,
-                            input.slice(..),
-                            flags.slice(..),
-                            output.slice_mut(..),
-                        )
-                        .unwrap(),
+                        remove_where(&exec, input.slice(..), flags.slice(..)).unwrap(),
                     );
                 })
             });
         }
         group.bench_function(BenchmarkId::new("partition", len), |b| {
             b.iter(|| {
-                criterion::black_box(
-                    partition(&exec, input.slice(..), Positive, output.slice_mut(..)).unwrap(),
-                );
+                criterion::black_box(partition(&exec, input.slice(..), Positive).unwrap());
             })
         });
     }
@@ -64,7 +49,6 @@ fn bench_select(c: &mut Criterion) {
                 exec.to_device(&(0..len).map(|i| (i + column) as u32).collect::<Vec<_>>())
             })
             .collect();
-        let outputs: Vec<_> = (0..7).map(|_| exec.alloc::<u32>(len)).collect();
         let flags = exec.to_device(&common::flags(len, 50));
         group.bench_function(BenchmarkId::new("copy_where_zip7", len), |b| {
             b.iter(|| {
@@ -81,15 +65,6 @@ fn bench_select(c: &mut Criterion) {
                             columns[6].slice(..),
                         ),
                         flags.slice(..),
-                        zip7(
-                            outputs[0].slice_mut(..),
-                            outputs[1].slice_mut(..),
-                            outputs[2].slice_mut(..),
-                            outputs[3].slice_mut(..),
-                            outputs[4].slice_mut(..),
-                            outputs[5].slice_mut(..),
-                            outputs[6].slice_mut(..),
-                        ),
                     )
                     .unwrap(),
                 );

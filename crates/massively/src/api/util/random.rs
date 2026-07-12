@@ -94,9 +94,8 @@ use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-let output = exec.alloc::<u32>(8);
 let values = random::uniform_u32(10, 20, 123).unwrap().take(8);
-transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+let output = transform(&exec, values, Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (10..=20).contains(value)));
@@ -114,9 +113,8 @@ use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-let output = exec.alloc::<u64>(8);
 let values = random::uniform_u64(100, 200, 123).unwrap().take(8);
-transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+let output = transform(&exec, values, Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (100..=200).contains(value)));
@@ -134,9 +132,8 @@ use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-let output = exec.alloc::<f32>(8);
 let values = random::uniform_f32(-1.0, 1.0, 123).unwrap().take(8);
-transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+let output = transform(&exec, values, Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
@@ -154,9 +151,8 @@ use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-let output = exec.alloc::<f64>(8);
 let values = random::uniform_f64(-1.0, 1.0, 123).unwrap().take(8);
-transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+let output = transform(&exec, values, Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
@@ -225,9 +221,8 @@ use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-let output = exec.alloc::<f32>(8);
 let values = random::normal_f32(0.0, 1.0, 123).take(8);
-transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+let output = transform(&exec, values, Identity).unwrap();
 
 assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
 ```"#
@@ -244,9 +239,8 @@ use massively::{Executor, vector::transform};
 use massively::{op::Identity, util::random};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-let output = exec.alloc::<f64>(8);
 let values = random::normal_f64(0.0, 1.0, 123).take(8);
-transform(&exec, values, Identity, output.slice_mut(..)).unwrap();
+let output = transform(&exec, values, Identity).unwrap();
 
 assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
 ```"#

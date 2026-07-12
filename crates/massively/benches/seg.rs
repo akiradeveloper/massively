@@ -8,7 +8,7 @@ use massively::{
     op::UnaryOp,
     seg::{
         ForEachSegment, InclusiveScan, Map, MapLikeExecutable, Reduce, ReduceLikeExecutable,
-        Reverse, Segmented, SegmentedMut, Sort, Unique, UniqueLikeExecutable,
+        Reverse, Segmented, Sort, Unique, UniqueLikeExecutable,
     },
     vector::inclusive_scan_by_key,
     vector::reduce_by_key,
@@ -105,23 +105,21 @@ fn bench_map(c: &mut Criterion) {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&dense_u32(len));
         let segment_offsets = exec.to_device(&[0u32, len as u32]);
-        let output = exec.alloc::<u32>(len);
         exec.sync().unwrap();
 
         group.bench_function(BenchmarkId::from_parameter(len), |b| {
             b.iter(|| {
-                ForEachSegment(Map(AddOne))
+                let output = ForEachSegment(Map(AddOne))
                     .run(
                         &exec,
                         Segmented::new(
                             black_box(values.slice(..)),
                             black_box(segment_offsets.slice(..)),
                         ),
-                        black_box(output.slice_mut(..)),
                     )
                     .unwrap();
                 exec.sync().unwrap();
-                black_box(&output);
+                black_box(output);
             })
         });
     }
@@ -134,7 +132,6 @@ fn bench_inclusive_scan(c: &mut Criterion) {
     for &len in common::SIZES {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&dense_u32(len));
-        let output = exec.alloc::<u32>(len);
 
         for segment_len in segment_lengths(len) {
             let pattern = segment_name(len, segment_len);
@@ -144,34 +141,32 @@ fn bench_inclusive_scan(c: &mut Criterion) {
 
             group.bench_function(BenchmarkId::new(format!("foreach_{pattern}"), len), |b| {
                 b.iter(|| {
-                    ForEachSegment(InclusiveScan(Sum))
+                    let output = ForEachSegment(InclusiveScan(Sum))
                         .run(
                             &exec,
                             Segmented::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
-                            black_box(output.slice_mut(..)),
                         )
                         .unwrap();
                     exec.sync().unwrap();
-                    black_box(&output);
+                    black_box(output);
                 })
             });
 
             group.bench_function(BenchmarkId::new(format!("by_key_{pattern}"), len), |b| {
                 b.iter(|| {
-                    inclusive_scan_by_key(
+                    let output = inclusive_scan_by_key(
                         &exec,
                         black_box(keys.slice(..)),
                         black_box(values.slice(..)),
                         Equal,
                         Sum,
-                        black_box(output.slice_mut(..)),
                     )
                     .unwrap();
                     exec.sync().unwrap();
-                    black_box(&output);
+                    black_box(output);
                 })
             });
         }
@@ -192,43 +187,38 @@ fn bench_reduce(c: &mut Criterion) {
             let segment_count = host_offsets.len() - 1;
             let segment_offsets = exec.to_device(&host_offsets);
             let keys = exec.to_device(&common::run_keys(len, segment_len));
-            let output = exec.alloc::<u32>(segment_count);
-            let output_keys = exec.alloc::<u32>(segment_count);
-            let by_key_output = exec.alloc::<u32>(segment_count);
+            let _segment_count = segment_count;
             exec.sync().unwrap();
 
             group.bench_function(BenchmarkId::new(format!("foreach_{pattern}"), len), |b| {
                 b.iter(|| {
-                    ForEachSegment(Reduce(Sum, 0u32))
+                    let output = ForEachSegment(Reduce(Sum, 0u32))
                         .run(
                             &exec,
                             Segmented::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
-                            black_box(output.slice_mut(..)),
                         )
                         .unwrap();
                     exec.sync().unwrap();
-                    black_box(&output);
+                    black_box(output);
                 })
             });
 
             group.bench_function(BenchmarkId::new(format!("by_key_{pattern}"), len), |b| {
                 b.iter(|| {
-                    let written = reduce_by_key(
+                    let output = reduce_by_key(
                         &exec,
                         black_box(keys.slice(..)),
                         black_box(values.slice(..)),
                         Equal,
                         0u32,
                         Sum,
-                        black_box(output_keys.slice_mut(..)),
-                        black_box(by_key_output.slice_mut(..)),
                     )
                     .unwrap();
                     exec.sync().unwrap();
-                    black_box((written, &output_keys, &by_key_output));
+                    black_box(output);
                 })
             });
         }
@@ -242,32 +232,26 @@ fn bench_unique(c: &mut Criterion) {
     for &len in common::SIZES {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&repeated_u32(len, 8));
-        let output_values = exec.alloc::<u32>(len);
 
         for segment_len in segment_lengths(len) {
             let pattern = segment_name(len, segment_len);
             let host_offsets = offsets(len, segment_len);
             let segment_offsets = exec.to_device(&host_offsets);
-            let output_offsets = exec.alloc::<u32>(host_offsets.len());
             exec.sync().unwrap();
 
             group.bench_function(BenchmarkId::new(pattern, len), |b| {
                 b.iter(|| {
-                    let written = ForEachSegment(Unique(Equal))
+                    let output = ForEachSegment(Unique(Equal))
                         .run(
                             &exec,
                             Segmented::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
-                            SegmentedMut::new(
-                                black_box(output_values.slice_mut(..)),
-                                black_box(output_offsets.slice_mut(..)),
-                            ),
                         )
                         .unwrap();
                     exec.sync().unwrap();
-                    black_box((written, &output_values, &output_offsets));
+                    black_box(output);
                 })
             });
         }
@@ -281,7 +265,6 @@ fn bench_reverse(c: &mut Criterion) {
     for &len in common::SIZES {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&dense_u32(len));
-        let output = exec.alloc::<u32>(len);
 
         for segment_len in segment_lengths(len) {
             let pattern = segment_name(len, segment_len);
@@ -290,18 +273,17 @@ fn bench_reverse(c: &mut Criterion) {
 
             group.bench_function(BenchmarkId::new(pattern, len), |b| {
                 b.iter(|| {
-                    ForEachSegment(Reverse)
+                    let output = ForEachSegment(Reverse)
                         .run(
                             &exec,
                             Segmented::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
-                            black_box(output.slice_mut(..)),
                         )
                         .unwrap();
                     exec.sync().unwrap();
-                    black_box(&output);
+                    black_box(output);
                 })
             });
         }
@@ -315,7 +297,6 @@ fn bench_sort(c: &mut Criterion) {
     for &len in common::SORT_SIZES {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&common::shuffled_u32(len));
-        let output = exec.alloc::<u32>(len);
 
         for segment_len in segment_lengths(len) {
             let pattern = segment_name(len, segment_len);
@@ -324,18 +305,17 @@ fn bench_sort(c: &mut Criterion) {
 
             group.bench_function(BenchmarkId::new(pattern, len), |b| {
                 b.iter(|| {
-                    ForEachSegment(Sort(Less))
+                    let output = ForEachSegment(Sort(Less))
                         .run(
                             &exec,
                             Segmented::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
-                            black_box(output.slice_mut(..)),
                         )
                         .unwrap();
                     exec.sync().unwrap();
-                    black_box(&output);
+                    black_box(output);
                 })
             });
         }
@@ -356,8 +336,6 @@ fn bench_unique_patterns(c: &mut Criterion) {
     for segment_len in [8, 128, 4_096] {
         let host_offsets = offsets(len, segment_len);
         let segment_offsets = exec.to_device(&host_offsets);
-        let output_values = exec.alloc::<u32>(len);
-        let output_offsets = exec.alloc::<u32>(host_offsets.len());
 
         for (pattern, host_values) in &patterns {
             let values = exec.to_device(host_values);
@@ -366,21 +344,17 @@ fn bench_unique_patterns(c: &mut Criterion) {
                 BenchmarkId::new(*pattern, format!("run{segment_len}")),
                 |b| {
                     b.iter(|| {
-                        let written = ForEachSegment(Unique(Equal))
+                        let output = ForEachSegment(Unique(Equal))
                             .run(
                                 &exec,
                                 Segmented::new(
                                     black_box(values.slice(..)),
                                     black_box(segment_offsets.slice(..)),
                                 ),
-                                SegmentedMut::new(
-                                    black_box(output_values.slice_mut(..)),
-                                    black_box(output_offsets.slice_mut(..)),
-                                ),
                             )
                             .unwrap();
                         exec.sync().unwrap();
-                        black_box((written, &output_values, &output_offsets));
+                        black_box(output);
                     })
                 },
             );
@@ -405,7 +379,6 @@ fn bench_sort_patterns(c: &mut Criterion) {
             ("shuffled", common::shuffled_u32(len)),
         ];
         let segment_offsets = exec.to_device(&offsets(len, segment_len));
-        let output = exec.alloc::<u32>(len);
 
         for (pattern, host_values) in patterns {
             let values = exec.to_device(&host_values);
@@ -414,18 +387,17 @@ fn bench_sort_patterns(c: &mut Criterion) {
                 BenchmarkId::new(pattern, format!("run{segment_len}")),
                 |b| {
                     b.iter(|| {
-                        ForEachSegment(Sort(Less))
+                        let output = ForEachSegment(Sort(Less))
                             .run(
                                 &exec,
                                 Segmented::new(
                                     black_box(values.slice(..)),
                                     black_box(segment_offsets.slice(..)),
                                 ),
-                                black_box(output.slice_mut(..)),
                             )
                             .unwrap();
                         exec.sync().unwrap();
-                        black_box(&output);
+                        black_box(output);
                     })
                 },
             );

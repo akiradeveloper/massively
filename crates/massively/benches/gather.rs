@@ -9,17 +9,10 @@ fn bench_gather(c: &mut Criterion) {
     for &len in common::SIZES {
         let input = exec.to_device(&common::dense_f32(len));
         let indices = exec.to_device(&common::reverse_indices(len));
-        let output = exec.alloc::<f32>(len);
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("reverse", len), |b| {
             b.iter(|| {
-                gather(
-                    &exec,
-                    input.slice(..),
-                    indices.slice(..),
-                    output.slice_mut(..),
-                )
-                .unwrap();
+                std::hint::black_box(gather(&exec, input.slice(..), indices.slice(..)).unwrap());
                 exec.sync().unwrap();
             })
         });

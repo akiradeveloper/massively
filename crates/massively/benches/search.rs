@@ -25,19 +25,17 @@ fn bench_search(c: &mut Criterion) {
     for &len in common::SIZES {
         let source = exec.to_device(&(0..len).map(|index| index as u32).collect::<Vec<_>>());
         let values = exec.to_device(&queries(len));
-        let output = exec.alloc::<u32>(len);
         lower.bench_function(BenchmarkId::new("gpu", len), |b| {
             b.iter(|| {
-                lower_bound(
+                let output = lower_bound(
                     &exec,
                     black_box(source.slice(..)),
                     black_box(values.slice(..)),
                     Less,
-                    black_box(output.slice_mut(..)),
                 )
                 .unwrap();
                 exec.sync().unwrap();
-                black_box(&output);
+                black_box(output);
             })
         });
     }
@@ -47,19 +45,17 @@ fn bench_search(c: &mut Criterion) {
     for &len in common::SIZES {
         let source = exec.to_device(&(0..len).map(|index| index as u32).collect::<Vec<_>>());
         let values = exec.to_device(&queries(len));
-        let output = exec.alloc::<u32>(len);
         upper.bench_function(BenchmarkId::new("gpu", len), |b| {
             b.iter(|| {
-                upper_bound(
+                let output = upper_bound(
                     &exec,
                     black_box(source.slice(..)),
                     black_box(values.slice(..)),
                     Less,
-                    black_box(output.slice_mut(..)),
                 )
                 .unwrap();
                 exec.sync().unwrap();
-                black_box(&output);
+                black_box(output);
             })
         });
     }

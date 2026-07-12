@@ -25,8 +25,6 @@ fn bench_reduce(c: &mut Criterion) {
     for &len in common::SIZES {
         let values = exec.to_device(&common::dense_f32(len));
         let keys = exec.to_device(&common::run_keys(len, 8));
-        let out_keys = exec.alloc::<u32>(len);
-        let out_values = exec.alloc::<f32>(len);
         exec.sync().unwrap();
         group.bench_function(BenchmarkId::new("reduce", len), |b| {
             b.iter(|| black_box(reduce(&exec, values.slice(..), 0.0, Sum).unwrap()))
@@ -34,17 +32,8 @@ fn bench_reduce(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("reduce_by_key", len), |b| {
             b.iter(|| {
                 black_box(
-                    reduce_by_key(
-                        &exec,
-                        keys.slice(..),
-                        values.slice(..),
-                        Equal,
-                        0.0,
-                        Sum,
-                        out_keys.slice_mut(..),
-                        out_values.slice_mut(..),
-                    )
-                    .unwrap(),
+                    reduce_by_key(&exec, keys.slice(..), values.slice(..), Equal, 0.0, Sum)
+                        .unwrap(),
                 )
             })
         });

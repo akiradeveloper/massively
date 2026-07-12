@@ -36,10 +36,10 @@ pub fn solve<R: Runtime>(
     iterations: usize,
 ) -> common::Result<Vec<f32>> {
     let n = graph.vertex_count();
-    let degree = common::degrees(exec, graph)?;
+    let degree_gpu = common::degrees(exec, graph)?;
+    let degree = exec.to_host(&degree_gpu)?;
     let device_graph = DeviceGraph::new(exec, graph);
     let frontier = common::all_vertices(exec, graph);
-    let degree_gpu = exec.to_device(&degree);
     let mut rank = vec![1.0 / n as f32; n];
 
     for _ in 0..iterations {

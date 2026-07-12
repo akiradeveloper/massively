@@ -1,11 +1,38 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp};
+use crate::{
+    Error, Executor, MCanonical, MIndex, MIter, MIterMut, MStorage, MVec, WriteFrom,
+    op::BinaryPredicateOp,
+};
 
 macro_rules! set_api {
-    ($name:ident, $mode:literal, $doc:literal) => {
+    ($name:ident, $into_name:ident, $mode:literal, $capacity:expr, $doc:literal) => {
         #[doc = $doc]
-        pub fn $name<R, Left, Right, Less, Output>(
+        pub fn $name<R, Left, Right, Less>(
+            exec: &Executor<R>,
+            left: Left,
+            right: Right,
+            less: Less,
+        ) -> Result<MVec<R, Left::Item>, Error>
+        where
+            R: Runtime,
+            Left: MIter<R>,
+            Left::Item: MCanonical<R>,
+            Right: MIter<R, Item = Left::Item>,
+            Less: BinaryPredicateOp<Left::Item>,
+        {
+            let left_len = left.len()? as usize;
+            let right_len = right.len()? as usize;
+            let capacity = ($capacity)(left_len, right_len)?;
+            let mut output = exec.alloc_mvec::<Left::Item>(capacity);
+            let len = $into_name(exec, left, right, less, output.slice_mut(..))?;
+            output.truncate(len);
+            Ok(output)
+        }
+
+        #[doc = concat!("Caller-provided output variant of [`", stringify!($name), "`].")]
+        #[doc(hidden)]
+        pub(crate) fn $into_name<R, Left, Right, Less, Output>(
             exec: &Executor<R>,
             left: Left,
             right: Right,
@@ -27,10 +54,12 @@ macro_rules! set_api {
 
 set_api!(
     set_union,
+    set_union_into,
     0,
+    |left: usize, right: usize| left
+        .checked_add(right)
+        .ok_or(Error::LengthTooLarge { len: usize::MAX }),
     r#"Computes the multiset union of two sorted ranges.
-
-The return value is the number of items written at the beginning of `output`.
 
 # Examples
 
@@ -51,20 +80,10 @@ impl BinaryPredicateOp<u32> for Less {
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let left = exec.to_device(&[1_u32, 2, 2, 4]);
 let right = exec.to_device(&[2_u32, 3, 4]);
-let output = exec.alloc::<u32>(left.len() + right.len());
+let output = set_union(&exec, left.slice(..), right.slice(..), Less).unwrap();
 
-let len = set_union(
-    &exec,
-    left.slice(..),
-    right.slice(..),
-    Less,
-    output.slice_mut(..),
-)
-.unwrap();
-
-assert_eq!(len, 5);
 assert_eq!(
-    exec.to_host(&output.slice(..len as usize)).unwrap(),
+    exec.to_host(&output).unwrap(),
     vec![1, 2, 2, 3, 4],
 );
 ```
@@ -72,10 +91,10 @@ assert_eq!(
 );
 set_api!(
     set_intersection,
+    set_intersection_into,
     1,
+    |left: usize, right: usize| Ok(left.min(right)),
     r#"Computes the multiset intersection of two sorted ranges.
-
-The return value is the number of items written at the beginning of `output`.
 
 # Examples
 
@@ -96,28 +115,18 @@ impl BinaryPredicateOp<u32> for Less {
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let left = exec.to_device(&[1_u32, 2, 2, 4]);
 let right = exec.to_device(&[2_u32, 3, 4]);
-let output = exec.alloc::<u32>(left.len());
+let output = set_intersection(&exec, left.slice(..), right.slice(..), Less).unwrap();
 
-let len = set_intersection(
-    &exec,
-    left.slice(..),
-    right.slice(..),
-    Less,
-    output.slice_mut(..),
-)
-.unwrap();
-
-assert_eq!(len, 2);
-assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![2, 4]);
+assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4]);
 ```
 "#
 );
 set_api!(
     set_difference,
+    set_difference_into,
     2,
+    |left: usize, _right: usize| Ok(left),
     r#"Computes the multiset difference of two sorted ranges.
-
-The return value is the number of items written at the beginning of `output`.
 
 # Examples
 
@@ -138,19 +147,9 @@ impl BinaryPredicateOp<u32> for Less {
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let left = exec.to_device(&[1_u32, 2, 2, 4]);
 let right = exec.to_device(&[2_u32, 3, 4]);
-let output = exec.alloc::<u32>(left.len());
+let output = set_difference(&exec, left.slice(..), right.slice(..), Less).unwrap();
 
-let len = set_difference(
-    &exec,
-    left.slice(..),
-    right.slice(..),
-    Less,
-    output.slice_mut(..),
-)
-.unwrap();
-
-assert_eq!(len, 2);
-assert_eq!(exec.to_host(&output.slice(..len as usize)).unwrap(), vec![1, 2]);
+assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2]);
 ```
 "#
 );

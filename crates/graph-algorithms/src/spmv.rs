@@ -35,8 +35,7 @@ pub fn solve<R: Runtime>(
     let frontier = common::all_vertices(exec, &matrix.graph);
     let weights = exec.to_device(&matrix.weights);
     let vector = exec.to_device(vector);
-    let output = exec.alloc::<f32>(matrix.graph.vertex_count());
-    graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+    let output = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
         .map(
             zip2(
                 graph::edge(weights.slice(..)),
@@ -44,7 +43,7 @@ pub fn solve<R: Runtime>(
             ),
             MulF32,
         )
-        .reduce_by_source(exec, 0.0, SumF32, output.slice_mut(..))?;
+        .reduce_by_source(exec, 0.0, SumF32)?;
     exec.to_host(&output)
 }
 

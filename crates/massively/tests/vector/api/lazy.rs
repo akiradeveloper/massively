@@ -33,12 +33,10 @@ fn public_lazy_constructors_compose_as_miter() {
     assert_eq!(reduce(&exec, constant, 0, Sum).unwrap(), 12);
 
     let counting: lazy::Taken<lazy::Counting> = lazy::counting(1).take(4);
-    let output = exec.to_device(&[0_u32; 4]);
-    transform(
+    let output = transform(
         &exec,
         lazy::identity(lazy::transform(counting, Double)),
         massively::op::Identity,
-        output.slice_mut(..),
     )
     .unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 6, 8]);
@@ -52,12 +50,11 @@ fn public_lazy_constructors_compose_as_miter() {
 #[test]
 fn taken_tracks_nested_slice_offsets() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let output = exec.to_device(&[0_u32; 2]);
     let taken: lazy::Taken<lazy::Counting> = lazy::counting(10).take(8);
     let sliced = taken.slice(2..6).slice(1..3);
 
     assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 2);
-    transform(&exec, sliced, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(&exec, sliced, massively::op::Identity).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![13, 14]);
 }
@@ -67,14 +64,13 @@ fn slicing_a_lazy_permutation_slices_its_logical_rows() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]);
     let indices = exec.to_device(&[4_u32, 1, 5, 0, 3, 2]);
-    let output = exec.to_device(&[0_u32; 2]);
 
     let sliced = lazy::permute(values.slice(..), indices.slice(..))
         .slice(1..5)
         .slice(1..3);
     assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 2);
 
-    transform(&exec, sliced, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(&exec, sliced, massively::op::Identity).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![60, 10]);
 }
 
@@ -87,7 +83,6 @@ fn slicing_does_not_increase_read_arity_eight() {
             exec.to_device(&[base, base + 1, base + 2, base + 3])
         })
         .collect();
-    let outputs: Vec<_> = (0..7).map(|_| exec.to_device(&[0_u32; 2])).collect();
 
     let sliced = lazy::permute(
         zip7(
@@ -103,23 +98,18 @@ fn slicing_does_not_increase_read_arity_eight() {
     )
     .slice(1..3);
 
-    transform(
-        &exec,
-        sliced,
-        massively::op::Identity,
-        zip7(
-            outputs[0].slice_mut(..),
-            outputs[1].slice_mut(..),
-            outputs[2].slice_mut(..),
-            outputs[3].slice_mut(..),
-            outputs[4].slice_mut(..),
-            outputs[5].slice_mut(..),
-            outputs[6].slice_mut(..),
-        ),
-    )
-    .unwrap();
+    let outputs = transform(&exec, sliced, massively::op::Identity).unwrap();
 
-    for (column, output) in outputs.iter().enumerate() {
+    let outputs = [
+        &outputs.0.0.0.0.0.0,
+        &outputs.0.0.0.0.0.1,
+        &outputs.0.0.0.0.1,
+        &outputs.0.0.0.1,
+        &outputs.0.0.1,
+        &outputs.0.1,
+        &outputs.1,
+    ];
+    for (column, output) in outputs.into_iter().enumerate() {
         let base = column as u32 * 10;
         assert_eq!(exec.to_host(output).unwrap(), vec![base + 1, base + 2]);
     }
@@ -131,35 +121,23 @@ fn reverse_composes_with_slicing_and_multi_column_inputs() {
     let empty = exec.alloc::<u32>(0);
     let reversed_empty = lazy::reverse(empty.slice(..));
     assert_eq!(MIter::<WgpuRuntime>::len(&reversed_empty).unwrap(), 0);
-    transform(
-        &exec,
-        reversed_empty,
-        massively::op::Identity,
-        empty.slice_mut(..),
-    )
-    .unwrap();
+    let empty_output = transform(&exec, reversed_empty, massively::op::Identity).unwrap();
+    assert!(empty_output.is_empty());
 
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50]);
-    let output = exec.alloc::<u32>(1);
     let middle = lazy::reverse(values.slice(..)).slice(1..4).slice(1..2);
 
-    transform(&exec, middle, massively::op::Identity, output.slice_mut(..)).unwrap();
+    let output = transform(&exec, middle, massively::op::Identity).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![30]);
 
     let first = exec.to_device(&[1_u32, 2, 3]);
     let second = exec.to_device(&[10_u32, 20, 30]);
-    let output_first = exec.alloc::<u32>(3);
-    let output_second = exec.alloc::<u32>(3);
     let reversed = lazy::reverse(zip2(first.slice(..), second.slice(..)));
 
     assert_eq!(MIter::<WgpuRuntime>::len(&reversed).unwrap(), 3);
-    transform(
-        &exec,
-        reversed,
-        massively::op::Identity,
-        zip2(output_first.slice_mut(..), output_second.slice_mut(..)),
-    )
-    .unwrap();
+    let output = transform(&exec, reversed, massively::op::Identity).unwrap();
+    let output_first = output.0;
+    let output_second = output.1;
     assert_eq!(exec.to_host(&output_first).unwrap(), vec![3, 2, 1]);
     assert_eq!(exec.to_host(&output_second).unwrap(), vec![30, 20, 10]);
 }

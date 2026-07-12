@@ -1,8 +1,8 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::UnaryOp};
+use crate::{Error, Executor, MCanonical, MIter, MIterMut, MStorage, MVec, WriteFrom, op::UnaryOp};
 
-/// Applies a unary operation and writes its result to preallocated storage.
+/// Applies a unary operation and returns its result in owned device storage.
 ///
 /// # Examples
 ///
@@ -24,13 +24,30 @@ use crate::{Error, Executor, MIter, MIterMut, WriteFrom, op::UnaryOp};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = exec.alloc::<u32>(input.len());
-///
-/// transform(&exec, input.slice(..), AddOne, output.slice_mut(..)).unwrap();
+/// let output = transform(&exec, input.slice(..), AddOne).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![2, 3, 4]);
 /// ```
-pub fn transform<R, Input, Output, Op>(
+pub fn transform<R, Input, Op>(
+    exec: &Executor<R>,
+    input: Input,
+    op: Op,
+) -> Result<MVec<R, Op::Output>, Error>
+where
+    R: Runtime,
+    Input: MIter<R>,
+    Op: UnaryOp<Input::Item>,
+    Op::Output: MCanonical<R>,
+{
+    let len = input.len()? as usize;
+    let output = exec.alloc_mvec::<Op::Output>(len);
+    transform_into(exec, input, op, output.slice_mut(..))?;
+    Ok(output)
+}
+
+/// Applies a unary operation into caller-provided storage.
+#[doc(hidden)]
+pub(crate) fn transform_into<R, Input, Output, Op>(
     exec: &Executor<R>,
     input: Input,
     op: Op,

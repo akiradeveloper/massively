@@ -38,13 +38,11 @@ pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> common::Result
     let device_graph = DeviceGraph::new(exec, &oriented);
     let sources = exec.to_device(&sources);
     let targets = exec.to_device(&targets);
-    let counts = exec.alloc::<u32>(targets.len());
-    graph::intersect_count(
+    let counts = graph::intersect_count(
         exec,
         device_graph.csr(),
         sources.slice(..),
         targets.slice(..),
-        counts.slice_mut(..),
     )?;
 
     massively::vector::reduce(exec, counts.slice(..), 0, SumU32)

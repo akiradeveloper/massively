@@ -1,8 +1,9 @@
 //! Multi-platform GPU parallel algorithms for Rust.
 //!
 //! Massively provides Thrust-style algorithms on top of CubeCL. Host/device transfers are
-//! explicit, algorithm outputs are preallocated, and lazy expressions can be fused into the
-//! consuming GPU kernel.
+//! explicit, algorithms return owned device storage when they naturally produce a new sequence,
+//! and lazy expressions can be fused into the consuming GPU kernel. Operations whose semantics
+//! require an existing destination, such as scatter, take that destination as an argument.
 //!
 //! # Quick start
 //!
@@ -24,9 +25,7 @@
 //!
 //! let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 //! let input = exec.to_device(&[1_u32, 2, 3, 4]);
-//! let output = exec.alloc::<u32>(input.len());
-//!
-//! transform(&exec, input.slice(..), Double, output.slice_mut(..)).unwrap();
+//! let output = transform(&exec, input.slice(..), Double).unwrap();
 //!
 //! assert_eq!(exec.to_host(&output).unwrap(), vec![2, 4, 6, 8]);
 //! ```
@@ -51,6 +50,8 @@ pub mod vector;
 // Crate-private compatibility aliases keep the kernel core independent from
 // the public module layout. They are not part of the external API.
 pub(crate) use core::allocation::{CanonicalAlloc, CanonicalStorage};
+#[doc(hidden)]
+pub use core::allocation::{CanonicalLeaves, FoldCanonical};
 pub(crate) use core::arity::{A1, A2, A3, A4, A5, A6, A7, A8};
 pub(crate) use core::read::{
     Column, Constant, Counting, Permute, ReadExpression, ReverseCounting, Taken, Transform,
@@ -65,7 +66,8 @@ pub(crate) use core::{
 };
 
 pub use api::iter::{
-    MAlloc, MItem, MIter, MIterMut, MStorage, WriteFrom, Zip, zip2, zip3, zip4, zip5, zip6, zip7,
+    MAlloc, MCanonical, MItem, MIter, MIterMut, MStorage, MVec, WriteFrom, Zip, zip2, zip3, zip4,
+    zip5, zip6, zip7,
 };
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
 pub use api::tuple::{
@@ -76,9 +78,9 @@ pub use api::{Error, MIndex, lazy, op, util};
 /// Common public data and operation types.
 pub mod prelude {
     pub use crate::{
-        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MIndex, MItem, MIter, MIterMut,
-        MStorage, Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, Zip, flatten3, flatten4,
-        flatten5, flatten6, flatten7, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, zip2, zip3,
-        zip4, zip5, zip6, zip7,
+        DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MAlloc, MCanonical, MIndex, MItem, MIter,
+        MIterMut, MStorage, MVec, Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, Zip, flatten3,
+        flatten4, flatten5, flatten6, flatten7, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7,
+        zip2, zip3, zip4, zip5, zip6, zip7,
     };
 }

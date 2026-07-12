@@ -55,6 +55,8 @@ pub(crate) struct TraversalControl<R: Runtime> {
     pub(super) destinations: DeviceVec<R, u32>,
     pub(super) edges: DeviceVec<R, u32>,
     pub(super) output_len: MIndex,
+    pub(super) source_count: MIndex,
+    pub(super) vertex_count: MIndex,
 }
 
 impl<R: Runtime> TraversalControl<R> {
@@ -75,14 +77,19 @@ impl<R: Runtime> TraversalControl<R> {
             return Err(Error::LengthMismatch { left: 1, right: 0 });
         }
         let vertices = vertices.materialize_u32(exec)?;
-        let vertex_count = vertices.len();
-        let lengths = exec.alloc::<u32>(vertex_count);
+        let source_count = vertices.len();
+        let vertex_count = input_offsets.len() - 1;
+        let source_count_index = MIndex::try_from(source_count)
+            .map_err(|_| Error::LengthTooLarge { len: source_count })?;
+        let vertex_count_index = MIndex::try_from(vertex_count)
+            .map_err(|_| Error::LengthTooLarge { len: vertex_count })?;
+        let lengths = exec.alloc::<u32>(source_count);
 
-        if vertex_count != 0 {
+        if source_count != 0 {
             unsafe {
                 traversal_lengths_kernel::launch_unchecked::<R>(
                     exec.client(),
-                    crate::launch::cube_count_1d(vertex_count.div_ceil(BLOCK_SIZE as usize))?,
+                    crate::launch::cube_count_1d(source_count.div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
                     BufferArg::from_raw_parts(input_offsets.handle.clone(), input_offsets.len()),
                     BufferArg::from_raw_parts(vertices.handle.clone(), vertices.len()),
@@ -93,17 +100,17 @@ impl<R: Runtime> TraversalControl<R> {
 
         let positions = crate::core::scan::inclusive_scan_u32(exec, &lengths)?;
         let output_len = crate::core::scan::last_u32(exec, &positions)?;
-        let output_offset_count = vertex_count
+        let output_offset_count = source_count
             .checked_add(1)
-            .ok_or(Error::LengthTooLarge { len: vertex_count })?;
-        let output_offsets = if vertex_count == 0 {
+            .ok_or(Error::LengthTooLarge { len: source_count })?;
+        let output_offsets = if source_count == 0 {
             exec.full(1, 0u32)?
         } else {
             let output_offsets = exec.alloc::<u32>(output_offset_count);
             unsafe {
                 traversal_offsets_kernel::launch_unchecked::<R>(
                     exec.client(),
-                    crate::launch::cube_count_1d(vertex_count.div_ceil(BLOCK_SIZE as usize))?,
+                    crate::launch::cube_count_1d(source_count.div_ceil(BLOCK_SIZE as usize))?,
                     CubeDim::new_1d(BLOCK_SIZE),
                     BufferArg::from_raw_parts(positions.handle.clone(), positions.len()),
                     BufferArg::from_raw_parts(output_offsets.handle.clone(), output_offsets.len()),
@@ -152,6 +159,8 @@ impl<R: Runtime> TraversalControl<R> {
             destinations: output_destinations,
             edges,
             output_len,
+            source_count: source_count_index,
+            vertex_count: vertex_count_index,
         })
     }
 }

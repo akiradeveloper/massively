@@ -48,8 +48,7 @@ fn sort_crosses_block_and_merge_tile_boundaries() {
     for &len in BOUNDARY_LENGTHS {
         let input = keys(len);
         let device = exec.to_device(&input);
-        let output = exec.alloc::<u32>(len);
-        sort(&exec, device.slice(..), LessU32, output.slice_mut(..)).unwrap();
+        let output = sort(&exec, device.slice(..), LessU32).unwrap();
 
         let mut expected = input;
         expected.sort();
@@ -65,21 +64,17 @@ fn sort_is_naturally_stable_across_merge_tiles() {
     let ordinal: Vec<u32> = (0..len as u32).collect();
     let first_device = exec.to_device(&first);
     let ordinal_device = exec.to_device(&ordinal);
-    let out_first = exec.alloc::<u32>(len);
-    let out_ordinal = exec.alloc::<u32>(len);
-
-    sort(
+    let output = sort(
         &exec,
         zip2(first_device.slice(..), ordinal_device.slice(..)),
         LessFirst,
-        zip2(out_first.slice_mut(..), out_ordinal.slice_mut(..)),
     )
     .unwrap();
 
     let mut expected: Vec<_> = first.into_iter().zip(ordinal).collect();
     expected.sort_by_key(|item| item.0);
-    let actual_first = exec.to_host(&out_first).unwrap();
-    let actual_ordinal = exec.to_host(&out_ordinal).unwrap();
+    let actual_first = exec.to_host(&output.0).unwrap();
+    let actual_ordinal = exec.to_host(&output.1).unwrap();
     assert_eq!(
         actual_first
             .into_iter()
@@ -97,18 +92,8 @@ fn sort_by_key_preserves_equal_key_value_order() {
         let values: Vec<u32> = (0..len as u32).collect();
         let key_device = exec.to_device(&input_keys);
         let value_device = exec.to_device(&values);
-        let out_keys = exec.alloc::<u32>(len);
-        let out_values = exec.alloc::<u32>(len);
-
-        sort_by_key(
-            &exec,
-            key_device.slice(..),
-            value_device.slice(..),
-            LessU32,
-            out_keys.slice_mut(..),
-            out_values.slice_mut(..),
-        )
-        .unwrap();
+        let (out_keys, out_values) =
+            sort_by_key(&exec, key_device.slice(..), value_device.slice(..), LessU32).unwrap();
 
         let mut expected: Vec<_> = input_keys.into_iter().zip(values).collect();
         expected.sort_by_key(|item| item.0);
@@ -143,9 +128,7 @@ fn seven_column_sort_runs_the_global_merge_resource_plan() {
             }
         })
         .collect();
-    let outputs: Vec<_> = (0..7).map(|_| exec.alloc::<u32>(len)).collect();
-
-    sort(
+    let outputs = sort(
         &exec,
         zip7(
             inputs[0].slice(..),
@@ -157,22 +140,13 @@ fn seven_column_sort_runs_the_global_merge_resource_plan() {
             inputs[6].slice(..),
         ),
         LessSevenFirst,
-        zip7(
-            outputs[0].slice_mut(..),
-            outputs[1].slice_mut(..),
-            outputs[2].slice_mut(..),
-            outputs[3].slice_mut(..),
-            outputs[4].slice_mut(..),
-            outputs[5].slice_mut(..),
-            outputs[6].slice_mut(..),
-        ),
     )
     .unwrap();
 
     let mut expected: Vec<_> = first.into_iter().zip(0_u32..len as u32).collect();
     expected.sort_by_key(|item| item.0);
-    let actual_first = exec.to_host(&outputs[0]).unwrap();
-    let actual_ordinal = exec.to_host(&outputs[1]).unwrap();
+    let actual_first = exec.to_host(&outputs.0.0.0.0.0.0).unwrap();
+    let actual_ordinal = exec.to_host(&outputs.0.0.0.0.0.1).unwrap();
     assert_eq!(
         actual_first
             .into_iter()
