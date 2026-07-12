@@ -27,10 +27,13 @@ implementation:
 cargo nextest run -p graph-algorithms --test oracle
 ```
 
-The current benchmark suite measures each public `solve` function end to end,
-including allocation, host/device transfer, host orchestration, and result
-transfer. It establishes a baseline for removing those costs in later
-device-resident implementations:
+The benchmark suite measures only device-resident algorithm entry points.
+CSR topology, weights, and input vectors are uploaded before timing. Each timed
+iteration includes algorithm execution, pooled output allocation, and an
+explicit synchronization, but no bulk host/device transfer. Every algorithm
+entry point in this crate satisfies this contract. Algorithms whose exact
+control flow is sequential may return individual control scalars to the host,
+but their graph, state vectors, and output remain resident:
 
 ```sh
 cargo bench -p graph-algorithms --bench algorithms

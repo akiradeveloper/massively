@@ -5,7 +5,7 @@
 
 mod common;
 
-pub use common::{CsrGraph, WeightedCsr};
+pub use common::{CsrGraph, DeviceCsr, DeviceWeightedCsr, WeightedCsr};
 
 pub mod bc;
 pub mod bfs;

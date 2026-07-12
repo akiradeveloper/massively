@@ -1,9 +1,12 @@
-//! Iterative unknown-vertex geolocation by neighbor-coordinate averaging.
+//! Iterative geolocation with device-resident coordinates and known flags.
 
 use cubecl::prelude::*;
-use massively::{Executor, graph, op::Identity, op::ReductionOp, zip2};
+use massively::{
+    DeviceVec, Executor, MVec, graph, lazy, op::Identity, op::ReductionOp, op::UnaryOp, vector,
+    zip2,
+};
 
-use super::common::{self, CsrGraph, DeviceGraph};
+use super::common::{self, DeviceCsr};
 
 struct SumCoordinates;
 
@@ -14,44 +17,58 @@ impl ReductionOp<(f32, f32)> for SumCoordinates {
     }
 }
 
+struct UpdateCoordinates;
+
+#[cubecl::cube]
+impl UnaryOp<(((f32, f32), (f32, f32)), (u32, u32))> for UpdateCoordinates {
+    type Output = (f32, f32);
+
+    fn apply(input: (((f32, f32), (f32, f32)), (u32, u32))) -> (f32, f32) {
+        let coordinates = input.0.0;
+        let sums = input.0.1;
+        let degree = input.1.0;
+        let known = input.1.1;
+        if known != 0u32 || degree == 0u32 {
+            coordinates
+        } else {
+            (sums.0 / degree as f32, sums.1 / degree as f32)
+        }
+    }
+}
+
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
-    graph: &CsrGraph,
-    initial: &[(f32, f32)],
-    known: &[bool],
+    graph: &DeviceCsr<R>,
+    initial: &MVec<R, (f32, f32)>,
+    known: &DeviceVec<R, u32>,
     iterations: usize,
-) -> common::Result<Vec<(f32, f32)>> {
-    assert_eq!(initial.len(), graph.vertex_count());
-    assert_eq!(known.len(), graph.vertex_count());
-
-    let degree = exec.to_host(&common::degrees(exec, graph)?)?;
-    let device_graph = DeviceGraph::new(exec, graph);
-    let frontier = common::all_vertices(exec, graph);
-    let mut coordinates = initial.to_vec();
+) -> common::Result<MVec<R, (f32, f32)>> {
+    let n = graph.vertex_count();
+    assert_eq!(initial.0.len(), n as usize);
+    assert_eq!(initial.1.len(), n as usize);
+    assert_eq!(known.len(), n as usize);
+    let degree = common::resident_degrees(exec, graph)?;
+    let mut coordinates = initial.clone();
 
     for _ in 0..iterations {
-        let xs = exec.to_device(&coordinates.iter().map(|value| value.0).collect::<Vec<_>>());
-        let ys = exec.to_device(&coordinates.iter().map(|value| value.1).collect::<Vec<_>>());
-        let sums = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+        let sums = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
             .map(
-                zip2(
-                    graph::destination(xs.slice(..)),
-                    graph::destination(ys.slice(..)),
-                ),
+                graph::destination(zip2(coordinates.0.slice(..), coordinates.1.slice(..))),
                 Identity,
             )
             .reduce_by_source(exec, (0.0, 0.0), SumCoordinates)?;
 
-        let sum_x = exec.to_host(&sums.0)?;
-        let sum_y = exec.to_host(&sums.1)?;
-        for vertex in 0..coordinates.len() {
-            if !known[vertex] && degree[vertex] != 0 {
-                coordinates[vertex] = (
-                    sum_x[vertex] / degree[vertex] as f32,
-                    sum_y[vertex] / degree[vertex] as f32,
-                );
-            }
-        }
+        coordinates = vector::transform(
+            exec,
+            zip2(
+                zip2(
+                    zip2(coordinates.0.slice(..), coordinates.1.slice(..)),
+                    zip2(sums.0.slice(..), sums.1.slice(..)),
+                ),
+                zip2(degree.slice(..), known.slice(..)),
+            ),
+            UpdateCoordinates,
+        )?;
     }
 
     Ok(coordinates)
@@ -65,15 +82,15 @@ mod tests {
     #[test]
     fn unknown_center_is_neighbor_mean() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
-        let graph = CsrGraph::new(vec![0, 2, 3, 4], vec![1, 2, 0, 0]);
-        let result = solve(
-            &exec,
-            &graph,
-            &[(0.0, 0.0), (0.0, 0.0), (2.0, 2.0)],
-            &[false, true, true],
-            1,
-        )
-        .unwrap();
-        assert_eq!(result, vec![(1.0, 1.0), (0.0, 0.0), (2.0, 2.0)]);
+        let graph = common::CsrGraph::new(vec![0, 2, 3, 4], vec![1, 2, 0, 0]);
+        let graph = DeviceCsr::from_host(&exec, &graph).unwrap();
+        let initial = zip2(
+            exec.to_device(&[0.0f32, 0.0, 2.0]),
+            exec.to_device(&[0.0f32, 0.0, 2.0]),
+        );
+        let known = exec.to_device(&[0u32, 1, 1]);
+        let result = solve(&exec, &graph, &initial, &known, 1).unwrap();
+        assert_eq!(exec.to_host(&result.0).unwrap(), vec![1.0, 0.0, 2.0]);
+        assert_eq!(exec.to_host(&result.1).unwrap(), vec![1.0, 0.0, 2.0]);
     }
 }

@@ -5,7 +5,7 @@ use graph_algorithms::{CsrGraph, WeightedCsr};
 
 pub const SINGLE_PASS_SIZES: &[usize] = &[256, 1_024, 4_096];
 pub const ITERATIVE_SIZES: &[usize] = &[128, 512, 2_048];
-pub const HOST_ORCHESTRATED_SIZES: &[usize] = &[16, 64];
+pub const CONTROL_SIZES: &[usize] = &[16, 64];
 pub const ITERATIONS: usize = 3;
 
 pub struct Fixture {

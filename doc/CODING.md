@@ -72,6 +72,6 @@ Each test area has a specific role.
 - `graph-algorithms/tests`: Complete graph algorithm property tests against
   independent CPU implementations on generated CSR graphs.
 - `graph-algorithms/benches`: Complete graph algorithm performance. Benchmark
-  names state whether they are end-to-end or device-resident; the initial
-  `solve` baseline is end-to-end and includes allocation, transfer, and host
-  orchestration.
+  targets must be device-resident: upload graph and bulk inputs before timing,
+  include an explicit synchronization in the timed iteration, and do not time
+  bulk host/device transfers.

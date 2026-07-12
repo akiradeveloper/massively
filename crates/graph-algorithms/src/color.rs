@@ -1,25 +1,84 @@
-//! Degree-ordered greedy graph coloring with GPU neighbor-degree computation.
+//! Degree-ordered greedy graph coloring over resident CSR storage.
 
-use cubecl::prelude::Runtime;
-use massively::Executor;
+use cubecl::prelude::*;
+use massively::{
+    DeviceVec, Executor, lazy,
+    op::{BinaryPredicateOp, PredicateOp},
+    vector, zip2,
+};
 
-use super::common::{self, CsrGraph};
+use super::common::{self, DeviceCsr};
 
-pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> common::Result<Vec<u32>> {
-    let degree = exec.to_host(&common::degrees(exec, graph)?)?;
-    let mut order: Vec<usize> = (0..graph.vertex_count()).collect();
-    order.sort_by_key(|&vertex| std::cmp::Reverse(degree[vertex]));
+struct GreaterU32;
 
-    let mut colors = vec![u32::MAX; graph.vertex_count()];
-    for vertex in order {
-        let mut used = vec![false; graph.vertex_count() + 1];
-        for &neighbor in graph.row(vertex) {
-            let color = colors[neighbor as usize];
-            if color != u32::MAX {
-                used[color as usize] = true;
+#[cubecl::cube]
+impl BinaryPredicateOp<u32> for GreaterU32 {
+    fn apply(lhs: u32, rhs: u32) -> bool {
+        lhs > rhs
+    }
+}
+
+struct EqualPair;
+
+#[cubecl::cube]
+impl PredicateOp<(u32, u32)> for EqualPair {
+    fn apply(input: (u32, u32)) -> bool {
+        input.0 == input.1
+    }
+}
+
+fn read_u32<R: Runtime>(
+    exec: &Executor<R>,
+    values: &DeviceVec<R, u32>,
+    index: usize,
+) -> common::Result<u32> {
+    Ok(exec.to_host(&values.slice(index..index + 1))?[0])
+}
+
+pub fn solve<R: Runtime>(
+    exec: &Executor<R>,
+    graph: &DeviceCsr<R>,
+) -> common::Result<DeviceVec<R, u32>> {
+    let n = graph.vertex_count();
+    let degree = common::resident_degrees(exec, graph)?;
+    let (_, order) = vector::sort_by_key(
+        exec,
+        degree.slice(..),
+        lazy::counting(0).take(n),
+        GreaterU32,
+    )?;
+    let colors = vector::fill(exec, n as usize, u32::MAX)?;
+
+    for position in 0..n as usize {
+        let vertex = read_u32(exec, &order, position)?;
+        let offsets = exec.to_host(&graph.offsets().slice(vertex as usize..vertex as usize + 2))?;
+        let neighbors = graph
+            .destinations()
+            .slice(offsets[0] as usize..offsets[1] as usize);
+        let neighbor_count = offsets[1] - offsets[0];
+
+        let mut color = 0;
+        loop {
+            let used = vector::count_if(
+                exec,
+                zip2(
+                    lazy::permute(colors.slice(..), neighbors.clone()),
+                    lazy::constant(color).take(neighbor_count),
+                ),
+                EqualPair,
+            )?;
+            if used == 0 {
+                break;
             }
+            color += 1;
         }
-        colors[vertex] = used.iter().position(|used| !*used).unwrap() as u32;
+
+        vector::scatter(
+            exec,
+            lazy::constant(color).take(1),
+            lazy::constant(vertex).take(1),
+            colors.slice_mut(..),
+        )?;
     }
 
     Ok(colors)
@@ -33,10 +92,12 @@ mod tests {
     #[test]
     fn adjacent_vertices_have_distinct_colors() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
-        let graph = common::sample_graph();
-        let colors = solve(&exec, &graph).unwrap();
-        for source in 0..graph.vertex_count() {
-            for &destination in graph.row(source) {
+        let host_graph = common::sample_graph();
+        let graph = DeviceCsr::from_host(&exec, &host_graph).unwrap();
+        let output = solve(&exec, &graph).unwrap();
+        let colors = exec.to_host(&output).unwrap();
+        for source in 0..host_graph.vertex_count() {
+            for &destination in host_graph.row(source) {
                 assert_ne!(colors[source], colors[destination as usize]);
             }
         }

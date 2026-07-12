@@ -1,9 +1,9 @@
 //! Breadth-first search as destination-state relaxation over a traversal.
 
 use cubecl::prelude::*;
-use massively::{Executor, graph, op::UnaryOp};
+use massively::{DeviceVec, Executor, graph, op::UnaryOp, vector};
 
-use super::common::{self, CsrGraph, DeviceGraph};
+use super::common::{self, DeviceCsr};
 
 struct AddOne;
 
@@ -18,21 +18,27 @@ impl UnaryOp<u32> for AddOne {
 
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
-    graph: &CsrGraph,
+    graph: &DeviceCsr<R>,
     source: u32,
-) -> common::Result<Vec<u32>> {
-    let mut distance = vec![u32::MAX; graph.vertex_count()];
-    distance[source as usize] = 0;
-    let distance = exec.to_device(&distance);
-    let device_graph = DeviceGraph::new(exec, graph);
-    let mut frontier = exec.to_device(&[source]);
+) -> common::Result<DeviceVec<R, u32>> {
+    assert!(source < graph.vertex_count());
+    let distance = vector::fill(exec, graph.vertex_count() as usize, u32::MAX)?;
+    let mut frontier = vector::fill(exec, 1, source)?;
+    let zero = vector::fill(exec, 1, 0u32)?;
+    vector::scatter(
+        exec,
+        zero.slice(..),
+        frontier.slice(..),
+        distance.slice_mut(..),
+    )?;
+
     while !frontier.is_empty() {
-        frontier = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+        frontier = graph::traverse(exec, graph.csr(), frontier.slice(..))?
             .map(graph::source(distance.slice(..)), AddOne)
             .relax_min_by_destination(exec, u32::MAX, distance.slice(..), distance.slice_mut(..))?;
     }
 
-    exec.to_host(&distance)
+    Ok(distance)
 }
 
 #[cfg(test)]
@@ -43,8 +49,9 @@ mod tests {
     #[test]
     fn path_levels() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+        let graph = DeviceCsr::from_host(&exec, &common::path_graph()).unwrap();
         assert_eq!(
-            solve(&exec, &common::path_graph(), 0).unwrap(),
+            exec.to_host(&solve(&exec, &graph, 0).unwrap()).unwrap(),
             vec![0, 1, 2, 3]
         );
     }

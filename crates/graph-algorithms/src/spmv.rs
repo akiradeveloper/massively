@@ -1,9 +1,9 @@
 //! CSR sparse matrix-vector multiplication as an edge expression reduced by row.
 
 use cubecl::prelude::*;
-use massively::{Executor, graph, op::ReductionOp, op::UnaryOp, zip2};
+use massively::{DeviceVec, Executor, graph, lazy, op::ReductionOp, op::UnaryOp, zip2};
 
-use super::common::{self, DeviceGraph, WeightedCsr};
+use super::common::{self, DeviceWeightedCsr};
 
 struct MulF32;
 
@@ -27,37 +27,37 @@ impl ReductionOp<f32> for SumF32 {
 
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
-    matrix: &WeightedCsr,
-    vector: &[f32],
-) -> common::Result<Vec<f32>> {
-    assert_eq!(vector.len(), matrix.graph.vertex_count());
-    let device_graph = DeviceGraph::new(exec, &matrix.graph);
-    let frontier = common::all_vertices(exec, &matrix.graph);
-    let weights = exec.to_device(&matrix.weights);
-    let vector = exec.to_device(vector);
-    let output = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
+    matrix: &DeviceWeightedCsr<R>,
+    vector: &DeviceVec<R, f32>,
+) -> common::Result<DeviceVec<R, f32>> {
+    assert_eq!(vector.len(), matrix.graph().vertex_count() as usize);
+    let frontier = lazy::counting(0).take(matrix.graph().vertex_count());
+    graph::traverse(exec, matrix.graph().csr(), frontier)?
         .map(
             zip2(
-                graph::edge(weights.slice(..)),
+                graph::edge(matrix.weights().slice(..)),
                 graph::destination(vector.slice(..)),
             ),
             MulF32,
         )
-        .reduce_by_source(exec, 0.0, SumF32)?;
-    exec.to_host(&output)
+        .reduce_by_source(exec, 0.0, SumF32)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WeightedCsr;
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
     fn path_adjacency_multiplies_vector() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
         let matrix = WeightedCsr::new(common::path_graph(), vec![1.0; 6]);
+        let matrix = DeviceWeightedCsr::<_, f32>::from_host(&exec, &matrix).unwrap();
+        let vector = exec.to_device(&[1.0, 2.0, 3.0, 4.0]);
         assert_eq!(
-            solve(&exec, &matrix, &[1.0, 2.0, 3.0, 4.0]).unwrap(),
+            exec.to_host(&solve(&exec, &matrix, &vector).unwrap())
+                .unwrap(),
             vec![2.0, 4.0, 6.0, 3.0]
         );
     }

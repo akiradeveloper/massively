@@ -1,8 +1,8 @@
 use std::{cmp::Reverse, collections::BTreeSet};
 
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use graph_algorithms::{self as graph, CsrGraph, WeightedCsr};
-use massively::Executor;
+use graph_algorithms::{self as graph, CsrGraph, DeviceCsr, DeviceWeightedCsr, WeightedCsr};
+use massively::{Executor, zip2};
 use proptest::{
     prelude::*,
     test_runner::{Config, TestCaseResult, TestRunner},
@@ -122,7 +122,9 @@ fn run_graph_cases(test: impl Fn(&Executor<WgpuRuntime>, GraphCase) -> TestCaseR
 fn bfs_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::bfs(&case.graph, case.source);
-        let actual = graph::bfs::solve(exec, &case.graph, case.source).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::bfs::solve(exec, &device_graph, case.source).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -132,7 +134,11 @@ fn bfs_matches_cpu_reference() {
 fn sssp_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::sssp(&case.graph, &case.weights_u32, case.source);
-        let actual = graph::sssp::solve(exec, &case.graph, &case.weights_u32, case.source).unwrap();
+        let device_graph =
+            DeviceWeightedCsr::<_, u32>::from_host_parts(exec, &case.graph, &case.weights_u32)
+                .unwrap();
+        let output = graph::sssp::solve(exec, &device_graph, case.source).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -143,7 +149,10 @@ fn spmv_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::spmv(&case.graph, &case.weights_f32, &case.vector);
         let matrix = WeightedCsr::new(case.graph, case.weights_f32);
-        let actual = graph::spmv::solve(exec, &matrix, &case.vector).unwrap();
+        let matrix = DeviceWeightedCsr::<_, f32>::from_host(exec, &matrix).unwrap();
+        let vector = exec.to_device(&case.vector);
+        let output = graph::spmv::solve(exec, &matrix, &vector).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         assert_near(&actual, &expected, 1e-5)
     });
 }
@@ -152,7 +161,9 @@ fn spmv_matches_cpu_reference() {
 fn page_rank_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::page_rank(&case.graph, 0.85, ITERATIONS);
-        let actual = graph::pr::solve(exec, &case.graph, 0.85, ITERATIONS).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::pr::solve(exec, &device_graph, 0.85, ITERATIONS).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         assert_near(&actual, &expected, 2e-4)
     });
 }
@@ -162,7 +173,9 @@ fn personalized_page_rank_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected =
             reference::personalized_page_rank(&case.graph, case.source, 0.85, ITERATIONS);
-        let actual = graph::ppr::solve(exec, &case.graph, case.source, 0.85, ITERATIONS).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::ppr::solve(exec, &device_graph, case.source, 0.85, ITERATIONS).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         assert_near(&actual, &expected, 2e-4)
     });
 }
@@ -171,9 +184,12 @@ fn personalized_page_rank_matches_cpu_reference() {
 fn hits_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::hits(&case.graph, ITERATIONS);
-        let actual = graph::hits::solve(exec, &case.graph, ITERATIONS).unwrap();
-        assert_near(&actual.0, &expected.0, 2e-4)?;
-        assert_near(&actual.1, &expected.1, 2e-4)
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::hits::solve(exec, &device_graph, ITERATIONS).unwrap();
+        let actual_hubs = exec.to_host(&output.0).unwrap();
+        let actual_authorities = exec.to_host(&output.1).unwrap();
+        assert_near(&actual_hubs, &expected.0, 2e-4)?;
+        assert_near(&actual_authorities, &expected.1, 2e-4)
     });
 }
 
@@ -181,14 +197,35 @@ fn hits_matches_cpu_reference() {
 fn geolocation_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::geo(&case.graph, &case.coordinates, &case.known, ITERATIONS);
-        let actual = graph::geo::solve(
-            exec,
-            &case.graph,
-            &case.coordinates,
-            &case.known,
-            ITERATIONS,
-        )
-        .unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let coordinates = zip2(
+            exec.to_device(
+                &case
+                    .coordinates
+                    .iter()
+                    .map(|coordinate| coordinate.0)
+                    .collect::<Vec<_>>(),
+            ),
+            exec.to_device(
+                &case
+                    .coordinates
+                    .iter()
+                    .map(|coordinate| coordinate.1)
+                    .collect::<Vec<_>>(),
+            ),
+        );
+        let known = exec.to_device(
+            &case
+                .known
+                .iter()
+                .map(|&known| u32::from(known))
+                .collect::<Vec<_>>(),
+        );
+        let output =
+            graph::geo::solve(exec, &device_graph, &coordinates, &known, ITERATIONS).unwrap();
+        let xs = exec.to_host(&output.0).unwrap();
+        let ys = exec.to_host(&output.1).unwrap();
+        let actual = xs.into_iter().zip(ys).collect::<Vec<_>>();
         assert_coordinates_near(&actual, &expected, 2e-4)
     });
 }
@@ -197,7 +234,12 @@ fn geolocation_matches_cpu_reference() {
 fn spgemm_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::spgemm(&case.graph, &case.graph);
-        let actual = graph::spgemm::solve(exec, &case.graph, &case.graph).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::spgemm::solve(exec, &device_graph, &device_graph).unwrap();
+        let actual = CsrGraph::new(
+            exec.to_host(output.offsets()).unwrap(),
+            exec.to_host(output.destinations()).unwrap(),
+        );
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -207,7 +249,8 @@ fn spgemm_matches_cpu_reference() {
 fn triangle_count_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::triangle_count(&case.graph);
-        let actual = graph::tc::solve(exec, &case.graph).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let actual = graph::tc::solve(exec, &device_graph).unwrap();
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -217,7 +260,9 @@ fn triangle_count_matches_cpu_reference() {
 fn graph_coloring_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::color(&case.graph);
-        let actual = graph::color::solve(exec, &case.graph).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::color::solve(exec, &device_graph).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -227,7 +272,9 @@ fn graph_coloring_matches_cpu_reference() {
 fn kcore_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::kcore(&case.graph);
-        let actual = graph::kcore::solve(exec, &case.graph).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::kcore::solve(exec, &device_graph).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -237,7 +284,9 @@ fn kcore_matches_cpu_reference() {
 fn forman_ricci_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::forman_ricci(&case.graph);
-        let actual = graph::forman_ricci::solve(exec, &case.graph).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::forman_ricci::solve(exec, &device_graph).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         prop_assert_eq!(actual, expected);
         Ok(())
     });
@@ -247,7 +296,9 @@ fn forman_ricci_matches_cpu_reference() {
 fn betweenness_centrality_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::betweenness_centrality(&case.graph);
-        let actual = graph::bc::solve(exec, &case.graph).unwrap();
+        let device_graph = DeviceCsr::from_host(exec, &case.graph).unwrap();
+        let output = graph::bc::solve(exec, &device_graph).unwrap();
+        let actual = exec.to_host(&output).unwrap();
         assert_near(&actual, &expected, 2e-4)
     });
 }
@@ -257,9 +308,10 @@ fn minimum_spanning_forest_matches_cpu_reference() {
     run_graph_cases(|exec, case| {
         let expected = reference::minimum_spanning_forest(&case.graph, &case.weights_f32);
         let matrix = WeightedCsr::new(case.graph, case.weights_f32);
+        let matrix = DeviceWeightedCsr::from_host(exec, &matrix).unwrap();
         let actual = graph::mst::solve(exec, &matrix).unwrap();
-        prop_assert_eq!(actual.len(), expected.0);
-        let actual_weight = actual.iter().map(|edge| edge.2).sum::<f32>();
+        prop_assert_eq!(actual.0.0.len(), expected.0);
+        let actual_weight = exec.to_host(&actual.1).unwrap().iter().sum::<f32>();
         prop_assert!((actual_weight - expected.1).abs() <= 1e-5);
         Ok(())
     });

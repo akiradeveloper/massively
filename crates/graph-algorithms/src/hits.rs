@@ -1,9 +1,11 @@
-//! HITS as alternating source and destination reductions.
+//! HITS with device-resident hub and authority vectors.
 
 use cubecl::prelude::*;
-use massively::{Executor, graph, op::Identity, op::ReductionOp};
+use massively::{
+    DeviceVec, Executor, graph, lazy, op::Identity, op::ReductionOp, op::UnaryOp, vector, zip2,
+};
 
-use super::common::{self, CsrGraph, DeviceGraph};
+use super::common::{self, DeviceCsr};
 
 struct SumF32;
 
@@ -14,40 +16,68 @@ impl ReductionOp<f32> for SumF32 {
     }
 }
 
-fn normalize(values: &mut [f32]) {
-    let norm = values.iter().map(|value| value * value).sum::<f32>().sqrt();
-    if norm != 0.0 {
-        for value in values {
-            *value /= norm;
-        }
+struct Square;
+
+#[cubecl::cube]
+impl UnaryOp<f32> for Square {
+    type Output = f32;
+
+    fn apply(value: f32) -> f32 {
+        value * value
     }
+}
+
+struct Scale;
+
+#[cubecl::cube]
+impl UnaryOp<(f32, f32)> for Scale {
+    type Output = f32;
+
+    fn apply(input: (f32, f32)) -> f32 {
+        input.0 * input.1
+    }
+}
+
+fn normalize<R: Runtime>(
+    exec: &Executor<R>,
+    values: DeviceVec<R, f32>,
+) -> common::Result<DeviceVec<R, f32>> {
+    let len = u32::try_from(values.len())
+        .map_err(|_| massively::Error::LengthTooLarge { len: values.len() })?;
+    let norm_squared =
+        vector::reduce(exec, lazy::transform(values.slice(..), Square), 0.0, SumF32)?;
+    let scale = if norm_squared == 0.0 {
+        1.0
+    } else {
+        norm_squared.sqrt().recip()
+    };
+    vector::transform(
+        exec,
+        zip2(values.slice(..), lazy::constant(scale).take(len)),
+        Scale,
+    )
 }
 
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
-    graph: &CsrGraph,
+    graph: &DeviceCsr<R>,
     iterations: usize,
-) -> common::Result<(Vec<f32>, Vec<f32>)> {
+) -> common::Result<(DeviceVec<R, f32>, DeviceVec<R, f32>)> {
     let n = graph.vertex_count();
-    let device_graph = DeviceGraph::new(exec, graph);
-    let frontier = common::all_vertices(exec, graph);
-    let mut hubs = vec![1.0f32; n];
-    let mut authorities = vec![1.0f32; n];
+    assert!(n != 0);
+    let mut hubs = vector::fill(exec, n as usize, 1.0f32)?;
+    let mut authorities = vector::fill(exec, n as usize, 1.0f32)?;
 
     for _ in 0..iterations {
-        let hubs_gpu = exec.to_device(&hubs);
-        let authority_gpu = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
-            .map(graph::source(hubs_gpu.slice(..)), Identity)
+        authorities = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
+            .map(graph::source(hubs.slice(..)), Identity)
             .reduce_by_destination(exec, 0.0, SumF32)?;
-        authorities = exec.to_host(&authority_gpu)?;
-        normalize(&mut authorities);
+        authorities = normalize(exec, authorities)?;
 
-        let authority_gpu = exec.to_device(&authorities);
-        let hub_gpu = graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
-            .map(graph::destination(authority_gpu.slice(..)), Identity)
+        hubs = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
+            .map(graph::destination(authorities.slice(..)), Identity)
             .reduce_by_source(exec, 0.0, SumF32)?;
-        hubs = exec.to_host(&hub_gpu)?;
-        normalize(&mut hubs);
+        hubs = normalize(exec, hubs)?;
     }
 
     Ok((hubs, authorities))
@@ -61,7 +91,10 @@ mod tests {
     #[test]
     fn vectors_are_normalized() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
-        let (hubs, authorities) = solve(&exec, &common::sample_graph(), 4).unwrap();
+        let graph = DeviceCsr::from_host(&exec, &common::sample_graph()).unwrap();
+        let (hubs, authorities) = solve(&exec, &graph, 4).unwrap();
+        let hubs = exec.to_host(&hubs).unwrap();
+        let authorities = exec.to_host(&authorities).unwrap();
         let hub_norm = hubs.iter().map(|value| value * value).sum::<f32>().sqrt();
         let authority_norm = authorities
             .iter()

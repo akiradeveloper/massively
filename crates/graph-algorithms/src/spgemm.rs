@@ -1,9 +1,13 @@
-//! Boolean sparse matrix multiplication using traversal emission and list canonicalization.
+//! Boolean sparse matrix multiplication into resident CSR storage.
 
 use cubecl::prelude::*;
-use massively::{Executor, graph, op::BinaryPredicateOp, op::Identity};
+use massively::{
+    Executor, graph, lazy,
+    op::{BinaryPredicateOp, Identity},
+    vector,
+};
 
-use super::common::{self, CsrGraph, DeviceGraph};
+use super::common::{self, DeviceCsr};
 
 struct LessU32;
 
@@ -25,35 +29,61 @@ impl BinaryPredicateOp<u32> for EqualU32 {
 
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
-    lhs: &CsrGraph,
-    rhs: &CsrGraph,
-) -> common::Result<CsrGraph> {
+    lhs: &DeviceCsr<R>,
+    rhs: &DeviceCsr<R>,
+) -> common::Result<DeviceCsr<R>> {
     assert_eq!(lhs.vertex_count(), rhs.vertex_count());
-    let rhs = DeviceGraph::new(exec, rhs);
-    let mut offsets = Vec::with_capacity(lhs.vertex_count() + 1);
-    let mut neighbors = Vec::new();
-    offsets.push(0);
+    let n = lhs.vertex_count();
 
-    for vertex in 0..lhs.vertex_count() {
-        if lhs.row(vertex).is_empty() {
-            offsets.push(neighbors.len() as u32);
+    let capacity = graph::traverse(exec, rhs.csr(), lhs.destinations().slice(..))?.edge_count();
+    let mut destinations = exec.alloc::<u32>(capacity as usize);
+    let offsets = exec.alloc::<u32>(n as usize + 1);
+    let mut output_len = 0u32;
+
+    for vertex in 0..n {
+        vector::scatter(
+            exec,
+            lazy::constant(output_len).take(1),
+            lazy::constant(vertex).take(1),
+            offsets.slice_mut(..),
+        )?;
+
+        let bounds = exec.to_host(&lhs.offsets().slice(vertex as usize..vertex as usize + 2))?;
+        let frontier = lhs
+            .destinations()
+            .slice(bounds[0] as usize..bounds[1] as usize);
+        if frontier.is_empty() {
             continue;
         }
-        let frontier = exec.to_device(lhs.row(vertex));
-        let traversal = graph::traverse(exec, rhs.csr(), frontier.slice(..))?;
-        let edge_count = traversal.edge_count() as usize;
-        if edge_count != 0 {
-            let emitted = traversal
-                .map(graph::destination_id(), Identity)
-                .emit(exec)?;
-            let sorted = massively::vector::sort(exec, emitted.slice(..), LessU32)?;
-            let unique = massively::vector::unique(exec, sorted.slice(..), EqualU32)?;
-            neighbors.extend(exec.to_host(&unique)?);
+
+        let traversal = graph::traverse(exec, rhs.csr(), frontier)?;
+        if traversal.edge_count() == 0 {
+            continue;
         }
-        offsets.push(neighbors.len() as u32);
+        let candidates = traversal
+            .map(graph::destination_id(), Identity)
+            .emit(exec)?;
+        let sorted = vector::sort(exec, candidates.slice(..), LessU32)?;
+        let row = vector::unique(exec, sorted.slice(..), EqualU32)?;
+        let row_len = u32::try_from(row.len())
+            .map_err(|_| massively::Error::LengthTooLarge { len: row.len() })?;
+        vector::scatter(
+            exec,
+            row.slice(..),
+            lazy::counting(output_len).take(row_len),
+            destinations.slice_mut(..),
+        )?;
+        output_len += row_len;
     }
 
-    Ok(CsrGraph::new(offsets, neighbors))
+    vector::scatter(
+        exec,
+        lazy::constant(output_len).take(1),
+        lazy::constant(n).take(1),
+        offsets.slice_mut(..),
+    )?;
+    destinations.truncate(output_len as usize);
+    DeviceCsr::from_parts(destinations, offsets)
 }
 
 #[cfg(test)]
@@ -64,9 +94,12 @@ mod tests {
     #[test]
     fn path_squared_contains_two_hop_pairs() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
+        let graph = DeviceCsr::from_host(&exec, &common::path_graph()).unwrap();
+        let output = solve(&exec, &graph, &graph).unwrap();
+        assert_eq!(exec.to_host(output.offsets()).unwrap(), vec![0, 2, 4, 6, 8]);
         assert_eq!(
-            solve(&exec, &common::path_graph(), &common::path_graph()).unwrap(),
-            CsrGraph::new(vec![0, 2, 4, 6, 8], vec![0, 2, 1, 3, 0, 2, 1, 3])
+            exec.to_host(output.destinations()).unwrap(),
+            vec![0, 2, 1, 3, 0, 2, 1, 3]
         );
     }
 }

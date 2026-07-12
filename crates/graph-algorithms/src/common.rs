@@ -2,8 +2,10 @@ use cubecl::prelude::*;
 use massively::{
     DeviceSlice, DeviceVec, Executor,
     graph::{self, Csr},
+    lazy,
     op::ReductionOp,
     op::UnaryOp,
+    vector, zip2, zip3,
 };
 
 pub(crate) type Result<T> = std::result::Result<T, massively::Error>;
@@ -35,14 +37,6 @@ impl CsrGraph {
     pub fn row(&self, vertex: usize) -> &[u32] {
         &self.neighbors[self.offsets[vertex] as usize..self.offsets[vertex + 1] as usize]
     }
-
-    pub(crate) fn edge_sources(&self) -> Vec<u32> {
-        let mut sources = Vec::with_capacity(self.neighbors.len());
-        for vertex in 0..self.vertex_count() {
-            sources.extend(std::iter::repeat_n(vertex as u32, self.row(vertex).len()));
-        }
-        sources
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -58,21 +52,114 @@ impl WeightedCsr {
     }
 }
 
-pub(crate) struct DeviceGraph<R: Runtime> {
+/// An owned CSR topology resident in device memory.
+pub struct DeviceCsr<R: Runtime> {
     destinations: DeviceVec<R, u32>,
     offsets: DeviceVec<R, u32>,
+    vertex_count: u32,
 }
 
-impl<R: Runtime> DeviceGraph<R> {
-    pub(crate) fn new(exec: &Executor<R>, graph: &CsrGraph) -> Self {
+impl<R: Runtime> Clone for DeviceCsr<R> {
+    fn clone(&self) -> Self {
         Self {
-            destinations: exec.to_device(&graph.neighbors),
-            offsets: exec.to_device(&graph.offsets),
+            destinations: self.destinations.clone(),
+            offsets: self.offsets.clone(),
+            vertex_count: self.vertex_count,
         }
     }
+}
 
-    pub(crate) fn csr(&self) -> Csr<DeviceSlice<u32>, DeviceSlice<u32>> {
+impl<R: Runtime> DeviceCsr<R> {
+    /// Creates a device CSR from already-resident storage without copying it.
+    pub fn from_parts(destinations: DeviceVec<R, u32>, offsets: DeviceVec<R, u32>) -> Result<Self> {
+        let vertex_count = offsets
+            .len()
+            .checked_sub(1)
+            .ok_or(massively::Error::LengthMismatch { left: 1, right: 0 })?;
+        let vertex_count = u32::try_from(vertex_count)
+            .map_err(|_| massively::Error::LengthTooLarge { len: vertex_count })?;
+        Ok(Self {
+            destinations,
+            offsets,
+            vertex_count,
+        })
+    }
+
+    /// Explicitly uploads a host CSR topology.
+    pub fn from_host(exec: &Executor<R>, graph: &CsrGraph) -> Result<Self> {
+        Self::from_parts(
+            exec.to_device(&graph.neighbors),
+            exec.to_device(&graph.offsets),
+        )
+    }
+
+    /// Returns the number of vertices.
+    pub const fn vertex_count(&self) -> u32 {
+        self.vertex_count
+    }
+
+    /// Returns the number of directed CSR entries.
+    pub fn edge_count(&self) -> usize {
+        self.destinations.len()
+    }
+
+    /// Returns the resident destinations.
+    pub const fn destinations(&self) -> &DeviceVec<R, u32> {
+        &self.destinations
+    }
+
+    /// Returns the resident offsets.
+    pub const fn offsets(&self) -> &DeviceVec<R, u32> {
+        &self.offsets
+    }
+
+    /// Borrows the topology as a traversal input.
+    pub fn csr(&self) -> Csr<DeviceSlice<u32>, DeviceSlice<u32>> {
         Csr::new(self.destinations.slice(..), self.offsets.slice(..))
+    }
+}
+
+/// A floating-point weighted CSR matrix resident in device memory.
+pub struct DeviceWeightedCsr<R: Runtime, Weight = f32> {
+    graph: DeviceCsr<R>,
+    weights: DeviceVec<R, Weight>,
+}
+
+impl<R: Runtime, Weight> DeviceWeightedCsr<R, Weight> {
+    /// Creates a resident weighted CSR from already-resident storage.
+    pub fn from_parts(graph: DeviceCsr<R>, weights: DeviceVec<R, Weight>) -> Result<Self> {
+        if graph.edge_count() != weights.len() {
+            return Err(massively::Error::LengthMismatch {
+                left: graph.edge_count(),
+                right: weights.len(),
+            });
+        }
+        Ok(Self { graph, weights })
+    }
+
+    pub const fn graph(&self) -> &DeviceCsr<R> {
+        &self.graph
+    }
+
+    pub const fn weights(&self) -> &DeviceVec<R, Weight> {
+        &self.weights
+    }
+}
+
+impl<R: Runtime> DeviceWeightedCsr<R, f32> {
+    /// Explicitly uploads a host floating-point weighted CSR matrix.
+    pub fn from_host(exec: &Executor<R>, matrix: &WeightedCsr) -> Result<Self> {
+        Self::from_parts(
+            DeviceCsr::from_host(exec, &matrix.graph)?,
+            exec.to_device(&matrix.weights),
+        )
+    }
+}
+
+impl<R: Runtime> DeviceWeightedCsr<R, u32> {
+    /// Explicitly uploads a host CSR topology and integer edge weights.
+    pub fn from_host_parts(exec: &Executor<R>, graph: &CsrGraph, weights: &[u32]) -> Result<Self> {
+        Self::from_parts(DeviceCsr::from_host(exec, graph)?, exec.to_device(weights))
     }
 }
 
@@ -96,19 +183,89 @@ impl UnaryOp<u32> for One {
     }
 }
 
-pub(crate) fn all_vertices<R: Runtime>(exec: &Executor<R>, graph: &CsrGraph) -> DeviceVec<R, u32> {
-    exec.to_device(&(0..graph.vertex_count() as u32).collect::<Vec<_>>())
+struct DanglingRank;
+
+#[cubecl::cube]
+impl UnaryOp<(f32, u32)> for DanglingRank {
+    type Output = f32;
+
+    fn apply(input: (f32, u32)) -> f32 {
+        if input.1 == 0u32 { input.0 } else { 0.0f32 }
+    }
 }
 
-pub(crate) fn degrees<R: Runtime>(
+struct RankContribution;
+
+#[cubecl::cube]
+impl UnaryOp<((f32, u32), f32)> for RankContribution {
+    type Output = f32;
+
+    fn apply(input: ((f32, u32), f32)) -> f32 {
+        if input.0.1 == 0u32 {
+            0.0f32
+        } else {
+            input.0.0 * input.1 / input.0.1 as f32
+        }
+    }
+}
+
+struct SumF32;
+
+#[cubecl::cube]
+impl ReductionOp<f32> for SumF32 {
+    fn apply(lhs: f32, rhs: f32) -> f32 {
+        lhs + rhs
+    }
+}
+
+pub(crate) fn resident_degrees<R: Runtime>(
     exec: &Executor<R>,
-    graph: &CsrGraph,
+    graph: &DeviceCsr<R>,
 ) -> Result<DeviceVec<R, u32>> {
-    let device_graph = DeviceGraph::new(exec, graph);
-    let frontier = all_vertices(exec, graph);
-    graph::traverse(exec, device_graph.csr(), frontier.slice(..))?
-        .map(graph::edge_id(), One)
-        .reduce_by_source(exec, 0, SumU32)
+    graph::traverse(
+        exec,
+        graph.csr(),
+        lazy::counting(0).take(graph.vertex_count()),
+    )?
+    .map(graph::edge_id(), One)
+    .reduce_by_source(exec, 0, SumU32)
+}
+
+pub(crate) fn dangling_mass<R: Runtime>(
+    exec: &Executor<R>,
+    rank: &DeviceVec<R, f32>,
+    degree: &DeviceVec<R, u32>,
+) -> Result<f32> {
+    vector::reduce(
+        exec,
+        lazy::transform(zip2(rank.slice(..), degree.slice(..)), DanglingRank),
+        0.0,
+        SumF32,
+    )
+}
+
+pub(crate) fn accumulate_rank<R: Runtime>(
+    exec: &Executor<R>,
+    graph: &DeviceCsr<R>,
+    degree: &DeviceVec<R, u32>,
+    rank: &DeviceVec<R, f32>,
+    damping: f32,
+    output: &DeviceVec<R, f32>,
+) -> Result<()> {
+    graph::traverse(
+        exec,
+        graph.csr(),
+        lazy::counting(0).take(graph.vertex_count()),
+    )?
+    .map(
+        zip3(
+            graph::source(rank.slice(..)),
+            graph::source(degree.slice(..)),
+            graph::source(lazy::constant(damping).take(graph.vertex_count())),
+        ),
+        RankContribution,
+    )
+    .update_by_destination(exec, 0.0, SumF32, output.slice_mut(..))
 }
 
 #[cfg(test)]

@@ -1,9 +1,13 @@
-//! Kruskal minimum spanning tree with GPU edge sorting.
+//! Kruskal minimum spanning forest over resident weighted CSR storage.
 
 use cubecl::prelude::*;
-use massively::{Executor, op::BinaryPredicateOp};
+use massively::{
+    DeviceVec, Executor, MVec, graph, lazy,
+    op::{BinaryPredicateOp, Identity, UnaryOp},
+    vector, zip2, zip3,
+};
 
-use super::common::{self, WeightedCsr};
+use super::common::{self, DeviceWeightedCsr};
 
 struct LessF32;
 
@@ -14,87 +18,107 @@ impl BinaryPredicateOp<f32> for LessF32 {
     }
 }
 
-struct DisjointSet {
-    parent: Vec<usize>,
-    rank: Vec<u8>,
+struct EqualPair;
+
+#[cubecl::cube]
+impl UnaryOp<(u32, u32)> for EqualPair {
+    type Output = u32;
+
+    fn apply(input: (u32, u32)) -> u32 {
+        if input.0 == input.1 { 1u32 } else { 0u32 }
+    }
 }
 
-impl DisjointSet {
-    fn new(len: usize) -> Self {
-        Self {
-            parent: (0..len).collect(),
-            rank: vec![0; len],
-        }
-    }
-
-    fn find(&mut self, value: usize) -> usize {
-        if self.parent[value] != value {
-            self.parent[value] = self.find(self.parent[value]);
-        }
-        self.parent[value]
-    }
-
-    fn union(&mut self, lhs: usize, rhs: usize) -> bool {
-        let mut lhs = self.find(lhs);
-        let mut rhs = self.find(rhs);
-        if lhs == rhs {
-            return false;
-        }
-        if self.rank[lhs] < self.rank[rhs] {
-            std::mem::swap(&mut lhs, &mut rhs);
-        }
-        self.parent[rhs] = lhs;
-        if self.rank[lhs] == self.rank[rhs] {
-            self.rank[lhs] += 1;
-        }
-        true
-    }
+fn read_u32<R: Runtime>(
+    exec: &Executor<R>,
+    values: &DeviceVec<R, u32>,
+    index: usize,
+) -> common::Result<u32> {
+    Ok(exec.to_host(&values.slice(index..index + 1))?[0])
 }
 
 pub fn solve<R: Runtime>(
     exec: &Executor<R>,
-    graph: &WeightedCsr,
-) -> common::Result<Vec<(u32, u32, f32)>> {
-    let mut edges = Vec::new();
-    for source in 0..graph.graph.vertex_count() {
-        let start = graph.graph.offsets[source] as usize;
-        let end = graph.graph.offsets[source + 1] as usize;
-        for edge in start..end {
-            let destination = graph.graph.neighbors[edge];
-            if source as u32 <= destination {
-                edges.push((source as u32, destination, graph.weights[edge]));
-            }
+    graph: &DeviceWeightedCsr<R, f32>,
+) -> common::Result<MVec<R, ((u32, u32), f32)>> {
+    let topology = graph.graph();
+    let edge_count = topology.edge_count();
+    let sources = graph::traverse(
+        exec,
+        topology.csr(),
+        lazy::counting(0).take(topology.vertex_count()),
+    )?
+    .map(graph::source_id(), Identity)
+    .emit(exec)?;
+    let (_, edge_order) = vector::sort_by_key(
+        exec,
+        graph.weights().slice(..),
+        lazy::counting(0).take(edge_count as u32),
+        LessF32,
+    )?;
+    let components = vector::transform(
+        exec,
+        lazy::counting(0).take(topology.vertex_count()),
+        Identity,
+    )?;
+    let selected = vector::fill(exec, edge_count, 0u32)?;
+
+    for position in 0..edge_count {
+        let edge = read_u32(exec, &edge_order, position)?;
+        let source = read_u32(exec, &sources, edge as usize)?;
+        let destination = read_u32(exec, topology.destinations(), edge as usize)?;
+        let source_component = read_u32(exec, &components, source as usize)?;
+        let destination_component = read_u32(exec, &components, destination as usize)?;
+        if source_component == destination_component {
+            continue;
         }
+
+        let stencil = vector::transform(
+            exec,
+            zip2(
+                components.slice(..),
+                lazy::constant(destination_component).take(topology.vertex_count()),
+            ),
+            EqualPair,
+        )?;
+        vector::replace_where(
+            exec,
+            source_component,
+            stencil.slice(..),
+            components.slice_mut(..),
+        )?;
+        vector::scatter(
+            exec,
+            lazy::constant(1u32).take(1),
+            lazy::constant(edge).take(1),
+            selected.slice_mut(..),
+        )?;
     }
 
-    let weights = exec.to_device(&edges.iter().map(|edge| edge.2).collect::<Vec<_>>());
-    let ids = exec.to_device(&(0..edges.len() as u32).collect::<Vec<_>>());
-    let (_sorted_weights, sorted_ids) =
-        massively::vector::sort_by_key(exec, weights.slice(..), ids.slice(..), LessF32)?;
-
-    let sorted_ids = exec.to_host(&sorted_ids)?;
-    let mut sets = DisjointSet::new(graph.graph.vertex_count());
-    let mut tree = Vec::new();
-    for id in sorted_ids {
-        let edge = edges[id as usize];
-        if sets.union(edge.0 as usize, edge.1 as usize) {
-            tree.push(edge);
-        }
-    }
-    Ok(tree)
+    vector::copy_where(
+        exec,
+        zip3(
+            sources.slice(..),
+            topology.destinations().slice(..),
+            graph.weights().slice(..),
+        ),
+        selected.slice(..),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::WeightedCsr;
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
     fn weighted_path_is_its_own_tree() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
         let graph = WeightedCsr::new(common::path_graph(), vec![1.0, 1.0, 2.0, 2.0, 3.0, 3.0]);
+        let graph = DeviceWeightedCsr::from_host(&exec, &graph).unwrap();
         let tree = solve(&exec, &graph).unwrap();
-        assert_eq!(tree.len(), 3);
-        assert_eq!(tree.iter().map(|edge| edge.2).sum::<f32>(), 6.0);
+        assert_eq!(tree.0.0.len(), 3);
+        assert_eq!(exec.to_host(&tree.1).unwrap().iter().sum::<f32>(), 6.0);
     }
 }
