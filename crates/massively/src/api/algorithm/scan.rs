@@ -1,7 +1,7 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MCanonical, MIter, MIterMut, MStorage, MVec, WriteFrom, op::ReductionOp,
+    Error, Executor, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom, op::ReductionOp,
 };
 
 /// Computes an inclusive scan and returns owned device storage.
@@ -28,19 +28,19 @@ use crate::{
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 6, 10]);
 /// ```
-pub fn inclusive_scan<R, Input, Op>(
+pub fn inclusive_scan<R, Input, Item, Op>(
     exec: &Executor<R>,
     input: Input,
     op: Op,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
-    Op: ReductionOp<Input::Item>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Input::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     inclusive_scan_into(exec, input, op, output.slice_mut(..))?;
     Ok(output)
 }
@@ -57,10 +57,15 @@ where
     R: Runtime,
     Input: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
-    input.inclusive_scan_with(exec, op, output)
+    crate::scan::inclusive_scan(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        op,
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Computes adjacent reductions while preserving the first item.
@@ -87,19 +92,19 @@ where
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 3, 5, 7]);
 /// ```
-pub fn adjacent_difference<R, Input, Op>(
+pub fn adjacent_difference<R, Input, Item, Op>(
     exec: &Executor<R>,
     input: Input,
     op: Op,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
-    Op: ReductionOp<Input::Item>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Input::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     adjacent_difference_into(exec, input, op, output.slice_mut(..))?;
     Ok(output)
 }
@@ -116,10 +121,15 @@ where
     R: Runtime,
     Input: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
-    input.adjacent_difference_with(exec, op, output)
+    crate::scan::adjacent_difference(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        op,
+        output.lower_output_from::<Input::Item>(),
+    )
 }
 
 /// Computes an exclusive scan and returns owned device storage.
@@ -146,20 +156,20 @@ where
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![0, 1, 3, 6]);
 /// ```
-pub fn exclusive_scan<R, Input, Op>(
+pub fn exclusive_scan<R, Input, Item, Op>(
     exec: &Executor<R>,
     input: Input,
-    init: Input::Item,
+    init: Item,
     op: Op,
-) -> Result<MVec<R, Input::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Input: MIter<R>,
-    Input::Item: MCanonical<R>,
-    Op: ReductionOp<Input::Item>,
+    Input: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Input::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     exclusive_scan_into(exec, input, init, op, output.slice_mut(..))?;
     Ok(output)
 }
@@ -177,8 +187,14 @@ where
     R: Runtime,
     Input: MIter<R>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
-    input.exclusive_scan_with(exec, init, op, output)
+    crate::scan::exclusive_scan(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        init,
+        op,
+        output.lower_output_from::<Input::Item>(),
+    )
 }

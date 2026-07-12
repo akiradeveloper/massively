@@ -1,12 +1,13 @@
 //! Recursive output trees and physical storage staging.
 
 use core::marker::PhantomData;
-use cubecl::prelude::Runtime;
+use cubecl::prelude::{ComputeClient, Runtime};
 use std::ops::RangeBounds;
 
 use crate::{
-    Column, DeviceSliceMut, Error, MStorageElement, S1, S2, S3, S4, S5, S6, S7, StorageLayout, Zip,
-    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7},
+    Column, DeviceSliceMut, Error, MStorageElement, S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11,
+    S12, StorageLayout, Zip,
+    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, Env9, Env10, Env11, Env12},
     storage::StorageArity,
 };
 
@@ -88,7 +89,7 @@ impl<Output, Source, Slots> OutputExpression for ReassociatedOutput<Output, Sour
 where
     Output: OutputExpression,
     Source: StorageLayout,
-    Output::Item: crate::WriteFrom<Source>,
+    Output::Item: crate::WritableFrom<Source>,
     Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
 {
     type Item = Source;
@@ -103,7 +104,7 @@ impl<Output, Source, Slots> SliceOutput for ReassociatedOutput<Output, Source, S
 where
     Output: SliceOutput,
     Source: StorageLayout,
-    Output::Item: crate::WriteFrom<Source>,
+    Output::Item: crate::WritableFrom<Source>,
     Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
 {
     fn slice_output<Range: RangeBounds<usize>>(&self, range: Range) -> Self {
@@ -255,6 +256,11 @@ impl_output_leaf_binding!(impl <L0, L1, L2> Env3<L0, L1, L2> => Env4<L0, L1, L2,
 impl_output_leaf_binding!(impl <L0, L1, L2, L3> Env4<L0, L1, L2, L3> => Env5<L0, L1, L2, L3, T>);
 impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4> Env5<L0, L1, L2, L3, L4> => Env6<L0, L1, L2, L3, L4, T>);
 impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4, L5> Env6<L0, L1, L2, L3, L4, L5> => Env7<L0, L1, L2, L3, L4, L5, T>);
+impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6> Env7<L0, L1, L2, L3, L4, L5, L6> => Env8<L0, L1, L2, L3, L4, L5, L6, T>);
+impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7> Env8<L0, L1, L2, L3, L4, L5, L6, L7> => Env9<L0, L1, L2, L3, L4, L5, L6, L7, T>);
+impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8> Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8> => Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, T>);
+impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> => Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T>);
+impl_output_leaf_binding!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> => Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, T>);
 
 impl<Left, Right, Env> BindOutputSlots<Env> for Zip<Left, Right>
 where
@@ -275,6 +281,68 @@ where
 pub trait OutputSlotEnvironment {
     type StorageArity: StorageArity;
 }
+
+/// Normalizes the physical output ABI to twelve buffer slots without changing
+/// the semantic item or its storage layout. Unused slots are typed as `u32`
+/// and are never accessed by device-side padded stores.
+#[doc(hidden)]
+pub trait PaddedOutputSlots: OutputSlotEnvironment {
+    type Leaves: crate::storage::StorePadded12;
+}
+
+/// Maps an ordered physical leaf list back to its actual (unpadded) output
+/// slot environment.
+#[doc(hidden)]
+pub trait OutputSlotLayout: crate::storage::StorePadded12 {
+    type Slots: PaddedOutputSlots<Leaves = Self>;
+}
+
+#[doc(hidden)]
+pub type KernelOutputSlots<Slots> = Env12<
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O0,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O1,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O2,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O3,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O4,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O5,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O6,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O7,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O8,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O9,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O10,
+    <<Slots as PaddedOutputSlots>::Leaves as crate::storage::StorePadded12>::O11,
+>;
+
+macro_rules! impl_padded_output_slots {
+    ($env:ty; [$($actual:ident),+]) => {
+        impl<$($actual: MStorageElement),+> PaddedOutputSlots for $env {
+            type Leaves = impl_padded_output_slots!(@leaves $($actual),+);
+        }
+
+        impl<$($actual: MStorageElement),+> OutputSlotLayout
+            for impl_padded_output_slots!(@leaves $($actual),+)
+        {
+            type Slots = $env;
+        }
+    };
+    (@leaves $last:ty) => { crate::storage::Last<$last> };
+    (@leaves $head:ty, $($tail:ty),+) => {
+        crate::storage::More<$head, impl_padded_output_slots!(@leaves $($tail),+)>
+    };
+}
+
+impl_padded_output_slots!(Env1<O0>; [O0]);
+impl_padded_output_slots!(Env2<O0, O1>; [O0, O1]);
+impl_padded_output_slots!(Env3<O0, O1, O2>; [O0, O1, O2]);
+impl_padded_output_slots!(Env4<O0, O1, O2, O3>; [O0, O1, O2, O3]);
+impl_padded_output_slots!(Env5<O0, O1, O2, O3, O4>; [O0, O1, O2, O3, O4]);
+impl_padded_output_slots!(Env6<O0, O1, O2, O3, O4, O5>; [O0, O1, O2, O3, O4, O5]);
+impl_padded_output_slots!(Env7<O0, O1, O2, O3, O4, O5, O6>; [O0, O1, O2, O3, O4, O5, O6]);
+impl_padded_output_slots!(Env8<O0, O1, O2, O3, O4, O5, O6, O7>; [O0, O1, O2, O3, O4, O5, O6, O7]);
+impl_padded_output_slots!(Env9<O0, O1, O2, O3, O4, O5, O6, O7, O8>; [O0, O1, O2, O3, O4, O5, O6, O7, O8]);
+impl_padded_output_slots!(Env10<O0, O1, O2, O3, O4, O5, O6, O7, O8, O9>; [O0, O1, O2, O3, O4, O5, O6, O7, O8, O9]);
+impl_padded_output_slots!(Env11<O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10>; [O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10]);
+impl_padded_output_slots!(Env12<O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11>; [O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11]);
 
 impl<L0> OutputSlotEnvironment for Env1<L0> {
     type StorageArity = S1;
@@ -297,10 +365,37 @@ impl<L0, L1, L2, L3, L4, L5> OutputSlotEnvironment for Env6<L0, L1, L2, L3, L4, 
 impl<L0, L1, L2, L3, L4, L5, L6> OutputSlotEnvironment for Env7<L0, L1, L2, L3, L4, L5, L6> {
     type StorageArity = S7;
 }
+impl<L0, L1, L2, L3, L4, L5, L6, L7> OutputSlotEnvironment
+    for Env8<L0, L1, L2, L3, L4, L5, L6, L7>
+{
+    type StorageArity = S8;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8> OutputSlotEnvironment
+    for Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8>
+{
+    type StorageArity = S9;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> OutputSlotEnvironment
+    for Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>
+{
+    type StorageArity = S10;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> OutputSlotEnvironment
+    for Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>
+{
+    type StorageArity = S11;
+}
+impl<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11> OutputSlotEnvironment
+    for Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>
+{
+    type StorageArity = S12;
+}
 
 /// Fully bound output tree.
 #[doc(hidden)]
-pub trait LowerOutputExpression: OutputExpression {
+pub trait LowerOutputExpression:
+    OutputExpression + BindOutputSlots<Env0, NextEnv = Self::Slots>
+{
     type Slots: OutputSlotEnvironment<StorageArity = Self::StorageArity>;
 }
 
@@ -326,9 +421,23 @@ impl OutputBindings {
         }
     }
 
-    fn push(&mut self, handle: cubecl::server::Handle, len: usize, offset: u32) {
+    pub(crate) fn push(&mut self, handle: cubecl::server::Handle, len: usize, offset: u32) {
         self.slots.push((handle, len));
         self.offsets.push(offset);
+    }
+
+    /// Pads the launch ABI to twelve writable buffers. One four-byte dummy
+    /// allocation is shared by every inactive slot; padded device stores never
+    /// access those slots.
+    pub(crate) fn pad_to_twelve<R: Runtime>(&mut self, client: &ComputeClient<R>) {
+        debug_assert!(self.slots.len() <= 12);
+        if self.slots.len() == 12 {
+            return;
+        }
+        let dummy = client.empty(core::mem::size_of::<u32>());
+        while self.slots.len() < 12 {
+            self.push(dummy.clone(), 1, 0);
+        }
     }
 }
 
@@ -343,7 +452,7 @@ where
     R: Runtime,
     Output: OutputExpression + StageOutput<R, Env0>,
     Source: StorageLayout,
-    Output::Item: crate::WriteFrom<Source>,
+    Output::Item: crate::WritableFrom<Source>,
     Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
 {
     fn stage_output(&self, owner: u64, bindings: &mut OutputBindings) -> Result<(), Error> {
@@ -381,6 +490,11 @@ impl_output_leaf_staging!(impl <L0, L1, L2> Env3<L0, L1, L2>);
 impl_output_leaf_staging!(impl <L0, L1, L2, L3> Env4<L0, L1, L2, L3>);
 impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4> Env5<L0, L1, L2, L3, L4>);
 impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4, L5> Env6<L0, L1, L2, L3, L4, L5>);
+impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6> Env7<L0, L1, L2, L3, L4, L5, L6>);
+impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7> Env8<L0, L1, L2, L3, L4, L5, L6, L7>);
+impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8> Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8>);
+impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>);
+impl_output_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>);
 
 impl<R, Left, Right, Env> StageOutput<R, Env> for Zip<Left, Right>
 where

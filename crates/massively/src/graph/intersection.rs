@@ -103,10 +103,10 @@ where
     }
 
     let (destinations, offsets) = graph.into_parts();
-    let destinations = destinations.materialize_u32(exec)?;
-    let offsets = offsets.materialize_u32(exec)?;
-    let sources = sources.materialize_u32(exec)?;
-    let targets = targets.materialize_u32(exec)?;
+    let destinations = crate::api::iter::materialize_indices(exec, destinations)?;
+    let offsets = crate::api::iter::materialize_indices(exec, offsets)?;
+    let sources = crate::api::iter::materialize_indices(exec, sources)?;
+    let targets = crate::api::iter::materialize_indices(exec, targets)?;
     let counts = exec.alloc_column::<MIndex>(pair_count as usize);
     unsafe {
         intersect_count_kernel::launch_unchecked::<R>(

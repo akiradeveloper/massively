@@ -1,8 +1,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceVec, Error, Executor, MIndex, MItem, MIter, MIterMut, WriteFrom, op::BinaryPredicateOp,
-    op::ReductionOp,
+    DeviceVec, Error, Executor, MIndex, MItem, MIter, MIterMut, WritableFrom,
+    op::BinaryPredicateOp, op::ReductionOp,
 };
 
 const BLOCK_SIZE: u32 = 256;
@@ -162,7 +162,7 @@ impl<R: Runtime> SegmentControl<R> {
     where
         Offsets: MIter<R, Item = MIndex>,
     {
-        let offsets = offsets.materialize_u32(exec)?;
+        let offsets = crate::api::iter::materialize_indices(exec, offsets)?;
         Self::from_materialized(exec, offsets, value_len)
     }
 
@@ -364,18 +364,20 @@ impl<R: Runtime> SegmentControl<R> {
         Ok(output)
     }
 
-    pub(crate) fn compact<Item, Output, OutputOffsets>(
+    pub(crate) fn compact<Input, Output, OutputOffsets>(
         &self,
         exec: &Executor<R>,
-        storage: &<Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        input: Input,
         flags: DeviceVec<R, u32>,
         output: Output,
         output_offsets: OutputOffsets,
     ) -> Result<MIndex, Error>
     where
-        Item: MItem<R>,
+        Input: crate::core::facade::KernelInput<R>,
+        Input::Item: MItem<R>,
+        <Input::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
         Output: MIterMut<R>,
-        Output::Item: WriteFrom<Item>,
+        Output::Item: WritableFrom<Input::Item>,
         OutputOffsets: MIterMut<R, Item = MIndex>,
     {
         let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;
@@ -405,16 +407,20 @@ impl<R: Runtime> SegmentControl<R> {
             }
             selected_offsets
         };
-        selected_offsets
-            .slice(..)
-            .transform_into(exec, crate::op::Identity, output_offsets)?;
+        crate::api::algorithm::transform::transform_into(
+            exec,
+            selected_offsets.slice(..),
+            crate::op::Identity,
+            output_offsets,
+        )?;
 
         let selection = crate::selection::SelectionControl::from_positions(exec, positions, false)?;
-        crate::core::facade::KernelWrite::select_storage_control(
-            output.lower_write_from::<Item>(),
+        crate::indexed::apply_permutation(
             exec,
-            storage,
-            &selection,
-        )
+            input,
+            selection.indices().column(),
+            output.lower_output_from::<Input::Item>(),
+        )?;
+        Ok(selection.count())
     }
 }

@@ -1,14 +1,45 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, MIterMut, lazy, op::Identity, op::UnaryOp, vector::gather, vector::transform,
-    zip2, zip3, zip4, zip5, zip6, zip7,
+    Executor, MIter, MIterMut, lazy, op::Identity, op::UnaryOp, unzip2, unzip3, unzip4, unzip5,
+    unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, vector::gather, vector::transform,
+    zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
 };
 
 struct AddThree;
 struct IdentityRightAssociated;
 struct SumFour;
 struct AddPair;
+
+#[test]
+fn unzip_helpers_are_the_inverse_of_zip_helpers() {
+    assert_eq!(unzip2(zip2(1, 2)), (1, 2));
+    assert_eq!(unzip3(zip3(1, 2, 3)), (1, 2, 3));
+    assert_eq!(unzip4(zip4(1, 2, 3, 4)), (1, 2, 3, 4));
+    assert_eq!(unzip5(zip5(1, 2, 3, 4, 5)), (1, 2, 3, 4, 5));
+    assert_eq!(unzip6(zip6(1, 2, 3, 4, 5, 6)), (1, 2, 3, 4, 5, 6));
+    assert_eq!(unzip7(zip7(1, 2, 3, 4, 5, 6, 7)), (1, 2, 3, 4, 5, 6, 7));
+    assert_eq!(
+        unzip8(zip8(1, 2, 3, 4, 5, 6, 7, 8)),
+        (1, 2, 3, 4, 5, 6, 7, 8)
+    );
+    assert_eq!(
+        unzip9(zip9(1, 2, 3, 4, 5, 6, 7, 8, 9)),
+        (1, 2, 3, 4, 5, 6, 7, 8, 9)
+    );
+    assert_eq!(
+        unzip10(zip10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)),
+        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+    );
+    assert_eq!(
+        unzip11(zip11(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)),
+        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11)
+    );
+    assert_eq!(
+        unzip12(zip12(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)),
+        (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)
+    );
+}
 
 #[cubecl::cube]
 impl UnaryOp<((u32, u32), u32)> for AddThree {
@@ -49,7 +80,7 @@ impl UnaryOp<(u32, u32)> for AddPair {
 #[test]
 fn zip_helpers_are_left_associated_public_iterators() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let columns: Vec<_> = (0_u32..7)
+    let columns: Vec<_> = (0_u32..12)
         .map(|base| exec.to_device(&[base + 1, base + 2]))
         .collect();
 
@@ -108,6 +139,86 @@ fn zip_helpers_are_left_associated_public_iterators() {
             columns[4].slice(..),
             columns[5].slice(..),
             columns[6].slice(..),
+        ))
+        .unwrap(),
+        2,
+    );
+    assert_eq!(
+        MIter::<WgpuRuntime>::len(&zip8(
+            columns[0].slice(..),
+            columns[1].slice(..),
+            columns[2].slice(..),
+            columns[3].slice(..),
+            columns[4].slice(..),
+            columns[5].slice(..),
+            columns[6].slice(..),
+            columns[7].slice(..),
+        ))
+        .unwrap(),
+        2,
+    );
+    assert_eq!(
+        MIter::<WgpuRuntime>::len(&zip9(
+            columns[0].slice(..),
+            columns[1].slice(..),
+            columns[2].slice(..),
+            columns[3].slice(..),
+            columns[4].slice(..),
+            columns[5].slice(..),
+            columns[6].slice(..),
+            columns[7].slice(..),
+            columns[8].slice(..),
+        ))
+        .unwrap(),
+        2,
+    );
+    assert_eq!(
+        MIter::<WgpuRuntime>::len(&zip10(
+            columns[0].slice(..),
+            columns[1].slice(..),
+            columns[2].slice(..),
+            columns[3].slice(..),
+            columns[4].slice(..),
+            columns[5].slice(..),
+            columns[6].slice(..),
+            columns[7].slice(..),
+            columns[8].slice(..),
+            columns[9].slice(..),
+        ))
+        .unwrap(),
+        2,
+    );
+    assert_eq!(
+        MIter::<WgpuRuntime>::len(&zip11(
+            columns[0].slice(..),
+            columns[1].slice(..),
+            columns[2].slice(..),
+            columns[3].slice(..),
+            columns[4].slice(..),
+            columns[5].slice(..),
+            columns[6].slice(..),
+            columns[7].slice(..),
+            columns[8].slice(..),
+            columns[9].slice(..),
+            columns[10].slice(..),
+        ))
+        .unwrap(),
+        2,
+    );
+    assert_eq!(
+        MIter::<WgpuRuntime>::len(&zip12(
+            columns[0].slice(..),
+            columns[1].slice(..),
+            columns[2].slice(..),
+            columns[3].slice(..),
+            columns[4].slice(..),
+            columns[5].slice(..),
+            columns[6].slice(..),
+            columns[7].slice(..),
+            columns[8].slice(..),
+            columns[9].slice(..),
+            columns[10].slice(..),
+            columns[11].slice(..),
         ))
         .unwrap(),
         2,

@@ -82,7 +82,9 @@ macro_rules! define_slots {
     };
 }
 
-define_slots!(Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7);
+define_slots!(
+    Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12
+);
 
 /// Device expression for a binary zip.
 #[doc(hidden)]
@@ -372,6 +374,11 @@ define_eval!(Eval5, eval5; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4
 define_eval!(Eval6, eval6; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5);
 define_eval!(Eval7, eval7; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6);
 define_eval!(Eval8, eval8; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7);
+define_eval!(Eval9, eval9; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8);
+define_eval!(Eval10, eval10; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9);
+define_eval!(Eval11, eval11; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10);
+define_eval!(Eval12, eval12; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11);
+define_eval!(Eval13, eval13; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11, L12: slot12);
 
 macro_rules! impl_slot_eval {
     (
@@ -442,3 +449,58 @@ impl_slot_eval!(Eval8, eval8, Slot4, 4; <L0, L1, L2, L3, T, L5, L6, L7>; [L0, L1
 impl_slot_eval!(Eval8, eval8, Slot5, 5; <L0, L1, L2, L3, L4, T, L6, L7>; [L0, L1, L2, L3, L4, T, L6, L7]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7]; slot5);
 impl_slot_eval!(Eval8, eval8, Slot6, 6; <L0, L1, L2, L3, L4, L5, T, L7>; [L0, L1, L2, L3, L4, L5, T, L7]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7]; slot6);
 impl_slot_eval!(Eval8, eval8, Slot7, 7; <L0, L1, L2, L3, L4, L5, L6, T>; [L0, L1, L2, L3, L4, L5, L6, T]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7]; slot7);
+impl_slot_eval!(Eval9, eval9, Slot0, 0; <T, L1, L2, L3, L4, L5, L6, L7, L8>; [T, L1, L2, L3, L4, L5, L6, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot0);
+impl_slot_eval!(Eval9, eval9, Slot1, 1; <L0, T, L2, L3, L4, L5, L6, L7, L8>; [L0, T, L2, L3, L4, L5, L6, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot1);
+impl_slot_eval!(Eval9, eval9, Slot2, 2; <L0, L1, T, L3, L4, L5, L6, L7, L8>; [L0, L1, T, L3, L4, L5, L6, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot2);
+impl_slot_eval!(Eval9, eval9, Slot3, 3; <L0, L1, L2, T, L4, L5, L6, L7, L8>; [L0, L1, L2, T, L4, L5, L6, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot3);
+impl_slot_eval!(Eval9, eval9, Slot4, 4; <L0, L1, L2, L3, T, L5, L6, L7, L8>; [L0, L1, L2, L3, T, L5, L6, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot4);
+impl_slot_eval!(Eval9, eval9, Slot5, 5; <L0, L1, L2, L3, L4, T, L6, L7, L8>; [L0, L1, L2, L3, L4, T, L6, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot5);
+impl_slot_eval!(Eval9, eval9, Slot6, 6; <L0, L1, L2, L3, L4, L5, T, L7, L8>; [L0, L1, L2, L3, L4, L5, T, L7, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot6);
+impl_slot_eval!(Eval9, eval9, Slot7, 7; <L0, L1, L2, L3, L4, L5, L6, T, L8>; [L0, L1, L2, L3, L4, L5, L6, T, L8]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot7);
+impl_slot_eval!(Eval9, eval9, Slot8, 8; <L0, L1, L2, L3, L4, L5, L6, L7, T>; [L0, L1, L2, L3, L4, L5, L6, L7, T]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8]; slot8);
+impl_slot_eval!(Eval10, eval10, Slot0, 0; <T, L1, L2, L3, L4, L5, L6, L7, L8, L9>; [T, L1, L2, L3, L4, L5, L6, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot0);
+impl_slot_eval!(Eval10, eval10, Slot1, 1; <L0, T, L2, L3, L4, L5, L6, L7, L8, L9>; [L0, T, L2, L3, L4, L5, L6, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot1);
+impl_slot_eval!(Eval10, eval10, Slot2, 2; <L0, L1, T, L3, L4, L5, L6, L7, L8, L9>; [L0, L1, T, L3, L4, L5, L6, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot2);
+impl_slot_eval!(Eval10, eval10, Slot3, 3; <L0, L1, L2, T, L4, L5, L6, L7, L8, L9>; [L0, L1, L2, T, L4, L5, L6, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot3);
+impl_slot_eval!(Eval10, eval10, Slot4, 4; <L0, L1, L2, L3, T, L5, L6, L7, L8, L9>; [L0, L1, L2, L3, T, L5, L6, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot4);
+impl_slot_eval!(Eval10, eval10, Slot5, 5; <L0, L1, L2, L3, L4, T, L6, L7, L8, L9>; [L0, L1, L2, L3, L4, T, L6, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot5);
+impl_slot_eval!(Eval10, eval10, Slot6, 6; <L0, L1, L2, L3, L4, L5, T, L7, L8, L9>; [L0, L1, L2, L3, L4, L5, T, L7, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot6);
+impl_slot_eval!(Eval10, eval10, Slot7, 7; <L0, L1, L2, L3, L4, L5, L6, T, L8, L9>; [L0, L1, L2, L3, L4, L5, L6, T, L8, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot7);
+impl_slot_eval!(Eval10, eval10, Slot8, 8; <L0, L1, L2, L3, L4, L5, L6, L7, T, L9>; [L0, L1, L2, L3, L4, L5, L6, L7, T, L9]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot8);
+impl_slot_eval!(Eval10, eval10, Slot9, 9; <L0, L1, L2, L3, L4, L5, L6, L7, L8, T>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, T]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9]; slot9);
+impl_slot_eval!(Eval11, eval11, Slot0, 0; <T, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>; [T, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot0);
+impl_slot_eval!(Eval11, eval11, Slot1, 1; <L0, T, L2, L3, L4, L5, L6, L7, L8, L9, L10>; [L0, T, L2, L3, L4, L5, L6, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot1);
+impl_slot_eval!(Eval11, eval11, Slot2, 2; <L0, L1, T, L3, L4, L5, L6, L7, L8, L9, L10>; [L0, L1, T, L3, L4, L5, L6, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot2);
+impl_slot_eval!(Eval11, eval11, Slot3, 3; <L0, L1, L2, T, L4, L5, L6, L7, L8, L9, L10>; [L0, L1, L2, T, L4, L5, L6, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot3);
+impl_slot_eval!(Eval11, eval11, Slot4, 4; <L0, L1, L2, L3, T, L5, L6, L7, L8, L9, L10>; [L0, L1, L2, L3, T, L5, L6, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot4);
+impl_slot_eval!(Eval11, eval11, Slot5, 5; <L0, L1, L2, L3, L4, T, L6, L7, L8, L9, L10>; [L0, L1, L2, L3, L4, T, L6, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot5);
+impl_slot_eval!(Eval11, eval11, Slot6, 6; <L0, L1, L2, L3, L4, L5, T, L7, L8, L9, L10>; [L0, L1, L2, L3, L4, L5, T, L7, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot6);
+impl_slot_eval!(Eval11, eval11, Slot7, 7; <L0, L1, L2, L3, L4, L5, L6, T, L8, L9, L10>; [L0, L1, L2, L3, L4, L5, L6, T, L8, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot7);
+impl_slot_eval!(Eval11, eval11, Slot8, 8; <L0, L1, L2, L3, L4, L5, L6, L7, T, L9, L10>; [L0, L1, L2, L3, L4, L5, L6, L7, T, L9, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot8);
+impl_slot_eval!(Eval11, eval11, Slot9, 9; <L0, L1, L2, L3, L4, L5, L6, L7, L8, T, L10>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, T, L10]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot9);
+impl_slot_eval!(Eval11, eval11, Slot10, 10; <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10]; slot10);
+impl_slot_eval!(Eval12, eval12, Slot0, 0; <T, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>; [T, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot0);
+impl_slot_eval!(Eval12, eval12, Slot1, 1; <L0, T, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>; [L0, T, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot1);
+impl_slot_eval!(Eval12, eval12, Slot2, 2; <L0, L1, T, L3, L4, L5, L6, L7, L8, L9, L10, L11>; [L0, L1, T, L3, L4, L5, L6, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot2);
+impl_slot_eval!(Eval12, eval12, Slot3, 3; <L0, L1, L2, T, L4, L5, L6, L7, L8, L9, L10, L11>; [L0, L1, L2, T, L4, L5, L6, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot3);
+impl_slot_eval!(Eval12, eval12, Slot4, 4; <L0, L1, L2, L3, T, L5, L6, L7, L8, L9, L10, L11>; [L0, L1, L2, L3, T, L5, L6, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot4);
+impl_slot_eval!(Eval12, eval12, Slot5, 5; <L0, L1, L2, L3, L4, T, L6, L7, L8, L9, L10, L11>; [L0, L1, L2, L3, L4, T, L6, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot5);
+impl_slot_eval!(Eval12, eval12, Slot6, 6; <L0, L1, L2, L3, L4, L5, T, L7, L8, L9, L10, L11>; [L0, L1, L2, L3, L4, L5, T, L7, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot6);
+impl_slot_eval!(Eval12, eval12, Slot7, 7; <L0, L1, L2, L3, L4, L5, L6, T, L8, L9, L10, L11>; [L0, L1, L2, L3, L4, L5, L6, T, L8, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot7);
+impl_slot_eval!(Eval12, eval12, Slot8, 8; <L0, L1, L2, L3, L4, L5, L6, L7, T, L9, L10, L11>; [L0, L1, L2, L3, L4, L5, L6, L7, T, L9, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot8);
+impl_slot_eval!(Eval12, eval12, Slot9, 9; <L0, L1, L2, L3, L4, L5, L6, L7, L8, T, L10, L11>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, T, L10, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot9);
+impl_slot_eval!(Eval12, eval12, Slot10, 10; <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T, L11>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T, L11]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot10);
+impl_slot_eval!(Eval12, eval12, Slot11, 11; <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, T>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, T]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11]; slot11);
+impl_slot_eval!(Eval13, eval13, Slot0, 0; <T, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>; [T, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot0);
+impl_slot_eval!(Eval13, eval13, Slot1, 1; <L0, T, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>; [L0, T, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot1);
+impl_slot_eval!(Eval13, eval13, Slot2, 2; <L0, L1, T, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12>; [L0, L1, T, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot2);
+impl_slot_eval!(Eval13, eval13, Slot3, 3; <L0, L1, L2, T, L4, L5, L6, L7, L8, L9, L10, L11, L12>; [L0, L1, L2, T, L4, L5, L6, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot3);
+impl_slot_eval!(Eval13, eval13, Slot4, 4; <L0, L1, L2, L3, T, L5, L6, L7, L8, L9, L10, L11, L12>; [L0, L1, L2, L3, T, L5, L6, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot4);
+impl_slot_eval!(Eval13, eval13, Slot5, 5; <L0, L1, L2, L3, L4, T, L6, L7, L8, L9, L10, L11, L12>; [L0, L1, L2, L3, L4, T, L6, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot5);
+impl_slot_eval!(Eval13, eval13, Slot6, 6; <L0, L1, L2, L3, L4, L5, T, L7, L8, L9, L10, L11, L12>; [L0, L1, L2, L3, L4, L5, T, L7, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot6);
+impl_slot_eval!(Eval13, eval13, Slot7, 7; <L0, L1, L2, L3, L4, L5, L6, T, L8, L9, L10, L11, L12>; [L0, L1, L2, L3, L4, L5, L6, T, L8, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot7);
+impl_slot_eval!(Eval13, eval13, Slot8, 8; <L0, L1, L2, L3, L4, L5, L6, L7, T, L9, L10, L11, L12>; [L0, L1, L2, L3, L4, L5, L6, L7, T, L9, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot8);
+impl_slot_eval!(Eval13, eval13, Slot9, 9; <L0, L1, L2, L3, L4, L5, L6, L7, L8, T, L10, L11, L12>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, T, L10, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot9);
+impl_slot_eval!(Eval13, eval13, Slot10, 10; <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T, L11, L12>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, T, L11, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot10);
+impl_slot_eval!(Eval13, eval13, Slot11, 11; <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, T, L12>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, T, L12]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot11);
+impl_slot_eval!(Eval13, eval13, Slot12, 12; <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, T>; [L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, T]; [slot0, slot1, slot2, slot3, slot4, slot5, slot6, slot7, slot8, slot9, slot10, slot11, slot12]; slot12);

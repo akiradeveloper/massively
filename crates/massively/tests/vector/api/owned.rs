@@ -3,7 +3,7 @@ use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
     Executor,
     op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp},
-    vector,
+    unzip3, vector,
 };
 
 struct AddOne;
@@ -121,9 +121,10 @@ fn owned_by_key_and_canonical_tuple_results() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2]);
     let triples = vector::transform(&exec, input.slice(..), Triple).unwrap();
-    assert_eq!(exec.to_host(&triples.0.0).unwrap(), vec![1, 2]);
-    assert_eq!(exec.to_host(&triples.0.1).unwrap(), vec![11, 12]);
-    assert_eq!(exec.to_host(&triples.1).unwrap(), vec![21, 22]);
+    let (first, second, third) = unzip3(triples);
+    assert_eq!(exec.to_host(&first).unwrap(), vec![1, 2]);
+    assert_eq!(exec.to_host(&second).unwrap(), vec![11, 12]);
+    assert_eq!(exec.to_host(&third).unwrap(), vec![21, 22]);
 
     let keys = exec.to_device(&[2_u32, 1, 1, 3]);
     let values = exec.to_device(&[20_u32, 10, 11, 30]);

@@ -2,7 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{DeviceVec, Error, Executor, MAlloc, MIndex, MIter, MStorage, Zip};
+use crate::{Allocable, DeviceVec, Error, Executor, MIndex, MIter, MStorage, Zip};
 
 use super::control::TraversalControl;
 
@@ -29,7 +29,7 @@ pub(crate) mod private {
 /// that the backend can change its fused representation without exposing traversal control.
 #[allow(private_bounds)]
 pub trait EdgeExpr<R: Runtime>: private::Sealed {
-    type Item: MAlloc<R>;
+    type Item: Allocable<R>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -91,7 +91,8 @@ impl<R, Values> EdgeExpr<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R>,
+    Values::Item: Allocable<R>,
+    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -100,7 +101,8 @@ impl<R, Values> EdgeExpr<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R>,
+    Values::Item: Allocable<R>,
+    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -109,7 +111,8 @@ impl<R, Values> EdgeExpr<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R>,
+    Values::Item: Allocable<R>,
+    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -130,16 +133,17 @@ impl<R, Values> private::EdgeExprImpl<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R>,
+    Values::Item: Allocable<R>,
+    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MAlloc<R>>::Storage;
+    type Storage = <Values::Item as Allocable<R>>::Storage;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Values::Item as MAlloc<R>>::alloc(exec, control.output_len as usize);
+        let output = <Values::Item as Allocable<R>>::alloc(exec, control.output_len as usize);
         crate::vector::gather_into(
             exec,
             self.0,
@@ -154,16 +158,17 @@ impl<R, Values> private::EdgeExprImpl<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R>,
+    Values::Item: Allocable<R>,
+    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MAlloc<R>>::Storage;
+    type Storage = <Values::Item as Allocable<R>>::Storage;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Values::Item as MAlloc<R>>::alloc(exec, control.output_len as usize);
+        let output = <Values::Item as Allocable<R>>::alloc(exec, control.output_len as usize);
         crate::vector::gather_into(
             exec,
             self.0,
@@ -178,16 +183,17 @@ impl<R, Values> private::EdgeExprImpl<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R>,
+    Values::Item: Allocable<R>,
+    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as MAlloc<R>>::Storage;
+    type Storage = <Values::Item as Allocable<R>>::Storage;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Values::Item as MAlloc<R>>::alloc(exec, control.output_len as usize);
+        let output = <Values::Item as Allocable<R>>::alloc(exec, control.output_len as usize);
         crate::vector::gather_into(exec, self.0, control.edges.slice(..), output.slice_mut(..))?;
         Ok(output)
     }
@@ -241,7 +247,7 @@ where
     R: Runtime,
     Left: EdgeExpr<R>,
     Right: EdgeExpr<R>,
-    (Left::Item, Right::Item): MAlloc<R>,
+    (Left::Item, Right::Item): Allocable<R>,
 {
     type Item = (Left::Item, Right::Item);
 }
@@ -251,7 +257,7 @@ where
     R: Runtime,
     Left: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Right: EdgeExpr<R> + private::EdgeExprImpl<R>,
-    (Left::Item, Right::Item): MAlloc<R>,
+    (Left::Item, Right::Item): Allocable<R>,
     Zip<Left::Storage, Right::Storage>: MStorage<R, Item = (Left::Item, Right::Item)>,
 {
     type Storage = Zip<Left::Storage, Right::Storage>;

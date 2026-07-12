@@ -1,7 +1,8 @@
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MCanonical, MIter, MIterMut, MStorage, MVec, WriteFrom, op::BinaryPredicateOp,
+    Error, Executor, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
+    op::BinaryPredicateOp,
 };
 
 /// Stably merges two sorted ranges.
@@ -29,25 +30,25 @@ use crate::{
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3, 4, 5, 6]);
 /// ```
-pub fn merge<R, Left, Right, Less>(
+pub fn merge<R, Left, Right, Item, Less>(
     exec: &Executor<R>,
     left: Left,
     right: Right,
     less: Less,
-) -> Result<MVec<R, Left::Item>, Error>
+) -> Result<MVec<R, Item>, Error>
 where
     R: Runtime,
-    Left: MIter<R>,
-    Left::Item: MCanonical<R>,
-    Right: MIter<R, Item = Left::Item>,
-    Less: BinaryPredicateOp<Left::Item>,
+    Left: MIter<R, Item = Item>,
+    Right: MIter<R, Item = Item>,
+    Item: Materializable<R>,
+    Less: BinaryPredicateOp<Item>,
 {
     let left_len = left.len()? as usize;
     let right_len = right.len()? as usize;
     let len = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let output = exec.alloc_mvec::<Left::Item>(len);
+    let output = exec.alloc_mvec::<Item>(len);
     merge_into(exec, left, right, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -67,9 +68,23 @@ where
     Right: MIter<R, Item = Left::Item>,
     Less: BinaryPredicateOp<Left::Item>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Left::Item>,
+    Output::Item: WritableFrom<Left::Item>,
 {
-    left.merge_with(exec, right, less, output)
+    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
+    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
+    let control = crate::merge::merge_control_fixed(
+        exec,
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
+        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        less,
+    )?;
+    crate::merge::apply_canonical(
+        exec,
+        &left,
+        &right,
+        &control,
+        output.lower_output_from::<Left::Item>(),
+    )
 }
 
 /// Stably merges key/value ranges using the ordering of the keys.
@@ -108,31 +123,31 @@ where
 /// assert_eq!(exec.to_host(&key_output).unwrap(), vec![1, 2, 3, 4]);
 /// assert_eq!(exec.to_host(&value_output).unwrap(), vec![10, 20, 30, 40]);
 /// ```
-pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less>(
+pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, KeyItem, ValueItem, Less>(
     exec: &Executor<R>,
     left_keys: LeftKeys,
     left_values: LeftValues,
     right_keys: RightKeys,
     right_values: RightValues,
     less: Less,
-) -> Result<(MVec<R, LeftKeys::Item>, MVec<R, LeftValues::Item>), Error>
+) -> Result<(MVec<R, KeyItem>, MVec<R, ValueItem>), Error>
 where
     R: Runtime,
-    LeftKeys: MIter<R>,
-    LeftKeys::Item: MCanonical<R>,
-    LeftValues: MIter<R>,
-    LeftValues::Item: MCanonical<R>,
-    RightKeys: MIter<R, Item = LeftKeys::Item>,
-    RightValues: MIter<R, Item = LeftValues::Item>,
-    Less: BinaryPredicateOp<LeftKeys::Item>,
+    LeftKeys: MIter<R, Item = KeyItem>,
+    LeftValues: MIter<R, Item = ValueItem>,
+    RightKeys: MIter<R, Item = KeyItem>,
+    RightValues: MIter<R, Item = ValueItem>,
+    KeyItem: Materializable<R>,
+    ValueItem: Materializable<R>,
+    Less: BinaryPredicateOp<KeyItem>,
 {
     let left_len = left_keys.len()? as usize;
     let right_len = right_keys.len()? as usize;
     let len = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let key_output = exec.alloc_mvec::<LeftKeys::Item>(len);
-    let value_output = exec.alloc_mvec::<LeftValues::Item>(len);
+    let key_output = exec.alloc_mvec::<KeyItem>(len);
+    let value_output = exec.alloc_mvec::<ValueItem>(len);
     merge_by_key_into(
         exec,
         left_keys,
@@ -175,17 +190,41 @@ where
     RightValues: MIter<R, Item = LeftValues::Item>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
     KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WriteFrom<LeftKeys::Item>,
+    KeyOutput::Item: WritableFrom<LeftKeys::Item>,
     ValueOutput: MIterMut<R>,
-    ValueOutput::Item: WriteFrom<LeftValues::Item>,
+    ValueOutput::Item: WritableFrom<LeftValues::Item>,
 {
-    left_keys.merge_by_key_with(
+    let left_keys =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left_keys))?;
+    let right_keys =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right_keys))?;
+    let control = crate::merge::merge_control_fixed(
         exec,
-        left_values,
-        right_keys,
-        right_values,
+        crate::read::FixedReassociate::<_, LeftKeys::Item>::new(crate::CanonicalStorage::read(
+            &left_keys,
+        )),
+        crate::read::FixedReassociate::<_, LeftKeys::Item>::new(crate::CanonicalStorage::read(
+            &right_keys,
+        )),
         less,
-        key_output,
-        value_output,
+    )?;
+    crate::merge::apply_canonical(
+        exec,
+        &left_keys,
+        &right_keys,
+        &control,
+        key_output.lower_output_from::<LeftKeys::Item>(),
+    )?;
+
+    let left_values =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left_values))?;
+    let right_values =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right_values))?;
+    crate::merge::apply_canonical(
+        exec,
+        &left_values,
+        &right_values,
+        &control,
+        value_output.lower_output_from::<LeftValues::Item>(),
     )
 }

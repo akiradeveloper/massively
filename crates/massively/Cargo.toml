@@ -7,7 +7,7 @@ license.workspace = true
 name = "massively"
 readme = "../../README.md"
 repository.workspace = true
-version = "0.73.0"
+version = "0.74.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -20,8 +20,40 @@ proptest = "1"
 static_assertions = "1"
 
 [[test]]
-name = "vector_api"
-path = "tests/vector/api.rs"
+name = "vector_api_iter"
+path = "tests/vector/api/iter.rs"
+
+[[test]]
+name = "vector_api_lazy"
+path = "tests/vector/api/lazy.rs"
+
+[[test]]
+name = "vector_api_owned"
+path = "tests/vector/api/owned.rs"
+
+[[test]]
+name = "vector_api_predicate"
+path = "tests/vector/api/predicate.rs"
+
+[[test]]
+name = "vector_api_random"
+path = "tests/vector/api/random.rs"
+
+[[test]]
+name = "vector_api_reduce"
+path = "tests/vector/api/reduce.rs"
+
+[[test]]
+name = "vector_api_runtime"
+path = "tests/vector/api/runtime.rs"
+
+[[test]]
+name = "vector_api_tuple"
+path = "tests/vector/api/tuple.rs"
+
+[[test]]
+name = "vector_api_write_from"
+path = "tests/vector/api/write_from.rs"
 
 [[test]]
 name = "vector_oracle"

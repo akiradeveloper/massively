@@ -5,11 +5,10 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, DeviceVec, Error, Executor, MStorageElement, ReadExpression,
-    StorageLayout,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7},
+    A13, DeviceVec, Error, Executor, MStorageElement, ReadExpression, StorageLayout,
+    eval::Eval13,
     ordering::BinaryPredicateOp,
-    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression},
+    read::{Env0, Env13, LowerReadExpression},
     reduce::{StageRead, StagedBindings},
 };
 
@@ -90,13 +89,7 @@ macro_rules! define_pair_code_kernel {
     };
 }
 
-define_pair_code_kernel!(pair_code_s1,Eval1,eval1; [L0:left0:right0]);
-define_pair_code_kernel!(pair_code_s2,Eval2,eval2; [L0:left0:right0,L1:left1:right1]);
-define_pair_code_kernel!(pair_code_s3,Eval3,eval3; [L0:left0:right0,L1:left1:right1,L2:left2:right2]);
-define_pair_code_kernel!(pair_code_s4,Eval4,eval4; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3]);
-define_pair_code_kernel!(pair_code_s5,Eval5,eval5; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4]);
-define_pair_code_kernel!(pair_code_s6,Eval6,eval6; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5]);
-define_pair_code_kernel!(pair_code_s7,Eval7,eval7; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5,L6:left6:right6]);
+define_pair_code_kernel!(pair_code_a13,Eval13,eval13; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5,L6:left6:right6,L7:left7:right7,L8:left8:right8,L9:left9:right9,L10:left10:right10,L11:left11:right11,L12:left12:right12]);
 
 macro_rules! define_find_first_of_kernel {
     ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$source_slot:ident:$needle_slot:ident ),+]) => {
@@ -137,13 +130,7 @@ macro_rules! define_find_first_of_kernel {
     };
 }
 
-define_find_first_of_kernel!(find_first_of_s1,Eval1,eval1; [L0:source0:needle0]);
-define_find_first_of_kernel!(find_first_of_s2,Eval2,eval2; [L0:source0:needle0,L1:source1:needle1]);
-define_find_first_of_kernel!(find_first_of_s3,Eval3,eval3; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2]);
-define_find_first_of_kernel!(find_first_of_s4,Eval4,eval4; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2,L3:source3:needle3]);
-define_find_first_of_kernel!(find_first_of_s5,Eval5,eval5; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2,L3:source3:needle3,L4:source4:needle4]);
-define_find_first_of_kernel!(find_first_of_s6,Eval6,eval6; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2,L3:source3:needle3,L4:source4:needle4,L5:source5:needle5]);
-define_find_first_of_kernel!(find_first_of_s7,Eval7,eval7; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2,L3:source3:needle3,L4:source4:needle4,L5:source5:needle5,L6:source6:needle6]);
+define_find_first_of_kernel!(find_first_of_a13,Eval13,eval13; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2,L3:source3:needle3,L4:source4:needle4,L5:source5:needle5,L6:source6:needle6,L7:source7:needle7,L8:source8:needle8,L9:source9:needle9,L10:source10:needle10,L11:source11:needle11,L12:source12:needle12]);
 
 #[cubecl::cube]
 trait BoundOp<Item: CubeType>: 'static + Send + Sync {
@@ -215,13 +202,7 @@ macro_rules! define_bound_kernel {
     };
 }
 
-define_bound_kernel!(bound_s1,Eval1,eval1; [L0:source0:value0]);
-define_bound_kernel!(bound_s2,Eval2,eval2; [L0:source0:value0,L1:source1:value1]);
-define_bound_kernel!(bound_s3,Eval3,eval3; [L0:source0:value0,L1:source1:value1,L2:source2:value2]);
-define_bound_kernel!(bound_s4,Eval4,eval4; [L0:source0:value0,L1:source1:value1,L2:source2:value2,L3:source3:value3]);
-define_bound_kernel!(bound_s5,Eval5,eval5; [L0:source0:value0,L1:source1:value1,L2:source2:value2,L3:source3:value3,L4:source4:value4]);
-define_bound_kernel!(bound_s6,Eval6,eval6; [L0:source0:value0,L1:source1:value1,L2:source2:value2,L3:source3:value3,L4:source4:value4,L5:source5:value5]);
-define_bound_kernel!(bound_s7,Eval7,eval7; [L0:source0:value0,L1:source1:value1,L2:source2:value2,L3:source3:value3,L4:source4:value4,L5:source5:value5,L6:source6:value6]);
+define_bound_kernel!(bound_a13,Eval13,eval13; [L0:source0:value0,L1:source1:value1,L2:source2:value2,L3:source3:value3,L4:source4:value4,L5:source5:value5,L6:source6:value6,L7:source7:value7,L8:source8:value8,L9:source9:value9,L10:source10:value10,L11:source11:value11,L12:source12:value12]);
 
 struct PairDispatch<Storage>(PhantomData<fn() -> Storage>);
 
@@ -297,13 +278,7 @@ macro_rules! impl_pair_code_dispatch {
     };
 }
 
-impl_pair_code_dispatch!(crate::S1,A1,Eval1,pair_code_s1,Env1<L0>; [L0:0]);
-impl_pair_code_dispatch!(crate::S2,A2,Eval2,pair_code_s2,Env2<L0,L1>; [L0:0,L1:1]);
-impl_pair_code_dispatch!(crate::S3,A3,Eval3,pair_code_s3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]);
-impl_pair_code_dispatch!(crate::S4,A4,Eval4,pair_code_s4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]);
-impl_pair_code_dispatch!(crate::S5,A5,Eval5,pair_code_s5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]);
-impl_pair_code_dispatch!(crate::S6,A6,Eval6,pair_code_s6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
-impl_pair_code_dispatch!(crate::S7,A7,Eval7,pair_code_s7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
+impl_pair_code_dispatch!(crate::S12,A13,Eval13,pair_code_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
 
 trait FindFirstDispatch<R, Source, Needles, Item, SourceSlots, NeedleSlots, Equal>
 where
@@ -440,13 +415,7 @@ macro_rules! impl_range_query_dispatch {
     };
 }
 
-impl_range_query_dispatch!(crate::S1,A1,Eval1,find_first_of_s1,bound_s1,Env1<L0>; [L0:0]);
-impl_range_query_dispatch!(crate::S2,A2,Eval2,find_first_of_s2,bound_s2,Env2<L0,L1>; [L0:0,L1:1]);
-impl_range_query_dispatch!(crate::S3,A3,Eval3,find_first_of_s3,bound_s3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]);
-impl_range_query_dispatch!(crate::S4,A4,Eval4,find_first_of_s4,bound_s4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]);
-impl_range_query_dispatch!(crate::S5,A5,Eval5,find_first_of_s5,bound_s5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]);
-impl_range_query_dispatch!(crate::S6,A6,Eval6,find_first_of_s6,bound_s6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
-impl_range_query_dispatch!(crate::S7,A7,Eval7,find_first_of_s7,bound_s7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
+impl_range_query_dispatch!(crate::S12,A13,Eval13,find_first_of_a13,bound_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
 
 trait PairCodeInput<R: Runtime, Right, Op>: ReadExpression {
     fn pair_codes(
@@ -468,11 +437,11 @@ where
     Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Source::Item: StorageLayout,
     Needles: ReadExpression<Item = Source::Item> + LowerReadExpression + StageRead<R, Env0>,
-    PairDispatch<<Source::Item as StorageLayout>::StorageArity>:
+    PairDispatch<crate::S12>:
         FindFirstDispatch<R, Source, Needles, Source::Item, Source::Slots, Needles::Slots, Equal>,
 {
     fn find_first(self, exec: &Executor<R>, needles: Needles) -> Result<Option<u32>, Error> {
-        <PairDispatch<<Source::Item as StorageLayout>::StorageArity> as FindFirstDispatch<
+        <PairDispatch<crate::S12> as FindFirstDispatch<
             R,
             Source,
             Needles,
@@ -511,7 +480,7 @@ where
     Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Source::Item: StorageLayout,
     Values: ReadExpression<Item = Source::Item> + LowerReadExpression + StageRead<R, Env0>,
-    PairDispatch<<Source::Item as StorageLayout>::StorageArity>: BoundDispatch<
+    PairDispatch<crate::S12>: BoundDispatch<
             R,
             Source,
             Values,
@@ -530,7 +499,7 @@ where
         >,
 {
     fn lower_bounds(self, exec: &Executor<R>, values: Values) -> Result<DeviceVec<R, u32>, Error> {
-        <PairDispatch<<Source::Item as StorageLayout>::StorageArity> as BoundDispatch<
+        <PairDispatch<crate::S12> as BoundDispatch<
             R,
             Source,
             Values,
@@ -542,7 +511,7 @@ where
     }
 
     fn upper_bounds(self, exec: &Executor<R>, values: Values) -> Result<DeviceVec<R, u32>, Error> {
-        <PairDispatch<<Source::Item as StorageLayout>::StorageArity> as BoundDispatch<
+        <PairDispatch<crate::S12> as BoundDispatch<
             R,
             Source,
             Values,
@@ -567,11 +536,35 @@ where
     source.lower_bounds(exec, values)
 }
 
+pub(crate) fn lower_bounds_typed<R, Source, Values, Less>(
+    exec: &Executor<R>,
+    source: Source,
+    values: Values,
+) -> Result<DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Source: SortedBoundsInput<R, Values, Less>,
+{
+    source.lower_bounds(exec, values)
+}
+
 pub(crate) fn upper_bounds_storage<R, Source, Values, Less>(
     exec: &Executor<R>,
     source: Source,
     values: Values,
     _less: Less,
+) -> Result<DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Source: SortedBoundsInput<R, Values, Less>,
+{
+    source.upper_bounds(exec, values)
+}
+
+pub(crate) fn upper_bounds_typed<R, Source, Values, Less>(
+    exec: &Executor<R>,
+    source: Source,
+    values: Values,
 ) -> Result<DeviceVec<R, u32>, Error>
 where
     R: Runtime,
@@ -618,7 +611,7 @@ where
     Left: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Left::Item: StorageLayout,
     Right: ReadExpression<Item = Left::Item> + LowerReadExpression + StageRead<R, Env0>,
-    PairDispatch<<Left::Item as StorageLayout>::StorageArity>:
+    PairDispatch<crate::S12>:
         PairCodeDispatch<R, Left, Right, Left::Item, Left::Slots, Right::Slots, Op>,
 {
     fn pair_codes(
@@ -626,7 +619,7 @@ where
         exec: &Executor<R>,
         right: Right,
     ) -> Result<(DeviceVec<R, u32>, Option<u32>, usize, usize), Error> {
-        <PairDispatch<<Left::Item as StorageLayout>::StorageArity> as PairCodeDispatch<
+        <PairDispatch<crate::S12> as PairCodeDispatch<
             R,
             Left,
             Right,
@@ -743,9 +736,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        CanonicalStorage, Counting, Permute, Zip, allocation::NormalizeInput, read::Reassociate,
-    };
+    use crate::{Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
@@ -846,17 +837,22 @@ mod tests {
             )
         };
 
-        let left = make_left().normalize(&exec).unwrap();
-        let right = make_right().normalize(&exec).unwrap();
-        let left_read = || Reassociate::<_, Seven>::new(left.read());
-        let right_read = || Reassociate::<_, Seven>::new(right.read());
-
-        assert!(!equal(&exec, left_read(), right_read(), EqualSeven).unwrap());
+        assert!(
+            !crate::api::algorithm::equal(&exec, make_left(), make_right(), EqualSeven).unwrap()
+        );
         assert_eq!(
-            mismatch(&exec, left_read(), right_read(), EqualSeven).unwrap(),
+            crate::api::algorithm::mismatch(&exec, make_left(), make_right(), EqualSeven).unwrap(),
             Some(1)
         );
-        assert!(lexicographical_compare(&exec, left_read(), right_read(), LessSeven).unwrap());
+        assert!(
+            crate::api::algorithm::lexicographical_compare(
+                &exec,
+                make_left(),
+                make_right(),
+                LessSeven,
+            )
+            .unwrap()
+        );
     }
 
     #[test]
@@ -866,18 +862,25 @@ mod tests {
         let needles = exec.to_device(&[9_u32, 2]);
         let empty = exec.to_device::<u32>(&[]);
         assert_eq!(
-            find_first_of(&exec, source.column(), needles.column(), EqualU32).unwrap(),
+            crate::api::algorithm::find_first_of(
+                &exec,
+                source.column(),
+                needles.column(),
+                EqualU32,
+            )
+            .unwrap(),
             Some(1)
         );
         assert_eq!(
-            find_first_of(&exec, source.column(), empty.column(), EqualU32).unwrap(),
+            crate::api::algorithm::find_first_of(&exec, source.column(), empty.column(), EqualU32,)
+                .unwrap(),
             None
         );
 
         let values = exec.to_device(&[0_u32, 2, 3, 5]);
         let lower = exec.to_device(&[99_u32; 4]);
         let upper = exec.to_device(&[99_u32; 4]);
-        lower_bound(
+        crate::api::algorithm::lower_bound_into(
             &exec,
             source.column(),
             values.column(),
@@ -885,7 +888,7 @@ mod tests {
             lower.slice_mut(..),
         )
         .unwrap();
-        upper_bound(
+        crate::api::algorithm::upper_bound_into(
             &exec,
             source.column(),
             values.column(),
@@ -904,13 +907,21 @@ mod tests {
         let right = exec.to_device(&[43_u32]);
         let (codes, _, _, _) =
             <_ as PairCodeInput<WgpuRuntime, _, LexicographicalCode<LessU32>>>::pair_codes(
-                left.column(),
+                crate::read::FixedRead::new(left.column()),
                 &exec,
-                right.column(),
+                crate::read::FixedRead::new(right.column()),
             )
             .unwrap();
 
         assert_eq!(exec.to_host(&codes).unwrap(), vec![2]);
-        assert!(!lexicographical_compare(&exec, left.column(), right.column(), LessU32,).unwrap());
+        assert!(
+            !crate::api::algorithm::lexicographical_compare(
+                &exec,
+                left.column(),
+                right.column(),
+                LessU32,
+            )
+            .unwrap()
+        );
     }
 }

@@ -13,8 +13,8 @@ use cubecl::prelude::*;
 use std::marker::PhantomData;
 
 use crate::{
-    Error, Executor, MAlloc, MCanonical, MIndex, MItem, MIter, MIterMut, MStorage, MVec, WriteFrom,
-    op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
+    Allocable, Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable,
+    WritableFrom, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
 };
 
 /// A flat value stream and the offsets delimiting its segments.
@@ -198,7 +198,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = MIndex>,
 {
-    type OutputItem: MCanonical<R>;
+    type OutputItem: Materializable<R>;
 
     fn run(
         self,
@@ -214,7 +214,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = MIndex>,
 {
-    type OutputItem: MCanonical<R>;
+    type OutputItem: Materializable<R>;
 
     fn run(
         self,
@@ -230,7 +230,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = MIndex>,
 {
-    type OutputItem: MCanonical<R>;
+    type OutputItem: Materializable<R>;
 
     fn run(
         self,
@@ -246,7 +246,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = MIndex>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: MCanonical<R>,
+    Op::Output: Materializable<R>,
 {
     type OutputItem = Op::Output;
 
@@ -269,7 +269,7 @@ where
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
 {
     fn run_into(
         self,
@@ -279,7 +279,7 @@ where
     ) -> Result<(), Error> {
         let Map(op) = self.0;
         let (values, _) = input.into_parts();
-        values.transform_into(exec, op, output)
+        crate::api::algorithm::transform::transform_into(exec, values, op, output)
     }
 }
 
@@ -291,7 +291,7 @@ where
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -304,37 +304,33 @@ where
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
 
-        let values =
-            <Input::Read as crate::core::facade::AnyRead<R>>::normalize(values.lower_read(), exec)?;
-        let ordering = <<Input::Item as MItem<R>>::Kernel as crate::core::facade::KernelItem<
-            R,
-            Input::Item,
-        >>::sort_ordering(exec, values, less)?;
+        let values = crate::api::iter::lower::<R, _>(values);
+        let ordering = crate::ordering::sort_control_with(exec, values.clone(), less)?;
         let sorted_ids = exec.alloc::<u32>(value_len);
-        control.ids.slice(..).indexed_with(
+        crate::indexed::apply_permutation(
             exec,
-            ordering.control.permutation().column(),
-            None,
-            false,
-            sorted_ids.slice_mut(..),
+            crate::api::iter::lower::<R, _>(control.ids.slice(..)),
+            ordering.column(),
+            <crate::DeviceSliceMut<u32> as MIterMut<R>>::lower_output(sorted_ids.slice_mut(..)),
         )?;
 
-        let sorted_ids = <_ as crate::core::facade::AnyRead<R>>::normalize(
-            <crate::DeviceSlice<u32> as MIter<R>>::lower_read(sorted_ids.slice(..)),
+        let id_ordering = crate::ordering::sort_control_with(
             exec,
+            crate::api::iter::lower::<R, _>(sorted_ids.slice(..)),
+            control::LessU32,
         )?;
-        let id_ordering =
-            <<u32 as MItem<R>>::Kernel as crate::core::facade::KernelItem<R, u32>>::sort_ordering(
-                exec,
-                sorted_ids,
-                control::LessU32,
-            )?;
-
-        crate::core::facade::KernelWrite::gather_storage(
-            output.lower_write_from::<Input::Item>(),
+        let permutation = exec.alloc::<u32>(value_len);
+        crate::indexed::apply_permutation(
             exec,
-            &ordering.sorted_keys,
-            id_ordering.control.permutation().column(),
+            crate::api::iter::lower::<R, _>(ordering.slice(..)),
+            id_ordering.column(),
+            <crate::DeviceSliceMut<u32> as MIterMut<R>>::lower_output(permutation.slice_mut(..)),
+        )?;
+        crate::indexed::apply_permutation(
+            exec,
+            values,
+            permutation.column(),
+            output.lower_output_from::<Input::Item>(),
         )
     }
 }
@@ -346,9 +342,9 @@ where
     Input: MIter<R> + Clone,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
     Output::SliceMut: MIterMut<R>,
-    <Output::SliceMut as MIterMut<R>>::Item: WriteFrom<Input::Item>,
+    <Output::SliceMut as MIterMut<R>>::Item: WritableFrom<Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
     fn run_into(
@@ -360,14 +356,13 @@ where
         let AdjacentDifference(op) = self.0;
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
-        values
-            .clone()
-            .adjacent_difference_with(exec, op, output.slice_mut(..))?;
-        values.transform_where_with(
+        crate::vector::adjacent_difference_into(exec, values.clone(), op, output.slice_mut(..))?;
+        crate::vector::transform_where(
             exec,
+            values,
             crate::op::Identity,
-            control.heads.column(),
-            output.slice_mut(..),
+            control.heads.slice(..),
+            output,
         )
     }
 }
@@ -380,7 +375,7 @@ where
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Op: ReductionOp<Input::Item>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -391,10 +386,14 @@ where
         let InclusiveScan(op) = self.0;
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
-        control
-            .ids
-            .slice(..)
-            .scan_by_key_with(exec, values, control::EqualU32, None, op, output)
+        crate::vector::inclusive_scan_by_key_into(
+            exec,
+            control.ids.slice(..),
+            values,
+            control::EqualU32,
+            op,
+            output,
+        )
     }
 }
 
@@ -405,9 +404,9 @@ where
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Init: CubeType,
-    Op: ReductionOp<Input::Item>,
-    Output::Item: WriteFrom<Input::Item>,
+    Init: Materializable<R>,
+    Op: ReductionOp<Init>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -418,11 +417,12 @@ where
         let ExclusiveScan(op, init) = self.0;
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
-        control.ids.slice(..).scan_by_key_with(
+        crate::vector::exclusive_scan_by_key_into(
             exec,
+            control.ids.slice(..),
             values,
             control::EqualU32,
-            Some(init),
+            init,
             op,
             output,
         )
@@ -436,7 +436,7 @@ where
     Input: MIter<R>,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -447,7 +447,7 @@ where
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
         let indices = control.reverse_indices(exec)?;
-        values.indexed_with(exec, indices.column(), None, false, output)
+        crate::vector::gather_into(exec, values, indices.slice(..), output)
     }
 }
 
@@ -461,7 +461,7 @@ where
     Output: MIterMut<R>,
     OutputOffsets: MIterMut<R, Item = MIndex>,
     Equal: BinaryPredicateOp<Input::Item>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -469,19 +469,15 @@ where
         input: Segmented<Input, InputOffsets>,
         output: SegmentedMut<Output, OutputOffsets>,
     ) -> Result<MIndex, Error> {
-        let Unique(equal) = self.0;
+        let Unique(_equal) = self.0;
         let (values, offsets) = input.into_parts();
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
-        let storage =
-            <Input::Read as crate::core::facade::AnyRead<R>>::normalize(values.lower_read(), exec)?;
-        let flags = <<Input::Item as MItem<R>>::Kernel as crate::core::facade::KernelItem<
-            R,
-            Input::Item,
-        >>::segment_heads(exec, &storage, equal)?;
+        let values = crate::api::iter::lower::<R, _>(values);
+        let flags = crate::ordering::unique_head_flags::<R, _, Equal>(exec, values.clone())?;
         control.merge_heads(exec, &flags)?;
         let (output_values, output_offsets) = output.into_parts();
-        control.compact::<Input::Item, _, _>(exec, &storage, flags, output_values, output_offsets)
+        control.compact(exec, values, flags, output_values, output_offsets)
     }
 }
 
@@ -547,19 +543,20 @@ pub(crate) fn reduce_segments<R, Values, Offsets, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: MAlloc<R> + Copy,
+    Values::Item: Allocable<R> + Copy,
     Offsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WriteFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let (values, offsets) = input.into_parts();
     let value_len = values.len()? as usize;
     let control = control::SegmentControl::new(exec, offsets, value_len)?;
     let keys = exec.alloc::<u32>(control.segment_count);
-    let reduced = <Values::Item as MAlloc<R>>::alloc(exec, control.segment_count);
-    let count = control.ids.slice(..).reduce_by_key_with(
+    let reduced = <Values::Item as Allocable<R>>::alloc(exec, control.segment_count);
+    let count = crate::vector::reduce_by_key_into(
         exec,
+        control.ids.slice(..),
         values,
         control::EqualU32,
         init,
@@ -568,23 +565,29 @@ where
         reduced.slice_mut(..),
     )?;
 
-    let result = <Values::Item as MAlloc<R>>::alloc(exec, control.segment_count);
+    let result = <Values::Item as Allocable<R>>::alloc(exec, control.segment_count);
     result.slice_mut(..).fill_with(exec, init)?;
     if count != 0 {
         let indices = exec.alloc::<u32>(count as usize);
-        keys.slice(..count as usize)
-            .transform_into(exec, Decrement, indices.slice_mut(..))?;
-        reduced.slice(..count).indexed_with(
+        crate::api::algorithm::transform::transform_into(
             exec,
-            indices.column(),
-            None,
-            true,
+            keys.slice(..count as usize),
+            Decrement,
+            indices.slice_mut(..),
+        )?;
+        crate::vector::scatter(
+            exec,
+            reduced.slice(..count),
+            indices.slice(..),
             result.slice_mut(..),
         )?;
     }
-    result
-        .slice(..)
-        .transform_into(exec, crate::op::Identity, output)
+    crate::api::algorithm::transform::transform_into(
+        exec,
+        result.slice(..),
+        crate::op::Identity,
+        output,
+    )
 }
 
 impl<R, Input, InputOffsets, Output, OutputOffsets, Pred>
@@ -597,7 +600,7 @@ where
     Output: MIterMut<R>,
     OutputOffsets: MIterMut<R, Item = MIndex>,
     Pred: PredicateOp<Input::Item>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -609,15 +612,20 @@ where
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
         let flags = exec.alloc::<u32>(value_len);
-        values.clone().transform_into(
+        crate::api::algorithm::transform::transform_into(
             exec,
+            values.clone(),
             PredicateMap::<Pred>(PhantomData),
             flags.slice_mut(..),
         )?;
-        let storage =
-            <Input::Read as crate::core::facade::AnyRead<R>>::normalize(values.lower_read(), exec)?;
         let (output_values, output_offsets) = output.into_parts();
-        control.compact::<Input::Item, _, _>(exec, &storage, flags, output_values, output_offsets)
+        control.compact(
+            exec,
+            crate::api::iter::lower::<R, _>(values),
+            flags,
+            output_values,
+            output_offsets,
+        )
     }
 }
 
@@ -628,9 +636,9 @@ where
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Init: CubeType + MAlloc<R> + Copy,
+    Init: CubeType + Allocable<R> + Copy,
     Op: ReductionOp<Input::Item>,
-    Output::Item: WriteFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>,
 {
     fn run_into(
         self,
@@ -654,7 +662,7 @@ macro_rules! impl_predicate_reduce_like {
             InputOffsets: MIter<R, Item = MIndex>,
             Output: MIterMut<R>,
             Pred: PredicateOp<Input::Item>,
-            Output::Item: WriteFrom<MIndex>,
+            Output::Item: WritableFrom<MIndex>,
         {
             fn run_into(
                 self,
@@ -665,7 +673,12 @@ macro_rules! impl_predicate_reduce_like {
                 let (values, offsets) = input.into_parts();
                 let value_len = values.len()? as usize;
                 let mapped = exec.alloc::<u32>(value_len);
-                values.transform_into(exec, $map::<Pred>(PhantomData), mapped.slice_mut(..))?;
+                crate::api::algorithm::transform::transform_into(
+                    exec,
+                    values,
+                    $map::<Pred>(PhantomData),
+                    mapped.slice_mut(..),
+                )?;
                 reduce_segments(
                     exec,
                     Segmented::new(mapped.slice(..), offsets),
@@ -691,7 +704,7 @@ where
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WriteFrom<MIndex>,
+    Output::Item: WritableFrom<MIndex>,
 {
     fn run_into(
         self,
@@ -699,21 +712,22 @@ where
         input: Segmented<Input, InputOffsets>,
         output: Output,
     ) -> Result<(), Error> {
-        let IsSorted(less) = self.0;
+        let IsSorted(_less) = self.0;
         let (values, offsets) = input.into_parts();
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
-        let storage =
-            <Input::Read as crate::core::facade::AnyRead<R>>::normalize(values.lower_read(), exec)?;
-        let breaks = <<Input::Item as MItem<R>>::Kernel as crate::core::facade::KernelItem<
-            R,
-            Input::Item,
-        >>::sorted_breaks(exec, &storage, less)?;
+        let breaks = crate::ordering::sorted_break_flags::<R, _, Less>(
+            exec,
+            crate::api::iter::lower::<R, _>(values),
+        )?;
         control.clear_heads(exec, &breaks)?;
         let ordered = exec.alloc::<u32>(value_len);
-        breaks
-            .slice(..)
-            .transform_into(exec, InvertFlag, ordered.slice_mut(..))?;
+        crate::api::algorithm::transform::transform_into(
+            exec,
+            breaks.slice(..),
+            InvertFlag,
+            ordered.slice_mut(..),
+        )?;
         reduce_segments(
             exec,
             Segmented::new(ordered.slice(..), control.offsets.slice(..)),
@@ -732,7 +746,7 @@ where
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WriteFrom<MIndex>,
+    Output::Item: WritableFrom<MIndex>,
 {
     fn run_into(
         self,
@@ -740,16 +754,14 @@ where
         input: Segmented<Input, InputOffsets>,
         output: Output,
     ) -> Result<(), Error> {
-        let IsSortedUntil(less) = self.0;
+        let IsSortedUntil(_less) = self.0;
         let (values, offsets) = input.into_parts();
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
-        let storage =
-            <Input::Read as crate::core::facade::AnyRead<R>>::normalize(values.lower_read(), exec)?;
-        let breaks = <<Input::Item as MItem<R>>::Kernel as crate::core::facade::KernelItem<
-            R,
-            Input::Item,
-        >>::sorted_breaks(exec, &storage, less)?;
+        let breaks = crate::ordering::sorted_break_flags::<R, _, Less>(
+            exec,
+            crate::api::iter::lower::<R, _>(values),
+        )?;
         let candidates = control.sorted_until_candidates(exec, &breaks)?;
         let reduced = exec.alloc::<u32>(control.segment_count);
         reduce_segments(
@@ -760,9 +772,12 @@ where
             reduced.slice_mut(..),
         )?;
         let result = control.finish_sorted_until(exec, &reduced)?;
-        result
-            .slice(..)
-            .transform_into(exec, crate::op::Identity, output)
+        crate::api::algorithm::transform::transform_into(
+            exec,
+            result.slice(..),
+            crate::op::Identity,
+            output,
+        )
     }
 }
 
@@ -773,7 +788,7 @@ macro_rules! impl_owned_map_input {
         where
             R: Runtime,
             Input: MIter<R>,
-            Input::Item: MCanonical<R>,
+            Input::Item: Materializable<R>,
             InputOffsets: MIter<R, Item = MIndex>,
             $( $bound )+
         {
@@ -800,10 +815,9 @@ impl<R, Input, InputOffsets, Op, Init> MapLikeExecutable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
-    Input::Item: MCanonical<R>,
     InputOffsets: MIter<R, Item = MIndex>,
-    Init: CubeType,
-    Op: ReductionOp<Input::Item>,
+    Init: Materializable<R>,
+    Op: ReductionOp<Init>,
 {
     type OutputItem = Input::Item;
 
@@ -822,7 +836,7 @@ impl<R, Input, InputOffsets> MapLikeExecutable<R, Input, InputOffsets> for ForEa
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: MCanonical<R>,
+    Input::Item: Materializable<R>,
     InputOffsets: MIter<R, Item = MIndex>,
 {
     type OutputItem = Input::Item;
@@ -843,7 +857,7 @@ impl<R, Input, InputOffsets, Op> MapLikeExecutable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
-    Input::Item: MCanonical<R>,
+    Input::Item: Materializable<R>,
     InputOffsets: MIter<R, Item = MIndex>,
     Op: ReductionOp<Input::Item>,
 {
@@ -876,7 +890,7 @@ macro_rules! impl_owned_unique_like {
         where
             R: Runtime,
             Input: MIter<R> + Clone,
-            Input::Item: MCanonical<R>,
+            Input::Item: Materializable<R>,
             InputOffsets: MIter<R, Item = MIndex>,
             $( $bound )+
         {
@@ -911,10 +925,9 @@ impl<R, Input, InputOffsets, Op, Init> ReduceLikeExecutable<R, Input, InputOffse
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
-    Input::Item: MCanonical<R>,
     InputOffsets: MIter<R, Item = MIndex>,
-    Init: CubeType + MAlloc<R> + Copy,
-    Op: ReductionOp<Input::Item>,
+    Init: Allocable<R> + Materializable<R> + Copy,
+    Op: ReductionOp<Init>,
 {
     type OutputItem = Input::Item;
 

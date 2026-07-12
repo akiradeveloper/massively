@@ -3,13 +3,10 @@
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalAlloc, CanonicalStorage, Counting, DeviceVec, Error, Executor, ReadExpression,
-    allocation::{NormalizeInput, singleton},
-    indexed::GatherInput,
+    CanonicalAlloc, CanonicalStorage, DeviceVec, Error, Executor, ReadExpression,
     ordering::{AdjacentFlagInput, BinaryPredicateOp, UniqueHead, unique_head_flags},
-    segmented::SegmentedStorage,
-    selection::{CopySelected, FillOutput, SelectionControl},
-    storage::WriteFrom,
+    selection::{CopySelected, SelectionControl},
+    storage::WritableFrom,
 };
 
 const BLOCK_SIZE: u32 = 256;
@@ -68,206 +65,349 @@ where
 }
 
 /// Value-only phase for segmented scans.  Keys never appear in this trait.
-#[doc(hidden)]
-pub trait SegmentedValues<R: Runtime, Op>: NormalizeInput<R> {
-    fn inclusive_storage(
-        self,
+#[cfg(any())]
+mod legacy_segmented_values {
+    use super::*;
+
+    #[doc(hidden)]
+    pub trait SegmentedValues<R: Runtime, Op>: NormalizeInput<R> {
+        fn inclusive_storage(
+            self,
+            exec: &Executor<R>,
+            heads: &DeviceVec<R, u32>,
+        ) -> Result<Self::Storage, Error>;
+        fn exclusive_storage(
+            self,
+            exec: &Executor<R>,
+            heads: &DeviceVec<R, u32>,
+            init: Self::Item,
+        ) -> Result<Self::Storage, Error>;
+        fn reduced_storage(
+            self,
+            exec: &Executor<R>,
+            heads: &DeviceVec<R, u32>,
+            init: Self::Item,
+        ) -> Result<Self::Storage, Error>;
+    }
+
+    impl<R, Values, Op> SegmentedValues<R, Op> for Values
+    where
+        R: Runtime,
+        Values: NormalizeInput<R>,
+        Values::Item: CanonicalAlloc<R, CanonicalStorage = Values::Storage>,
+        Values::Storage: CanonicalStorage<R> + SegmentedStorage<R, Values::Item, Op>,
+        <Values::Storage as CanonicalStorage<R>>::Item: WritableFrom<Values::Item>,
+        <Values::Storage as CanonicalStorage<R>>::Write: FillOutput<R>,
+        Op: crate::op::ReductionOp<Values::Item>,
+    {
+        fn inclusive_storage(
+            self,
+            exec: &Executor<R>,
+            heads: &DeviceVec<R, u32>,
+        ) -> Result<Self::Storage, Error> {
+            let values = self.normalize(exec)?;
+            if values.segmented_len() != heads.len() {
+                return Err(Error::LengthMismatch {
+                    left: values.segmented_len(),
+                    right: heads.len(),
+                });
+            }
+            let output = exec.alloc_canonical::<Values::Item>(heads.len());
+            values.segmented_inclusive(exec, heads, &output)?;
+            Ok(output)
+        }
+
+        fn exclusive_storage(
+            self,
+            exec: &Executor<R>,
+            heads: &DeviceVec<R, u32>,
+            init: Self::Item,
+        ) -> Result<Self::Storage, Error> {
+            let inclusive = self.inclusive_storage(exec, heads)?;
+            let initial = singleton::<R, Values::Item>(exec, init)?;
+            let output = exec.alloc_canonical::<Values::Item>(heads.len());
+            inclusive.segmented_exclusive(exec, heads, &initial, &output)?;
+            Ok(output)
+        }
+
+        fn reduced_storage(
+            self,
+            exec: &Executor<R>,
+            heads: &DeviceVec<R, u32>,
+            init: Self::Item,
+        ) -> Result<Self::Storage, Error> {
+            let inclusive = self.inclusive_storage(exec, heads)?;
+            let initial = singleton::<R, Values::Item>(exec, init)?;
+            let output = exec.alloc_canonical::<Values::Item>(heads.len());
+            inclusive.apply_init(exec, &initial, &output)?;
+            Ok(output)
+        }
+    }
+
+    pub(crate) fn segmented_inclusive_with<R, Values, Op>(
         exec: &Executor<R>,
+        values: Values,
         heads: &DeviceVec<R, u32>,
-    ) -> Result<Self::Storage, Error>;
-    fn exclusive_storage(
-        self,
+        _op: Op,
+    ) -> Result<Values::Storage, Error>
+    where
+        R: Runtime,
+        Values: SegmentedValues<R, Op>,
+    {
+        values.inclusive_storage(exec, heads)
+    }
+
+    pub(crate) fn segmented_exclusive_with<R, Values, Op>(
         exec: &Executor<R>,
+        values: Values,
         heads: &DeviceVec<R, u32>,
-        init: Self::Item,
-    ) -> Result<Self::Storage, Error>;
-    fn reduced_storage(
-        self,
+        init: Values::Item,
+        _op: Op,
+    ) -> Result<Values::Storage, Error>
+    where
+        R: Runtime,
+        Values: SegmentedValues<R, Op>,
+    {
+        values.exclusive_storage(exec, heads, init)
+    }
+
+    pub(crate) fn segmented_reduced_with<R, Values, Op>(
         exec: &Executor<R>,
+        values: Values,
         heads: &DeviceVec<R, u32>,
-        init: Self::Item,
-    ) -> Result<Self::Storage, Error>;
+        init: Values::Item,
+        _op: Op,
+    ) -> Result<Values::Storage, Error>
+    where
+        R: Runtime,
+        Values: SegmentedValues<R, Op>,
+    {
+        values.reduced_storage(exec, heads, init)
+    }
+
+    pub(crate) fn segment_heads_with<R, Keys, Equal>(
+        exec: &Executor<R>,
+        keys: Keys,
+        _equal: Equal,
+    ) -> Result<DeviceVec<R, u32>, Error>
+    where
+        R: Runtime,
+        Keys: SegmentKeyInput<R, Equal>,
+    {
+        keys.segment_heads(exec)
+    }
 }
 
-impl<R, Values, Op> SegmentedValues<R, Op> for Values
+fn segmented_lowered_storage<R, Values, Op>(
+    exec: &Executor<R>,
+    values: Values,
+    heads: &DeviceVec<R, u32>,
+    init: Option<Values::Item>,
+    op: Op,
+    mode: u8,
+) -> Result<<Values::Item as CanonicalAlloc<R>>::CanonicalStorage, Error>
 where
     R: Runtime,
-    Values: NormalizeInput<R>,
-    Values::Item: CanonicalAlloc<R, CanonicalStorage = Values::Storage>,
-    Values::Storage: CanonicalStorage<R> + SegmentedStorage<R, Values::Item, Op>,
-    <Values::Storage as CanonicalStorage<R>>::Item: WriteFrom<Values::Item>,
-    <Values::Storage as CanonicalStorage<R>>::Write: FillOutput<R>,
+    Values: crate::core::facade::KernelInput<R>,
+    Values::Item: crate::api::iter::MItem<R>,
+    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
+    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
+        WritableFrom<Values::Item>,
     Op: crate::op::ReductionOp<Values::Item>,
 {
-    fn inclusive_storage(
-        self,
-        exec: &Executor<R>,
-        heads: &DeviceVec<R, u32>,
-    ) -> Result<Self::Storage, Error> {
-        let values = self.normalize(exec)?;
-        if values.segmented_len() != heads.len() {
-            return Err(Error::LengthMismatch {
-                left: values.segmented_len(),
-                right: heads.len(),
-            });
-        }
-        let output = exec.alloc_canonical::<Values::Item>(heads.len());
-        values.segmented_inclusive(exec, heads, &output)?;
-        Ok(output)
-    }
-
-    fn exclusive_storage(
-        self,
-        exec: &Executor<R>,
-        heads: &DeviceVec<R, u32>,
-        init: Self::Item,
-    ) -> Result<Self::Storage, Error> {
-        let inclusive = self.inclusive_storage(exec, heads)?;
-        let initial = singleton::<R, Values::Item>(exec, init)?;
-        let output = exec.alloc_canonical::<Values::Item>(heads.len());
-        inclusive.segmented_exclusive(exec, heads, &initial, &output)?;
-        Ok(output)
-    }
-
-    fn reduced_storage(
-        self,
-        exec: &Executor<R>,
-        heads: &DeviceVec<R, u32>,
-        init: Self::Item,
-    ) -> Result<Self::Storage, Error> {
-        let inclusive = self.inclusive_storage(exec, heads)?;
-        let initial = singleton::<R, Values::Item>(exec, init)?;
-        let output = exec.alloc_canonical::<Values::Item>(heads.len());
-        inclusive.apply_init(exec, &initial, &output)?;
-        Ok(output)
-    }
+    let values = crate::allocation::normalize_lowered(exec, values)?;
+    crate::segmented::segmented_fixed(exec, &values, heads, init, op, mode)
 }
 
-pub(crate) fn segmented_inclusive_with<R, Values, Op>(
-    exec: &Executor<R>,
-    values: Values,
-    heads: &DeviceVec<R, u32>,
-    _op: Op,
-) -> Result<Values::Storage, Error>
-where
-    R: Runtime,
-    Values: SegmentedValues<R, Op>,
-{
-    values.inclusive_storage(exec, heads)
-}
-
-pub(crate) fn segmented_exclusive_with<R, Values, Op>(
-    exec: &Executor<R>,
-    values: Values,
-    heads: &DeviceVec<R, u32>,
-    init: Values::Item,
-    _op: Op,
-) -> Result<Values::Storage, Error>
-where
-    R: Runtime,
-    Values: SegmentedValues<R, Op>,
-{
-    values.exclusive_storage(exec, heads, init)
-}
-
-pub(crate) fn segmented_reduced_with<R, Values, Op>(
-    exec: &Executor<R>,
-    values: Values,
-    heads: &DeviceVec<R, u32>,
-    init: Values::Item,
-    _op: Op,
-) -> Result<Values::Storage, Error>
-where
-    R: Runtime,
-    Values: SegmentedValues<R, Op>,
-{
-    values.reduced_storage(exec, heads, init)
-}
-
-pub(crate) fn segment_heads_with<R, Keys, Equal>(
-    exec: &Executor<R>,
-    keys: Keys,
-    _equal: Equal,
-) -> Result<DeviceVec<R, u32>, Error>
-where
-    R: Runtime,
-    Keys: SegmentKeyInput<R, Equal>,
-{
-    keys.segment_heads(exec)
-}
-
-/// Inclusive segmented scan over values grouped by adjacent equal keys.
-pub(crate) fn inclusive_scan_by_key<R, Keys, Values, Equal, Op, Output>(
+/// Fixed-input implementation used by the public logical iterator facade.
+pub(crate) fn inclusive_scan_by_key_lowered<R, Keys, Values, Equal, Op, Output>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     _equal: Equal,
-    _op: Op,
+    op: Op,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
-    Values: SegmentedValues<R, Op>,
-    Values::Storage: CanonicalStorage<R>,
-    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    Values: crate::core::facade::KernelInput<R>,
+    Values::Item: crate::api::iter::MItem<R>,
+    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
+    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
+        WritableFrom<Values::Item>,
+    Op: crate::op::ReductionOp<Values::Item>,
+    Output: crate::output::OutputExpression<Item = Values::Item>
+        + crate::output::LowerOutputExpression
+        + crate::output::StageOutput<R, crate::read::Env0>,
+    Output::Slots: crate::output::PaddedOutputSlots<
+            Leaves = <Values::Item as crate::StorageLayout>::StorageLeaves,
+        >,
 {
     let heads = keys.segment_heads(exec)?;
-    let scanned = values.inclusive_storage(exec, &heads)?;
-    crate::indexed::gather_direct(exec, scanned.read(), Counting::new(0, heads.len()), output)
+    let scanned = segmented_lowered_storage(exec, values, &heads, None, op, 0)?;
+    let read = crate::read::FixedReassociate::<_, Values::Item>::new(scanned.read());
+    crate::transform::materialize_fixed(exec, &read, &output)
 }
 
-/// Exclusive segmented scan over values grouped by adjacent equal keys.
-pub(crate) fn exclusive_scan_by_key<R, Keys, Values, Equal, Op, Output>(
+/// Fixed-input implementation used by the public logical iterator facade.
+pub(crate) fn exclusive_scan_by_key_lowered<R, Keys, Values, Equal, Op, Output>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     _equal: Equal,
     init: Values::Item,
-    _op: Op,
+    op: Op,
     output: Output,
 ) -> Result<(), Error>
 where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
-    Values: SegmentedValues<R, Op>,
-    Values::Storage: CanonicalStorage<R>,
-    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    Values: crate::core::facade::KernelInput<R>,
+    Values::Item: crate::api::iter::MItem<R>,
+    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
+    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
+        WritableFrom<Values::Item>,
+    Op: crate::op::ReductionOp<Values::Item>,
+    Output: crate::output::OutputExpression<Item = Values::Item>
+        + crate::output::LowerOutputExpression
+        + crate::output::StageOutput<R, crate::read::Env0>,
+    Output::Slots: crate::output::PaddedOutputSlots<
+            Leaves = <Values::Item as crate::StorageLayout>::StorageLeaves,
+        >,
 {
     let heads = keys.segment_heads(exec)?;
-    let scanned = values.exclusive_storage(exec, &heads, init)?;
-    crate::indexed::gather_direct(exec, scanned.read(), Counting::new(0, heads.len()), output)
+    let scanned = segmented_lowered_storage(exec, values, &heads, Some(init), op, 1)?;
+    let read = crate::read::FixedReassociate::<_, Values::Item>::new(scanned.read());
+    crate::transform::materialize_fixed(exec, &read, &output)
 }
 
-/// Reduces each adjacent equal-key segment, emitting its first key and one
-/// initialized value reduction.
-pub(crate) fn reduce_by_key<R, Keys, Values, Equal, Op, KeyOutput, ValueOutput>(
+/// Fixed-input implementation used by the public logical iterator facade.
+pub(crate) fn reduce_by_key_lowered<R, Keys, Values, Equal, Op, KeyOutput, ValueOutput>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     _equal: Equal,
     init: Values::Item,
-    _op: Op,
+    op: Op,
     key_output: KeyOutput,
     value_output: ValueOutput,
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Keys: Clone + SegmentKeyInput<R, Equal> + CopySelected<R, KeyOutput>,
-    Values: SegmentedValues<R, Op>,
-    Values::Storage: CanonicalStorage<R>,
-    <Values::Storage as CanonicalStorage<R>>::Read: CopySelected<R, ValueOutput>,
+    Keys: crate::core::facade::KernelInput<R> + SegmentKeyInput<R, Equal>,
+    Keys::Item: crate::api::iter::MItem<R>,
+    <Keys::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
+    Values: crate::core::facade::KernelInput<R>,
+    Values::Item: crate::api::iter::MItem<R>,
+    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
+    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
+        WritableFrom<Values::Item>,
+    Op: crate::op::ReductionOp<Values::Item>,
+    KeyOutput: crate::output::OutputExpression<Item = Keys::Item>
+        + crate::output::LowerOutputExpression
+        + crate::output::StageOutput<R, crate::read::Env0>,
+    KeyOutput::Slots: crate::output::PaddedOutputSlots<
+            Leaves = <Keys::Item as crate::StorageLayout>::StorageLeaves,
+        >,
+    ValueOutput: crate::output::OutputExpression<Item = Values::Item>
+        + crate::output::LowerOutputExpression
+        + crate::output::StageOutput<R, crate::read::Env0>,
+    ValueOutput::Slots: crate::output::PaddedOutputSlots<
+            Leaves = <Values::Item as crate::StorageLayout>::StorageLeaves,
+        >,
 {
     let heads = keys.clone().segment_heads(exec)?;
-    let reduced = values.reduced_storage(exec, &heads, init)?;
+    let reduced = segmented_lowered_storage(exec, values, &heads, Some(init), op, 2)?;
     let head_control = SelectionControl::from_flags(exec, heads)?;
     let tail_control = tail_control_from_heads(exec, &head_control)?;
-    let key_count = keys.copy_selected(exec, &head_control, key_output)?;
-    let value_count = reduced
-        .read()
-        .copy_selected(exec, &tail_control, value_output)?;
-    debug_assert_eq!(key_count, value_count);
-    Ok(key_count)
+    crate::indexed::gather_direct(exec, keys, head_control.indices().column(), key_output)?;
+    let reduced = crate::read::FixedReassociate::<_, Values::Item>::new(reduced.read());
+    crate::indexed::gather_direct(exec, reduced, tail_control.indices().column(), value_output)?;
+    Ok(head_control.count())
+}
+
+/// Inclusive segmented scan over values grouped by adjacent equal keys.
+#[cfg(any())]
+mod legacy_by_key_algorithms {
+    use super::*;
+
+    pub(crate) fn inclusive_scan_by_key<R, Keys, Values, Equal, Op, Output>(
+        exec: &Executor<R>,
+        keys: Keys,
+        values: Values,
+        _equal: Equal,
+        _op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        R: Runtime,
+        Keys: SegmentKeyInput<R, Equal>,
+        Values: SegmentedValues<R, Op>,
+        Values::Storage: CanonicalStorage<R>,
+        <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    {
+        let heads = keys.segment_heads(exec)?;
+        let scanned = values.inclusive_storage(exec, &heads)?;
+        crate::indexed::gather_direct(exec, scanned.read(), Counting::new(0, heads.len()), output)
+    }
+
+    /// Exclusive segmented scan over values grouped by adjacent equal keys.
+    pub(crate) fn exclusive_scan_by_key<R, Keys, Values, Equal, Op, Output>(
+        exec: &Executor<R>,
+        keys: Keys,
+        values: Values,
+        _equal: Equal,
+        init: Values::Item,
+        _op: Op,
+        output: Output,
+    ) -> Result<(), Error>
+    where
+        R: Runtime,
+        Keys: SegmentKeyInput<R, Equal>,
+        Values: SegmentedValues<R, Op>,
+        Values::Storage: CanonicalStorage<R>,
+        <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    {
+        let heads = keys.segment_heads(exec)?;
+        let scanned = values.exclusive_storage(exec, &heads, init)?;
+        crate::indexed::gather_direct(exec, scanned.read(), Counting::new(0, heads.len()), output)
+    }
+
+    /// Reduces each adjacent equal-key segment, emitting its first key and one
+    /// initialized value reduction.
+    pub(crate) fn reduce_by_key<R, Keys, Values, Equal, Op, KeyOutput, ValueOutput>(
+        exec: &Executor<R>,
+        keys: Keys,
+        values: Values,
+        _equal: Equal,
+        init: Values::Item,
+        _op: Op,
+        key_output: KeyOutput,
+        value_output: ValueOutput,
+    ) -> Result<u32, Error>
+    where
+        R: Runtime,
+        Keys: Clone + SegmentKeyInput<R, Equal> + CopySelected<R, KeyOutput>,
+        Values: SegmentedValues<R, Op>,
+        Values::Storage: CanonicalStorage<R>,
+        <Values::Storage as CanonicalStorage<R>>::Read: CopySelected<R, ValueOutput>,
+    {
+        let heads = keys.clone().segment_heads(exec)?;
+        let reduced = values.reduced_storage(exec, &heads, init)?;
+        let head_control = SelectionControl::from_flags(exec, heads)?;
+        let tail_control = tail_control_from_heads(exec, &head_control)?;
+        let key_count = keys.copy_selected(exec, &head_control, key_output)?;
+        let value_count = reduced
+            .read()
+            .copy_selected(exec, &tail_control, value_output)?;
+        debug_assert_eq!(key_count, value_count);
+        Ok(key_count)
+    }
 }
 
 /// Key phase for stable adjacent-key deduplication.
@@ -524,7 +664,7 @@ mod tests {
         };
 
         let inclusive = exec.alloc_canonical::<Seven>(len);
-        inclusive_scan_by_key(
+        crate::api::algorithm::inclusive_scan_by_key_into(
             &exec,
             keys.column(),
             values(),
@@ -540,7 +680,7 @@ mod tests {
 
         let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
         let exclusive = exec.alloc_canonical::<Seven>(len);
-        exclusive_scan_by_key(
+        crate::api::algorithm::exclusive_scan_by_key_into(
             &exec,
             keys.column(),
             values(),
@@ -558,7 +698,7 @@ mod tests {
 
         let key_output = exec.to_device(&vec![0_u32; len]);
         let value_output = exec.alloc_canonical::<Seven>(len);
-        let count = reduce_by_key(
+        let count = crate::api::algorithm::reduce_by_key_into(
             &exec,
             keys.column(),
             values(),

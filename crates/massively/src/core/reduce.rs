@@ -3,24 +3,36 @@
 use core::marker::PhantomData;
 use cubecl::prelude::*;
 
+use crate::allocation::CopyStorage;
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, Column, Constant, Counting, Error, Executor, MStorageElement,
-    Permute, ReadExpression, ReverseCounting, S1, S2, S3, S4, S5, S6, S7, StorageLayout, Taken,
-    Transform, Zip,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    A13, CanonicalStorage, Column, Constant, Counting, Error, Executor, MStorageElement, Permute,
+    ReadExpression, ReverseCounting, S12, StorageLayout, Taken, Transform, Zip,
+    eval::Eval13,
     launch::cube_count_1d,
     op::UnaryOp,
+    output::OutputBindings,
     read::{
-        BindSlots, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression, TakenSource,
+        BindSlots, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, Env9, Env10, Env11, Env12,
+        Env13, LowerReadExpression, PaddedReadSlots, TakenSource,
     },
     storage::{
-        Decompose, Last, LoadLeaves2, LoadLeaves3, LoadLeaves4, LoadLeaves5, LoadLeaves6,
-        LoadLeaves7, More, MutableLeaves, MutableLeavesExpand, PlaneShuffleLeaves, Recompose,
-        ScalarLayout, StoreLeaves2, StoreLeaves2Expand, StoreLeaves3, StoreLeaves3Expand,
-        StoreLeaves4, StoreLeaves4Expand, StoreLeaves5, StoreLeaves5Expand, StoreLeaves6,
-        StoreLeaves6Expand, StoreLeaves7, StoreLeaves7Expand,
+        Decompose, MutableLeaves, MutableLeavesExpand, PlaneShuffleLeaves, Recompose, SharedLeaves,
+        SharedLeavesExpand, StorePadded12, StorePadded12Expand,
     },
 };
+
+type FixedReduceStorage<R, Item> = <Item as crate::CanonicalAlloc<R>>::CanonicalStorage;
+type FixedReduceRead<R, Item> = crate::read::FixedReassociate<
+    <FixedReduceStorage<R, Item> as crate::CanonicalStorage<R>>::Read,
+    Item,
+>;
+type FixedReduceSlots<Item> =
+    <<Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots;
+type FixedReduceOutput<R, Item> = crate::output::ReassociatedOutput<
+    <FixedReduceStorage<R, Item> as crate::CanonicalStorage<R>>::Write,
+    Item,
+    FixedReduceSlots<Item>,
+>;
 
 const BLOCK_SIZE: u32 = 256;
 const ITEMS_PER_UNIT: usize = 256;
@@ -59,11 +71,13 @@ pub trait ReductionOp<Item: CubeType>: 'static + Send + Sync {
 }
 
 /// Semantic items supported by the first single-leaf reduction slice.
+#[cfg(any())]
 pub trait ReduceStorage1:
     MStorageElement + StorageLayout<StorageArity = S1> + Send + Sync + 'static
 {
 }
 
+#[cfg(any())]
 impl<T> ReduceStorage1 for T where
     T: MStorageElement + StorageLayout<StorageArity = S1> + Send + Sync + 'static
 {
@@ -141,6 +155,7 @@ where
     (Leaves::read(&cells), cell_valid.read())
 }
 
+#[cfg(any())]
 #[cubecl::cube]
 fn finish_storage1_workgroup<Item, Op>(
     value: Item,
@@ -213,6 +228,20 @@ impl StagedBindings {
     fn push(&mut self, handle: cubecl::server::Handle, len: usize, offset: u32) {
         self.slots.push((handle, len));
         self.offsets.push(offset);
+    }
+
+    /// Pads the staged read ABI to thirteen buffers. The shared dummy buffer
+    /// is never indexed by expressions whose corresponding slots are unused.
+    pub(crate) fn pad_to_thirteen<R: Runtime>(&mut self, client: &ComputeClient<R>) {
+        debug_assert!(self.slots.len() <= 13);
+        if self.slots.len() == 13 {
+            return;
+        }
+        let dummy = client.empty(core::mem::size_of::<u32>());
+        while self.slots.len() < 13 {
+            self.slots.push((dummy.clone(), 1));
+            self.offsets.push(0);
+        }
     }
 }
 
@@ -332,6 +361,11 @@ impl_leaf_staging!(impl <L0, L1, L2, L3> Env4<L0, L1, L2, L3>);
 impl_leaf_staging!(impl <L0, L1, L2, L3, L4> Env5<L0, L1, L2, L3, L4>);
 impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5> Env6<L0, L1, L2, L3, L4, L5>);
 impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6> Env7<L0, L1, L2, L3, L4, L5, L6>);
+impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7> Env8<L0, L1, L2, L3, L4, L5, L6, L7>);
+impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8> Env9<L0, L1, L2, L3, L4, L5, L6, L7, L8>);
+impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9> Env10<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9>);
+impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10> Env11<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10>);
+impl_leaf_staging!(impl <L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11> Env12<L0, L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11>);
 
 impl<R, Source, Env> StageRead<R, Env> for Taken<Source>
 where
@@ -470,7 +504,7 @@ where
     R: Runtime,
     Input: ReadExpression + StageRead<R, Env>,
     Input::Item: StorageLayout,
-    Output: StorageLayout + crate::WriteFrom<Input::Item> + 'static,
+    Output: StorageLayout + crate::WritableFrom<Input::Item> + 'static,
     crate::read::Reassociate<Input, Output>: BindSlots<Env>,
 {
     fn logical_len(&self) -> Result<usize, Error> {
@@ -555,7 +589,11 @@ where
     }
 }
 
-macro_rules! define_reduce_eval_storage1_kernel {
+#[cfg(any())]
+mod legacy_storage1_reduce {
+    use super::*;
+
+    macro_rules! define_reduce_eval_storage1_kernel {
     ($name:ident, $eval:ident, $method:ident; $( $leaf:ident : $slot:ident ),+ $(,)?) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
@@ -628,100 +666,341 @@ macro_rules! define_reduce_eval_storage1_kernel {
     };
 }
 
-define_reduce_eval_storage1_kernel!(
-    reduce_eval1_storage1_partials_kernel,
-    Eval1,
-    eval1;
-    L0: slot0
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval2_storage1_partials_kernel,
-    Eval2,
-    eval2;
-    L0: slot0,
-    L1: slot1
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval3_storage1_partials_kernel,
-    Eval3,
-    eval3;
-    L0: slot0,
-    L1: slot1,
-    L2: slot2
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval4_storage1_partials_kernel,
-    Eval4,
-    eval4;
-    L0: slot0,
-    L1: slot1,
-    L2: slot2,
-    L3: slot3
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval5_storage1_partials_kernel,
-    Eval5,
-    eval5;
-    L0: slot0,
-    L1: slot1,
-    L2: slot2,
-    L3: slot3,
-    L4: slot4
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval6_storage1_partials_kernel,
-    Eval6,
-    eval6;
-    L0: slot0,
-    L1: slot1,
-    L2: slot2,
-    L3: slot3,
-    L4: slot4,
-    L5: slot5
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval7_storage1_partials_kernel,
-    Eval7,
-    eval7;
-    L0: slot0,
-    L1: slot1,
-    L2: slot2,
-    L3: slot3,
-    L4: slot4,
-    L5: slot5,
-    L6: slot6
-);
-define_reduce_eval_storage1_kernel!(
-    reduce_eval8_storage1_partials_kernel,
-    Eval8,
-    eval8;
-    L0: slot0,
-    L1: slot1,
-    L2: slot2,
-    L3: slot3,
-    L4: slot4,
-    L5: slot5,
-    L6: slot6,
-    L7: slot7
-);
+    #[cfg(any())]
+    mod unused_variable_arity_scalar_reduce_kernels {
+        use super::*;
 
-macro_rules! define_multi_reduce_eval_kernel {
-    (
-        $name:ident,$eval:ident,$method:ident,$load_trait:ident,$store_trait:ident;
-        [$( $leaf:ident:$slot:ident ),+];
-        [$first_out:ident:$first_partial:ident:$first_shared:ident $(, $out_ty:ident:$partial:ident:$shared:ident )*]
-    ) => {
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval1_storage1_partials_kernel,
+            Eval1,
+            eval1;
+            L0: slot0
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval2_storage1_partials_kernel,
+            Eval2,
+            eval2;
+            L0: slot0,
+            L1: slot1
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval3_storage1_partials_kernel,
+            Eval3,
+            eval3;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval4_storage1_partials_kernel,
+            Eval4,
+            eval4;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval5_storage1_partials_kernel,
+            Eval5,
+            eval5;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval6_storage1_partials_kernel,
+            Eval6,
+            eval6;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval7_storage1_partials_kernel,
+            Eval7,
+            eval7;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5,
+            L6: slot6
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval8_storage1_partials_kernel,
+            Eval8,
+            eval8;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5,
+            L6: slot6,
+            L7: slot7
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval9_storage1_partials_kernel,
+            Eval9,
+            eval9;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5,
+            L6: slot6,
+            L7: slot7,
+            L8: slot8
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval10_storage1_partials_kernel,
+            Eval10,
+            eval10;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5,
+            L6: slot6,
+            L7: slot7,
+            L8: slot8,
+            L9: slot9
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval11_storage1_partials_kernel,
+            Eval11,
+            eval11;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5,
+            L6: slot6,
+            L7: slot7,
+            L8: slot8,
+            L9: slot9,
+            L10: slot10
+        );
+        define_reduce_eval_storage1_kernel!(
+            reduce_eval12_storage1_partials_kernel,
+            Eval12,
+            eval12;
+            L0: slot0,
+            L1: slot1,
+            L2: slot2,
+            L3: slot3,
+            L4: slot4,
+            L5: slot5,
+            L6: slot6,
+            L7: slot7,
+            L8: slot8,
+            L9: slot9,
+            L10: slot10,
+            L11: slot11
+        );
+    }
+
+    define_reduce_eval_storage1_kernel!(
+        reduce_eval13_storage1_partials_kernel,
+        Eval13,
+        eval13;
+        L0: slot0,
+        L1: slot1,
+        L2: slot2,
+        L3: slot3,
+        L4: slot4,
+        L5: slot5,
+        L6: slot6,
+        L7: slot7,
+        L8: slot8,
+        L9: slot9,
+        L10: slot10,
+        L11: slot11,
+        L12: slot12
+    );
+}
+
+#[cubecl::cube]
+fn combine_plane_results<Item, Leaves, Layout, Op>(value: Leaves, value_valid: u32) -> (Leaves, u32)
+where
+    Item: CubeType + Send + Sync + 'static,
+    Leaves: SharedLeaves + MutableLeaves + PlaneShuffleLeaves + Send + Sync + 'static,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+{
+    let cube_dim = BLOCK_SIZE as usize;
+    let mut shared = Leaves::new_shared(cube_dim);
+    let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+    let result = value.into_cells();
+    let result_valid = RuntimeCell::<u32>::new(0u32);
+    if UNIT_POS_PLANE == 0u32 {
+        Leaves::read(&result).store_shared(&mut shared, PLANE_POS as usize);
+        plane_valid[PLANE_POS as usize] = value_valid;
+    }
+    sync_cube();
+    if PLANE_POS == 0u32 {
+        let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
+        let source = if UNIT_POS_PLANE < plane_count {
+            UNIT_POS_PLANE as usize
+        } else {
+            0usize
+        };
+        let source_valid = if UNIT_POS_PLANE < plane_count {
+            plane_valid[source]
+        } else {
+            0u32
+        };
+        let accumulator =
+            Layout::decompose(Layout::recompose(Leaves::load_shared(&shared, source))).into_cells();
+        let accumulator_valid = RuntimeCell::<u32>::new(source_valid);
+        let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
+        while cursor.read() < plane_count {
+            let index = cursor.read() as usize;
+            if plane_valid[index] != 0u32 {
+                let next = Leaves::load_shared(&shared, index).into_cells();
+                if accumulator_valid.read() != 0u32 {
+                    accumulate_register::<Item, Leaves, Layout, Op>(
+                        &accumulator,
+                        Layout::recompose(Leaves::read(&next)),
+                    );
+                } else {
+                    Leaves::store(&accumulator, Leaves::read(&next));
+                    accumulator_valid.store(1u32);
+                }
+            }
+            cursor.store(cursor.read() + PLANE_DIM);
+        }
+        let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
+            Layout::recompose(Leaves::read(&accumulator)),
+            accumulator_valid.read(),
+        );
+        if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
+            Leaves::store(&result, block_result.0);
+            result_valid.store(1u32);
+        }
+    }
+    (Leaves::read(&result), result_valid.read())
+}
+
+#[cubecl::cube]
+#[allow(clippy::too_many_arguments)]
+fn finish_reduce_value_padded12<
+    Item,
+    O0,
+    O1,
+    O2,
+    O3,
+    O4,
+    O5,
+    O6,
+    O7,
+    O8,
+    O9,
+    O10,
+    O11,
+    Leaves,
+    Layout,
+    Op,
+>(
+    value: Leaves,
+    value_valid: u32,
+    zero_offsets: &[u32],
+    partial0: &mut [O0],
+    partial1: &mut [O1],
+    partial2: &mut [O2],
+    partial3: &mut [O3],
+    partial4: &mut [O4],
+    partial5: &mut [O5],
+    partial6: &mut [O6],
+    partial7: &mut [O7],
+    partial8: &mut [O8],
+    partial9: &mut [O9],
+    partial10: &mut [O10],
+    partial11: &mut [O11],
+) where
+    Item: CubeType + Send + Sync + 'static,
+    O0: CubePrimitive,
+    O1: CubePrimitive,
+    O2: CubePrimitive,
+    O3: CubePrimitive,
+    O4: CubePrimitive,
+    O5: CubePrimitive,
+    O6: CubePrimitive,
+    O7: CubePrimitive,
+    O8: CubePrimitive,
+    O9: CubePrimitive,
+    O10: CubePrimitive,
+    O11: CubePrimitive,
+    Leaves: SharedLeaves
+        + MutableLeaves
+        + PlaneShuffleLeaves
+        + StorePadded12<
+            O0 = O0,
+            O1 = O1,
+            O2 = O2,
+            O3 = O3,
+            O4 = O4,
+            O5 = O5,
+            O6 = O6,
+            O7 = O7,
+            O8 = O8,
+            O9 = O9,
+            O10 = O10,
+            O11 = O11,
+        > + Send
+        + Sync
+        + 'static,
+    Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
+    Op: ReductionOp<Item>,
+{
+    let block_result = combine_plane_results::<Item, Leaves, Layout, Op>(value, value_valid);
+    if block_result.1 != 0u32 {
+        block_result.0.store_padded(
+            partial0,
+            partial1,
+            partial2,
+            partial3,
+            partial4,
+            partial5,
+            partial6,
+            partial7,
+            partial8,
+            partial9,
+            partial10,
+            partial11,
+            zero_offsets,
+            CUBE_POS as usize,
+        );
+    }
+}
+
+macro_rules! define_padded_reduce_eval_kernel {
+    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$slot:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Item: CubeType + Send + Sync + 'static,
             $( $leaf: CubePrimitive, )+
-            $first_out: CubePrimitive,
-            $( $out_ty: CubePrimitive, )*
-            Leaves: CubeType + Send + Sync + 'static
-                + $load_trait<$first_out, $( $out_ty ),*>
-                + $store_trait<$first_out, $( $out_ty ),*>
+            O0: CubePrimitive, O1: CubePrimitive, O2: CubePrimitive, O3: CubePrimitive,
+            O4: CubePrimitive, O5: CubePrimitive, O6: CubePrimitive, O7: CubePrimitive,
+            O8: CubePrimitive, O9: CubePrimitive, O10: CubePrimitive, O11: CubePrimitive,
+            Leaves: SharedLeaves
                 + MutableLeaves
-                + PlaneShuffleLeaves,
+                + PlaneShuffleLeaves
+                + StorePadded12<
+                    O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
+                    O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
+                >
+                + Send + Sync + 'static,
             Layout: Decompose<Item, Leaves = Leaves> + Recompose<Item, Leaves = Leaves>,
             Expr: $eval<Item, $( $leaf ),+>,
             Op: ReductionOp<Item>,
@@ -730,15 +1009,14 @@ macro_rules! define_multi_reduce_eval_kernel {
             read_offsets: &[u32],
             len: &[u32],
             zero_offsets: &[u32],
-            $first_partial: &mut [$first_out],
-            $( $partial: &mut [$out_ty], )*
+            partial0: &mut [O0], partial1: &mut [O1], partial2: &mut [O2],
+            partial3: &mut [O3], partial4: &mut [O4], partial5: &mut [O5],
+            partial6: &mut [O6], partial7: &mut [O7], partial8: &mut [O8],
+            partial9: &mut [O9], partial10: &mut [O10], partial11: &mut [O11],
         ) {
             let unit = UNIT_POS as usize;
             let cube_dim = BLOCK_SIZE as usize;
             let logical_len = len[0] as usize;
-            let mut $first_shared = Shared::<[$first_out]>::new_slice(cube_dim);
-            $( let mut $shared = Shared::<[$out_ty]>::new_slice(cube_dim); )*
-            let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
             let tile_start = (CUBE_POS as usize) * TILE_SIZE;
             let first_index = tile_start + unit;
             let safe_index = if first_index < logical_len {
@@ -753,85 +1031,23 @@ macro_rules! define_multi_reduce_eval_kernel {
             if tile_start + TILE_SIZE <= logical_len {
                 for item in 1usize..ITEMS_PER_UNIT {
                     let value = Expr::$method(
-                        $( $slot, )+
-                        read_offsets,
-                        first_index + item * cube_dim,
+                        $( $slot, )+ read_offsets, first_index + item * cube_dim,
                     );
                     accumulate_register::<Item, Leaves, Layout, Op>(&accumulator, value);
                 }
                 let result = reduce_plane_full::<Item, Leaves, Layout, Op>(
                     Layout::recompose(Leaves::read(&accumulator)),
                 );
-                if UNIT_POS_PLANE == 0u32 {
-                    result.store(
-                        &mut $first_shared,
-                        $( &mut $shared, )*
-                        zero_offsets,
-                        PLANE_POS as usize,
-                    );
-                    plane_valid[PLANE_POS as usize] = 1u32;
-                }
-                sync_cube();
-
-                if PLANE_POS == 0u32 {
-                    let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
-                    let source = if UNIT_POS_PLANE < plane_count {
-                        UNIT_POS_PLANE as usize
-                    } else {
-                        0usize
-                    };
-                    let source_valid = if UNIT_POS_PLANE < plane_count {
-                        plane_valid[source]
-                    } else {
-                        0u32
-                    };
-                    let source_value = Layout::recompose(Leaves::load(
-                        &$first_shared,
-                        $( &$shared, )*
-                        zero_offsets,
-                        source,
-                    ));
-                    let block_accumulator = Layout::decompose(source_value).into_cells();
-                    let block_valid = RuntimeCell::<u32>::new(source_valid);
-                    let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
-                    while cursor.read() < plane_count {
-                        let index = cursor.read() as usize;
-                        if block_valid.read() != 0u32 && plane_valid[index] != 0u32 {
-                            let value = Layout::recompose(Leaves::load(
-                                &$first_shared,
-                                $( &$shared, )*
-                                zero_offsets,
-                                index,
-                            ));
-                            accumulate_register::<Item, Leaves, Layout, Op>(
-                                &block_accumulator,
-                                value,
-                            );
-                        }
-                        cursor.store(cursor.read() + PLANE_DIM);
-                    }
-                    let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
-                        Layout::recompose(Leaves::read(&block_accumulator)),
-                        block_valid.read(),
-                    );
-                    if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
-                        block_result.0.store(
-                            $first_partial,
-                            $( $partial, )*
-                            zero_offsets,
-                            CUBE_POS as usize,
-                        );
-                    }
-                }
+                finish_reduce_value_padded12::<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, Leaves, Layout, Op>(
+                    result, 1u32, zero_offsets,
+                    partial0, partial1, partial2, partial3, partial4, partial5,
+                    partial6, partial7, partial8, partial9, partial10, partial11,
+                );
             } else {
                 for item in 1usize..ITEMS_PER_UNIT {
                     let index = first_index + item * cube_dim;
                     if index < logical_len {
-                        let value = Expr::$method(
-                            $( $slot, )+
-                            read_offsets,
-                            index,
-                        );
+                        let value = Expr::$method($( $slot, )+ read_offsets, index);
                         accumulate_register::<Item, Leaves, Layout, Op>(&accumulator, value);
                     }
                 }
@@ -839,93 +1055,23 @@ macro_rules! define_multi_reduce_eval_kernel {
                     Layout::recompose(Leaves::read(&accumulator)),
                     if first_index < logical_len { 1u32 } else { 0u32 },
                 );
-                if UNIT_POS_PLANE == 0u32 {
-                    result.0.store(
-                        &mut $first_shared,
-                        $( &mut $shared, )*
-                        zero_offsets,
-                        PLANE_POS as usize,
-                    );
-                    plane_valid[PLANE_POS as usize] = result.1;
-                }
-                sync_cube();
-
-                if PLANE_POS == 0u32 {
-                    let plane_count = (CUBE_DIM + PLANE_DIM - 1u32) / PLANE_DIM;
-                    let source = if UNIT_POS_PLANE < plane_count {
-                        UNIT_POS_PLANE as usize
-                    } else {
-                        0usize
-                    };
-                    let source_valid = if UNIT_POS_PLANE < plane_count {
-                        plane_valid[source]
-                    } else {
-                        0u32
-                    };
-                    let source_value = Layout::recompose(Leaves::load(
-                        &$first_shared,
-                        $( &$shared, )*
-                        zero_offsets,
-                        source,
-                    ));
-                    let block_accumulator = Layout::decompose(source_value).into_cells();
-                    let block_valid = RuntimeCell::<u32>::new(source_valid);
-                    let cursor = RuntimeCell::<u32>::new(UNIT_POS_PLANE + PLANE_DIM);
-                    while cursor.read() < plane_count {
-                        let index = cursor.read() as usize;
-                        if block_valid.read() != 0u32 && plane_valid[index] != 0u32 {
-                            let value = Layout::recompose(Leaves::load(
-                                &$first_shared,
-                                $( &$shared, )*
-                                zero_offsets,
-                                index,
-                            ));
-                            accumulate_register::<Item, Leaves, Layout, Op>(
-                                &block_accumulator,
-                                value,
-                            );
-                        }
-                        cursor.store(cursor.read() + PLANE_DIM);
-                    }
-                    let block_result = reduce_plane_valid::<Item, Leaves, Layout, Op>(
-                        Layout::recompose(Leaves::read(&block_accumulator)),
-                        block_valid.read(),
-                    );
-                    if UNIT_POS_PLANE == 0u32 && block_result.1 != 0u32 {
-                        block_result.0.store(
-                            $first_partial,
-                            $( $partial, )*
-                            zero_offsets,
-                            CUBE_POS as usize,
-                        );
-                    }
-                }
+                finish_reduce_value_padded12::<Item, O0, O1, O2, O3, O4, O5, O6, O7, O8, O9, O10, O11, Leaves, Layout, Op>(
+                    result.0, result.1, zero_offsets,
+                    partial0, partial1, partial2, partial3, partial4, partial5,
+                    partial6, partial7, partial8, partial9, partial10, partial11,
+                );
             }
         }
     };
 }
 
-macro_rules! define_multi_reduce_eval_kernels {
-    ($eval:ident,$method:ident; [$( $leaf:ident:$slot:ident ),+]; [$k2:ident,$k3:ident,$k4:ident,$k5:ident,$k6:ident,$k7:ident]) => {
-        define_multi_reduce_eval_kernel!($k2,$eval,$method,LoadLeaves2,StoreLeaves2; [$($leaf:$slot),+]; [O0:partial0:shared0,O1:partial1:shared1]);
-        define_multi_reduce_eval_kernel!($k3,$eval,$method,LoadLeaves3,StoreLeaves3; [$($leaf:$slot),+]; [O0:partial0:shared0,O1:partial1:shared1,O2:partial2:shared2]);
-        define_multi_reduce_eval_kernel!($k4,$eval,$method,LoadLeaves4,StoreLeaves4; [$($leaf:$slot),+]; [O0:partial0:shared0,O1:partial1:shared1,O2:partial2:shared2,O3:partial3:shared3]);
-        define_multi_reduce_eval_kernel!($k5,$eval,$method,LoadLeaves5,StoreLeaves5; [$($leaf:$slot),+]; [O0:partial0:shared0,O1:partial1:shared1,O2:partial2:shared2,O3:partial3:shared3,O4:partial4:shared4]);
-        define_multi_reduce_eval_kernel!($k6,$eval,$method,LoadLeaves6,StoreLeaves6; [$($leaf:$slot),+]; [O0:partial0:shared0,O1:partial1:shared1,O2:partial2:shared2,O3:partial3:shared3,O4:partial4:shared4,O5:partial5:shared5]);
-        define_multi_reduce_eval_kernel!($k7,$eval,$method,LoadLeaves7,StoreLeaves7; [$($leaf:$slot),+]; [O0:partial0:shared0,O1:partial1:shared1,O2:partial2:shared2,O3:partial3:shared3,O4:partial4:shared4,O5:partial5:shared5,O6:partial6:shared6]);
-    };
-}
+define_padded_reduce_eval_kernel!(padded_reduce_a13,Eval13,eval13; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12]);
 
-define_multi_reduce_eval_kernels!(Eval1,eval1; [L0:slot0]; [reduce_eval1_s2,reduce_eval1_s3,reduce_eval1_s4,reduce_eval1_s5,reduce_eval1_s6,reduce_eval1_s7]);
-define_multi_reduce_eval_kernels!(Eval2,eval2; [L0:slot0,L1:slot1]; [reduce_eval2_s2,reduce_eval2_s3,reduce_eval2_s4,reduce_eval2_s5,reduce_eval2_s6,reduce_eval2_s7]);
-define_multi_reduce_eval_kernels!(Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]; [reduce_eval3_s2,reduce_eval3_s3,reduce_eval3_s4,reduce_eval3_s5,reduce_eval3_s6,reduce_eval3_s7]);
-define_multi_reduce_eval_kernels!(Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]; [reduce_eval4_s2,reduce_eval4_s3,reduce_eval4_s4,reduce_eval4_s5,reduce_eval4_s6,reduce_eval4_s7]);
-define_multi_reduce_eval_kernels!(Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]; [reduce_eval5_s2,reduce_eval5_s3,reduce_eval5_s4,reduce_eval5_s5,reduce_eval5_s6,reduce_eval5_s7]);
-define_multi_reduce_eval_kernels!(Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]; [reduce_eval6_s2,reduce_eval6_s3,reduce_eval6_s4,reduce_eval6_s5,reduce_eval6_s6,reduce_eval6_s7]);
-define_multi_reduce_eval_kernels!(Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]; [reduce_eval7_s2,reduce_eval7_s3,reduce_eval7_s4,reduce_eval7_s5,reduce_eval7_s6,reduce_eval7_s7]);
-define_multi_reduce_eval_kernels!(Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]; [reduce_eval8_s2,reduce_eval8_s3,reduce_eval8_s4,reduce_eval8_s5,reduce_eval8_s6,reduce_eval8_s7]);
+#[cfg(any())]
+mod legacy_storage_reduce {
+    use super::*;
 
-macro_rules! define_storage_reduce_kernel {
+    macro_rules! define_storage_reduce_kernel {
     ($name:ident,$load_trait:ident,$store_trait:ident; [$first_out:ident:$first_input:ident:$first_partial:ident:$first_shared:ident $(, $out_ty:ident:$input:ident:$partial:ident:$shared:ident )*]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
@@ -1124,14 +1270,19 @@ macro_rules! define_storage_reduce_kernel {
     };
 }
 
-define_storage_reduce_kernel!(reduce_storage_s2,LoadLeaves2,StoreLeaves2; [O0:input0:partial0:shared0,O1:input1:partial1:shared1]);
-define_storage_reduce_kernel!(reduce_storage_s3,LoadLeaves3,StoreLeaves3; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2]);
-define_storage_reduce_kernel!(reduce_storage_s4,LoadLeaves4,StoreLeaves4; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3]);
-define_storage_reduce_kernel!(reduce_storage_s5,LoadLeaves5,StoreLeaves5; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4]);
-define_storage_reduce_kernel!(reduce_storage_s6,LoadLeaves6,StoreLeaves6; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5]);
-define_storage_reduce_kernel!(reduce_storage_s7,LoadLeaves7,StoreLeaves7; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6]);
+    define_storage_reduce_kernel!(reduce_storage_s2,LoadLeaves2,StoreLeaves2; [O0:input0:partial0:shared0,O1:input1:partial1:shared1]);
+    define_storage_reduce_kernel!(reduce_storage_s3,LoadLeaves3,StoreLeaves3; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2]);
+    define_storage_reduce_kernel!(reduce_storage_s4,LoadLeaves4,StoreLeaves4; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3]);
+    define_storage_reduce_kernel!(reduce_storage_s5,LoadLeaves5,StoreLeaves5; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4]);
+    define_storage_reduce_kernel!(reduce_storage_s6,LoadLeaves6,StoreLeaves6; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5]);
+    define_storage_reduce_kernel!(reduce_storage_s7,LoadLeaves7,StoreLeaves7; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6]);
+    define_storage_reduce_kernel!(reduce_storage_s8,LoadLeaves8,StoreLeaves8; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6,O7:input7:partial7:shared7]);
+    define_storage_reduce_kernel!(reduce_storage_s9,LoadLeaves9,StoreLeaves9; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6,O7:input7:partial7:shared7,O8:input8:partial8:shared8]);
+    define_storage_reduce_kernel!(reduce_storage_s10,LoadLeaves10,StoreLeaves10; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6,O7:input7:partial7:shared7,O8:input8:partial8:shared8,O9:input9:partial9:shared9]);
+    define_storage_reduce_kernel!(reduce_storage_s11,LoadLeaves11,StoreLeaves11; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6,O7:input7:partial7:shared7,O8:input8:partial8:shared8,O9:input9:partial9:shared9,O10:input10:partial10:shared10]);
+    define_storage_reduce_kernel!(reduce_storage_s12,LoadLeaves12,StoreLeaves12; [O0:input0:partial0:shared0,O1:input1:partial1:shared1,O2:input2:partial2:shared2,O3:input3:partial3:shared3,O4:input4:partial4:shared4,O5:input5:partial5:shared5,O6:input6:partial6:shared6,O7:input7:partial7:shared7,O8:input8:partial8:shared8,O9:input9:partial9:shared9,O10:input10:partial10:shared10,O11:input11:partial11:shared11]);
 
-macro_rules! define_multi_reduce_finalize_kernel {
+    macro_rules! define_multi_reduce_finalize_kernel {
     ($name:ident,$load_trait:ident,$store_trait:ident; [$( $out_ty:ident:$partial:ident:$init:ident:$output:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
@@ -1163,82 +1314,88 @@ macro_rules! define_multi_reduce_finalize_kernel {
     };
 }
 
-define_multi_reduce_finalize_kernel!(reduce_finalize_s2,LoadLeaves2,StoreLeaves2; [O0:partial0:init0:out0,O1:partial1:init1:out1]);
-define_multi_reduce_finalize_kernel!(reduce_finalize_s3,LoadLeaves3,StoreLeaves3; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2]);
-define_multi_reduce_finalize_kernel!(reduce_finalize_s4,LoadLeaves4,StoreLeaves4; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3]);
-define_multi_reduce_finalize_kernel!(reduce_finalize_s5,LoadLeaves5,StoreLeaves5; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4]);
-define_multi_reduce_finalize_kernel!(reduce_finalize_s6,LoadLeaves6,StoreLeaves6; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5]);
-define_multi_reduce_finalize_kernel!(reduce_finalize_s7,LoadLeaves7,StoreLeaves7; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s2,LoadLeaves2,StoreLeaves2; [O0:partial0:init0:out0,O1:partial1:init1:out1]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s3,LoadLeaves3,StoreLeaves3; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s4,LoadLeaves4,StoreLeaves4; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s5,LoadLeaves5,StoreLeaves5; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s6,LoadLeaves6,StoreLeaves6; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s7,LoadLeaves7,StoreLeaves7; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s8,LoadLeaves8,StoreLeaves8; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6,O7:partial7:init7:out7]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s9,LoadLeaves9,StoreLeaves9; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6,O7:partial7:init7:out7,O8:partial8:init8:out8]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s10,LoadLeaves10,StoreLeaves10; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6,O7:partial7:init7:out7,O8:partial8:init8:out8,O9:partial9:init9:out9]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s11,LoadLeaves11,StoreLeaves11; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6,O7:partial7:init7:out7,O8:partial8:init8:out8,O9:partial9:init9:out9,O10:partial10:init10:out10]);
+    define_multi_reduce_finalize_kernel!(reduce_finalize_s12,LoadLeaves12,StoreLeaves12; [O0:partial0:init0:out0,O1:partial1:init1:out1,O2:partial2:init2:out2,O3:partial3:init3:out3,O4:partial4:init4:out4,O5:partial5:init5:out5,O6:partial6:init6:out6,O7:partial7:init7:out7,O8:partial8:init8:out8,O9:partial9:init9:out9,O10:partial10:init10:out10,O11:partial11:init11:out11]);
 
-#[cubecl::cube(launch_unchecked, explicit_define)]
-fn reduce_storage1_partials_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
-    input: &[Item],
-    len: &[u32],
-    partials: &mut [Item],
-) {
-    let unit = UNIT_POS as usize;
-    let cube_dim = BLOCK_SIZE as usize;
-    let logical_len = len[0] as usize;
-    let mut plane_values = Shared::<[Item]>::new_slice(cube_dim);
-    let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
-    let tile_start = (CUBE_POS as usize) * TILE_SIZE;
-    let first_index = tile_start + unit;
-    let safe_index = if first_index < logical_len {
-        first_index
-    } else {
-        logical_len - 1usize
-    };
-    let accumulator = RuntimeCell::<Item>::new(input[safe_index]);
+    #[cubecl::cube(launch_unchecked, explicit_define)]
+    fn reduce_storage1_partials_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
+        input: &[Item],
+        len: &[u32],
+        partials: &mut [Item],
+    ) {
+        let unit = UNIT_POS as usize;
+        let cube_dim = BLOCK_SIZE as usize;
+        let logical_len = len[0] as usize;
+        let mut plane_values = Shared::<[Item]>::new_slice(cube_dim);
+        let mut plane_valid = Shared::<[u32]>::new_slice(cube_dim);
+        let tile_start = (CUBE_POS as usize) * TILE_SIZE;
+        let first_index = tile_start + unit;
+        let safe_index = if first_index < logical_len {
+            first_index
+        } else {
+            logical_len - 1usize
+        };
+        let accumulator = RuntimeCell::<Item>::new(input[safe_index]);
 
-    if tile_start + TILE_SIZE <= logical_len {
-        for item in 1usize..ITEMS_PER_UNIT {
-            accumulator.store(Op::apply(
-                accumulator.read(),
-                input[first_index + item * cube_dim],
-            ));
-        }
-        let result =
-            reduce_plane_full::<Item, Last<Item>, ScalarLayout<Item>, Op>(accumulator.read());
-        finish_storage1_workgroup::<Item, Op>(
-            result.value,
-            1u32,
-            &mut plane_values,
-            &mut plane_valid,
-            partials,
-        );
-    } else {
-        for item in 1usize..ITEMS_PER_UNIT {
-            let index = first_index + item * cube_dim;
-            if index < logical_len {
-                accumulator.store(Op::apply(accumulator.read(), input[index]));
+        if tile_start + TILE_SIZE <= logical_len {
+            for item in 1usize..ITEMS_PER_UNIT {
+                accumulator.store(Op::apply(
+                    accumulator.read(),
+                    input[first_index + item * cube_dim],
+                ));
             }
+            let result =
+                reduce_plane_full::<Item, Last<Item>, ScalarLayout<Item>, Op>(accumulator.read());
+            finish_storage1_workgroup::<Item, Op>(
+                result.value,
+                1u32,
+                &mut plane_values,
+                &mut plane_valid,
+                partials,
+            );
+        } else {
+            for item in 1usize..ITEMS_PER_UNIT {
+                let index = first_index + item * cube_dim;
+                if index < logical_len {
+                    accumulator.store(Op::apply(accumulator.read(), input[index]));
+                }
+            }
+            let result = reduce_plane_valid::<Item, Last<Item>, ScalarLayout<Item>, Op>(
+                accumulator.read(),
+                if first_index < logical_len {
+                    1u32
+                } else {
+                    0u32
+                },
+            );
+            finish_storage1_workgroup::<Item, Op>(
+                result.0.value,
+                result.1,
+                &mut plane_values,
+                &mut plane_valid,
+                partials,
+            );
         }
-        let result = reduce_plane_valid::<Item, Last<Item>, ScalarLayout<Item>, Op>(
-            accumulator.read(),
-            if first_index < logical_len {
-                1u32
-            } else {
-                0u32
-            },
-        );
-        finish_storage1_workgroup::<Item, Op>(
-            result.0.value,
-            result.1,
-            &mut plane_values,
-            &mut plane_valid,
-            partials,
-        );
     }
-}
 
-#[cubecl::cube(launch_unchecked, explicit_define)]
-fn reduce_storage1_finalize_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
-    partial: &[Item],
-    init: &[Item],
-    output: &mut [Item],
-) {
-    if ABSOLUTE_POS == 0 {
-        output[0] = Op::apply(init[0], partial[0]);
+    #[cubecl::cube(launch_unchecked, explicit_define)]
+    fn reduce_storage1_finalize_kernel<Item: CubePrimitive, Op: ReductionOp<Item>>(
+        partial: &[Item],
+        init: &[Item],
+        output: &mut [Item],
+    ) {
+        if ABSOLUTE_POS == 0 {
+            output[0] = Op::apply(init[0], partial[0]);
+        }
     }
 }
 
@@ -1250,6 +1407,7 @@ fn checked_u32(len: usize) -> Result<u32, Error> {
     u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })
 }
 
+#[cfg(any())]
 fn finish_storage1_reduce<R, Item, Op>(
     exec: &Executor<R>,
     mut current: cubecl::server::Handle,
@@ -1304,460 +1462,168 @@ pub trait ReduceDispatch<R: Runtime, Input, Item, Op, Slots> {
     fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error>;
 }
 
-impl<R, Input, Item, Op, L0> ReduceDispatch<R, Input, Item, Op, Env1<L0>> for Dispatch<A1, S1>
+/// One fixed-ABI reduction pass. The output contains one partial per tile.
+#[doc(hidden)]
+pub trait ReducePassDispatch<R, Input, Output, Item, Op, ReadSlots, WriteSlots>
 where
     R: Runtime,
-    Item: ReduceStorage1,
-    L0: MStorageElement,
-    Op: ReductionOp<Item>,
-    Input: ReadExpression<Item = Item, ReadArity = A1>
-        + BindSlots<Env0, NextEnv = Env1<L0>>
-        + LowerReadExpression<Slots = Env1<L0>>
-        + StageRead<R, Env0>,
-    Input::DeviceExpr: Eval1<Item, L0>,
 {
-    fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
-        let len = input.logical_len()?;
-        if len == 0 {
-            return Ok(init);
-        }
-        let mut bindings = StagedBindings::new();
-        input.stage_at(exec.client(), exec.id(), &mut bindings)?;
-        debug_assert_eq!(bindings.slots.len(), 1);
-        let blocks = pass_block_count(len);
-        let offsets = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&bindings.offsets));
-        let len_handle = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
-        let partials = exec.client().empty(blocks * size_of::<Item>());
-        unsafe {
-            reduce_eval1_storage1_partials_kernel::launch_unchecked::<
-                Item,
-                L0,
-                Input::DeviceExpr,
-                Op,
-                R,
-            >(
-                exec.client(),
-                cube_count_1d(blocks)?,
-                CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(bindings.slots[0].0.clone(), bindings.slots[0].1),
-                BufferArg::from_raw_parts(offsets, 1),
-                BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(partials.clone(), blocks),
-            );
-        }
-        finish_storage1_reduce::<R, Item, Op>(exec, partials, blocks, init)
-    }
+    fn execute_pass(exec: &Executor<R>, input: &Input, output: &Output) -> Result<(), Error>;
 }
 
-impl<R, Input, Item, Op, L0, L1> ReduceDispatch<R, Input, Item, Op, Env2<L0, L1>>
-    for Dispatch<A2, S1>
-where
-    R: Runtime,
-    Item: ReduceStorage1,
-    L0: MStorageElement,
-    L1: MStorageElement,
-    Op: ReductionOp<Item>,
-    Input: ReadExpression<Item = Item, ReadArity = A2>
-        + BindSlots<Env0, NextEnv = Env2<L0, L1>>
-        + LowerReadExpression<Slots = Env2<L0, L1>>
-        + StageRead<R, Env0>,
-    Input::DeviceExpr: Eval2<Item, L0, L1>,
-{
-    fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
-        let len = input.logical_len()?;
-        if len == 0 {
-            return Ok(init);
-        }
-        let mut bindings = StagedBindings::new();
-        input.stage_at(exec.client(), exec.id(), &mut bindings)?;
-        debug_assert_eq!(bindings.slots.len(), 2);
-        let blocks = pass_block_count(len);
-        let offsets = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&bindings.offsets));
-        let len_handle = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
-        let partials = exec.client().empty(blocks * size_of::<Item>());
-        unsafe {
-            reduce_eval2_storage1_partials_kernel::launch_unchecked::<
-                Item,
-                L0,
-                L1,
-                Input::DeviceExpr,
-                Op,
-                R,
-            >(
-                exec.client(),
-                cube_count_1d(blocks)?,
-                CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(bindings.slots[0].0.clone(), bindings.slots[0].1),
-                BufferArg::from_raw_parts(bindings.slots[1].0.clone(), bindings.slots[1].1),
-                BufferArg::from_raw_parts(offsets, 2),
-                BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(partials.clone(), blocks),
-            );
-        }
-        finish_storage1_reduce::<R, Item, Op>(exec, partials, blocks, init)
-    }
-}
-
-impl<R, Input, Item, Op, L0, L1, L2> ReduceDispatch<R, Input, Item, Op, Env3<L0, L1, L2>>
-    for Dispatch<A3, S1>
-where
-    R: Runtime,
-    Item: ReduceStorage1,
-    L0: MStorageElement,
-    L1: MStorageElement,
-    L2: MStorageElement,
-    Op: ReductionOp<Item>,
-    Input: ReadExpression<Item = Item, ReadArity = A3>
-        + BindSlots<Env0, NextEnv = Env3<L0, L1, L2>>
-        + LowerReadExpression<Slots = Env3<L0, L1, L2>>
-        + StageRead<R, Env0>,
-    Input::DeviceExpr: Eval3<Item, L0, L1, L2>,
-{
-    fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
-        let len = input.logical_len()?;
-        if len == 0 {
-            return Ok(init);
-        }
-        let mut bindings = StagedBindings::new();
-        input.stage_at(exec.client(), exec.id(), &mut bindings)?;
-        debug_assert_eq!(bindings.slots.len(), 3);
-        let blocks = pass_block_count(len);
-        let offsets = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&bindings.offsets));
-        let len_handle = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
-        let partials = exec.client().empty(blocks * size_of::<Item>());
-        unsafe {
-            reduce_eval3_storage1_partials_kernel::launch_unchecked::<
-                Item,
-                L0,
-                L1,
-                L2,
-                Input::DeviceExpr,
-                Op,
-                R,
-            >(
-                exec.client(),
-                cube_count_1d(blocks)?,
-                CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(bindings.slots[0].0.clone(), bindings.slots[0].1),
-                BufferArg::from_raw_parts(bindings.slots[1].0.clone(), bindings.slots[1].1),
-                BufferArg::from_raw_parts(bindings.slots[2].0.clone(), bindings.slots[2].1),
-                BufferArg::from_raw_parts(offsets, 3),
-                BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(partials.clone(), blocks),
-            );
-        }
-        finish_storage1_reduce::<R, Item, Op>(exec, partials, blocks, init)
-    }
-}
-
-macro_rules! impl_reduce_storage1_dispatch {
-    (
-        $arity:ty,$eval:ident,$kernel:ident,$env:ty;
-        [$( $leaf:ident:$index:literal ),+ $(,)?]
-    ) => {
-        impl<R, Input, Item, Op, $( $leaf ),+>
-            ReduceDispatch<R, Input, Item, Op, $env> for Dispatch<$arity, S1>
-        where
-            R: Runtime,
-            Item: ReduceStorage1,
-            $( $leaf: MStorageElement, )+
-            Op: ReductionOp<Item>,
-            Input: ReadExpression<Item = Item, ReadArity = $arity>
-                + BindSlots<Env0, NextEnv = $env>
-                + LowerReadExpression<Slots = $env>
-                + StageRead<R, Env0>,
-            Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
-        {
-            fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
-                let len = input.logical_len()?;
-                if len == 0 {
-                    return Ok(init);
-                }
-                let mut bindings = StagedBindings::new();
-                input.stage_at(exec.client(), exec.id(), &mut bindings)?;
-                debug_assert_eq!(bindings.slots.len(), impl_reduce_storage1_dispatch!(@count $( $leaf ),+));
-                let blocks = pass_block_count(len);
-                let offsets = exec.client().create_from_slice(u32::as_bytes(&bindings.offsets));
-                let len_handle = exec.client().create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
-                let partials = exec.client().empty(blocks * size_of::<Item>());
-                unsafe {
-                    $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
-                        exec.client(),
-                        cube_count_1d(blocks)?,
-                        CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(bindings.slots[$index].0.clone(), bindings.slots[$index].1), )+
-                        BufferArg::from_raw_parts(offsets, bindings.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle, 1),
-                        BufferArg::from_raw_parts(partials.clone(), blocks),
-                    );
-                }
-                finish_storage1_reduce::<R, Item, Op>(exec, partials, blocks, init)
-            }
-        }
-    };
-    (@count $first:ident $(, $rest:ident)*) => { 1usize $( + { let _ = stringify!($rest); 1usize } )* };
-}
-
-impl_reduce_storage1_dispatch!(A4,Eval4,reduce_eval4_storage1_partials_kernel,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]);
-impl_reduce_storage1_dispatch!(A5,Eval5,reduce_eval5_storage1_partials_kernel,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]);
-impl_reduce_storage1_dispatch!(A6,Eval6,reduce_eval6_storage1_partials_kernel,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
-impl_reduce_storage1_dispatch!(A7,Eval7,reduce_eval7_storage1_partials_kernel,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
-impl_reduce_storage1_dispatch!(A8,Eval8,reduce_eval8_storage1_partials_kernel,crate::read::Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7]);
-
+#[cfg(any())]
 macro_rules! leaf_value {
     ($root:ident; $first:ident $( . $rest:ident )*) => {
         $root.$first $( .$rest )*
     };
 }
 
+#[cfg(any())]
 macro_rules! build_leaf_list {
-    ($v0:ident,$v1:ident) => {
-        More {
-            head: $v0,
-            tail: Last { value: $v1 },
-        }
+    (@tail $last:ident) => { Last { value: $last } };
+    (@tail $head:ident, $($tail:ident),+) => {
+        More { head: $head, tail: build_leaf_list!(@tail $($tail),+) }
     };
-    ($v0:ident,$v1:ident,$v2:ident) => {
-        More {
-            head: $v0,
-            tail: More {
-                head: $v1,
-                tail: Last { value: $v2 },
-            },
-        }
-    };
-    ($v0:ident,$v1:ident,$v2:ident,$v3:ident) => {
-        More {
-            head: $v0,
-            tail: More {
-                head: $v1,
-                tail: More {
-                    head: $v2,
-                    tail: Last { value: $v3 },
-                },
-            },
-        }
-    };
-    ($v0:ident,$v1:ident,$v2:ident,$v3:ident,$v4:ident) => {
-        More {
-            head: $v0,
-            tail: More {
-                head: $v1,
-                tail: More {
-                    head: $v2,
-                    tail: More {
-                        head: $v3,
-                        tail: Last { value: $v4 },
-                    },
-                },
-            },
-        }
-    };
-    ($v0:ident,$v1:ident,$v2:ident,$v3:ident,$v4:ident,$v5:ident) => {
-        More {
-            head: $v0,
-            tail: More {
-                head: $v1,
-                tail: More {
-                    head: $v2,
-                    tail: More {
-                        head: $v3,
-                        tail: More {
-                            head: $v4,
-                            tail: Last { value: $v5 },
-                        },
-                    },
-                },
-            },
-        }
-    };
-    ($v0:ident,$v1:ident,$v2:ident,$v3:ident,$v4:ident,$v5:ident,$v6:ident) => {
-        More {
-            head: $v0,
-            tail: More {
-                head: $v1,
-                tail: More {
-                    head: $v2,
-                    tail: More {
-                        head: $v3,
-                        tail: More {
-                            head: $v4,
-                            tail: More {
-                                head: $v5,
-                                tail: Last { value: $v6 },
-                            },
-                        },
-                    },
-                },
-            },
-        }
+    ($head:ident, $($tail:ident),+) => {
+        More { head: $head, tail: build_leaf_list!(@tail $($tail),+) }
     };
 }
 
-macro_rules! impl_multi_reduce_dispatch {
-    (
-        $read_arity:ty,$storage_arity:ty,$eval:ident,$eval_kernel:ident,
-        $storage_kernel:ident,$finalize_kernel:ident,$read_env:ty,$leaves:ty,
-        $load_trait:ident,$store_trait:ident;
-        [$( $leaf:ident:$read_index:literal ),+];
-        [$( $out_ty:ident:$current:ident:$next:ident:$init_handle:ident:$output_handle:ident:$value:ident:$first_field:ident $(.$rest_field:ident)* ),+]
-    ) => {
-        impl<R, Input, Item, Op, $( $leaf, )+ $( $out_ty ),+>
-            ReduceDispatch<R, Input, Item, Op, $read_env>
-            for Dispatch<$read_arity, $storage_arity>
-        where
-            R: Runtime,
-            Item: StorageLayout<StorageArity = $storage_arity, StorageLeaves = $leaves>
-                + Send
-                + Sync
-                + 'static,
-            Item::DeviceLayout: Decompose<Item, Leaves = $leaves>
-                + Recompose<Item, Leaves = $leaves>,
-            $( $leaf: MStorageElement, )+
-            $( $out_ty: MStorageElement, )+
-            $leaves: $load_trait<$( $out_ty ),+>
-                + $store_trait<$( $out_ty ),+>
-                + Send
-                + Sync
-                + 'static,
-            Op: ReductionOp<Item>,
-            Input: ReadExpression<Item = Item, ReadArity = $read_arity>
-                + BindSlots<Env0, NextEnv = $read_env>
-                + LowerReadExpression<Slots = $read_env>
-                + StageRead<R, Env0>,
-            Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
-        {
-            fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
-                let len = input.logical_len()?;
-                if len == 0 {
-                    return Ok(init);
-                }
-                let client = exec.client();
-                let mut bindings = StagedBindings::new();
-                input.stage_at(client, exec.id(), &mut bindings)?;
-                let blocks = pass_block_count(len);
-                let offsets = client.create_from_slice(u32::as_bytes(&bindings.offsets));
-                let len_handle = client.create_from_slice(u32::as_bytes(&[checked_u32(len)?]));
-                let zero_offsets = vec![$({ let _ = stringify!($out_ty); 0u32 }),+];
-                let zero_handle = client.create_from_slice(u32::as_bytes(&zero_offsets));
-                $( let mut $current = client.empty(blocks * size_of::<$out_ty>()); )+
-                unsafe {
-                    $eval_kernel::launch_unchecked::<
-                        Item,
-                        $( $leaf, )+
-                        $( $out_ty, )+
-                        $leaves,
-                        Item::DeviceLayout,
-                        Input::DeviceExpr,
-                        Op,
-                        R,
-                    >(
-                        client,
-                        cube_count_1d(blocks)?,
-                        CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(bindings.slots[$read_index].0.clone(), bindings.slots[$read_index].1), )+
-                        BufferArg::from_raw_parts(offsets, bindings.offsets.len()),
-                        BufferArg::from_raw_parts(len_handle, 1),
-                        BufferArg::from_raw_parts(zero_handle.clone(), zero_offsets.len()),
-                        $( BufferArg::from_raw_parts($current.clone(), blocks), )+
-                    );
-                }
+#[path = "reduce_fixed.rs"]
+mod reduce_fixed;
 
-                let mut current_len = blocks;
-                while current_len > 1 {
-                    let next_len = pass_block_count(current_len);
-                    let current_len_handle = client.create_from_slice(u32::as_bytes(&[checked_u32(current_len)?]));
-                    $( let $next = client.empty(next_len * size_of::<$out_ty>()); )+
-                    unsafe {
-                        $storage_kernel::launch_unchecked::<
-                            Item,
-                            $( $out_ty, )+
-                            $leaves,
-                            Item::DeviceLayout,
-                            Op,
-                            R,
-                        >(
-                            client,
-                            cube_count_1d(next_len)?,
-                            CubeDim::new_1d(BLOCK_SIZE),
-                            $( BufferArg::from_raw_parts($current.clone(), current_len), )+
-                            BufferArg::from_raw_parts(current_len_handle, 1),
-                            BufferArg::from_raw_parts(zero_handle.clone(), zero_offsets.len()),
-                            $( BufferArg::from_raw_parts($next.clone(), next_len), )+
-                        );
-                    }
-                    $( $current = $next; )+
-                    current_len = next_len;
-                }
+fn reduce_pass<R, Input, Output, Item, Op>(
+    exec: &Executor<R>,
+    input: &Input,
+    output: &Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Input: ReadExpression<Item = Item>
+        + LowerReadExpression<Slots: crate::read::PaddedReadSlots>
+        + StageRead<R, Env0>,
+    Output: crate::output::OutputExpression<Item = Item>
+        + crate::output::LowerOutputExpression<Slots: crate::output::PaddedOutputSlots>
+        + crate::output::StageOutput<R, Env0>,
+    Item: StorageLayout,
+    Op: ReductionOp<Item>,
+    Dispatch<A13, S12>: ReducePassDispatch<
+            R,
+            Input,
+            Output,
+            Item,
+            Op,
+            crate::read::KernelReadSlots<Input::Slots>,
+            crate::output::KernelOutputSlots<Output::Slots>,
+        >,
+{
+    <Dispatch<A13, S12> as ReducePassDispatch<
+        R,
+        Input,
+        Output,
+        Item,
+        Op,
+        crate::read::KernelReadSlots<Input::Slots>,
+        crate::output::KernelOutputSlots<Output::Slots>,
+    >>::execute_pass(exec, input, output)
+}
 
-                let init_leaves = init.into_storage_leaves();
-                $(
-                    let $init_handle = client.create_from_slice($out_ty::as_bytes(&[
-                        leaf_value!(init_leaves; $first_field $(.$rest_field)*)
-                    ]));
-                    let $output_handle = client.empty(size_of::<$out_ty>());
-                )+
-                unsafe {
-                    $finalize_kernel::launch_unchecked::<
-                        Item,
-                        $( $out_ty, )+
-                        $leaves,
-                        Item::DeviceLayout,
-                        Op,
-                        R,
-                    >(
-                        client,
-                        CubeCount::new_single(),
-                        CubeDim::new_1d(1),
-                        $( BufferArg::from_raw_parts($current, 1), )+
-                        $( BufferArg::from_raw_parts($init_handle, 1), )+
-                        BufferArg::from_raw_parts(zero_handle, zero_offsets.len()),
-                        $( BufferArg::from_raw_parts($output_handle.clone(), 1), )+
-                    );
-                }
-                $(
-                    let bytes = client.read_one($output_handle).map_err(|err| Error::Launch {
-                        message: format!("{err:?}"),
-                    })?;
-                    let $value = $out_ty::from_bytes(&bytes)[0];
-                )+
-                Ok(Item::from_storage_leaves(build_leaf_list!($( $value ),+)))
-            }
+fn finish_fixed_reduce<R, Item, Op>(
+    exec: &Executor<R>,
+    mut current: FixedReduceStorage<R, Item>,
+    mut current_len: usize,
+    init: Item,
+) -> Result<Item, Error>
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>,
+    Op: ReductionOp<Item>,
+    Dispatch<A13, S12>: ReducePassDispatch<
+            R,
+            FixedReduceRead<R, Item>,
+            FixedReduceOutput<R, Item>,
+            Item,
+            Op,
+            crate::read::KernelReadSlots<<FixedReduceRead<R, Item> as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<
+                <FixedReduceOutput<R, Item> as crate::output::LowerOutputExpression>::Slots,
+            >,
+        >,
+{
+    while current_len > 1 {
+        let next_len = pass_block_count(current_len);
+        let next = exec.alloc_canonical::<Item>(next_len);
+        let input = FixedReduceRead::<R, Item>::new(current.read());
+        let output = FixedReduceOutput::<R, Item>::new(next.write());
+        reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
+        current = next;
+        current_len = next_len;
+    }
+
+    let initial = crate::allocation::singleton(exec, init)?;
+    let combined = exec.alloc_canonical::<Item>(2);
+    initial.copy_storage(exec, combined.slice_mut(..1))?;
+    current.copy_storage(exec, combined.slice_mut(1..))?;
+
+    let result = exec.alloc_canonical::<Item>(1);
+    let input = FixedReduceRead::<R, Item>::new(combined.read());
+    let output = FixedReduceOutput::<R, Item>::new(result.write());
+    reduce_pass::<R, _, _, Item, Op>(exec, &input, &output)?;
+
+    let canonical = result.read_first(exec)?;
+    Ok(Item::from_storage_leaves(canonical.into_storage_leaves()))
+}
+
+impl<R, Input, Item, Op, Slots> ReduceDispatch<R, Input, Item, Op, Slots> for Dispatch<A13, S12>
+where
+    R: Runtime,
+    Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+    Item: crate::api::iter::MItem<R>,
+    Op: ReductionOp<Item>,
+    Dispatch<A13, S12>: ReducePassDispatch<
+            R,
+            Input,
+            FixedReduceOutput<R, Item>,
+            Item,
+            Op,
+            Slots,
+            crate::output::KernelOutputSlots<
+                <FixedReduceOutput<R, Item> as crate::output::LowerOutputExpression>::Slots,
+            >,
+        > + ReducePassDispatch<
+            R,
+            FixedReduceRead<R, Item>,
+            FixedReduceOutput<R, Item>,
+            Item,
+            Op,
+            crate::read::KernelReadSlots<<FixedReduceRead<R, Item> as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<
+                <FixedReduceOutput<R, Item> as crate::output::LowerOutputExpression>::Slots,
+            >,
+        >,
+{
+    fn execute(exec: &Executor<R>, input: &Input, init: Item) -> Result<Item, Error> {
+        let len = input.logical_len()?;
+        if len == 0 {
+            return Ok(init);
         }
-    };
+        let blocks = pass_block_count(len);
+        let partials = exec.alloc_canonical::<Item>(blocks);
+        let output = FixedReduceOutput::<R, Item>::new(partials.write());
+        <Dispatch<A13, S12> as ReducePassDispatch<
+            R,
+            Input,
+            FixedReduceOutput<R, Item>,
+            Item,
+            Op,
+            Slots,
+            crate::output::KernelOutputSlots<
+                <FixedReduceOutput<R, Item> as crate::output::LowerOutputExpression>::Slots,
+            >,
+        >>::execute_pass(exec, input, &output)?;
+        finish_fixed_reduce::<R, Item, Op>(exec, partials, blocks, init)
+    }
 }
-
-macro_rules! impl_multi_reduce_dispatches_for_eval {
-    ($arity:ty,$eval:ident,$env:ty; [$( $leaf:ident:$index:literal ),+]; [$k2:ident,$k3:ident,$k4:ident,$k5:ident,$k6:ident,$k7:ident]) => {
-        impl_multi_reduce_dispatch!($arity,S2,$eval,$k2,reduce_storage_s2,reduce_finalize_s2,$env,More<O0,Last<O1>>,LoadLeaves2,StoreLeaves2; [$($leaf:$index),+]; [O0:current0:next0:init0:output0:value0:head,O1:current1:next1:init1:output1:value1:tail.value]);
-        impl_multi_reduce_dispatch!($arity,S3,$eval,$k3,reduce_storage_s3,reduce_finalize_s3,$env,More<O0,More<O1,Last<O2>>>,LoadLeaves3,StoreLeaves3; [$($leaf:$index),+]; [O0:current0:next0:init0:output0:value0:head,O1:current1:next1:init1:output1:value1:tail.head,O2:current2:next2:init2:output2:value2:tail.tail.value]);
-        impl_multi_reduce_dispatch!($arity,S4,$eval,$k4,reduce_storage_s4,reduce_finalize_s4,$env,More<O0,More<O1,More<O2,Last<O3>>>>,LoadLeaves4,StoreLeaves4; [$($leaf:$index),+]; [O0:current0:next0:init0:output0:value0:head,O1:current1:next1:init1:output1:value1:tail.head,O2:current2:next2:init2:output2:value2:tail.tail.head,O3:current3:next3:init3:output3:value3:tail.tail.tail.value]);
-        impl_multi_reduce_dispatch!($arity,S5,$eval,$k5,reduce_storage_s5,reduce_finalize_s5,$env,More<O0,More<O1,More<O2,More<O3,Last<O4>>>>>,LoadLeaves5,StoreLeaves5; [$($leaf:$index),+]; [O0:current0:next0:init0:output0:value0:head,O1:current1:next1:init1:output1:value1:tail.head,O2:current2:next2:init2:output2:value2:tail.tail.head,O3:current3:next3:init3:output3:value3:tail.tail.tail.head,O4:current4:next4:init4:output4:value4:tail.tail.tail.tail.value]);
-        impl_multi_reduce_dispatch!($arity,S6,$eval,$k6,reduce_storage_s6,reduce_finalize_s6,$env,More<O0,More<O1,More<O2,More<O3,More<O4,Last<O5>>>>>>,LoadLeaves6,StoreLeaves6; [$($leaf:$index),+]; [O0:current0:next0:init0:output0:value0:head,O1:current1:next1:init1:output1:value1:tail.head,O2:current2:next2:init2:output2:value2:tail.tail.head,O3:current3:next3:init3:output3:value3:tail.tail.tail.head,O4:current4:next4:init4:output4:value4:tail.tail.tail.tail.head,O5:current5:next5:init5:output5:value5:tail.tail.tail.tail.tail.value]);
-        impl_multi_reduce_dispatch!($arity,S7,$eval,$k7,reduce_storage_s7,reduce_finalize_s7,$env,More<O0,More<O1,More<O2,More<O3,More<O4,More<O5,Last<O6>>>>>>>,LoadLeaves7,StoreLeaves7; [$($leaf:$index),+]; [O0:current0:next0:init0:output0:value0:head,O1:current1:next1:init1:output1:value1:tail.head,O2:current2:next2:init2:output2:value2:tail.tail.head,O3:current3:next3:init3:output3:value3:tail.tail.tail.head,O4:current4:next4:init4:output4:value4:tail.tail.tail.tail.head,O5:current5:next5:init5:output5:value5:tail.tail.tail.tail.tail.head,O6:current6:next6:init6:output6:value6:tail.tail.tail.tail.tail.tail.value]);
-    };
-}
-
-impl_multi_reduce_dispatches_for_eval!(A1,Eval1,Env1<L0>; [L0:0]; [reduce_eval1_s2,reduce_eval1_s3,reduce_eval1_s4,reduce_eval1_s5,reduce_eval1_s6,reduce_eval1_s7]);
-impl_multi_reduce_dispatches_for_eval!(A2,Eval2,Env2<L0,L1>; [L0:0,L1:1]; [reduce_eval2_s2,reduce_eval2_s3,reduce_eval2_s4,reduce_eval2_s5,reduce_eval2_s6,reduce_eval2_s7]);
-impl_multi_reduce_dispatches_for_eval!(A3,Eval3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]; [reduce_eval3_s2,reduce_eval3_s3,reduce_eval3_s4,reduce_eval3_s5,reduce_eval3_s6,reduce_eval3_s7]);
-impl_multi_reduce_dispatches_for_eval!(A4,Eval4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]; [reduce_eval4_s2,reduce_eval4_s3,reduce_eval4_s4,reduce_eval4_s5,reduce_eval4_s6,reduce_eval4_s7]);
-impl_multi_reduce_dispatches_for_eval!(A5,Eval5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]; [reduce_eval5_s2,reduce_eval5_s3,reduce_eval5_s4,reduce_eval5_s5,reduce_eval5_s6,reduce_eval5_s7]);
-impl_multi_reduce_dispatches_for_eval!(A6,Eval6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]; [reduce_eval6_s2,reduce_eval6_s3,reduce_eval6_s4,reduce_eval6_s5,reduce_eval6_s6,reduce_eval6_s7]);
-impl_multi_reduce_dispatches_for_eval!(A7,Eval7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]; [reduce_eval7_s2,reduce_eval7_s3,reduce_eval7_s4,reduce_eval7_s5,reduce_eval7_s6,reduce_eval7_s7]);
-impl_multi_reduce_dispatches_for_eval!(A8,Eval8,crate::read::Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7]; [reduce_eval8_s2,reduce_eval8_s3,reduce_eval8_s4,reduce_eval8_s5,reduce_eval8_s6,reduce_eval8_s7]);
 
 /// Reduces all input items, starting from `init`.
 pub(crate) fn reduce<R, Input, Op>(
@@ -1771,15 +1637,15 @@ where
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Input::Item: StorageLayout,
     Op: ReductionOp<Input::Item>,
-    Dispatch<Input::ReadArity, <Input::Item as StorageLayout>::StorageArity>:
-        ReduceDispatch<R, Input, Input::Item, Op, Input::Slots>,
+    Dispatch<A13, S12>:
+        ReduceDispatch<R, Input, Input::Item, Op, crate::read::KernelReadSlots<Input::Slots>>,
 {
-    <Dispatch<Input::ReadArity, <Input::Item as StorageLayout>::StorageArity> as ReduceDispatch<
+    <Dispatch<A13, S12> as ReduceDispatch<
         R,
         Input,
         Input::Item,
         Op,
-        Input::Slots,
+        crate::read::KernelReadSlots<Input::Slots>,
     >>::execute(exec, &input, init)
 }
 

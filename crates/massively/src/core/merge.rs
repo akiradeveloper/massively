@@ -5,13 +5,13 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, CanonicalAlloc, CanonicalStorage, Column, DeviceVec, Error,
-    Executor, MStorageElement, ReadExpression, StorageLayout,
+    A13, CanonicalAlloc, CanonicalStorage, Column, DeviceVec, Error, Executor, MStorageElement,
+    ReadExpression, StorageLayout,
     allocation::{CopyStorage, NormalizeInput},
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7},
+    eval::Eval13,
     indexed::GatherInput,
     ordering::BinaryPredicateOp,
-    read::{Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, LowerReadExpression},
+    read::{Env0, Env13, LowerReadExpression},
     reduce::{StageRead, StagedBindings},
 };
 
@@ -82,17 +82,11 @@ macro_rules! define_merge_control_kernel {
     };
 }
 
-define_merge_control_kernel!(merge_control_s1,Eval1,eval1; [L0:left0:right0]);
-define_merge_control_kernel!(merge_control_s2,Eval2,eval2; [L0:left0:right0,L1:left1:right1]);
-define_merge_control_kernel!(merge_control_s3,Eval3,eval3; [L0:left0:right0,L1:left1:right1,L2:left2:right2]);
-define_merge_control_kernel!(merge_control_s4,Eval4,eval4; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3]);
-define_merge_control_kernel!(merge_control_s5,Eval5,eval5; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4]);
-define_merge_control_kernel!(merge_control_s6,Eval6,eval6; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5]);
-define_merge_control_kernel!(merge_control_s7,Eval7,eval7; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5,L6:left6:right6]);
+define_merge_control_kernel!(merge_control_a13,Eval13,eval13; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5,L6:left6:right6,L7:left7:right7,L8:left8:right8,L9:left9:right9,L10:left10:right10,L11:left11:right11,L12:left12:right12]);
 
-struct MergeDispatch<Storage>(PhantomData<fn() -> Storage>);
+pub(crate) struct MergeDispatch<Storage>(PhantomData<fn() -> Storage>);
 
-trait MergeControlDispatch<R, Left, Right, Item, LeftSlots, RightSlots, Less>
+pub(crate) trait MergeControlDispatch<R, Left, Right, Item, LeftSlots, RightSlots, Less>
 where
     R: Runtime,
 {
@@ -154,13 +148,7 @@ macro_rules! impl_merge_control_dispatch {
     };
 }
 
-impl_merge_control_dispatch!(crate::S1,A1,Eval1,merge_control_s1,Env1<L0>; [L0:0]);
-impl_merge_control_dispatch!(crate::S2,A2,Eval2,merge_control_s2,Env2<L0,L1>; [L0:0,L1:1]);
-impl_merge_control_dispatch!(crate::S3,A3,Eval3,merge_control_s3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]);
-impl_merge_control_dispatch!(crate::S4,A4,Eval4,merge_control_s4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]);
-impl_merge_control_dispatch!(crate::S5,A5,Eval5,merge_control_s5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]);
-impl_merge_control_dispatch!(crate::S6,A6,Eval6,merge_control_s6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
-impl_merge_control_dispatch!(crate::S7,A7,Eval7,merge_control_s7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
+impl_merge_control_dispatch!(crate::S12,A13,Eval13,merge_control_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
 
 /// Stable merge permutation over a conceptual `left || right` payload.
 #[doc(hidden)]
@@ -180,11 +168,11 @@ impl<R, Left, Right, Less> MergeControlInput<R, Right, Less> for Left
 where
     R: Runtime,
     Left: NormalizeInput<R>,
-    Left::Item: StorageLayout,
+    Left::Item: StorageLayout + CanonicalAlloc<R>,
     Right: NormalizeInput<R> + ReadExpression<Item = Left::Item>,
     Left::SemanticRead: LowerReadExpression,
     Right::SemanticRead: LowerReadExpression,
-    MergeDispatch<<Left::Item as StorageLayout>::StorageArity>: MergeControlDispatch<
+    MergeDispatch<crate::S12>: MergeControlDispatch<
             R,
             Left::SemanticRead,
             Right::SemanticRead,
@@ -199,7 +187,7 @@ where
         let right = right.normalize(exec)?;
         let left_read = Left::semantic_read(&left);
         let right_read = Right::semantic_read(&right);
-        <MergeDispatch<<Left::Item as StorageLayout>::StorageArity> as MergeControlDispatch<
+        <MergeDispatch<crate::S12> as MergeControlDispatch<
             R,
             Left::SemanticRead,
             Right::SemanticRead,
@@ -222,6 +210,93 @@ where
     Left: MergeControlInput<R, Right, Less>,
 {
     left.merge_control(exec, right)
+}
+
+pub(crate) fn merge_control_fixed<R, Left, Right, Less>(
+    exec: &Executor<R>,
+    left: Left,
+    right: Right,
+    _less: Less,
+) -> Result<MergeControl<R>, Error>
+where
+    R: Runtime,
+    Left: ReadExpression<ReadArity = A13> + LowerReadExpression + StageRead<R, Env0>,
+    Right: ReadExpression<Item = Left::Item, ReadArity = A13>
+        + LowerReadExpression
+        + StageRead<R, Env0>,
+    MergeDispatch<crate::S12>:
+        MergeControlDispatch<R, Left, Right, Left::Item, Left::Slots, Right::Slots, Less>,
+{
+    <MergeDispatch<crate::S12> as MergeControlDispatch<
+        R,
+        Left,
+        Right,
+        Left::Item,
+        Left::Slots,
+        Right::Slots,
+        Less,
+    >>::run(exec, &left, &right)
+}
+
+/// Applies a merge permutation to two already-normalized payloads.
+///
+/// The payload layout is handled once through its semantic leaf list.  Key
+/// and value arities therefore never occur in the same dispatch obligation.
+pub(crate) fn apply_canonical<R, Item, Output>(
+    exec: &Executor<R>,
+    left: &<Item as CanonicalAlloc<R>>::CanonicalStorage,
+    right: &<Item as CanonicalAlloc<R>>::CanonicalStorage,
+    control: &MergeControl<R>,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>,
+    Item::StorageLeaves: crate::core::facade::KernelValue,
+    <Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
+    <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
+        crate::WritableFrom<Item>,
+    Output: crate::output::OutputExpression<Item = Item>
+        + crate::output::LowerOutputExpression<
+            Slots = <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+        > + crate::output::StageOutput<R, Env0>,
+{
+    let left_len = left.len()?;
+    let right_len = right.len()?;
+    if left_len != control.left_len || right_len != control.right_len {
+        return Err(Error::LengthMismatch {
+            left: left_len + right_len,
+            right: control.left_len + control.right_len,
+        });
+    }
+
+    let total = left_len
+        .checked_add(right_len)
+        .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
+    let combined = exec.alloc_canonical::<Item>(total);
+
+    let left_read = crate::read::FixedReassociate::<_, Item>::new(left.read());
+    let left_write = crate::output::ReassociatedOutput::<
+        _,
+        Item,
+        <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+    >::new(combined.slice_mut(..left_len));
+    crate::transform::materialize_fixed(exec, &left_read, &left_write)?;
+
+    let right_read = crate::read::FixedReassociate::<_, Item>::new(right.read());
+    let right_write = crate::output::ReassociatedOutput::<
+        _,
+        Item,
+        <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+    >::new(combined.slice_mut(left_len..));
+    crate::transform::materialize_fixed(exec, &right_read, &right_write)?;
+
+    crate::masked::MaskedCopyInput::indexed_copy(
+        crate::read::FixedReassociate::<_, Item>::new(combined.read()),
+        exec,
+        &control.permutation,
+        output,
+    )
 }
 
 /// Applies a conceptual concatenation control to one payload pair.

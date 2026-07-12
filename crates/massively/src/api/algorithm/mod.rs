@@ -9,7 +9,7 @@ mod scatter;
 mod search;
 mod selection;
 mod set;
-mod transform;
+pub(crate) mod transform;
 
 pub use by_key::*;
 pub use indexed::*;

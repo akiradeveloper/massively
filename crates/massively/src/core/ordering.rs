@@ -5,16 +5,15 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, CanonicalAlloc, CanonicalStorage, DeviceVec, Dispatch, Error,
-    Executor, MStorageElement, ReadExpression,
+    A13, CanonicalAlloc, DeviceVec, Dispatch, Error, Executor, MStorageElement, ReadExpression,
     arg_reduce::{ArgReduceDispatch, ArgReductionOp, arg_reduce},
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    eval::Eval13,
     launch::cube_count_1d,
     op::IndexedBinaryOp,
     output::{LowerOutputExpression, OutputExpression, StageOutput},
     read::{
-        AdjacentIndexedTransform, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8,
-        LowerReadExpression, Reassociate,
+        AdjacentIndexedTransform, Env0, Env13, KernelReadSlots, LowerReadExpression,
+        PaddedReadSlots,
     },
     reduce::{ReduceDispatch, ReductionOp, StageRead, StagedBindings, reduce},
     transform::{MaterializeDispatch, materialize},
@@ -215,14 +214,7 @@ macro_rules! define_adjacent_flags_kernel {
     };
 }
 
-define_adjacent_flags_kernel!(adjacent_flags_a1,Eval1,eval1; L0:slot0);
-define_adjacent_flags_kernel!(adjacent_flags_a2,Eval2,eval2; L0:slot0,L1:slot1);
-define_adjacent_flags_kernel!(adjacent_flags_a3,Eval3,eval3; L0:slot0,L1:slot1,L2:slot2);
-define_adjacent_flags_kernel!(adjacent_flags_a4,Eval4,eval4; L0:slot0,L1:slot1,L2:slot2,L3:slot3);
-define_adjacent_flags_kernel!(adjacent_flags_a5,Eval5,eval5; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4);
-define_adjacent_flags_kernel!(adjacent_flags_a6,Eval6,eval6; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5);
-define_adjacent_flags_kernel!(adjacent_flags_a7,Eval7,eval7; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6);
-define_adjacent_flags_kernel!(adjacent_flags_a8,Eval8,eval8; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7);
+define_adjacent_flags_kernel!(adjacent_flags_a13,Eval13,eval13; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12);
 
 trait AdjacentFlagDispatch<R, Input, Item, Slots, Op>
 where
@@ -240,9 +232,11 @@ macro_rules! impl_adjacent_flags_dispatch {
             Item: CubeType + Send + Sync + 'static,
             Op: AdjacentFlagOp<Item>,
             $( $leaf: MStorageElement, )+
-            Input: ReadExpression<Item = Item>
-                + LowerReadExpression<Slots = $env>
-                + StageRead<R, Env0>,
+            Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+            Input::Slots: PaddedReadSlots<
+                L0 = L0, L1 = L1, L2 = L2, L3 = L3, L4 = L4, L5 = L5, L6 = L6,
+                L7 = L7, L8 = L8, L9 = L9, L10 = L10, L11 = L11, L12 = L12,
+            >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
         {
             fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
@@ -254,6 +248,7 @@ macro_rules! impl_adjacent_flags_dispatch {
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
+                reads.pad_to_thirteen(exec.client());
                 let offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
                 unsafe {
@@ -273,14 +268,7 @@ macro_rules! impl_adjacent_flags_dispatch {
     };
 }
 
-impl_adjacent_flags_dispatch!(A1,Eval1,adjacent_flags_a1; [L0:0],Env1<L0>);
-impl_adjacent_flags_dispatch!(A2,Eval2,adjacent_flags_a2; [L0:0,L1:1],Env2<L0,L1>);
-impl_adjacent_flags_dispatch!(A3,Eval3,adjacent_flags_a3; [L0:0,L1:1,L2:2],Env3<L0,L1,L2>);
-impl_adjacent_flags_dispatch!(A4,Eval4,adjacent_flags_a4; [L0:0,L1:1,L2:2,L3:3],Env4<L0,L1,L2,L3>);
-impl_adjacent_flags_dispatch!(A5,Eval5,adjacent_flags_a5; [L0:0,L1:1,L2:2,L3:3,L4:4],Env5<L0,L1,L2,L3,L4>);
-impl_adjacent_flags_dispatch!(A6,Eval6,adjacent_flags_a6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5],Env6<L0,L1,L2,L3,L4,L5>);
-impl_adjacent_flags_dispatch!(A7,Eval7,adjacent_flags_a7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6],Env7<L0,L1,L2,L3,L4,L5,L6>);
-impl_adjacent_flags_dispatch!(A8,Eval8,adjacent_flags_a8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7],Env8<L0,L1,L2,L3,L4,L5,L6,L7>);
+impl_adjacent_flags_dispatch!(A13,Eval13,adjacent_flags_a13; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12],Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>);
 
 #[cubecl::cube(launch_unchecked)]
 fn iota_indices_kernel(len: &[u32], indices: &mut [u32]) {
@@ -383,14 +371,7 @@ macro_rules! define_merge_permutation_kernel {
     };
 }
 
-define_merge_permutation_kernel!(merge_permutation_a1,Eval1,eval1; L0:slot0);
-define_merge_permutation_kernel!(merge_permutation_a2,Eval2,eval2; L0:slot0,L1:slot1);
-define_merge_permutation_kernel!(merge_permutation_a3,Eval3,eval3; L0:slot0,L1:slot1,L2:slot2);
-define_merge_permutation_kernel!(merge_permutation_a4,Eval4,eval4; L0:slot0,L1:slot1,L2:slot2,L3:slot3);
-define_merge_permutation_kernel!(merge_permutation_a5,Eval5,eval5; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4);
-define_merge_permutation_kernel!(merge_permutation_a6,Eval6,eval6; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5);
-define_merge_permutation_kernel!(merge_permutation_a7,Eval7,eval7; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6);
-define_merge_permutation_kernel!(merge_permutation_a8,Eval8,eval8; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7);
+define_merge_permutation_kernel!(merge_permutation_a13,Eval13,eval13; L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12);
 
 trait SortControlDispatch<R, Input, Item, Slots, Less>
 where
@@ -408,9 +389,11 @@ macro_rules! impl_sort_control_dispatch {
             Item: CubeType + Send + Sync + 'static,
             Less: BinaryPredicateOp<Item>,
             $( $leaf: MStorageElement, )+
-            Input: ReadExpression<Item = Item>
-                + LowerReadExpression<Slots = $env>
-                + StageRead<R, Env0>,
+            Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+            Input::Slots: PaddedReadSlots<
+                L0 = L0, L1 = L1, L2 = L2, L3 = L3, L4 = L4, L5 = L5, L6 = L6,
+                L7 = L7, L8 = L8, L9 = L9, L10 = L10, L11 = L11, L12 = L12,
+            >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
         {
             fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
@@ -437,6 +420,7 @@ macro_rules! impl_sort_control_dispatch {
                 let mut next = exec.alloc_canonical::<u32>(len);
                 let mut reads = StagedBindings::new();
                 input.stage_at(exec.client(), exec.id(), &mut reads)?;
+                reads.pad_to_thirteen(exec.client());
                 let offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let mut width = 1usize;
                 while width < len {
@@ -465,14 +449,7 @@ macro_rules! impl_sort_control_dispatch {
     };
 }
 
-impl_sort_control_dispatch!(A1,Eval1,merge_permutation_a1; [L0:0],Env1<L0>);
-impl_sort_control_dispatch!(A2,Eval2,merge_permutation_a2; [L0:0,L1:1],Env2<L0,L1>);
-impl_sort_control_dispatch!(A3,Eval3,merge_permutation_a3; [L0:0,L1:1,L2:2],Env3<L0,L1,L2>);
-impl_sort_control_dispatch!(A4,Eval4,merge_permutation_a4; [L0:0,L1:1,L2:2,L3:3],Env4<L0,L1,L2,L3>);
-impl_sort_control_dispatch!(A5,Eval5,merge_permutation_a5; [L0:0,L1:1,L2:2,L3:3,L4:4],Env5<L0,L1,L2,L3,L4>);
-impl_sort_control_dispatch!(A6,Eval6,merge_permutation_a6; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5],Env6<L0,L1,L2,L3,L4,L5>);
-impl_sort_control_dispatch!(A7,Eval7,merge_permutation_a7; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6],Env7<L0,L1,L2,L3,L4,L5,L6>);
-impl_sort_control_dispatch!(A8,Eval8,merge_permutation_a8; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7],Env8<L0,L1,L2,L3,L4,L5,L6,L7>);
+impl_sort_control_dispatch!(A13,Eval13,merge_permutation_a13; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12],Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>);
 
 /// Generates a stable ordering permutation from one read expression.
 #[doc(hidden)]
@@ -485,15 +462,15 @@ where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Less: BinaryPredicateOp<Input::Item>,
-    Dispatch<Input::ReadArity, crate::S1>:
-        SortControlDispatch<R, Input, Input::Item, Input::Slots, Less>,
+    Dispatch<A13, crate::S1>:
+        SortControlDispatch<R, Input, Input::Item, KernelReadSlots<Input::Slots>, Less>,
 {
     fn sort_control(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        <Dispatch<Input::ReadArity, crate::S1> as SortControlDispatch<
+        <Dispatch<A13, crate::S1> as SortControlDispatch<
             R,
             Input,
             Input::Item,
-            Input::Slots,
+            KernelReadSlots<Input::Slots>,
             Less,
         >>::run(exec, &self)
     }
@@ -523,63 +500,25 @@ pub trait SortInput<R: Runtime, Less, Output>: ReadExpression + Sized {
 impl<R, Input, Less, Output> SortInput<R, Less, Output> for Input
 where
     R: Runtime,
-    Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
+    Input: crate::allocation::NormalizeInput<R>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: crate::WriteFrom<Input::Item>,
-    Input::Item: CanonicalAlloc<R>,
-    <Input::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
-        LowerOutputExpression + StageOutput<R, Env0>,
-    <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
-        crate::WriteFrom<Input::Item>,
-    Dispatch<
-        Input::ReadArity,
-        <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity,
-    >: MaterializeDispatch<
+    Output::Item: crate::WritableFrom<Input::Item>,
+    Input::Item:
+        CanonicalAlloc<R, CanonicalStorage = Input::Storage> + sort::SortStorageItem<R, Less>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
-            Input,
-            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
-            Input::Slots,
-            <<<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
-        >,
-    Input::Item: crate::WriteFrom<
-            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item,
-        >,
-    Input::Item: sort::SortStorageItem<R, Less>,
-    Reassociate<
-        <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
-        Input::Item,
-    >: ReadExpression<Item = Input::Item>
-        + LowerReadExpression
-        + StageRead<R, Env0>,
-    Dispatch<
-        <Reassociate<
-            <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
-            Input::Item,
-        > as ReadExpression>::ReadArity,
-        <Output as OutputExpression>::StorageArity,
-    >: MaterializeDispatch<
-            R,
-            Reassociate<
-                <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
-                Input::Item,
-            >,
+            Input::SemanticRead,
             Output,
-            <Reassociate<
-                <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
-                Input::Item,
-            > as LowerReadExpression>::Slots,
-            <Output as LowerOutputExpression>::Slots,
+            crate::read::KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<<Output as LowerOutputExpression>::Slots>,
         >,
+    <Output as LowerOutputExpression>::Slots: crate::output::PaddedOutputSlots,
 {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
-        let len = self.logical_len()?;
-        let temporary = exec.alloc_canonical::<Input::Item>(len);
-        materialize(exec, self, temporary.write())?;
-        let result = <Input::Item as sort::SortStorageItem<R, Less>>::sort_storage(
-            exec, temporary, false,
-        )?;
-        let semantic = Reassociate::<_, Input::Item>::new(result.sorted_keys.read());
+        let temporary = self.normalize(exec)?;
+        let result =
+            <Input::Item as sort::SortStorageItem<R, Less>>::sort_storage(exec, temporary, false)?;
+        let semantic = Input::semantic_read(&result.sorted_keys);
         materialize(exec, semantic, output)
     }
 }
@@ -607,15 +546,15 @@ where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Op: AdjacentFlagOp<Input::Item>,
-    Dispatch<Input::ReadArity, crate::S1>:
-        AdjacentFlagDispatch<R, Input, Input::Item, Input::Slots, Op>,
+    Dispatch<A13, crate::S1>:
+        AdjacentFlagDispatch<R, Input, Input::Item, KernelReadSlots<Input::Slots>, Op>,
 {
     fn adjacent_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        <Dispatch<Input::ReadArity, crate::S1> as AdjacentFlagDispatch<
+        <Dispatch<A13, crate::S1> as AdjacentFlagDispatch<
             R,
             Input,
             Input::Item,
-            Input::Slots,
+            KernelReadSlots<Input::Slots>,
             Op,
         >>::run(exec, &self)
     }
@@ -657,15 +596,14 @@ where
     Equal: BinaryPredicateOp<Input::Item>,
     AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<
-        <AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>> as ReadExpression>::ReadArity,
-        crate::S1,
-    >: ReduceDispatch<
+    Dispatch<crate::A13, crate::S12>: ReduceDispatch<
             R,
             AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>>,
             u32,
             MinU32,
-            <AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>> as LowerReadExpression>::Slots,
+            crate::read::KernelReadSlots<
+                <AdjacentIndexedTransform<Input, FirstAdjacentMatch<Equal>> as LowerReadExpression>::Slots,
+            >,
         >,
 {
     fn adjacent_find_len(&self) -> Result<usize, Error> {
@@ -750,15 +688,14 @@ where
     Less: BinaryPredicateOp<Input::Item>,
     AdjacentIndexedTransform<Input, FirstSortedBreak<Less>>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<
-        <AdjacentIndexedTransform<Input, FirstSortedBreak<Less>> as ReadExpression>::ReadArity,
-        crate::S1,
-    >: ReduceDispatch<
+    Dispatch<crate::A13, crate::S12>: ReduceDispatch<
             R,
             AdjacentIndexedTransform<Input, FirstSortedBreak<Less>>,
             u32,
             MinU32,
-            <AdjacentIndexedTransform<Input, FirstSortedBreak<Less>> as LowerReadExpression>::Slots,
+            crate::read::KernelReadSlots<
+                <AdjacentIndexedTransform<Input, FirstSortedBreak<Less>> as LowerReadExpression>::Slots,
+            >,
         >,
 {
     fn sorted_len(&self) -> Result<usize, Error> {
@@ -821,9 +758,9 @@ where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0> + Clone,
     Less: BinaryPredicateOp<Input::Item>,
-    Dispatch<Input::ReadArity, crate::S1>: ArgReduceDispatch<R, Input, ArgMinFirst<Less>, Input::Slots>
-        + ArgReduceDispatch<R, Input, ArgMinLast<Less>, Input::Slots>
-        + ArgReduceDispatch<R, Input, ArgMaxFirst<Less>, Input::Slots>,
+    Dispatch<crate::A13, crate::S1>: ArgReduceDispatch<R, Input, ArgMinFirst<Less>, crate::read::KernelReadSlots<Input::Slots>>
+        + ArgReduceDispatch<R, Input, ArgMinLast<Less>, crate::read::KernelReadSlots<Input::Slots>>
+        + ArgReduceDispatch<R, Input, ArgMaxFirst<Less>, crate::read::KernelReadSlots<Input::Slots>>,
 {
     fn extremum_len(&self) -> Result<usize, Error> {
         self.logical_len()
@@ -893,7 +830,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));

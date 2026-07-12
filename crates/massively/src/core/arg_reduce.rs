@@ -5,10 +5,10 @@ use core::mem::size_of;
 use cubecl::prelude::*;
 
 use crate::{
-    A1, A2, A3, A4, A5, A6, A7, A8, Dispatch, Error, Executor, MStorageElement, ReadExpression,
-    eval::{Eval1, Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8},
+    A13, Dispatch, Error, Executor, MStorageElement, ReadExpression,
+    eval::Eval13,
     launch::cube_count_1d,
-    read::{BindSlots, Env0, Env1, Env2, Env3, Env4, Env5, Env6, Env7, Env8, LowerReadExpression},
+    read::{Env0, Env13, KernelReadSlots, LowerReadExpression, PaddedReadSlots},
     reduce::{StageRead, StagedBindings},
 };
 
@@ -349,23 +349,9 @@ macro_rules! define_arg_partial_kernel {
     };
 }
 
-define_arg_reduce_kernel!(arg_reduce_a1,Eval1,eval1; [L0:slot0]);
-define_arg_reduce_kernel!(arg_reduce_a2,Eval2,eval2; [L0:slot0,L1:slot1]);
-define_arg_reduce_kernel!(arg_reduce_a3,Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]);
-define_arg_reduce_kernel!(arg_reduce_a4,Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]);
-define_arg_reduce_kernel!(arg_reduce_a5,Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]);
-define_arg_reduce_kernel!(arg_reduce_a6,Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]);
-define_arg_reduce_kernel!(arg_reduce_a7,Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]);
-define_arg_reduce_kernel!(arg_reduce_a8,Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]);
+define_arg_reduce_kernel!(arg_reduce_a13,Eval13,eval13; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12]);
 
-define_arg_partial_kernel!(arg_partial_a1,Eval1,eval1; [L0:slot0]);
-define_arg_partial_kernel!(arg_partial_a2,Eval2,eval2; [L0:slot0,L1:slot1]);
-define_arg_partial_kernel!(arg_partial_a3,Eval3,eval3; [L0:slot0,L1:slot1,L2:slot2]);
-define_arg_partial_kernel!(arg_partial_a4,Eval4,eval4; [L0:slot0,L1:slot1,L2:slot2,L3:slot3]);
-define_arg_partial_kernel!(arg_partial_a5,Eval5,eval5; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4]);
-define_arg_partial_kernel!(arg_partial_a6,Eval6,eval6; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5]);
-define_arg_partial_kernel!(arg_partial_a7,Eval7,eval7; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6]);
-define_arg_partial_kernel!(arg_partial_a8,Eval8,eval8; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7]);
+define_arg_partial_kernel!(arg_partial_a13,Eval13,eval13; [L0:slot0,L1:slot1,L2:slot2,L3:slot3,L4:slot4,L5:slot5,L6:slot6,L7:slot7,L8:slot8,L9:slot9,L10:slot10,L11:slot11,L12:slot12]);
 
 /// Arity dispatch for an index-sideband reduction.
 #[doc(hidden)]
@@ -386,10 +372,11 @@ macro_rules! impl_arg_reduce_dispatch {
             Item: CubeType + Send + Sync + 'static,
             Op: ArgReductionOp<Item>,
             $( $leaf: MStorageElement, )+
-            Input: ReadExpression<Item = Item, ReadArity = $arity>
-                + BindSlots<Env0, NextEnv = $env>
-                + LowerReadExpression<Slots = $env>
-                + StageRead<R, Env0>,
+            Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
+            Input::Slots: PaddedReadSlots<
+                L0 = L0, L1 = L1, L2 = L2, L3 = L3, L4 = L4, L5 = L5, L6 = L6,
+                L7 = L7, L8 = L8, L9 = L9, L10 = L10, L11 = L11, L12 = L12,
+            >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
         {
             fn execute(exec: &Executor<R>, input: &Input) -> Result<Option<u32>, Error> {
@@ -400,6 +387,7 @@ macro_rules! impl_arg_reduce_dispatch {
                 let client = exec.client();
                 let mut bindings = StagedBindings::new();
                 input.stage_at(client, exec.id(), &mut bindings)?;
+                bindings.pad_to_thirteen(client);
                 let offsets = client.create_from_slice(u32::as_bytes(&bindings.offsets));
                 let len_u32 = u32::try_from(len).map_err(|_| Error::LengthTooLarge { len })?;
                 let len_handle = client.create_from_slice(u32::as_bytes(&[len_u32]));
@@ -450,14 +438,7 @@ macro_rules! impl_arg_reduce_dispatch {
     };
 }
 
-impl_arg_reduce_dispatch!(A1,Eval1,arg_reduce_a1,arg_partial_a1,Env1<L0>; [L0:0]);
-impl_arg_reduce_dispatch!(A2,Eval2,arg_reduce_a2,arg_partial_a2,Env2<L0,L1>; [L0:0,L1:1]);
-impl_arg_reduce_dispatch!(A3,Eval3,arg_reduce_a3,arg_partial_a3,Env3<L0,L1,L2>; [L0:0,L1:1,L2:2]);
-impl_arg_reduce_dispatch!(A4,Eval4,arg_reduce_a4,arg_partial_a4,Env4<L0,L1,L2,L3>; [L0:0,L1:1,L2:2,L3:3]);
-impl_arg_reduce_dispatch!(A5,Eval5,arg_reduce_a5,arg_partial_a5,Env5<L0,L1,L2,L3,L4>; [L0:0,L1:1,L2:2,L3:3,L4:4]);
-impl_arg_reduce_dispatch!(A6,Eval6,arg_reduce_a6,arg_partial_a6,Env6<L0,L1,L2,L3,L4,L5>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5]);
-impl_arg_reduce_dispatch!(A7,Eval7,arg_reduce_a7,arg_partial_a7,Env7<L0,L1,L2,L3,L4,L5,L6>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6]);
-impl_arg_reduce_dispatch!(A8,Eval8,arg_reduce_a8,arg_partial_a8,Env8<L0,L1,L2,L3,L4,L5,L6,L7>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7]);
+impl_arg_reduce_dispatch!(A13,Eval13,arg_reduce_a13,arg_partial_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
 
 /// Returns the selected input index, or `None` for an empty input.
 pub(crate) fn arg_reduce<R, Input, Op>(
@@ -469,12 +450,12 @@ where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
     Op: ArgReductionOp<Input::Item>,
-    Dispatch<Input::ReadArity, crate::S1>: ArgReduceDispatch<R, Input, Op, Input::Slots>,
+    Dispatch<A13, crate::S1>: ArgReduceDispatch<R, Input, Op, KernelReadSlots<Input::Slots>>,
 {
-    <Dispatch<Input::ReadArity, crate::S1> as ArgReduceDispatch<
+    <Dispatch<A13, crate::S1> as ArgReduceDispatch<
         R,
         Input,
         Op,
-        Input::Slots,
+        KernelReadSlots<Input::Slots>,
     >>::execute(exec, &input)
 }

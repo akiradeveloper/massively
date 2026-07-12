@@ -96,11 +96,17 @@ where
     Constant<T>: ReadExpression<Item = T, ReadArity = A1>
         + LowerReadExpression<Slots = Env1<T>>
         + StageRead<R, Env0>,
-    Dispatch<A1, S1>: MaterializeDispatch<R, Constant<T>, DeviceSliceMut<T>, Env1<T>, Env1<T>>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Constant<T>,
+            DeviceSliceMut<T>,
+            crate::read::KernelReadSlots<Env1<T>>,
+            crate::output::KernelOutputSlots<Env1<T>>,
+        >,
     DeviceSliceMut<T>: OutputExpression<Item = T, StorageArity = S1>
         + LowerOutputExpression<Slots = Env1<T>>
         + StageOutput<R, Env0>,
-    T: crate::WriteFrom<T>,
+    T: crate::WritableFrom<T>,
 {
     fn fill_output(self, exec: &Executor<R>, value: T) -> Result<(), Error> {
         let len = self.len();
@@ -135,11 +141,11 @@ where
     R: Runtime,
     Output: FillOutput<R>,
     Source: StorageLayout,
-    Output::Item: crate::WriteFrom<Source>,
+    Output::Item: crate::WritableFrom<Source>,
     Slots: crate::output::OutputSlotEnvironment<StorageArity = Source::StorageArity>,
 {
     fn fill_output(self, exec: &Executor<R>, value: Source) -> Result<(), Error> {
-        let value = <Output::Item as crate::WriteFrom<Source>>::write_from(value);
+        let value = <Output::Item as crate::WritableFrom<Source>>::write_from(value);
         self.into_inner().fill_output(exec, value)
     }
 }
@@ -235,7 +241,7 @@ where
     R: Runtime,
     Output: ReplaceOutput<R>,
     Source: StorageLayout,
-    Output::Item: crate::WriteFrom<Source>,
+    Output::Item: crate::WritableFrom<Source>,
     Slots: crate::output::OutputSlotEnvironment<StorageArity = Source::StorageArity>,
 {
     fn replace_output(
@@ -244,7 +250,7 @@ where
         value: Source,
         flags: &DeviceVec<R, u32>,
     ) -> Result<(), Error> {
-        let value = <Output::Item as crate::WriteFrom<Source>>::write_from(value);
+        let value = <Output::Item as crate::WritableFrom<Source>>::write_from(value);
         self.into_inner().replace_output(exec, value, flags)
     }
 }
@@ -277,29 +283,37 @@ impl<R, Stencil> FlagInput<R> for Stencil
 where
     R: Runtime,
     Stencil: ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<Stencil::ReadArity, S1>:
-        MaterializeDispatch<R, Stencil, DeviceSliceMut<u32>, Stencil::Slots, Env1<u32>>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Stencil,
+            DeviceSliceMut<u32>,
+            crate::read::KernelReadSlots<Stencil::Slots>,
+            crate::output::KernelOutputSlots<Env1<u32>>,
+        >,
     Transform<Stencil, IsNonZero>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
     Transform<Stencil, IsZero>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<<Transform<Stencil, IsNonZero> as ReadExpression>::ReadArity, S1>:
-        InclusiveScanDispatch<
-                R,
-                Transform<Stencil, IsNonZero>,
-                DeviceSliceMut<u32>,
-                u32,
+    Dispatch<crate::A13, crate::S12>: InclusiveScanDispatch<
+            R,
+            Transform<Stencil, IsNonZero>,
+            DeviceSliceMut<u32>,
+            u32,
+            crate::read::KernelReadSlots<
                 <Transform<Stencil, IsNonZero> as LowerReadExpression>::Slots,
-                Env1<u32>,
-                SumU32,
             >,
-    Dispatch<<Transform<Stencil, IsZero> as ReadExpression>::ReadArity, S1>: InclusiveScanDispatch<
+            crate::output::KernelOutputSlots<Env1<u32>>,
+            SumU32,
+        >,
+    Dispatch<crate::A13, crate::S12>: InclusiveScanDispatch<
             R,
             Transform<Stencil, IsZero>,
             DeviceSliceMut<u32>,
             u32,
-            <Transform<Stencil, IsZero> as LowerReadExpression>::Slots,
-            Env1<u32>,
+            crate::read::KernelReadSlots<
+                <Transform<Stencil, IsZero> as LowerReadExpression>::Slots,
+            >,
+            crate::output::KernelOutputSlots<Env1<u32>>,
             SumU32,
         >,
     DeviceSliceMut<u32>: StageOutput<R, Env0>,
@@ -636,23 +650,28 @@ where
     Input: ReadExpression + StageRead<R, Env0>,
     Op: UnaryOp<Input::Item>,
     Op::Output: CanonicalAlloc<R>,
+    <Op::Output as StorageLayout>::StorageLeaves: crate::storage::StorePadded12,
     <Op::Output as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     Transform<Input, Op>: ReadExpression<Item = Op::Output>
         + LowerReadExpression
         + StageRead<R, Env0>,
     <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
         LowerOutputExpression + StageOutput<R, Env0>,
+    <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots:
+        crate::output::PaddedOutputSlots,
     <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
-        crate::WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
-    Dispatch<
-        <Transform<Input, Op> as ReadExpression>::ReadArity,
-        <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::StorageArity,
-    >: MaterializeDispatch<
+        crate::WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Dispatch<crate::A13, crate::S12>:
+        MaterializeDispatch<
             R,
             Transform<Input, Op>,
             <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
-            <Transform<Input, Op> as LowerReadExpression>::Slots,
-            <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
+                crate::read::KernelReadSlots<
+                    <Transform<Input, Op> as LowerReadExpression>::Slots,
+                >,
+            crate::output::KernelOutputSlots<
+                <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
+            >,
         >,
     <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read:
         MaskedCopyInput<R, Output>,

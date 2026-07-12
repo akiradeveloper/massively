@@ -1,6 +1,8 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MCanonical, MIter, MIterMut, MStorage, MVec, WriteFrom, op::UnaryOp};
+use crate::{
+    Error, Executor, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom, op::UnaryOp,
+};
 
 /// Applies a unary operation and returns its result in owned device storage.
 ///
@@ -37,7 +39,7 @@ where
     R: Runtime,
     Input: MIter<R>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: MCanonical<R>,
+    Op::Output: Materializable<R>,
 {
     let len = input.len()? as usize;
     let output = exec.alloc_mvec::<Op::Output>(len);
@@ -58,7 +60,12 @@ where
     Input: MIter<R>,
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item>,
-    Output::Item: WriteFrom<<Op as UnaryOp<Input::Item>>::Output>,
+    Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
 {
-    input.transform_into(exec, op, output)
+    crate::transform::transform_fixed(
+        exec,
+        crate::api::iter::lower::<R, _>(input),
+        op,
+        output.lower_output(),
+    )
 }

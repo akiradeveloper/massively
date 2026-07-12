@@ -15,3 +15,6 @@ mod arity;
 
 #[path = "oracle/arity_value.rs"]
 mod arity_value;
+
+#[path = "oracle/arity12.rs"]
+mod arity12;

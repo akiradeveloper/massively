@@ -21,6 +21,22 @@ pub type Tuple6<A, B, C, D, E, F> = (Tuple5<A, B, C, D, E>, F);
 /// Public seven-element tuple value.
 pub type Tuple7<A, B, C, D, E, F, G> = (Tuple6<A, B, C, D, E, F>, G);
 
+/// Public eight-element tuple value.
+pub type Tuple8<A, B, C, D, E, F, G, H> = (Tuple7<A, B, C, D, E, F, G>, H);
+
+/// Public nine-element tuple value.
+pub type Tuple9<A, B, C, D, E, F, G, H, I> = (Tuple8<A, B, C, D, E, F, G, H>, I);
+
+/// Public ten-element tuple value.
+pub type Tuple10<A, B, C, D, E, F, G, H, I, J> = (Tuple9<A, B, C, D, E, F, G, H, I>, J);
+
+/// Public eleven-element tuple value.
+pub type Tuple11<A, B, C, D, E, F, G, H, I, J, K> = (Tuple10<A, B, C, D, E, F, G, H, I, J>, K);
+
+/// Public twelve-element tuple value.
+pub type Tuple12<A, B, C, D, E, F, G, H, I, J, K, L> =
+    (Tuple11<A, B, C, D, E, F, G, H, I, J, K>, L);
+
 /// Constructs a two-element tuple value.
 ///
 /// # Examples
@@ -228,6 +244,52 @@ pub mod tuple7 {
         ((((((a, b), c), d), e), f), g)
     }
 }
+
+macro_rules! define_tuple_constructor {
+    (
+        $name:ident, $module:ident, $tuple:ident, $previous:ident;
+        $( $generic:ident : $argument:ident ),+ ; $last_generic:ident : $last_argument:ident
+    ) => {
+        #[doc = concat!("Constructs a ", stringify!($tuple), " value.")]
+        #[allow(clippy::too_many_arguments)]
+        pub fn $name<$( $generic, )+ $last_generic>(
+            $( $argument: $generic, )+
+            $last_argument: $last_generic,
+        ) -> $tuple<$( $generic, )+ $last_generic> {
+            ($previous($( $argument ),+), $last_argument)
+        }
+
+        #[doc(hidden)]
+        pub mod $module {
+            use cubecl::{frontend::NativeExpand, prelude::*};
+
+            #[allow(clippy::too_many_arguments)]
+            pub fn expand<$( $generic: CubePrimitive, )+ $last_generic: CubePrimitive>(
+                _scope: &Scope,
+                $( $argument: NativeExpand<$generic>, )+
+                $last_argument: NativeExpand<$last_generic>,
+            ) -> super::$tuple<$( NativeExpand<$generic>, )+ NativeExpand<$last_generic>> {
+                (super::$previous($( $argument ),+), $last_argument)
+            }
+        }
+    };
+}
+
+define_tuple_constructor!(tuple8, tuple8, Tuple8, tuple7;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g; H:h
+);
+define_tuple_constructor!(tuple9, tuple9, Tuple9, tuple8;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h; I:i
+);
+define_tuple_constructor!(tuple10, tuple10, Tuple10, tuple9;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i; J:j
+);
+define_tuple_constructor!(tuple11, tuple11, Tuple11, tuple10;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j; K:k
+);
+define_tuple_constructor!(tuple12, tuple12, Tuple12, tuple11;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j, K:k; L:l
+);
 
 /// Flattens a public three-element tuple value into a Rust three-tuple.
 ///
@@ -444,3 +506,51 @@ pub mod flatten7 {
         (a, b, c, d, e, f, g)
     }
 }
+
+macro_rules! define_tuple_flatten {
+    (
+        $name:ident, $module:ident, $tuple:ident, $previous:ident;
+        $( $generic:ident : $value:ident ),+ ; $last_generic:ident : $last_value:ident
+    ) => {
+        #[doc = concat!("Flattens a public `", stringify!($tuple), "` value.")]
+        #[allow(clippy::type_complexity)]
+        pub fn $name<$( $generic, )+ $last_generic>(
+            value: $tuple<$( $generic, )+ $last_generic>,
+        ) -> ($( $generic, )+ $last_generic) {
+            let (head, $last_value) = value;
+            let ($( $value, )+) = $previous(head);
+            ($( $value, )+ $last_value)
+        }
+
+        #[doc(hidden)]
+        pub mod $module {
+            use cubecl::{frontend::NativeExpand, prelude::*};
+
+            #[allow(clippy::type_complexity)]
+            pub fn expand<$( $generic: CubePrimitive, )+ $last_generic: CubePrimitive>(
+                _scope: &Scope,
+                value: super::$tuple<$( NativeExpand<$generic>, )+ NativeExpand<$last_generic>>,
+            ) -> ($( NativeExpand<$generic>, )+ NativeExpand<$last_generic>) {
+                let (head, $last_value) = value;
+                let ($( $value, )+) = super::$previous(head);
+                ($( $value, )+ $last_value)
+            }
+        }
+    };
+}
+
+define_tuple_flatten!(flatten8, flatten8, Tuple8, flatten7;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g; H:h
+);
+define_tuple_flatten!(flatten9, flatten9, Tuple9, flatten8;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h; I:i
+);
+define_tuple_flatten!(flatten10, flatten10, Tuple10, flatten9;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i; J:j
+);
+define_tuple_flatten!(flatten11, flatten11, Tuple11, flatten10;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j; K:k
+);
+define_tuple_flatten!(flatten12, flatten12, Tuple12, flatten11;
+    A:a, B:b, C:c, D:d, E:e, F:f, G:g, H:h, I:i, J:j, K:k; L:l
+);
