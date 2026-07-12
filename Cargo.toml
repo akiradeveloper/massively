@@ -1,8 +1,8 @@
 [workspace]
 members = [
+    "crates/graph-algorithms",
     "crates/massively",
     "crates/oracle",
-    "crates/recipes",
 ]
 resolver = "3"
 

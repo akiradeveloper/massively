@@ -7,7 +7,7 @@ license.workspace = true
 name = "massively"
 readme = "../../README.md"
 repository.workspace = true
-version = "0.70.0"
+version = "0.71.0"
 
 [dependencies]
 cubecl.workspace = true
@@ -17,12 +17,7 @@ futures-lite = "2.6"
 criterion = "0.5"
 oracle_ref = { package = "oracle", path = "../oracle" }
 proptest = "1"
-recipes = { path = "../recipes" }
 static_assertions = "1"
-
-[[test]]
-name = "graph_oracle"
-path = "tests/graph/oracle.rs"
 
 [[test]]
 name = "vector_api"

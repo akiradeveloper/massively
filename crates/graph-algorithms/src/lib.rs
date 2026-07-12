@@ -1,4 +1,7 @@
 //! Graph algorithms composed with Massively's traversal algebra.
+//!
+//! `massively::graph` provides traversal and aggregation primitives. This crate
+//! composes those primitives into complete graph algorithms.
 
 mod common;
 

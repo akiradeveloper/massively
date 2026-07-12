@@ -1,12 +1,12 @@
 use std::{cmp::Reverse, collections::BTreeSet};
 
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+use graph_algorithms::{self as graph, CsrGraph, WeightedCsr};
 use massively::Executor;
 use proptest::{
     prelude::*,
     test_runner::{Config, TestCaseResult, TestRunner},
 };
-use recipes::graph::{self, CsrGraph, WeightedCsr};
 
 const CASES: u32 = 24;
 const ITERATIONS: usize = 3;

@@ -5,6 +5,9 @@ doc:
 bench:
     cargo bench -p massively
 
+bench-graph:
+    cargo bench -p graph-algorithms --bench algorithms
+
 test-api:
     cargo doc -p massively --no-deps
     bash scripts/check-public-api.sh
@@ -15,3 +18,6 @@ test: test-api
 
 test-scale:
     cargo nextest run -p massively --test vector_oracle_scale --no-fail-fast
+
+test-graph:
+    cargo nextest run -p graph-algorithms --test oracle

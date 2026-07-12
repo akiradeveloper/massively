@@ -67,5 +67,11 @@ Each test area has a specific role.
   tests.
 - `massively/tests/seg`: Segmented API and property tests against the CPU
   reference.
-- `massively/tests/graph`: Graph algorithm property tests against independent CPU
-  implementations on generated CSR graphs.
+- `massively` graph unit tests: Traversal, edge expression, terminal, and
+  intersection primitive semantics.
+- `graph-algorithms/tests`: Complete graph algorithm property tests against
+  independent CPU implementations on generated CSR graphs.
+- `graph-algorithms/benches`: Complete graph algorithm performance. Benchmark
+  names state whether they are end-to-end or device-resident; the initial
+  `solve` baseline is end-to-end and includes allocation, transfer, and host
+  orchestration.

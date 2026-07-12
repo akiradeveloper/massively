@@ -171,11 +171,12 @@ lowering, future implementations can fuse edge expressions into terminals and
 choose atomic, sort-reduce, hierarchical, push/pull, or degree-aware
 intersection strategies without changing graph programs.
 
-The graph recipes include breadth-first search, single-source shortest paths,
+The `graph-algorithms` crate includes breadth-first search, single-source shortest paths,
 PageRank, personalized PageRank, HITS, graph coloring, k-core decomposition,
 minimum spanning tree, Boolean SpGEMM, SpMV, triangle counting, betweenness
 centrality, Forman–Ricci curvature, and graph-based geolocation. See
-[`crates/recipes/src/graph`](crates/recipes/src/graph) for tested compositions.
+[`crates/graph-algorithms`](crates/graph-algorithms) for the tested compositions,
+independent CPU references, and generated graph property tests.
 
 ## Core Model
 
@@ -287,18 +288,18 @@ Every public algorithm has a runnable, single-column example in the
 [API documentation](https://docs.rs/massively). Integration tests are grouped
 under `crates/massively/tests/vector` and `crates/massively/tests/seg`. Their
 oracle tests compare public functions against CPU AoS references and cover the
-full transform input/output arity matrix. Graph algorithm oracles live under
-`crates/massively/tests/graph` and compare all graph recipes with independent CPU
-implementations on generated CSR graphs.
+full transform input/output arity matrix. Complete graph algorithm oracles live
+under `crates/graph-algorithms/tests` and compare every algorithm with
+independent CPU implementations on generated CSR graphs. Tests in `massively`
+itself cover the graph traversal primitives.
 
-### Recipes
+### Graph Algorithms
 
-Recipes under `crates/recipes/src` combine Massively primitives into complete
-algorithms. Vector examples live in `vector/`; graph examples
-written with the traversal algebra live in `graph/` and include GPU tests.
+Complete algorithms written with the graph traversal algebra, together with
+generated property tests and end-to-end benchmarks, live in the separate
+`graph-algorithms` crate.
 
 ```sh
-cargo nextest run -p massively --test graph_oracle
+cargo nextest run -p graph-algorithms --test oracle
+cargo bench -p graph-algorithms --bench algorithms
 ```
-
-See the [recipe list](crates/recipes/README.md) for the full catalog.
