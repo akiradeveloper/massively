@@ -168,6 +168,15 @@ where
     }
 }
 
+impl<Values, Offsets> IterLength for crate::seg::SegmentIterator<Values, Offsets>
+where
+    Offsets: IterLength,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        Ok(self.offsets().logical_len()?.saturating_sub(1))
+    }
+}
+
 impl<Input, Op> IterLength for crate::read::Transform<Input, Op>
 where
     Input: IterLength,

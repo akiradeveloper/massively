@@ -10,12 +10,13 @@ use crate::{
     eval::{
         AdjacentExpr, AdjacentIndexedTransformExpr, Broadcast, Count, DeviceExpr, Direct, Eval1,
         Eval2, Eval3, Eval4, Eval5, Eval6, Eval7, Eval8, Eval9, Eval10, Eval11, Eval12, Eval13,
-        IndexedTransformExpr, PermuteExpr, ReassociateExpr, ReverseCount, Slot0, Slot1, Slot2,
-        Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11, Slot12, TransformExpr,
-        ZipExpr,
+        IndexedTransformExpr, PermuteExpr, ReassociateExpr, ReverseCount, SegmentIteratorExpr,
+        Slot0, Slot1, Slot2, Slot3, Slot4, Slot5, Slot6, Slot7, Slot8, Slot9, Slot10, Slot11,
+        Slot12, TransformExpr, ZipExpr,
     },
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
+    seg::Segment,
     storage::{StorageLayout, WritableFrom},
     value::MStorageElement,
 };
@@ -518,6 +519,16 @@ where
     type ReadArity = Input::ReadArity;
 }
 
+impl<Values, Offsets> ReadExpression for crate::seg::SegmentIterator<Values, Offsets>
+where
+    Values: ReadExpression,
+    Offsets: ReadExpression<Item = u32>,
+    Values::ReadArity: AddArity<Offsets::ReadArity>,
+{
+    type Item = Segment<Values::Item>;
+    type ReadArity = <Values::ReadArity as AddArity<Offsets::ReadArity>>::Output;
+}
+
 /// Produces a same-arity expression for a logical subrange.
 ///
 /// This operation is defined per expression node so that index-sensitive lazy
@@ -686,6 +697,21 @@ where
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
         Self::new(self.input.slice_expression(start, len))
+    }
+}
+
+impl<Values, Offsets> SliceExpression for crate::seg::SegmentIterator<Values, Offsets>
+where
+    Values: ReadExpression + Clone,
+    Offsets: SliceExpression<Item = u32>,
+    crate::seg::SegmentIterator<Values, Offsets>: ReadExpression,
+{
+    fn slice_expression(&self, start: usize, len: usize) -> Self {
+        let offset_len = len.checked_add(1).expect("segmented slice length overflow");
+        crate::seg::SegmentIterator::new(
+            self.values().clone(),
+            self.offsets().slice_expression(start, offset_len),
+        )
     }
 }
 
@@ -882,6 +908,15 @@ where
 {
     type Expr = Input::Expr;
     type NextEnv = Input::NextEnv;
+}
+
+impl<Values, Offsets, Env> BindSlots<Env> for crate::seg::SegmentIterator<Values, Offsets>
+where
+    Values: BindSlots<Env>,
+    Offsets: BindSlots<Values::NextEnv>,
+{
+    type Expr = SegmentIteratorExpr<Values::Expr, Offsets::Expr>;
+    type NextEnv = Offsets::NextEnv;
 }
 
 /// A non-empty final slot environment and its read arity.
@@ -1514,6 +1549,8 @@ mod tests {
         }
 
         type Pair = Zip<Column<u32>, Column<u32>>;
+        type Segments = crate::seg::SegmentIterator<Column<u32>, Column<u32>>;
+        type ByteSegments = crate::seg::SegmentIterator<Column<u8>, Column<u32>>;
         assert_arity::<One, A1>();
         assert_arity::<Two, A2>();
         assert_arity::<Three, A3>();
@@ -1523,6 +1560,8 @@ mod tests {
         assert_shape::<Seven, SevenItem, A7>();
         assert_shape::<Lazified, SevenItem, A8>();
         assert_shape::<Transform<Pair, AddPair>, u32, A2>();
+        assert_shape::<Segments, Segment<u32>, A2>();
+        assert_shape::<ByteSegments, Segment<u8>, A2>();
     }
 
     #[test]
@@ -1542,6 +1581,14 @@ mod tests {
         type Mixed = Zip<Constant<u16>, Counting>;
         type MixedDevice = ZipExpr<Slot0<u16, Broadcast>, Slot1<u32, Count>>;
         assert_binding::<Mixed, MixedDevice, Env2<u16, u32>>();
+
+        type Segments = crate::seg::SegmentIterator<Column<u32>, Column<u32>>;
+        type SegmentsDevice = SegmentIteratorExpr<Slot0<u32, Direct>, Slot1<u32, Direct>>;
+        assert_binding::<Segments, SegmentsDevice, Env2<u32, u32>>();
+
+        type ByteSegments = crate::seg::SegmentIterator<Column<u8>, Column<u32>>;
+        type ByteSegmentsDevice = SegmentIteratorExpr<Slot0<u8, Direct>, Slot1<u32, Direct>>;
+        assert_binding::<ByteSegments, ByteSegmentsDevice, Env2<u8, u32>>();
     }
 
     #[cubecl::cube]

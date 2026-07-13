@@ -2,10 +2,12 @@
 
 use core::marker::PhantomData;
 use cubecl::prelude::*;
+use std::rc::Rc;
 
 use crate::{
     op::{IndexedBinaryOp, IndexedUnaryOp, UnaryOp},
     reduce::ReductionOp,
+    seg::{Segment, SegmentExpand, SegmentReader},
     storage::{Decompose, Recompose, SelectLeaves},
 };
 
@@ -35,6 +37,21 @@ pub struct Count;
 /// Reads a staged final index and subtracts the logical index.
 #[doc(hidden)]
 pub struct ReverseCount;
+
+/// Device expression for one row of an offset-delimited value stream.
+#[doc(hidden)]
+pub struct SegmentIteratorExpr<ValuesExpr, OffsetsExpr> {
+    _marker: PhantomData<fn() -> (ValuesExpr, OffsetsExpr)>,
+}
+
+impl<ValuesExpr, OffsetsExpr, Item> DeviceExpr<Segment<Item>>
+    for SegmentIteratorExpr<ValuesExpr, OffsetsExpr>
+where
+    Item: CubeType + 'static,
+    ValuesExpr: DeviceExpr<Item>,
+    OffsetsExpr: DeviceExpr<u32>,
+{
+}
 
 #[cubecl::cube]
 impl<T: CubePrimitive> ReadMode<T> for Direct {
@@ -379,6 +396,84 @@ define_eval!(Eval10, eval10; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slo
 define_eval!(Eval11, eval11; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10);
 define_eval!(Eval12, eval12; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11);
 define_eval!(Eval13, eval13; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11, L12: slot12);
+
+/// Binds a segmented row to the same staged leaves used by its backing value
+/// expression.  There is one implementation per total read arity, not per
+/// values-arity x offsets-arity combination.
+macro_rules! impl_segment_iterator_eval {
+    ($trait_name:ident, $method:ident, $expand_method:ident; $( $leaf:ident : $slot:ident ),+ $(,)?) => {
+        impl<Item, ValuesExpr, OffsetsExpr, $( $leaf ),+>
+            $trait_name<Segment<Item>, $( $leaf ),+>
+            for SegmentIteratorExpr<ValuesExpr, OffsetsExpr>
+        where
+            Item: CubeType + Send + Sync + 'static,
+            $( $leaf: CubePrimitive + 'static, )+
+            ValuesExpr: $trait_name<Item, $( $leaf ),+>,
+            OffsetsExpr: $trait_name<u32, $( $leaf ),+>,
+        {
+            fn $method(
+                $( $slot: &[$leaf], )+
+                _slot_offsets: &[u32],
+                _index: usize,
+            ) -> Segment<Item> {
+                let _ = ($( $slot, )+);
+                unreachable!("segments are constructed while CubeCL expands a kernel")
+            }
+
+            fn $expand_method(
+                scope: &Scope,
+                $( $slot: &<[$leaf] as CubeType>::ExpandType, )+
+                slot_offsets: &<[u32] as CubeType>::ExpandType,
+                index: <usize as CubeType>::ExpandType,
+            ) -> <Segment<Item> as CubeType>::ExpandType {
+                let next_index = ExpandTypeClone::clone_unchecked(&index).__expand_add_method(
+                    scope,
+                    NativeExpand::from_lit(scope, 1usize),
+                );
+                let start = OffsetsExpr::$expand_method(
+                    scope,
+                    $( $slot, )+
+                    slot_offsets,
+                    ExpandTypeClone::clone_unchecked(&index),
+                );
+                let end = OffsetsExpr::$expand_method(
+                    scope,
+                    $( $slot, )+
+                    slot_offsets,
+                    next_index,
+                );
+
+                $( let $slot = ExpandTypeClone::clone_unchecked($slot); )+
+                let slot_offsets = ExpandTypeClone::clone_unchecked(slot_offsets);
+                let reader: SegmentReader<Item> = Rc::new(move |scope, absolute| {
+                    let absolute = <usize as Cast>::__expand_cast_from(scope, absolute);
+                    ValuesExpr::$expand_method(
+                        scope,
+                        $( &$slot, )+
+                        &slot_offsets,
+                        absolute,
+                    )
+                });
+
+                SegmentExpand::from_bounds(scope, reader, start, end)
+            }
+        }
+    };
+}
+
+impl_segment_iterator_eval!(Eval1, eval1, __expand_eval1; L0: slot0);
+impl_segment_iterator_eval!(Eval2, eval2, __expand_eval2; L0: slot0, L1: slot1);
+impl_segment_iterator_eval!(Eval3, eval3, __expand_eval3; L0: slot0, L1: slot1, L2: slot2);
+impl_segment_iterator_eval!(Eval4, eval4, __expand_eval4; L0: slot0, L1: slot1, L2: slot2, L3: slot3);
+impl_segment_iterator_eval!(Eval5, eval5, __expand_eval5; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4);
+impl_segment_iterator_eval!(Eval6, eval6, __expand_eval6; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5);
+impl_segment_iterator_eval!(Eval7, eval7, __expand_eval7; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6);
+impl_segment_iterator_eval!(Eval8, eval8, __expand_eval8; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7);
+impl_segment_iterator_eval!(Eval9, eval9, __expand_eval9; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8);
+impl_segment_iterator_eval!(Eval10, eval10, __expand_eval10; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9);
+impl_segment_iterator_eval!(Eval11, eval11, __expand_eval11; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10);
+impl_segment_iterator_eval!(Eval12, eval12, __expand_eval12; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11);
+impl_segment_iterator_eval!(Eval13, eval13, __expand_eval13; L0: slot0, L1: slot1, L2: slot2, L3: slot3, L4: slot4, L5: slot5, L6: slot6, L7: slot7, L8: slot8, L9: slot9, L10: slot10, L11: slot11, L12: slot12);
 
 macro_rules! impl_slot_eval {
     (

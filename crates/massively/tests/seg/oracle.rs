@@ -4,9 +4,9 @@ mod common;
 
 use cubecl::prelude::*;
 use massively::seg::{
-    AdjacentDifference, AllOf, AnyOf, CountIf, ExclusiveScan, Filter, ForEachSegment,
-    InclusiveScan, IsSorted, IsSortedUntil, Map, MapLikeExecutable, NoneOf, Reduce,
-    ReduceLikeExecutable, Reverse, Segmented, Sort, Unique, UniqueLikeExecutable,
+    AdjacentDifference, AllOf, AnyOf, CountIf, ExclusiveScan, Executable, Filter, ForEachSegment,
+    InclusiveScan, IsSorted, IsSortedUntil, NoneOf, Reduce, Reverse, SegmentIterator, Sort,
+    Transform, Unique,
 };
 use massively::{op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp, zip2};
 use oracle_ref::seg as oracle;
@@ -35,7 +35,7 @@ fn flatten<T: Clone>(segments: &[Vec<T>]) -> (Vec<T>, Vec<u32>) {
     (values, offsets)
 }
 
-macro_rules! map_like_case {
+macro_rules! length_preserving_case {
     ($name:ident, $algorithm:expr, $oracle:expr) => {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
@@ -47,21 +47,26 @@ macro_rules! map_like_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
                 ).unwrap();
 
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
-                prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
-                prop_assert_eq!(offsets, expected_offsets);
+                let output_offsets = massively::vector::transform(
+                    &exec,
+                    output.offsets().clone(),
+                    massively::op::Identity,
+                ).unwrap();
+                prop_assert_eq!(exec.to_host(output.values()).unwrap(), expected);
+                prop_assert_eq!(exec.to_host(&output_offsets).unwrap(), expected_offsets);
             }
         }
     };
 }
 
-macro_rules! unique_like_case {
+macro_rules! compacting_case {
     ($name:ident, $algorithm:expr, $oracle:expr) => {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
@@ -73,7 +78,7 @@ macro_rules! unique_like_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
@@ -87,7 +92,7 @@ macro_rules! unique_like_case {
     };
 }
 
-macro_rules! reduce_like_case {
+macro_rules! summarizing_case {
     ($name:ident, $algorithm:expr, $oracle:expr) => {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
@@ -99,7 +104,7 @@ macro_rules! reduce_like_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         lazify(values_gpu.slice(..)),
                         lazify(offsets_gpu.slice(..)),
                     ),
@@ -111,51 +116,51 @@ macro_rules! reduce_like_case {
     };
 }
 
-map_like_case!(seg_map, Map(AddOne), |segments| oracle::map(
+length_preserving_case!(seg_transform, Transform(AddOne), |segments| oracle::map(
     segments, AddOne
 ));
-map_like_case!(seg_sort, Sort(Less), |segments| oracle::sort(
+length_preserving_case!(seg_sort, Sort(Less), |segments| oracle::sort(
     segments, Less
 ));
-map_like_case!(seg_reverse, Reverse, oracle::reverse);
-map_like_case!(seg_inclusive_scan, InclusiveScan(Sum), |segments| {
+length_preserving_case!(seg_reverse, Reverse, oracle::reverse);
+length_preserving_case!(seg_inclusive_scan, InclusiveScan(Sum), |segments| {
     oracle::inclusive_scan(segments, Sum)
 });
-map_like_case!(seg_exclusive_scan, ExclusiveScan(Sum, 7), |segments| {
+length_preserving_case!(seg_exclusive_scan, ExclusiveScan(Sum, 7), |segments| {
     oracle::exclusive_scan(segments, Sum, 7)
 });
-map_like_case!(
+length_preserving_case!(
     seg_adjacent_difference,
     AdjacentDifference(Sum),
     |segments| oracle::adjacent_difference(segments, Sum)
 );
 
-unique_like_case!(seg_unique, Unique(Equal), |segments| oracle::unique(
+compacting_case!(seg_unique, Unique(Equal), |segments| oracle::unique(
     segments, Equal
 ));
-unique_like_case!(seg_filter, Filter(Even), |segments| oracle::filter(
+compacting_case!(seg_filter, Filter(Even), |segments| oracle::filter(
     segments, Even
 ));
 
-reduce_like_case!(seg_reduce, Reduce(Sum, 7), |segments| oracle::reduce(
+summarizing_case!(seg_reduce, Reduce(Sum, 7), |segments| oracle::reduce(
     segments, Sum, 7
 ));
-reduce_like_case!(seg_count_if, CountIf(Even), |segments| {
+summarizing_case!(seg_count_if, CountIf(Even), |segments| {
     oracle::count_if(segments, Even)
 });
-reduce_like_case!(seg_all_of, AllOf(Even), |segments| oracle::all_of(
+summarizing_case!(seg_all_of, AllOf(Even), |segments| oracle::all_of(
     segments, Even
 ));
-reduce_like_case!(seg_any_of, AnyOf(Even), |segments| oracle::any_of(
+summarizing_case!(seg_any_of, AnyOf(Even), |segments| oracle::any_of(
     segments, Even
 ));
-reduce_like_case!(seg_none_of, NoneOf(Even), |segments| oracle::none_of(
+summarizing_case!(seg_none_of, NoneOf(Even), |segments| oracle::none_of(
     segments, Even
 ));
-reduce_like_case!(seg_is_sorted, IsSorted(Less), |segments| {
+summarizing_case!(seg_is_sorted, IsSorted(Less), |segments| {
     oracle::is_sorted(segments, Less)
 });
-reduce_like_case!(seg_is_sorted_until, IsSortedUntil(Less), |segments| {
+summarizing_case!(seg_is_sorted_until, IsSortedUntil(Less), |segments| {
     oracle::is_sorted_until(segments, Less)
 });
 
@@ -265,7 +270,7 @@ fn pair_rows(first: Vec<u32>, second: Vec<u32>) -> Vec<Pair> {
     first.into_iter().zip(second).collect()
 }
 
-macro_rules! pair_map_like_case {
+macro_rules! pair_length_preserving_case {
     ($name:ident, $algorithm:expr, $oracle:expr) => {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
@@ -279,7 +284,7 @@ macro_rules! pair_map_like_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
@@ -288,18 +293,23 @@ macro_rules! pair_map_like_case {
                 let (expected, expected_offsets) = flatten(&$oracle(&segments));
                 prop_assert_eq!(
                     pair_rows(
-                        exec.to_host(&output.0).unwrap(),
-                        exec.to_host(&output.1).unwrap(),
+                        exec.to_host(&output.values().0).unwrap(),
+                        exec.to_host(&output.values().1).unwrap(),
                     ),
                     expected,
                 );
-                prop_assert_eq!(offsets, expected_offsets);
+                let output_offsets = massively::vector::transform(
+                    &exec,
+                    output.offsets().clone(),
+                    massively::op::Identity,
+                ).unwrap();
+                prop_assert_eq!(exec.to_host(&output_offsets).unwrap(), expected_offsets);
             }
         }
     };
 }
 
-macro_rules! pair_unique_like_case {
+macro_rules! pair_compacting_case {
     ($name:ident, $algorithm:expr, $oracle:expr) => {
         proptest! {
             #![proptest_config(ProptestConfig { cases: CASES, .. ProptestConfig::default() })]
@@ -313,7 +323,7 @@ macro_rules! pair_unique_like_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
@@ -347,7 +357,7 @@ macro_rules! pair_item_reduce_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
@@ -379,7 +389,7 @@ macro_rules! pair_flag_reduce_case {
                 let offsets_gpu = exec.to_device(&offsets);
                 let output = ForEachSegment($algorithm).run(
                     &exec,
-                    Segmented::new(
+                    SegmentIterator::new(
                         zip2(lazify(first_gpu.slice(..)), lazify(second_gpu.slice(..))),
                         lazify(offsets_gpu.slice(..)),
                     ),
@@ -391,33 +401,33 @@ macro_rules! pair_flag_reduce_case {
     };
 }
 
-pair_map_like_case!(seg_pair_map, Map(PairAddOne), |segments| oracle::map(
-    segments, PairAddOne
-));
-pair_map_like_case!(seg_pair_sort, Sort(PairLess), |segments| oracle::sort(
+pair_length_preserving_case!(seg_pair_transform, Transform(PairAddOne), |segments| {
+    oracle::map(segments, PairAddOne)
+});
+pair_length_preserving_case!(seg_pair_sort, Sort(PairLess), |segments| oracle::sort(
     segments, PairLess
 ));
-pair_map_like_case!(seg_pair_reverse, Reverse, oracle::reverse);
-pair_map_like_case!(
+pair_length_preserving_case!(seg_pair_reverse, Reverse, oracle::reverse);
+pair_length_preserving_case!(
     seg_pair_inclusive_scan,
     InclusiveScan(PairSum),
     |segments| oracle::inclusive_scan(segments, PairSum)
 );
-pair_map_like_case!(
+pair_length_preserving_case!(
     seg_pair_exclusive_scan,
     ExclusiveScan(PairSum, (7, 11)),
     |segments| oracle::exclusive_scan(segments, PairSum, (7, 11))
 );
-pair_map_like_case!(
+pair_length_preserving_case!(
     seg_pair_adjacent_difference,
     AdjacentDifference(PairSum),
     |segments| oracle::adjacent_difference(segments, PairSum)
 );
 
-pair_unique_like_case!(seg_pair_unique, Unique(PairEqual), |segments| {
+pair_compacting_case!(seg_pair_unique, Unique(PairEqual), |segments| {
     oracle::unique(segments, PairEqual)
 });
-pair_unique_like_case!(seg_pair_filter, Filter(PairEven), |segments| {
+pair_compacting_case!(seg_pair_filter, Filter(PairEven), |segments| {
     oracle::filter(segments, PairEven)
 });
 

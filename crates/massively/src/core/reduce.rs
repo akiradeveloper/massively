@@ -415,6 +415,28 @@ where
     }
 }
 
+impl<R, Values, Offsets, Env> StageRead<R, Env> for crate::seg::SegmentIterator<Values, Offsets>
+where
+    R: Runtime,
+    Values: StageRead<R, Env>,
+    Offsets: StageRead<R, Values::NextEnv>,
+    crate::seg::SegmentIterator<Values, Offsets>: BindSlots<Env>,
+{
+    fn logical_len(&self) -> Result<usize, Error> {
+        Ok(self.offsets().logical_len()?.saturating_sub(1))
+    }
+
+    fn stage_at(
+        &self,
+        client: &ComputeClient<R>,
+        owner: u64,
+        bindings: &mut StagedBindings,
+    ) -> Result<(), Error> {
+        self.values().stage_at(client, owner, bindings)?;
+        self.offsets().stage_at(client, owner, bindings)
+    }
+}
+
 impl<R, Input, Op, Env> StageRead<R, Env> for Transform<Input, Op>
 where
     R: Runtime,

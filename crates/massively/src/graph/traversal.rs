@@ -11,7 +11,7 @@ use crate::{
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
-    seg::{ForEachSegment, Reduce, ReduceLikeExecutableInto, Segmented},
+    seg::{ForEachSegment, Reduce, SegmentIterator, SummarizingExecutableInto},
 };
 
 use super::{Csr, EdgeExpr, control::TraversalControl, expr::EdgeExprImpl};
@@ -175,7 +175,7 @@ where
         crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
         ForEachSegment(Reduce(reduce, init)).run_into(
             exec,
-            Segmented::new(
+            SegmentIterator::new(
                 mapped.slice(..),
                 self.traversal.control.output_offsets.slice(..),
             ),

@@ -7,8 +7,8 @@ use massively::{
     op::ReductionOp,
     op::UnaryOp,
     seg::{
-        ForEachSegment, InclusiveScan, Map, MapLikeExecutable, Reduce, ReduceLikeExecutable,
-        Reverse, Segmented, Sort, Unique, UniqueLikeExecutable,
+        Executable, ForEachSegment, InclusiveScan, Reduce, Reverse, SegmentIterator, Sort,
+        Transform, Unique,
     },
     vector::inclusive_scan_by_key,
     vector::reduce_by_key,
@@ -98,9 +98,9 @@ fn reverse_within_segments(len: usize, segment_len: usize) -> Vec<u32> {
         .collect()
 }
 
-fn bench_map(c: &mut Criterion) {
+fn bench_transform(c: &mut Criterion) {
     let exec = common::exec();
-    let mut group = c.benchmark_group("seg_map");
+    let mut group = c.benchmark_group("seg_transform");
     for &len in common::SIZES {
         group.throughput(Throughput::Elements(len as u64));
         let values = exec.to_device(&dense_u32(len));
@@ -109,10 +109,10 @@ fn bench_map(c: &mut Criterion) {
 
         group.bench_function(BenchmarkId::from_parameter(len), |b| {
             b.iter(|| {
-                let output = ForEachSegment(Map(AddOne))
+                let output = ForEachSegment(Transform(AddOne))
                     .run(
                         &exec,
-                        Segmented::new(
+                        SegmentIterator::new(
                             black_box(values.slice(..)),
                             black_box(segment_offsets.slice(..)),
                         ),
@@ -144,7 +144,7 @@ fn bench_inclusive_scan(c: &mut Criterion) {
                     let output = ForEachSegment(InclusiveScan(Sum))
                         .run(
                             &exec,
-                            Segmented::new(
+                            SegmentIterator::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
@@ -195,7 +195,7 @@ fn bench_reduce(c: &mut Criterion) {
                     let output = ForEachSegment(Reduce(Sum, 0u32))
                         .run(
                             &exec,
-                            Segmented::new(
+                            SegmentIterator::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
@@ -244,7 +244,7 @@ fn bench_unique(c: &mut Criterion) {
                     let output = ForEachSegment(Unique(Equal))
                         .run(
                             &exec,
-                            Segmented::new(
+                            SegmentIterator::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
@@ -276,7 +276,7 @@ fn bench_reverse(c: &mut Criterion) {
                     let output = ForEachSegment(Reverse)
                         .run(
                             &exec,
-                            Segmented::new(
+                            SegmentIterator::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
@@ -308,7 +308,7 @@ fn bench_sort(c: &mut Criterion) {
                     let output = ForEachSegment(Sort(Less))
                         .run(
                             &exec,
-                            Segmented::new(
+                            SegmentIterator::new(
                                 black_box(values.slice(..)),
                                 black_box(segment_offsets.slice(..)),
                             ),
@@ -347,7 +347,7 @@ fn bench_unique_patterns(c: &mut Criterion) {
                         let output = ForEachSegment(Unique(Equal))
                             .run(
                                 &exec,
-                                Segmented::new(
+                                SegmentIterator::new(
                                     black_box(values.slice(..)),
                                     black_box(segment_offsets.slice(..)),
                                 ),
@@ -390,7 +390,7 @@ fn bench_sort_patterns(c: &mut Criterion) {
                         let output = ForEachSegment(Sort(Less))
                             .run(
                                 &exec,
-                                Segmented::new(
+                                SegmentIterator::new(
                                     black_box(values.slice(..)),
                                     black_box(segment_offsets.slice(..)),
                                 ),
@@ -410,7 +410,7 @@ criterion_group! {
     name = benches;
     config = common::criterion();
     targets =
-        bench_map,
+        bench_transform,
         bench_inclusive_scan,
         bench_reduce,
         bench_unique,
