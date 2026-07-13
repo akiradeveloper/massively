@@ -57,13 +57,13 @@ pub(crate) fn sort_into<R, Input, Output, Less>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: Materializable<R>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Input::Item>,
     Less: BinaryPredicateOp<Input::Item>,
 {
     let input = crate::api::iter::lower_fixed::<R, _>(input);
-    let permutation = crate::ordering::sort_control_with(exec, input.clone(), less)?;
-    crate::indexed::apply_permutation(exec, input, permutation.column(), output.lower_output())
+    crate::ordering::sort(exec, input, less, output.lower_output())
 }
 
 /// Finds the first accepted adjacent pair.

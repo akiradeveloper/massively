@@ -57,6 +57,24 @@ pub struct OrderingResult<R: Runtime, Storage> {
     pub(crate) control: OrderingControl<R>,
 }
 
+/// Storage-shape dispatch for the optimized sort.
+///
+/// This capability lives on the physical leaf list, whose type identifies one
+/// exact storage width.  Semantic callers therefore keep a universal API while
+/// the generated kernel contains only the leaves that hold the item.
+pub(crate) trait SortLeaves<R: Runtime, Item>: Sized
+where
+    Item: CanonicalAlloc<R, StorageLeaves = Self>,
+{
+    fn sort_storage<Less>(
+        exec: &Executor<R>,
+        input: Item::CanonicalStorage,
+        carry_indices: bool,
+    ) -> Result<OrderingResult<R, Item::CanonicalStorage>, Error>
+    where
+        Less: BinaryPredicateOp<Item>;
+}
+
 macro_rules! define_sort_kernels {
     (
         $block:ident, $merge:ident, $eval:ident, $method:ident;
@@ -777,3 +795,63 @@ where
         })
     }
 }
+
+macro_rules! impl_sort_leaves {
+    ($read_arity:ty, $arity:ty, $eval:ident; $env:ty; $leaves:ty; $storage:ty; $( $leaf:ident ),+) => {
+        impl<R, Item, $( $leaf ),+> SortLeaves<R, Item> for $leaves
+        where
+            R: Runtime,
+            $( $leaf: MStorageElement, )+
+            Item: CanonicalAlloc<
+                    R,
+                    CanonicalStorage = $storage,
+                    StorageArity = $arity,
+                    StorageLeaves = $leaves,
+                > + StorageLayout
+                + Send
+                + Sync
+                + 'static,
+            $storage: CanonicalStorage<R, ReadSlots = $env, WriteSlots = $env>,
+            Reassociate<<$storage as CanonicalStorage<R>>::Read, Item>:
+                ReadExpression<Item = Item, ReadArity = $read_arity>
+                    + LowerReadExpression<Slots = $env>
+                    + StageRead<R, Env0>,
+            <Reassociate<<$storage as CanonicalStorage<R>>::Read, Item> as LowerReadExpression>::DeviceExpr:
+                $eval<Item, $( $leaf ),+>,
+            Item::DeviceLayout:
+                Decompose<Item, Leaves = $leaves> + Recompose<Item, Leaves = $leaves>,
+            <$storage as CanonicalStorage<R>>::Write:
+                OutputExpression<StorageArity = $arity>
+                    + LowerOutputExpression<Slots = $env>
+                    + StageOutput<R, Env0>,
+        {
+            fn sort_storage<Less>(
+                exec: &Executor<R>,
+                input: Item::CanonicalStorage,
+                carry_indices: bool,
+            ) -> Result<OrderingResult<R, Item::CanonicalStorage>, Error>
+            where
+                Less: BinaryPredicateOp<Item>,
+            {
+                <Item as SortStorageItem<R, Less>>::sort_storage(
+                    exec,
+                    input,
+                    carry_indices,
+                )
+            }
+        }
+    };
+}
+
+impl_sort_leaves!(crate::A1, crate::S1, Eval1; Env1<L0>; Last<L0>; crate::DeviceVec<R,L0>; L0);
+impl_sort_leaves!(crate::A2, crate::S2, Eval2; Env2<L0,L1>; More<L0,Last<L1>>; crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>; L0,L1);
+impl_sort_leaves!(crate::A3, crate::S3, Eval3; Env3<L0,L1,L2>; More<L0,More<L1,Last<L2>>>; crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>; L0,L1,L2);
+impl_sort_leaves!(crate::A4, crate::S4, Eval4; Env4<L0,L1,L2,L3>; More<L0,More<L1,More<L2,Last<L3>>>>; crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>; L0,L1,L2,L3);
+impl_sort_leaves!(crate::A5, crate::S5, Eval5; Env5<L0,L1,L2,L3,L4>; More<L0,More<L1,More<L2,More<L3,Last<L4>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>; L0,L1,L2,L3,L4);
+impl_sort_leaves!(crate::A6, crate::S6, Eval6; Env6<L0,L1,L2,L3,L4,L5>; More<L0,More<L1,More<L2,More<L3,More<L4,Last<L5>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>; L0,L1,L2,L3,L4,L5);
+impl_sort_leaves!(crate::A7, crate::S7, Eval7; Env7<L0,L1,L2,L3,L4,L5,L6>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,Last<L6>>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>,crate::DeviceVec<R,L6>>; L0,L1,L2,L3,L4,L5,L6);
+impl_sort_leaves!(crate::A8, crate::S8, Eval8; Env8<L0,L1,L2,L3,L4,L5,L6,L7>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,Last<L7>>>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>,crate::DeviceVec<R,L6>>,crate::DeviceVec<R,L7>>; L0,L1,L2,L3,L4,L5,L6,L7);
+impl_sort_leaves!(crate::A9, crate::S9, Eval9; Env9<L0,L1,L2,L3,L4,L5,L6,L7,L8>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,Last<L8>>>>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>,crate::DeviceVec<R,L6>>,crate::DeviceVec<R,L7>>,crate::DeviceVec<R,L8>>; L0,L1,L2,L3,L4,L5,L6,L7,L8);
+impl_sort_leaves!(crate::A10, crate::S10, Eval10; Env10<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,Last<L9>>>>>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>,crate::DeviceVec<R,L6>>,crate::DeviceVec<R,L7>>,crate::DeviceVec<R,L8>>,crate::DeviceVec<R,L9>>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9);
+impl_sort_leaves!(crate::A11, crate::S11, Eval11; Env11<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,Last<L10>>>>>>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>,crate::DeviceVec<R,L6>>,crate::DeviceVec<R,L7>>,crate::DeviceVec<R,L8>>,crate::DeviceVec<R,L9>>,crate::DeviceVec<R,L10>>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10);
+impl_sort_leaves!(crate::A12, crate::S12, Eval12; Env12<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11>; More<L0,More<L1,More<L2,More<L3,More<L4,More<L5,More<L6,More<L7,More<L8,More<L9,More<L10,Last<L11>>>>>>>>>>>>; crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::Zip<crate::DeviceVec<R,L0>,crate::DeviceVec<R,L1>>,crate::DeviceVec<R,L2>>,crate::DeviceVec<R,L3>>,crate::DeviceVec<R,L4>>,crate::DeviceVec<R,L5>>,crate::DeviceVec<R,L6>>,crate::DeviceVec<R,L7>>,crate::DeviceVec<R,L8>>,crate::DeviceVec<R,L9>>,crate::DeviceVec<R,L10>>,crate::DeviceVec<R,L11>>; L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11);

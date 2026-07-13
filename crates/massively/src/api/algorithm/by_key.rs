@@ -78,6 +78,7 @@ pub(crate) fn sort_by_key_into<R, Keys, Values, Less, KeyOutput, ValueOutput>(
 where
     R: Runtime,
     Keys: MIter<R>,
+    Keys::Item: Materializable<R>,
     Values: MIter<R>,
     Less: BinaryPredicateOp<Keys::Item>,
     KeyOutput: MIterMut<R>,
@@ -95,12 +96,12 @@ where
     }
     let keys = crate::api::iter::lower_fixed::<R, _>(keys);
     let values = crate::api::iter::lower_fixed::<R, _>(values);
-    let permutation = crate::ordering::sort_control_with(exec, keys.clone(), less)?;
-    crate::indexed::apply_permutation(exec, keys, permutation.column(), key_output.lower_output())?;
+    let ordering =
+        crate::ordering::sort_keys_with_control(exec, keys, less, key_output.lower_output())?;
     crate::indexed::apply_permutation(
         exec,
         values,
-        permutation.column(),
+        ordering.permutation().column(),
         value_output.lower_output(),
     )
 }

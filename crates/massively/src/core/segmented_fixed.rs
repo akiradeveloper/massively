@@ -2,6 +2,7 @@
 
 use cubecl::prelude::*;
 
+use crate::allocation::ScratchStorage;
 use crate::output::{OutputBindings, StageOutput};
 use crate::reduce::{ReductionOp, StageRead, StagedBindings};
 use crate::storage::{
@@ -12,7 +13,7 @@ use crate::{CanonicalStorage, DeviceVec, Error, Executor};
 
 const BLOCK_SIZE: u32 = 256;
 
-type FixedStorage<R, Item> = <Item as crate::CanonicalAlloc<R>>::CanonicalStorage;
+type FixedStorage<R, Item> = <Item as ScratchStorage<R>>::Storage;
 
 #[cubecl::cube(launch_unchecked, explicit_define)]
 #[allow(clippy::too_many_arguments)]
@@ -702,7 +703,7 @@ fn segmented_inclusive_fixed<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()?;
@@ -719,7 +720,7 @@ where
 
     let blocks = len.div_ceil(BLOCK_SIZE as usize);
     let local_flags = exec.alloc_column::<u32>(len);
-    let block_sums = exec.alloc_canonical::<Item>(blocks);
+    let block_sums = Item::alloc_scratch(exec, blocks);
     let block_flags = exec.alloc_column::<u32>(blocks);
     let input_read = input.read();
     let output_write = output.write();
@@ -850,7 +851,7 @@ where
     }
 
     if blocks > 1 {
-        let prefixes = exec.alloc_canonical::<Item>(blocks);
+        let prefixes = Item::alloc_scratch(exec, blocks);
         segmented_inclusive_fixed::<R, Item, Op>(exec, &block_sums, &block_flags, &prefixes)?;
         let prefix_read = prefixes.read();
         let prefix_bindings = stage_read(exec, &prefix_read)?;
@@ -995,7 +996,7 @@ fn launch_exclusive<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
 {
     let len = inclusive.len()?;
@@ -1163,7 +1164,7 @@ fn launch_apply_init<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
 {
     let len = inclusive.len()?;
@@ -1332,7 +1333,7 @@ pub(crate) fn segmented_fixed<R, Item, Op>(
 ) -> Result<FixedStorage<R, Item>, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
+    Item: ScratchStorage<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()?;
@@ -1342,16 +1343,16 @@ where
             right: heads.len(),
         });
     }
-    let output = exec.alloc_canonical::<Item>(len);
+    let output = Item::alloc_scratch(exec, len);
     match mode {
         0 => segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &output)?,
         1 => {
             if len == 0 {
                 return Ok(output);
             }
-            let inclusive = exec.alloc_canonical::<Item>(len);
+            let inclusive = Item::alloc_scratch(exec, len);
             segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &inclusive)?;
-            let initial = crate::allocation::singleton(
+            let initial = crate::allocation::scratch_singleton(
                 exec,
                 init.expect("exclusive segmented scan requires init"),
             )?;
@@ -1361,9 +1362,9 @@ where
             if len == 0 {
                 return Ok(output);
             }
-            let inclusive = exec.alloc_canonical::<Item>(len);
+            let inclusive = Item::alloc_scratch(exec, len);
             segmented_inclusive_fixed::<R, Item, Op>(exec, input, heads, &inclusive)?;
-            let initial = crate::allocation::singleton(
+            let initial = crate::allocation::scratch_singleton(
                 exec,
                 init.expect("segmented reduction requires init"),
             )?;

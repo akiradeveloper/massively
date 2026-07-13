@@ -264,6 +264,59 @@ pub trait AllocColumns<R: Runtime> {
     fn alloc_columns(exec: &Executor<R>, len: usize) -> Self::Storage;
 }
 
+/// Allocates internal canonical scratch storage from an item's physical leaves.
+///
+/// Unlike [`Materializable`], this does not make the semantic item an owned
+/// storage item. It only gives fixed-width algorithms temporary SoA columns
+/// whose canonical item can cross the same physical write boundary.
+pub(crate) trait ScratchStorage<R: Runtime>:
+    crate::api::iter::MItem<R> + WritableFrom<Self::ScratchItem>
+{
+    type ScratchItem: WritableFrom<Self>
+        + StorageLayout<StorageArity = Self::StorageArity, StorageLeaves = Self::StorageLeaves>;
+    type Storage: CanonicalStorage<R, Item = Self::ScratchItem>;
+
+    fn alloc_scratch(exec: &Executor<R>, len: usize) -> Self::Storage;
+}
+
+impl<R, Item> ScratchStorage<R> for Item
+where
+    R: Runtime,
+    Item: crate::api::iter::MItem<R>
+        + WritableFrom<
+            <<<Item as StorageLayout>::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item,
+        >,
+    Item::StorageLeaves: AllocColumns<R>,
+    <<Item::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item:
+        WritableFrom<Item>
+        + StorageLayout<
+            StorageArity = Item::StorageArity,
+            StorageLeaves = Item::StorageLeaves,
+        >,
+{
+    type ScratchItem =
+        <<Item::StorageLeaves as AllocColumns<R>>::Storage as CanonicalStorage<R>>::Item;
+    type Storage = <Item::StorageLeaves as AllocColumns<R>>::Storage;
+
+    fn alloc_scratch(exec: &Executor<R>, len: usize) -> Self::Storage {
+        Item::StorageLeaves::alloc_columns(exec, len)
+    }
+}
+
+pub(crate) fn scratch_singleton<R, Item>(
+    exec: &Executor<R>,
+    value: Item,
+) -> Result<<Item as ScratchStorage<R>>::Storage, Error>
+where
+    R: Runtime,
+    Item: ScratchStorage<R>,
+{
+    let storage = Item::alloc_scratch(exec, 1);
+    let value = <Item::ScratchItem as WritableFrom<Item>>::write_from(value);
+    storage.write().fill_output(exec, value)?;
+    Ok(storage)
+}
+
 impl<R, L0> AllocColumns<R> for Last<L0>
 where
     R: Runtime,
@@ -667,10 +720,11 @@ where
 impl<R, Item> Materializable<R> for Item
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + CanonicalAlloc<R> + Canonicalizable,
+    Item: crate::api::iter::MItem<R> + CanonicalAlloc<R> + Canonicalizable + ScratchStorage<R>,
     Item::Canonical:
         Allocable<R> + crate::WritableFrom<Item> + crate::api::iter::SameStorageLayout<Item>,
     <Item::Canonical as Allocable<R>>::Storage: MStorage<R, Item = Item::Canonical>,
+    <Item as StorageLayout>::StorageLeaves: crate::ordering::sort::SortLeaves<R, Item>,
 {
     type Materialized = Item::Canonical;
     type Storage = <Item::Canonical as Allocable<R>>::Storage;
@@ -786,7 +840,7 @@ where
     Left: MStorage<R>,
     Right: MStorage<R>,
     Self: CanonicalStorage<R>,
-    <Self as CanonicalStorage<R>>::Item: Allocable<R, Storage = Self>,
+    <Self as CanonicalStorage<R>>::Item: Allocable<R, Storage = Self> + ScratchStorage<R>,
     <<Self as CanonicalStorage<R>>::Item as StorageLayout>::StorageLeaves:
         crate::core::facade::KernelValue,
     <Self as CanonicalStorage<R>>::Read:
@@ -1049,6 +1103,30 @@ where
 {
     let len = input.logical_len()?;
     let storage = exec.alloc_canonical::<Input::Item>(len);
+    let output = crate::output::ReassociatedOutput::<
+        _,
+        Input::Item,
+        <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+    >::new(storage.write());
+    crate::transform::materialize_fixed(exec, &input, &output)?;
+    Ok(storage)
+}
+
+/// Materializes a fixed-ABI read expression into internal scratch storage.
+///
+/// The semantic item itself need not support owned allocation; only its
+/// fixed-width physical leaves are materialized.
+pub(crate) fn normalize_lowered_scratch<R, Input>(
+    exec: &Executor<R>,
+    input: Input,
+) -> Result<<Input::Item as ScratchStorage<R>>::Storage, Error>
+where
+    R: Runtime,
+    Input: crate::core::facade::KernelInput<R>,
+    Input::Item: ScratchStorage<R>,
+{
+    let len = input.logical_len()?;
+    let storage = Input::Item::alloc_scratch(exec, len);
     let output = crate::output::ReassociatedOutput::<
         _,
         Input::Item,

@@ -57,11 +57,11 @@ pub trait Canonicalizable: CubeType + Sized {
 /// relation directly.
 #[allow(private_bounds)]
 pub trait Materializable<R: Runtime>:
-    MaterializationAbi<R> + Canonicalizable<Canonical = Self::Materialized>
+    MaterializationAbi<R> + SortAbi<R> + Canonicalizable<Canonical = Self::Materialized>
 {
     /// The canonical item written to owned storage.
     #[doc(hidden)]
-    type Materialized: Allocable<R, Storage = Self::Storage>
+    type Materialized: Allocable<R, Storage = <Self as Materializable<R>>::Storage>
         + WritableFrom<Self>
         + SameStorageLayout<Self>;
 
@@ -72,15 +72,60 @@ pub trait Materializable<R: Runtime>:
 /// current fixed-width storage backend. It is not a user-facing capability.
 #[doc(hidden)]
 pub(crate) trait MaterializationAbi<R: Runtime>:
-    MItem<R> + crate::CanonicalAlloc<R>
+    MItem<R> + crate::CanonicalAlloc<R> + crate::core::allocation::ScratchStorage<R>
 {
 }
 
 impl<R, Item> MaterializationAbi<R> for Item
 where
     R: Runtime,
-    Item: MItem<R> + crate::CanonicalAlloc<R>,
+    Item: MItem<R> + crate::CanonicalAlloc<R> + crate::core::allocation::ScratchStorage<R>,
 {
+}
+
+/// Sealed storage-shape dispatch for algorithms that materialize before
+/// sorting. Public iterator APIs remain independent of physical arity.
+pub(crate) trait SortAbi<R: Runtime>: MItem<R> + crate::CanonicalAlloc<R> {
+    fn sort_storage<Less>(
+        exec: &Executor<R>,
+        input: <Self as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        carry_indices: bool,
+    ) -> Result<
+        crate::ordering::sort::OrderingResult<
+            R,
+            <Self as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        >,
+        Error,
+    >
+    where
+        Less: crate::op::BinaryPredicateOp<Self>;
+}
+
+impl<R, Item> SortAbi<R> for Item
+where
+    R: Runtime,
+    Item: MItem<R> + crate::CanonicalAlloc<R>,
+    <Item as crate::StorageLayout>::StorageLeaves: crate::ordering::sort::SortLeaves<R, Item>,
+{
+    fn sort_storage<Less>(
+        exec: &Executor<R>,
+        input: <Self as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        carry_indices: bool,
+    ) -> Result<
+        crate::ordering::sort::OrderingResult<
+            R,
+            <Self as crate::CanonicalAlloc<R>>::CanonicalStorage,
+        >,
+        Error,
+    >
+    where
+        Less: crate::op::BinaryPredicateOp<Self>,
+    {
+        <<Self as crate::StorageLayout>::StorageLeaves as crate::ordering::sort::SortLeaves<
+            R,
+            Self,
+        >>::sort_storage::<Less>(exec, input, carry_indices)
+    }
 }
 
 /// Sealed equality witness for the storage ABI before and after canonical
@@ -711,12 +756,13 @@ where
 /// Public preallocated output stream.
 ///
 /// Device mutable slices and [`Zip`] trees of mutable slices implement this trait.
+#[allow(private_bounds)]
 pub trait MIterMut<R: Runtime>: Sized {
     /// Semantic value stored by one output row.
     ///
     /// A preallocated destination needs a physical storage layout, but it does
     /// not need to be allocatable as new owned storage.
-    type Item: MItem<R>;
+    type Item: MItem<R> + crate::core::allocation::ScratchStorage<R>;
 
     #[doc(hidden)]
     type Slice;
@@ -1627,7 +1673,7 @@ where
         + crate::selection::FillOutput<R>
         + crate::selection::ReplaceOutput<R>
         + crate::output::SliceOutput,
-    Output::Item: MItem<R>,
+    Output::Item: MItem<R> + crate::core::allocation::ScratchStorage<R>,
     Output::Slots: crate::output::PaddedOutputSlots<
             Leaves = <Output::Item as crate::StorageLayout>::StorageLeaves,
         > + crate::output::OutputSlotEnvironment<

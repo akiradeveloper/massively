@@ -489,9 +489,8 @@ where
 }
 
 /// Public sort capability.  The blanket implementation first normalizes an
-/// arbitrary semantic expression into canonical storage, builds a stable
-/// permutation from that storage, and applies it to the output.  The
-/// permutation is the only connection between ordering and payload movement.
+/// arbitrary fixed-ABI semantic expression into canonical storage, then runs
+/// the storage-width sort and materializes its semantic shape into the output.
 #[doc(hidden)]
 pub trait SortInput<R: Runtime, Less, Output>: ReadExpression + Sized {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error>;
@@ -501,10 +500,11 @@ impl<R, Input, Less, Output> SortInput<R, Less, Output> for Input
 where
     R: Runtime,
     Input: crate::allocation::NormalizeInput<R>,
+    Less: BinaryPredicateOp<Input::Item>,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Item: crate::WritableFrom<Input::Item>,
     Input::Item:
-        CanonicalAlloc<R, CanonicalStorage = Input::Storage> + sort::SortStorageItem<R, Less>,
+        CanonicalAlloc<R, CanonicalStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
     Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
             R,
             Input::SemanticRead,
@@ -516,8 +516,9 @@ where
 {
     fn sort_into(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
         let temporary = self.normalize(exec)?;
-        let result =
-            <Input::Item as sort::SortStorageItem<R, Less>>::sort_storage(exec, temporary, false)?;
+        let result = <Input::Item as crate::api::iter::SortAbi<R>>::sort_storage::<Less>(
+            exec, temporary, false,
+        )?;
         let semantic = Input::semantic_read(&result.sorted_keys);
         materialize(exec, semantic, output)
     }
@@ -535,6 +536,66 @@ where
     Input: SortInput<R, Less, Output>,
 {
     input.sort_into(exec, output)
+}
+
+/// Key-sort capability that also retains the stable source permutation.
+///
+/// Keys are moved by the storage-width sort itself.  Only the permutation is
+/// exposed to the independent value phase, so key and value arities never form
+/// one combined kernel ABI.
+#[doc(hidden)]
+pub trait SortKeysInput<R: Runtime, Less, Output>: ReadExpression + Sized {
+    fn sort_keys_into(
+        self,
+        exec: &Executor<R>,
+        output: Output,
+    ) -> Result<sort::OrderingControl<R>, Error>;
+}
+
+impl<R, Input, Less, Output> SortKeysInput<R, Less, Output> for Input
+where
+    R: Runtime,
+    Input: crate::allocation::NormalizeInput<R>,
+    Less: BinaryPredicateOp<Input::Item>,
+    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
+    Output::Item: crate::WritableFrom<Input::Item>,
+    Input::Item:
+        CanonicalAlloc<R, CanonicalStorage = Input::Storage> + crate::api::iter::SortAbi<R>,
+    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
+            R,
+            Input::SemanticRead,
+            Output,
+            crate::read::KernelReadSlots<<Input::SemanticRead as LowerReadExpression>::Slots>,
+            crate::output::KernelOutputSlots<<Output as LowerOutputExpression>::Slots>,
+        >,
+    <Output as LowerOutputExpression>::Slots: crate::output::PaddedOutputSlots,
+{
+    fn sort_keys_into(
+        self,
+        exec: &Executor<R>,
+        output: Output,
+    ) -> Result<sort::OrderingControl<R>, Error> {
+        let temporary = self.normalize(exec)?;
+        let result = <Input::Item as crate::api::iter::SortAbi<R>>::sort_storage::<Less>(
+            exec, temporary, true,
+        )?;
+        let semantic = Input::semantic_read(&result.sorted_keys);
+        materialize(exec, semantic, output)?;
+        Ok(result.control)
+    }
+}
+
+pub(crate) fn sort_keys_with_control<R, Input, Less, Output>(
+    exec: &Executor<R>,
+    input: Input,
+    _less: Less,
+    output: Output,
+) -> Result<sort::OrderingControl<R>, Error>
+where
+    R: Runtime,
+    Input: SortKeysInput<R, Less, Output>,
+{
+    input.sort_keys_into(exec, output)
 }
 
 pub(crate) trait AdjacentFlagInput<R: Runtime, Op>: ReadExpression + Sized {

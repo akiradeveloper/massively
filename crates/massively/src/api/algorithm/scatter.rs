@@ -3,8 +3,7 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalStorage, Error, Executor, MIndex, MIter, MIterMut, Materializable, StorageLayout,
-    WritableFrom,
+    CanonicalStorage, Error, Executor, MIndex, MIter, MIterMut, StorageLayout, WritableFrom,
     op::{BinaryPredicateOp, ReductionOp, UnaryOp},
 };
 
@@ -207,7 +206,7 @@ where
     Values: MIter<R>,
     Indices: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: Materializable<R> + WritableFrom<Values::Item>,
+    Output::Item: WritableFrom<Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let len = values.len()?;
@@ -224,7 +223,8 @@ where
 
     let len_usize = len as usize;
     let sorted_indices = exec.alloc::<MIndex>(len_usize);
-    let sorted_values = exec.alloc_canonical::<Output::Item>(len_usize);
+    let sorted_values =
+        <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(exec, len_usize);
     let indices = crate::api::iter::lower_fixed::<R, _>(indices);
     let values = crate::read::Transform::new(
         crate::api::iter::lower_fixed::<R, _>(values),
@@ -246,7 +246,8 @@ where
 
     let mut unique_indices = exec.alloc::<MIndex>(len_usize);
     let sorted_values = crate::read::FixedReassociate::<_, Output::Item>::new(sorted_values.read());
-    let mut reduced_values = exec.alloc_canonical::<Output::Item>(len_usize);
+    let mut reduced_values =
+        <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(exec, len_usize);
     let reduced_output = crate::output::ReassociatedOutput::<
         _,
         Output::Item,
@@ -282,6 +283,59 @@ mod tests {
     use super::*;
     use crate::zip2;
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+    use static_assertions::assert_not_impl_any;
+
+    #[derive(CubeType, Clone, Copy)]
+    struct StoredOnlyValue {
+        value: u32,
+    }
+
+    struct StoredOnlyLayout;
+
+    #[cubecl::cube]
+    impl crate::storage::Decompose<StoredOnlyValue> for StoredOnlyLayout {
+        type Leaves = crate::storage::Last<u32>;
+
+        fn decompose(item: StoredOnlyValue) -> Self::Leaves {
+            crate::storage::Last::new(item.value)
+        }
+    }
+
+    #[cubecl::cube]
+    impl crate::storage::Recompose<StoredOnlyValue> for StoredOnlyLayout {
+        type Leaves = crate::storage::Last<u32>;
+
+        fn recompose(leaves: Self::Leaves) -> StoredOnlyValue {
+            StoredOnlyValue {
+                value: leaves.value,
+            }
+        }
+    }
+
+    impl StorageLayout for StoredOnlyValue {
+        type StorageArity = crate::S1;
+        type StorageLeaves = crate::storage::Last<u32>;
+        type DeviceLayout = StoredOnlyLayout;
+
+        fn into_storage_leaves(self) -> Self::StorageLeaves {
+            crate::storage::Last { value: self.value }
+        }
+
+        fn from_storage_leaves(leaves: Self::StorageLeaves) -> Self {
+            Self {
+                value: leaves.value,
+            }
+        }
+    }
+
+    struct Add;
+
+    #[cubecl::cube]
+    impl ReductionOp<u32> for Add {
+        fn apply(lhs: u32, rhs: u32) -> u32 {
+            lhs + rhs
+        }
+    }
 
     struct PairAdd;
 
@@ -351,5 +405,23 @@ mod tests {
         assert_eq!(exec.to_host(&output_first).unwrap(), vec![102, 204]);
         assert_eq!(exec.to_host(&output_second).unwrap(), vec![1020, 2040]);
         assert_eq!(exec.to_host(&output_third).unwrap(), vec![10200, 20400]);
+    }
+
+    #[test]
+    fn scatter_reduce_accepts_non_materializable_preallocated_output() {
+        assert_not_impl_any!(StoredOnlyValue: crate::Materializable<WgpuRuntime>);
+
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let values = exec.to_device(&[2_u32, 3, 5, 7]);
+        let indices = exec.to_device(&[1_u32, 0, 1, 1]);
+        let backing = exec.to_device(&[10_u32, 20, 30]);
+        let output =
+            crate::output::ReassociatedOutput::<_, StoredOnlyValue, crate::read::Env1<u32>>::new(
+                backing.slice_mut(..),
+            );
+
+        scatter_reduce(&exec, values.slice(..), indices.slice(..), 0, Add, output).unwrap();
+
+        assert_eq!(exec.to_host(&backing).unwrap(), vec![13, 34, 30]);
     }
 }

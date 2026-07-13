@@ -3,7 +3,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalAlloc, CanonicalStorage, DeviceVec, Error, Executor, ReadExpression,
+    CanonicalStorage, DeviceVec, Error, Executor, ReadExpression,
+    allocation::ScratchStorage,
     ordering::{AdjacentFlagInput, BinaryPredicateOp, UniqueHead, unique_head_flags},
     selection::{CopySelected, SelectionControl},
     storage::WritableFrom,
@@ -94,7 +95,7 @@ mod legacy_segmented_values {
     where
         R: Runtime,
         Values: NormalizeInput<R>,
-        Values::Item: CanonicalAlloc<R, CanonicalStorage = Values::Storage>,
+        Values::Item: crate::CanonicalAlloc<R, CanonicalStorage = Values::Storage>,
         Values::Storage: CanonicalStorage<R> + SegmentedStorage<R, Values::Item, Op>,
         <Values::Storage as CanonicalStorage<R>>::Item: WritableFrom<Values::Item>,
         <Values::Storage as CanonicalStorage<R>>::Write: FillOutput<R>,
@@ -205,18 +206,14 @@ fn segmented_lowered_storage<R, Values, Op>(
     init: Option<Values::Item>,
     op: Op,
     mode: u8,
-) -> Result<<Values::Item as CanonicalAlloc<R>>::CanonicalStorage, Error>
+) -> Result<<Values::Item as ScratchStorage<R>>::Storage, Error>
 where
     R: Runtime,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
-    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
-    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        WritableFrom<Values::Item>,
+    Values::Item: ScratchStorage<R>,
     Op: crate::op::ReductionOp<Values::Item>,
 {
-    let values = crate::allocation::normalize_lowered(exec, values)?;
+    let values = crate::allocation::normalize_lowered_scratch(exec, values)?;
     crate::segmented::segmented_fixed(exec, &values, heads, init, op, mode)
 }
 
@@ -233,11 +230,7 @@ where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
-    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
-    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        WritableFrom<Values::Item>,
+    Values::Item: ScratchStorage<R>,
     Op: crate::op::ReductionOp<Values::Item>,
     Output: crate::core::facade::KernelOutput<R>,
     Output::Item: WritableFrom<Values::Item>,
@@ -262,11 +255,7 @@ where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
-    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
-    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        WritableFrom<Values::Item>,
+    Values::Item: ScratchStorage<R>,
     Op: crate::op::ReductionOp<Values::Item>,
     Output: crate::core::facade::KernelOutput<R>,
     Output::Item: WritableFrom<Values::Item>,
@@ -292,11 +281,7 @@ where
     R: Runtime,
     Keys: crate::core::facade::KernelInput<R> + SegmentKeyInput<R, Equal>,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
-    <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
-    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
-        WritableFrom<Values::Item>,
+    Values::Item: ScratchStorage<R>,
     Op: crate::op::ReductionOp<Values::Item>,
     KeyOutput: crate::core::facade::KernelOutput<R>,
     KeyOutput::Item: WritableFrom<Keys::Item>,
