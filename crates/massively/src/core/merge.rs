@@ -251,15 +251,13 @@ pub(crate) fn apply_canonical<R, Item, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
     Item::StorageLeaves: crate::core::facade::KernelValue,
     <Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
         crate::WritableFrom<Item>,
-    Output: crate::output::OutputExpression<Item = Item>
-        + crate::output::LowerOutputExpression<
-            Slots = <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-        > + crate::output::StageOutput<R, Env0>,
+    Output: crate::core::facade::KernelOutput<R>,
+    Output::Item: crate::WritableFrom<Item>,
 {
     let left_len = left.len()?;
     let right_len = right.len()?;

@@ -109,17 +109,14 @@ pub(crate) fn set_canonical<R, Item, Less, Output>(
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Less: crate::op::BinaryPredicateOp<Item>,
     Item::StorageLeaves: crate::core::facade::KernelValue,
     <Item as crate::CanonicalAlloc<R>>::CanonicalStorage: crate::CanonicalStorage<R>,
     <<Item as crate::CanonicalAlloc<R>>::CanonicalStorage as crate::CanonicalStorage<R>>::Item:
         crate::WritableFrom<Item>,
-    Output: crate::output::OutputExpression<Item = Item>
-        + crate::output::LowerOutputExpression<
-            Slots = <Item::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-        > + crate::output::StageOutput<R, crate::read::Env0>
-        + SliceOutput,
+    Output: crate::core::facade::KernelOutput<R> + SliceOutput,
+    Output::Item: crate::WritableFrom<Item>,
 {
     let left_read =
         crate::read::FixedReassociate::<_, Item>::new(crate::CanonicalStorage::read(left));
@@ -176,7 +173,7 @@ where
             left_len: merge.left_len,
             right_len: merge.right_len,
         };
-        crate::merge::apply_canonical(
+        crate::merge::apply_canonical::<R, Item, _>(
             exec,
             left,
             right,

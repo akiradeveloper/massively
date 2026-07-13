@@ -395,7 +395,7 @@ impl<Input, Output> Reassociate<Input, Output> {
 
 /// Semantic item and physical read arity of a read-expression tree.
 pub trait ReadExpression {
-    type Item: StorageLayout;
+    type Item: CubeType + Send + Sync + 'static;
     type ReadArity: ReadArity;
 }
 
@@ -438,7 +438,7 @@ where
     Left: ReadExpression,
     Right: ReadExpression,
     Left::ReadArity: AddArity<Right::ReadArity>,
-    (Left::Item, Right::Item): StorageLayout,
+    (Left::Item, Right::Item): CubeType,
 {
     type Item = (Left::Item, Right::Item);
     type ReadArity = <Left::ReadArity as AddArity<Right::ReadArity>>::Output;
@@ -1181,6 +1181,7 @@ where
 impl<Input> BindSlots<Env0> for FixedRead<Input>
 where
     Input: LowerReadExpression,
+    Input::Slots: PaddedReadSlots,
 {
     type Expr = Input::DeviceExpr;
     type NextEnv = KernelReadSlots<Input::Slots>;
@@ -1246,6 +1247,7 @@ where
 impl<Input, Output> BindSlots<Env0> for FixedReassociate<Input, Output>
 where
     Input: LowerReadExpression,
+    Input::Slots: PaddedReadSlots,
     Input::Item: StorageLayout,
     Output: StorageLayout + WritableFrom<Input::Item> + 'static,
 {
@@ -1360,8 +1362,10 @@ impl_fixed_eval_environment!(Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [
 
 /// Fully bound form of a read expression.
 ///
-/// This is the bridge from recursively computed [`ReadArity`] to the matching
-/// `EvalN` trait and ordered leaf types.
+/// `Slots` retains the recursively computed [`ReadArity`].  The `Eval13`
+/// requirement only says that this exact expression can be evaluated by the
+/// current padded ABI; it does not widen the expression.  The actual arity is
+/// erased only when [`FixedRead`] is constructed by a consumer.
 #[doc(hidden)]
 pub trait LowerReadExpression:
     ReadExpression + BindSlots<Env0, NextEnv = Self::Slots, Expr = Self::DeviceExpr>

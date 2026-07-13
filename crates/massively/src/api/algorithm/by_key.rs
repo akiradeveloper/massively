@@ -93,20 +93,15 @@ where
             right: value_len as usize,
         });
     }
-    let keys = crate::api::iter::lower::<R, _>(keys);
-    let values = crate::api::iter::lower::<R, _>(values);
+    let keys = crate::api::iter::lower_fixed::<R, _>(keys);
+    let values = crate::api::iter::lower_fixed::<R, _>(values);
     let permutation = crate::ordering::sort_control_with(exec, keys.clone(), less)?;
-    crate::indexed::apply_permutation(
-        exec,
-        keys,
-        permutation.column(),
-        key_output.lower_output_from::<Keys::Item>(),
-    )?;
+    crate::indexed::apply_permutation(exec, keys, permutation.column(), key_output.lower_output())?;
     crate::indexed::apply_permutation(
         exec,
         values,
         permutation.column(),
-        value_output.lower_output_from::<Values::Item>(),
+        value_output.lower_output(),
     )
 }
 
@@ -185,6 +180,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
+    Values::Item: Materializable<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
     Output: MIterMut<R>,
@@ -192,11 +188,11 @@ where
 {
     crate::core::by_key::inclusive_scan_by_key_lowered(
         exec,
-        crate::api::iter::lower::<R, _>(keys),
-        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(keys),
+        crate::api::iter::lower_fixed::<R, _>(values),
         equal,
         op,
-        output.lower_output_from::<Values::Item>(),
+        output.lower_output(),
     )
 }
 
@@ -278,6 +274,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
+    Values::Item: Materializable<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
     Output: MIterMut<R>,
@@ -285,12 +282,12 @@ where
 {
     crate::core::by_key::exclusive_scan_by_key_lowered(
         exec,
-        crate::api::iter::lower::<R, _>(keys),
-        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(keys),
+        crate::api::iter::lower_fixed::<R, _>(values),
         equal,
         init,
         op,
-        output.lower_output_from::<Values::Item>(),
+        output.lower_output(),
     )
 }
 
@@ -387,6 +384,7 @@ where
     R: Runtime,
     Keys: MIter<R>,
     Values: MIter<R>,
+    Values::Item: Materializable<R>,
     Equal: BinaryPredicateOp<Keys::Item>,
     Op: ReductionOp<Values::Item>,
     KeyOutput: MIterMut<R>,
@@ -396,13 +394,13 @@ where
 {
     crate::core::by_key::reduce_by_key_lowered(
         exec,
-        crate::api::iter::lower::<R, _>(keys),
-        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(keys),
+        crate::api::iter::lower_fixed::<R, _>(values),
         equal,
         init,
         op,
-        key_output.lower_output_from::<Keys::Item>(),
-        value_output.lower_output_from::<Values::Item>(),
+        key_output.lower_output(),
+        value_output.lower_output(),
     )
 }
 
@@ -496,10 +494,10 @@ where
 {
     crate::core::by_key::unique_by_key(
         exec,
-        crate::api::iter::lower::<R, _>(keys),
-        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(keys),
+        crate::api::iter::lower_fixed::<R, _>(values),
         equal,
-        key_output.lower_output_from::<Keys::Item>(),
-        value_output.lower_output_from::<Values::Item>(),
+        key_output.lower_output(),
+        value_output.lower_output(),
     )
 }

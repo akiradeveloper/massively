@@ -61,14 +61,9 @@ where
     Output::Item: WritableFrom<Input::Item>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    let input = crate::api::iter::lower::<R, _>(input);
+    let input = crate::api::iter::lower_fixed::<R, _>(input);
     let permutation = crate::ordering::sort_control_with(exec, input.clone(), less)?;
-    crate::indexed::apply_permutation(
-        exec,
-        input,
-        permutation.column(),
-        output.lower_output_from::<Input::Item>(),
-    )
+    crate::indexed::apply_permutation(exec, input, permutation.column(), output.lower_output())
 }
 
 /// Finds the first accepted adjacent pair.
@@ -104,7 +99,7 @@ where
     Input: MIter<R>,
     Equal: BinaryPredicateOp<Input::Item>,
 {
-    crate::ordering::adjacent_find(exec, crate::api::iter::lower::<R, _>(input), equal)
+    crate::ordering::adjacent_find(exec, crate::api::iter::lower_fixed::<R, _>(input), equal)
 }
 
 /// Removes consecutive duplicates.
@@ -169,9 +164,9 @@ where
 {
     crate::ordering::unique(
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(input),
         equal,
-        output.lower_output_from::<Input::Item>(),
+        output.lower_output(),
     )
 }
 
@@ -208,7 +203,7 @@ where
     Input: MIter<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    crate::ordering::is_sorted_until(exec, crate::api::iter::lower::<R, _>(input), less)
+    crate::ordering::is_sorted_until(exec, crate::api::iter::lower_fixed::<R, _>(input), less)
 }
 
 /// Returns whether the input is sorted.
@@ -244,7 +239,7 @@ where
     Input: MIter<R>,
     Less: BinaryPredicateOp<Input::Item>,
 {
-    crate::ordering::is_sorted(exec, crate::api::iter::lower::<R, _>(input), less)
+    crate::ordering::is_sorted(exec, crate::api::iter::lower_fixed::<R, _>(input), less)
 }
 
 macro_rules! extremum_api {
@@ -260,7 +255,7 @@ macro_rules! extremum_api {
             Input: MIter<R>,
             Less: BinaryPredicateOp<Input::Item>,
         {
-            crate::ordering::$name(exec, crate::api::iter::lower::<R, _>(input), less)
+            crate::ordering::$name(exec, crate::api::iter::lower_fixed::<R, _>(input), less)
         }
     };
 }

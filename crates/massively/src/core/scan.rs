@@ -1222,7 +1222,7 @@ fn add_fixed_prefixes<R, Output, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
     Output: OutputExpression
         + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
@@ -1393,7 +1393,7 @@ fn scan_fixed_storage<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
             R,
@@ -1444,7 +1444,7 @@ where
         + LowerOutputExpression<Slots: PaddedOutputSlots<Leaves = Item::StorageLeaves>>
         + StageOutput<R, Env0>,
     Output::Item: WritableFrom<Item>,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: InclusiveScanPassDispatch<
             R,
@@ -1580,7 +1580,6 @@ pub(crate) fn adjacent_difference<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: ReadExpression,
-    Input::Item: StorageLayout,
     Op: ReductionOp<Input::Item>,
     Adjacent<Input, Op>:
         ReadExpression<Item = Input::Item> + LowerReadExpression + StageRead<R, Env0>,

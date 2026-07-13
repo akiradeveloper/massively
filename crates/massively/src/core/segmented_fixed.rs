@@ -702,7 +702,7 @@ fn segmented_inclusive_fixed<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()?;
@@ -995,7 +995,7 @@ fn launch_exclusive<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
 {
     let len = inclusive.len()?;
@@ -1163,7 +1163,7 @@ fn launch_apply_init<R, Item, Op>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
 {
     let len = inclusive.len()?;
@@ -1332,7 +1332,7 @@ pub(crate) fn segmented_fixed<R, Item, Op>(
 ) -> Result<FixedStorage<R, Item>, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()?;

@@ -2,8 +2,6 @@
 
 use cubecl::prelude::CubeType;
 
-use crate::StorageLayout;
-
 /// Compile-time unary operation used by [`crate::read::Transform`].
 ///
 /// # Examples
@@ -33,7 +31,7 @@ use crate::StorageLayout;
 /// ```
 #[cubecl::cube]
 pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
-    type Output: StorageLayout;
+    type Output: CubeType + Send + Sync + 'static;
 
     fn apply(input: Input) -> Self::Output;
 }
@@ -42,7 +40,7 @@ pub trait UnaryOp<Input: CubeType>: 'static + Send + Sync {
 #[doc(hidden)]
 #[cubecl::cube]
 pub trait IndexedUnaryOp<Input: CubeType>: 'static + Send + Sync {
-    type Output: StorageLayout;
+    type Output: CubeType + Send + Sync + 'static;
 
     fn apply(input: Input, index: u32) -> Self::Output;
 }
@@ -51,7 +49,7 @@ pub trait IndexedUnaryOp<Input: CubeType>: 'static + Send + Sync {
 #[doc(hidden)]
 #[cubecl::cube]
 pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
-    type Output: StorageLayout;
+    type Output: CubeType + Send + Sync + 'static;
 
     fn apply(previous: Input, current: Input, index: u32) -> Self::Output;
 }
@@ -75,7 +73,7 @@ pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
 pub struct Identity;
 
 #[cubecl::cube]
-impl<Input: StorageLayout> UnaryOp<Input> for Identity {
+impl<Input: CubeType + Send + Sync + 'static> UnaryOp<Input> for Identity {
     type Output = Input;
 
     fn apply(input: Input) -> Input {

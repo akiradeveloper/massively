@@ -15,7 +15,7 @@ macro_rules! predicate_api {
             Input: MIter<R>,
             Pred: PredicateOp<Input::Item>,
         {
-            crate::predicate::$name(exec, crate::api::iter::lower::<R, _>(input), pred)
+            crate::predicate::$name(exec, crate::api::iter::lower_fixed::<R, _>(input), pred)
         }
     };
 }

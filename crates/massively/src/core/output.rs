@@ -112,6 +112,20 @@ where
     }
 }
 
+impl<Output, Source, Slots> ReadOutput for ReassociatedOutput<Output, Source, Slots>
+where
+    Output: ReadOutput,
+    Source: StorageLayout + crate::WritableFrom<Output::Item>,
+    Output::Item: crate::WritableFrom<Source>,
+    Slots: OutputSlotEnvironment<StorageArity = Source::StorageArity>,
+{
+    type Read = crate::read::Reassociate<Output::Read, Source>;
+
+    fn slice_read<Range: RangeBounds<usize>>(&self, range: Range) -> Self::Read {
+        crate::read::Reassociate::new(self.output.slice_read(range))
+    }
+}
+
 /// A mutable output whose public shape is a binary tree.
 pub trait OutputExpression {
     type Item: StorageLayout;

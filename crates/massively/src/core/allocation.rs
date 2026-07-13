@@ -663,11 +663,13 @@ where
     type Canonical = <Item::StorageLeaves as CanonicalLeaves>::Item;
 }
 
+#[doc(hidden)]
 impl<R, Item> Materializable<R> for Item
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R> + Canonicalizable,
-    Item::Canonical: Allocable<R> + crate::WritableFrom<Item>,
+    Item: crate::api::iter::MItem<R> + CanonicalAlloc<R> + Canonicalizable,
+    Item::Canonical:
+        Allocable<R> + crate::WritableFrom<Item> + crate::api::iter::SameStorageLayout<Item>,
     <Item::Canonical as Allocable<R>>::Storage: MStorage<R, Item = Item::Canonical>,
 {
     type Materialized = Item::Canonical;
@@ -679,6 +681,7 @@ impl<R, Item> Allocable<R> for Item
 where
     R: Runtime,
     Item: crate::api::iter::MItem<R>
+        + CanonicalAlloc<R>
         + MStorageElement
         + StorageLayout<StorageArity = S1, StorageLeaves = Last<Item>>,
     Last<Item>: crate::core::facade::KernelValue,
@@ -705,6 +708,7 @@ macro_rules! impl_public_alloc {
                     >,
             )+
             $item: crate::api::iter::MItem<R>
+                + CanonicalAlloc<R>
                 + StorageLayout<StorageArity = $arity, StorageLeaves = $leaves>,
             $leaves: crate::core::facade::KernelValue,
         {
@@ -1037,7 +1041,7 @@ pub(crate) fn normalize_lowered<R, Input>(
 where
     R: Runtime,
     Input: crate::core::facade::KernelInput<R>,
-    Input::Item: crate::api::iter::MItem<R>,
+    Input::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
     <Input::Item as StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
     <Input::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     <<Input::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:

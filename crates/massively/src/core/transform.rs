@@ -84,12 +84,8 @@ pub(crate) fn materialize_fixed<R, Input, Output>(
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Input::Item: StorageLayout,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Slots: PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
+    Output: crate::core::facade::KernelOutput<R>,
     Output::Item: StorageLayout + WritableFrom<Input::Item>,
-    <Output::Item as StorageLayout>::StorageLeaves: StorePadded12,
-    <<Output::Item as StorageLayout>::StorageLeaves as CubeType>::ExpandType: StorePadded12Expand,
 {
     let input_len = input.logical_len()?;
     let output_len = output.logical_len()?;
@@ -224,7 +220,7 @@ macro_rules! impl_padded_materialize_dispatch {
             O9: MStorageElement,
             O10: MStorageElement,
             O11: MStorageElement,
-            Source: StorageLayout + Send + Sync + 'static,
+            Source: CubeType + Send + Sync + 'static,
             Leaves: CubeType + Send + Sync + 'static + StorePadded12<
                 O0 = O0, O1 = O1, O2 = O2, O3 = O3, O4 = O4, O5 = O5,
                 O6 = O6, O7 = O7, O8 = O8, O9 = O9, O10 = O10, O11 = O11,
@@ -270,7 +266,6 @@ pub(crate) fn materialize<R, Input, Output>(
 where
     R: Runtime,
     Input: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Input::Item: StorageLayout,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots,
     Output::Item: WritableFrom<Input::Item>,
@@ -304,7 +299,6 @@ where
     Op: UnaryOp<Input::Item>,
     Transform<Input, Op>:
         ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
-    Op::Output: StorageLayout,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots,
     Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
@@ -333,7 +327,6 @@ where
     Op: UnaryOp<Input::Item>,
     Transform<Input, Op>:
         ReadExpression<Item = Op::Output> + LowerReadExpression + StageRead<R, Env0>,
-    Op::Output: StorageLayout,
     Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
     Output::Slots: PaddedOutputSlots<Leaves = <Output::Item as StorageLayout>::StorageLeaves>,
     Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,

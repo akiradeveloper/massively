@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, op::ReductionOp};
+use crate::{Error, Executor, MIter, Materializable, op::ReductionOp};
 
 /// Reduces all input items, starting from `init`.
 ///
@@ -36,7 +36,8 @@ pub fn reduce<R, Input, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: Materializable<R>,
     Op: ReductionOp<Input::Item>,
 {
-    crate::reduce::reduce(exec, crate::api::iter::lower::<R, _>(input), init, op)
+    crate::reduce::reduce(exec, crate::api::iter::lower_fixed::<R, _>(input), init, op)
 }

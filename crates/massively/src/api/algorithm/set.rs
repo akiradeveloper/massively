@@ -43,22 +43,20 @@ macro_rules! set_api {
             R: Runtime,
             Left: MIter<R>,
             Right: MIter<R, Item = Left::Item>,
+            Left::Item: Materializable<R>,
             Less: BinaryPredicateOp<Left::Item>,
             Output: MIterMut<R>,
             Output::Item: WritableFrom<Left::Item>,
         {
-            let left =
-                crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
-            let right =
-                crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
-            crate::core::set::set_canonical(
+            let left = crate::allocation::normalize_lowered(
                 exec,
-                &left,
-                &right,
-                less,
-                output.lower_output_from::<Left::Item>(),
-                $mode,
-            )
+                crate::api::iter::lower_fixed::<R, _>(left),
+            )?;
+            let right = crate::allocation::normalize_lowered(
+                exec,
+                crate::api::iter::lower_fixed::<R, _>(right),
+            )?;
+            crate::core::set::set_canonical(exec, &left, &right, less, output.lower_output(), $mode)
         }
     };
 }

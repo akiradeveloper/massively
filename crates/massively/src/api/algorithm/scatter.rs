@@ -3,7 +3,8 @@ use core::marker::PhantomData;
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalStorage, Error, Executor, MIndex, MIter, MIterMut, StorageLayout, WritableFrom,
+    CanonicalStorage, Error, Executor, MIndex, MIter, MIterMut, Materializable, StorageLayout,
+    WritableFrom,
     op::{BinaryPredicateOp, ReductionOp, UnaryOp},
 };
 
@@ -30,8 +31,8 @@ struct WriteValue<Target>(PhantomData<fn() -> Target>);
 #[cubecl::cube]
 impl<Source, Target> UnaryOp<Source> for WriteValue<Target>
 where
-    Source: StorageLayout + 'static,
-    Target: StorageLayout + WritableFrom<Source> + 'static,
+    Source: CubeType + Send + Sync + 'static,
+    Target: StorageLayout + WritableFrom<Source> + Send + Sync + 'static,
 {
     type Output = Target;
 
@@ -45,8 +46,8 @@ struct WriteReduction<Source, Op>(PhantomData<fn() -> (Source, Op)>);
 #[cubecl::cube]
 impl<Source, Target, Op> ReductionOp<Target> for WriteReduction<Source, Op>
 where
-    Source: StorageLayout + 'static,
-    Target: StorageLayout + WritableFrom<Source> + 'static,
+    Source: CubeType + Send + Sync + 'static,
+    Target: StorageLayout + WritableFrom<Source> + Send + Sync + 'static,
     Op: ReductionOp<Source>,
 {
     fn apply(lhs: Target, rhs: Target) -> Target {
@@ -95,9 +96,9 @@ where
 {
     crate::core::scatter::scatter(
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        output.lower_output_from::<Values::Item>(),
+        crate::api::iter::lower_fixed::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(indices),
+        output.lower_output(),
     )
 }
 
@@ -145,10 +146,10 @@ where
 {
     crate::core::scatter::scatter_where(
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output_from::<Values::Item>(),
+        crate::api::iter::lower_fixed::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(indices),
+        crate::api::iter::lower_fixed::<R, _>(stencil),
+        output.lower_output(),
     )
 }
 
@@ -206,7 +207,7 @@ where
     Values: MIter<R>,
     Indices: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Output::Item: WritableFrom<Values::Item>,
+    Output::Item: Materializable<R> + WritableFrom<Values::Item>,
     Op: ReductionOp<Values::Item>,
 {
     let len = values.len()?;
@@ -224,9 +225,9 @@ where
     let len_usize = len as usize;
     let sorted_indices = exec.alloc::<MIndex>(len_usize);
     let sorted_values = exec.alloc_canonical::<Output::Item>(len_usize);
-    let indices = crate::api::iter::lower::<R, _>(indices);
+    let indices = crate::api::iter::lower_fixed::<R, _>(indices);
     let values = crate::read::Transform::new(
-        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(values),
         WriteValue::<Output::Item>(PhantomData),
     );
     let permutation = crate::ordering::sort_control_with(exec, indices.clone(), IndexLess)?;
@@ -234,7 +235,7 @@ where
         exec,
         indices,
         permutation.column(),
-        <_ as MIterMut<R>>::lower_output_from::<MIndex>(sorted_indices.slice_mut(..)),
+        <_ as MIterMut<R>>::lower_output(sorted_indices.slice_mut(..)),
     )?;
     let sorted_output = crate::output::ReassociatedOutput::<
         _,
@@ -253,22 +254,26 @@ where
     >::new(reduced_values.write());
     let unique_len = crate::core::by_key::reduce_by_key_lowered(
         exec,
-        crate::api::iter::lower::<R, _>(sorted_indices.slice(..)),
+        crate::api::iter::lower_fixed::<R, _>(sorted_indices.slice(..)),
         sorted_values,
         IndexEqual,
         Output::Item::write_from(init),
         WriteReduction::<Values::Item, Op>(PhantomData),
-        <_ as MIterMut<R>>::lower_output_from::<MIndex>(unique_indices.slice_mut(..)),
+        <_ as MIterMut<R>>::lower_output(unique_indices.slice_mut(..)),
         reduced_output,
     )?;
 
     unique_indices.truncate(unique_len as usize);
     reduced_values.truncate(unique_len as usize);
     let _ = op;
-    output.scatter_combine_storage::<WriteReduction<Values::Item, Op>>(
+    let reduced_values = crate::read::FixedReassociate::<_, Output::Item>::new(
+        CanonicalStorage::read(&reduced_values),
+    );
+    crate::core::scatter_reduce::apply::<R, _, _, WriteReduction<Values::Item, Op>>(
         exec,
-        &reduced_values,
+        reduced_values,
         &unique_indices,
+        output.lower_output(),
     )
 }
 

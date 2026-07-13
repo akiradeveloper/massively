@@ -64,7 +64,7 @@ where
 {
     crate::transform::transform_fixed(
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(input),
         op,
         output.lower_output(),
     )

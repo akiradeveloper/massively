@@ -111,7 +111,7 @@ pub struct Last<T: CubeType> {
 #[cubecl::cube]
 impl<T: CubeType> Last<T> {
     #[allow(dead_code)]
-    fn new(value: T) -> Self {
+    pub(crate) fn new(value: T) -> Self {
         Last::<T> { value }
     }
 }

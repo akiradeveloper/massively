@@ -1,11 +1,11 @@
-//! Search controls over independently normalized semantic inputs.
+//! Search controls over independently lowered fixed-ABI inputs.
 
 use core::marker::PhantomData;
 
 use cubecl::prelude::*;
 
 use crate::{
-    A13, DeviceVec, Error, Executor, MStorageElement, ReadExpression, StorageLayout,
+    A13, DeviceVec, Error, Executor, MStorageElement, ReadExpression,
     eval::Eval13,
     ordering::BinaryPredicateOp,
     read::{Env0, Env13, LowerReadExpression},
@@ -56,18 +56,23 @@ where
 }
 
 macro_rules! define_pair_code_kernel {
-    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$left_slot:ident:$right_slot:ident ),+]) => {
+    (
+        $name:ident,$eval:ident,$method:ident;
+        [$( $left_leaf:ident:$left_slot:ident ),+];
+        [$( $right_leaf:ident:$right_slot:ident ),+]
+    ) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Item: CubeType + Send + Sync + 'static,
-            $( $leaf: CubePrimitive, )+
-            Left: $eval<Item, $( $leaf ),+>,
-            Right: $eval<Item, $( $leaf ),+>,
+            $( $left_leaf: CubePrimitive, )+
+            $( $right_leaf: CubePrimitive, )+
+            Left: $eval<Item, $( $left_leaf ),+>,
+            Right: $eval<Item, $( $right_leaf ),+>,
             Op: PairCodeOp<Item>,
         >(
-            $( $left_slot: &[$leaf], )+
+            $( $left_slot: &[$left_leaf], )+
             left_offsets: &[u32],
-            $( $right_slot: &[$leaf], )+
+            $( $right_slot: &[$right_leaf], )+
             right_offsets: &[u32],
             len: &[u32],
             codes: &mut [u32],
@@ -89,21 +94,30 @@ macro_rules! define_pair_code_kernel {
     };
 }
 
-define_pair_code_kernel!(pair_code_a13,Eval13,eval13; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5,L6:left6:right6,L7:left7:right7,L8:left8:right8,L9:left9:right9,L10:left10:right10,L11:left11:right11,L12:left12:right12]);
+define_pair_code_kernel!(
+    pair_code_a13, Eval13, eval13;
+    [L0:left0,L1:left1,L2:left2,L3:left3,L4:left4,L5:left5,L6:left6,L7:left7,L8:left8,L9:left9,L10:left10,L11:left11,L12:left12];
+    [R0:right0,R1:right1,R2:right2,R3:right3,R4:right4,R5:right5,R6:right6,R7:right7,R8:right8,R9:right9,R10:right10,R11:right11,R12:right12]
+);
 
 macro_rules! define_find_first_of_kernel {
-    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$source_slot:ident:$needle_slot:ident ),+]) => {
+    (
+        $name:ident,$eval:ident,$method:ident;
+        [$( $source_leaf:ident:$source_slot:ident ),+];
+        [$( $needle_leaf:ident:$needle_slot:ident ),+]
+    ) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Item: CubeType + Send + Sync + 'static,
-            $( $leaf: CubePrimitive, )+
-            Source: $eval<Item, $( $leaf ),+>,
-            Needles: $eval<Item, $( $leaf ),+>,
+            $( $source_leaf: CubePrimitive, )+
+            $( $needle_leaf: CubePrimitive, )+
+            Source: $eval<Item, $( $source_leaf ),+>,
+            Needles: $eval<Item, $( $needle_leaf ),+>,
             Equal: BinaryPredicateOp<Item>,
         >(
-            $( $source_slot: &[$leaf], )+
+            $( $source_slot: &[$source_leaf], )+
             source_offsets: &[u32],
-            $( $needle_slot: &[$leaf], )+
+            $( $needle_slot: &[$needle_leaf], )+
             needle_offsets: &[u32],
             source_len: &[u32],
             needle_len: &[u32],
@@ -130,7 +144,11 @@ macro_rules! define_find_first_of_kernel {
     };
 }
 
-define_find_first_of_kernel!(find_first_of_a13,Eval13,eval13; [L0:source0:needle0,L1:source1:needle1,L2:source2:needle2,L3:source3:needle3,L4:source4:needle4,L5:source5:needle5,L6:source6:needle6,L7:source7:needle7,L8:source8:needle8,L9:source9:needle9,L10:source10:needle10,L11:source11:needle11,L12:source12:needle12]);
+define_find_first_of_kernel!(
+    find_first_of_a13, Eval13, eval13;
+    [L0:source0,L1:source1,L2:source2,L3:source3,L4:source4,L5:source5,L6:source6,L7:source7,L8:source8,L9:source9,L10:source10,L11:source11,L12:source12];
+    [R0:needle0,R1:needle1,R2:needle2,R3:needle3,R4:needle4,R5:needle5,R6:needle6,R7:needle7,R8:needle8,R9:needle9,R10:needle10,R11:needle11,R12:needle12]
+);
 
 #[cubecl::cube]
 trait BoundOp<Item: CubeType>: 'static + Send + Sync {
@@ -164,18 +182,23 @@ where
 }
 
 macro_rules! define_bound_kernel {
-    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$source_slot:ident:$value_slot:ident ),+]) => {
+    (
+        $name:ident,$eval:ident,$method:ident;
+        [$( $source_leaf:ident:$source_slot:ident ),+];
+        [$( $value_leaf:ident:$value_slot:ident ),+]
+    ) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Item: CubeType + Send + Sync + 'static,
-            $( $leaf: CubePrimitive, )+
-            Source: $eval<Item, $( $leaf ),+>,
-            Values: $eval<Item, $( $leaf ),+>,
+            $( $source_leaf: CubePrimitive, )+
+            $( $value_leaf: CubePrimitive, )+
+            Source: $eval<Item, $( $source_leaf ),+>,
+            Values: $eval<Item, $( $value_leaf ),+>,
             Op: BoundOp<Item>,
         >(
-            $( $source_slot: &[$leaf], )+
+            $( $source_slot: &[$source_leaf], )+
             source_offsets: &[u32],
-            $( $value_slot: &[$leaf], )+
+            $( $value_slot: &[$value_leaf], )+
             value_offsets: &[u32],
             source_len: &[u32],
             value_len: &[u32],
@@ -202,7 +225,11 @@ macro_rules! define_bound_kernel {
     };
 }
 
-define_bound_kernel!(bound_a13,Eval13,eval13; [L0:source0:value0,L1:source1:value1,L2:source2:value2,L3:source3:value3,L4:source4:value4,L5:source5:value5,L6:source6:value6,L7:source7:value7,L8:source8:value8,L9:source9:value9,L10:source10:value10,L11:source11:value11,L12:source12:value12]);
+define_bound_kernel!(
+    bound_a13, Eval13, eval13;
+    [L0:source0,L1:source1,L2:source2,L3:source3,L4:source4,L5:source5,L6:source6,L7:source7,L8:source8,L9:source9,L10:source10,L11:source11,L12:source12];
+    [R0:value0,R1:value1,R2:value2,R3:value3,R4:value4,R5:value5,R6:value6,R7:value7,R8:value8,R9:value9,R10:value10,R11:value11,R12:value12]
+);
 
 struct PairDispatch<Storage>(PhantomData<fn() -> Storage>);
 
@@ -218,23 +245,28 @@ where
 }
 
 macro_rules! impl_pair_code_dispatch {
-    ($storage:ty,$arity:ty,$eval:ident,$kernel:ident,$env:ty; [$( $leaf:ident:$index:literal ),+]) => {
-        impl<R, Left, Right, Item, Op, $( $leaf ),+>
-            PairCodeDispatch<R, Left, Right, Item, $env, $env, Op>
+    (
+        $storage:ty,$arity:ty,$eval:ident,$kernel:ident;
+        $left_env:ty => [$( $left_leaf:ident:$left_index:literal ),+];
+        $right_env:ty => [$( $right_leaf:ident:$right_index:literal ),+]
+    ) => {
+        impl<R, Left, Right, Item, Op, $( $left_leaf, )+ $( $right_leaf ),+>
+            PairCodeDispatch<R, Left, Right, Item, $left_env, $right_env, Op>
             for PairDispatch<$storage>
         where
             R: Runtime,
             Item: CubeType + Send + Sync + 'static,
             Op: PairCodeOp<Item>,
-            $( $leaf: MStorageElement, )+
+            $( $left_leaf: MStorageElement, )+
+            $( $right_leaf: MStorageElement, )+
             Left: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = $left_env>
                 + StageRead<R, Env0>,
             Right: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = $right_env>
                 + StageRead<R, Env0>,
-            Left::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Right::DeviceExpr: $eval<Item, $( $leaf ),+>,
+            Left::DeviceExpr: $eval<Item, $( $left_leaf ),+>,
+            Right::DeviceExpr: $eval<Item, $( $right_leaf ),+>,
         {
             fn run(
                 exec: &Executor<R>,
@@ -258,13 +290,21 @@ macro_rules! impl_pair_code_dispatch {
                 let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
                 let best = exec.to_device(&[len_u32]);
                 unsafe {
-                    $kernel::launch_unchecked::<Item, $( $leaf, )+ Left::DeviceExpr, Right::DeviceExpr, Op, R>(
+                    $kernel::launch_unchecked::<
+                        Item,
+                        $( $left_leaf, )+
+                        $( $right_leaf, )+
+                        Left::DeviceExpr,
+                        Right::DeviceExpr,
+                        Op,
+                        R,
+                    >(
                         exec.client(),
                         crate::launch::cube_count_1d(len.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(left_bindings.slots[$index].0.clone(), left_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(left_bindings.slots[$left_index].0.clone(), left_bindings.slots[$left_index].1), )+
                         BufferArg::from_raw_parts(left_offsets, left_bindings.offsets.len()),
-                        $( BufferArg::from_raw_parts(right_bindings.slots[$index].0.clone(), right_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(right_bindings.slots[$right_index].0.clone(), right_bindings.slots[$right_index].1), )+
                         BufferArg::from_raw_parts(right_offsets, right_bindings.offsets.len()),
                         BufferArg::from_raw_parts(len_handle, 1),
                         BufferArg::from_raw_parts(codes.handle.clone(), codes.len()),
@@ -278,7 +318,13 @@ macro_rules! impl_pair_code_dispatch {
     };
 }
 
-impl_pair_code_dispatch!(crate::S12,A13,Eval13,pair_code_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
+impl_pair_code_dispatch!(
+    crate::S12, A13, Eval13, pair_code_a13;
+    Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>
+        => [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12];
+    Env13<R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12>
+        => [R0:0,R1:1,R2:2,R3:3,R4:4,R5:5,R6:6,R7:7,R8:8,R9:9,R10:10,R11:11,R12:12]
+);
 
 trait FindFirstDispatch<R, Source, Needles, Item, SourceSlots, NeedleSlots, Equal>
 where
@@ -299,23 +345,28 @@ where
 }
 
 macro_rules! impl_range_query_dispatch {
-    ($storage:ty,$arity:ty,$eval:ident,$find_kernel:ident,$bound_kernel:ident,$env:ty; [$( $leaf:ident:$index:literal ),+]) => {
-        impl<R, Source, Needles, Item, Equal, $( $leaf ),+>
-            FindFirstDispatch<R, Source, Needles, Item, $env, $env, Equal>
+    (
+        $storage:ty,$arity:ty,$eval:ident,$find_kernel:ident,$bound_kernel:ident;
+        $source_env:ty => [$( $source_leaf:ident:$source_index:literal ),+];
+        $other_env:ty => [$( $other_leaf:ident:$other_index:literal ),+]
+    ) => {
+        impl<R, Source, Needles, Item, Equal, $( $source_leaf, )+ $( $other_leaf ),+>
+            FindFirstDispatch<R, Source, Needles, Item, $source_env, $other_env, Equal>
             for PairDispatch<$storage>
         where
             R: Runtime,
             Item: CubeType + Send + Sync + 'static,
             Equal: BinaryPredicateOp<Item>,
-            $( $leaf: MStorageElement, )+
+            $( $source_leaf: MStorageElement, )+
+            $( $other_leaf: MStorageElement, )+
             Source: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = $source_env>
                 + StageRead<R, Env0>,
             Needles: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = $other_env>
                 + StageRead<R, Env0>,
-            Source::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Needles::DeviceExpr: $eval<Item, $( $leaf ),+>,
+            Source::DeviceExpr: $eval<Item, $( $source_leaf ),+>,
+            Needles::DeviceExpr: $eval<Item, $( $other_leaf ),+>,
         {
             fn run(
                 exec: &Executor<R>,
@@ -339,13 +390,21 @@ macro_rules! impl_range_query_dispatch {
                 let needle_len_handle = exec.client().create_from_slice(u32::as_bytes(&[needle_len_u32]));
                 let best = exec.to_device(&[source_len_u32]);
                 unsafe {
-                    $find_kernel::launch_unchecked::<Item, $( $leaf, )+ Source::DeviceExpr, Needles::DeviceExpr, Equal, R>(
+                    $find_kernel::launch_unchecked::<
+                        Item,
+                        $( $source_leaf, )+
+                        $( $other_leaf, )+
+                        Source::DeviceExpr,
+                        Needles::DeviceExpr,
+                        Equal,
+                        R,
+                    >(
                         exec.client(),
                         crate::launch::cube_count_1d(source_len.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(source_bindings.slots[$index].0.clone(), source_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(source_bindings.slots[$source_index].0.clone(), source_bindings.slots[$source_index].1), )+
                         BufferArg::from_raw_parts(source_offsets, source_bindings.offsets.len()),
-                        $( BufferArg::from_raw_parts(needle_bindings.slots[$index].0.clone(), needle_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(needle_bindings.slots[$other_index].0.clone(), needle_bindings.slots[$other_index].1), )+
                         BufferArg::from_raw_parts(needle_offsets, needle_bindings.offsets.len()),
                         BufferArg::from_raw_parts(source_len_handle, 1),
                         BufferArg::from_raw_parts(needle_len_handle, 1),
@@ -357,22 +416,23 @@ macro_rules! impl_range_query_dispatch {
             }
         }
 
-        impl<R, Source, Values, Item, Op, $( $leaf ),+>
-            BoundDispatch<R, Source, Values, Item, $env, $env, Op>
+        impl<R, Source, Values, Item, Op, $( $source_leaf, )+ $( $other_leaf ),+>
+            BoundDispatch<R, Source, Values, Item, $source_env, $other_env, Op>
             for PairDispatch<$storage>
         where
             R: Runtime,
             Item: CubeType + Send + Sync + 'static,
             Op: BoundOp<Item>,
-            $( $leaf: MStorageElement, )+
+            $( $source_leaf: MStorageElement, )+
+            $( $other_leaf: MStorageElement, )+
             Source: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = $source_env>
                 + StageRead<R, Env0>,
             Values: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = $other_env>
                 + StageRead<R, Env0>,
-            Source::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Values::DeviceExpr: $eval<Item, $( $leaf ),+>,
+            Source::DeviceExpr: $eval<Item, $( $source_leaf ),+>,
+            Values::DeviceExpr: $eval<Item, $( $other_leaf ),+>,
         {
             fn run(
                 exec: &Executor<R>,
@@ -396,13 +456,21 @@ macro_rules! impl_range_query_dispatch {
                 let source_len_handle = exec.client().create_from_slice(u32::as_bytes(&[source_len_u32]));
                 let value_len_handle = exec.client().create_from_slice(u32::as_bytes(&[value_len_u32]));
                 unsafe {
-                    $bound_kernel::launch_unchecked::<Item, $( $leaf, )+ Source::DeviceExpr, Values::DeviceExpr, Op, R>(
+                    $bound_kernel::launch_unchecked::<
+                        Item,
+                        $( $source_leaf, )+
+                        $( $other_leaf, )+
+                        Source::DeviceExpr,
+                        Values::DeviceExpr,
+                        Op,
+                        R,
+                    >(
                         exec.client(),
                         crate::launch::cube_count_1d(value_len.div_ceil(BLOCK_SIZE as usize))?,
                         CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(source_bindings.slots[$index].0.clone(), source_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(source_bindings.slots[$source_index].0.clone(), source_bindings.slots[$source_index].1), )+
                         BufferArg::from_raw_parts(source_offsets, source_bindings.offsets.len()),
-                        $( BufferArg::from_raw_parts(value_bindings.slots[$index].0.clone(), value_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(value_bindings.slots[$other_index].0.clone(), value_bindings.slots[$other_index].1), )+
                         BufferArg::from_raw_parts(value_offsets, value_bindings.offsets.len()),
                         BufferArg::from_raw_parts(source_len_handle, 1),
                         BufferArg::from_raw_parts(value_len_handle, 1),
@@ -415,7 +483,13 @@ macro_rules! impl_range_query_dispatch {
     };
 }
 
-impl_range_query_dispatch!(crate::S12,A13,Eval13,find_first_of_a13,bound_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
+impl_range_query_dispatch!(
+    crate::S12, A13, Eval13, find_first_of_a13, bound_a13;
+    Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>
+        => [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12];
+    Env13<R0,R1,R2,R3,R4,R5,R6,R7,R8,R9,R10,R11,R12>
+        => [R0:0,R1:1,R2:2,R3:3,R4:4,R5:5,R6:6,R7:7,R8:8,R9:9,R10:10,R11:11,R12:12]
+);
 
 trait PairCodeInput<R: Runtime, Right, Op>: ReadExpression {
     fn pair_codes(
@@ -435,7 +509,6 @@ impl<R, Source, Needles, Equal> FindFirstOfInput<R, Needles, Equal> for Source
 where
     R: Runtime,
     Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Source::Item: StorageLayout,
     Needles: ReadExpression<Item = Source::Item> + LowerReadExpression + StageRead<R, Env0>,
     PairDispatch<crate::S12>:
         FindFirstDispatch<R, Source, Needles, Source::Item, Source::Slots, Needles::Slots, Equal>,
@@ -478,7 +551,6 @@ impl<R, Source, Values, Less> SortedBoundsInput<R, Values, Less> for Source
 where
     R: Runtime,
     Source: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Source::Item: StorageLayout,
     Values: ReadExpression<Item = Source::Item> + LowerReadExpression + StageRead<R, Env0>,
     PairDispatch<crate::S12>: BoundDispatch<
             R,
@@ -609,7 +681,6 @@ impl<R, Left, Right, Op> PairCodeInput<R, Right, Op> for Left
 where
     R: Runtime,
     Left: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Left::Item: StorageLayout,
     Right: ReadExpression<Item = Left::Item> + LowerReadExpression + StageRead<R, Env0>,
     PairDispatch<crate::S12>:
         PairCodeDispatch<R, Left, Right, Left::Item, Left::Slots, Right::Slots, Op>,
@@ -631,7 +702,7 @@ where
     }
 }
 
-/// Internal capability hiding normalized pair-code dispatch for equality.
+/// Internal capability hiding fixed-ABI pair-code dispatch for equality.
 #[doc(hidden)]
 pub trait EqualityInput<R: Runtime, Right, Equal>: ReadExpression + Sized {
     fn mismatch_control(
@@ -691,7 +762,7 @@ where
     }
 }
 
-/// Internal capability hiding normalized lexicographical dispatch.
+/// Internal capability hiding fixed-ABI lexicographical dispatch.
 #[doc(hidden)]
 pub trait LexicographicalInput<R: Runtime, Right, Less>: ReadExpression + Sized {
     fn lexicographical_codes(
@@ -784,7 +855,7 @@ mod tests {
     }
 
     #[test]
-    fn pair_queries_compare_two_normalized_storage7_inputs() {
+    fn pair_queries_compare_two_independent_storage7_inputs() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let left0 = exec.to_device(&[1_u32, 2, 3]);
         let right0 = exec.to_device(&[1_u32, 4, 3]);

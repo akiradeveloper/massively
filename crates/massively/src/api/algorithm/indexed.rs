@@ -53,9 +53,9 @@ where
 {
     crate::indexed::gather_direct(
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        output.lower_output_from::<Values::Item>(),
+        crate::api::iter::lower_fixed::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(indices),
+        output.lower_output(),
     )
 }
 
@@ -103,10 +103,10 @@ where
 {
     crate::indexed::gather_where_direct(
         exec,
-        crate::api::iter::lower::<R, _>(values),
-        crate::api::iter::lower::<R, _>(indices),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output_from::<Values::Item>(),
+        crate::api::iter::lower_fixed::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(indices),
+        crate::api::iter::lower_fixed::<R, _>(stencil),
+        output.lower_output(),
     )
 }
 
@@ -150,10 +150,10 @@ where
     Output::Item: WritableFrom<Values::Item>,
 {
     let len = values.len()? as usize;
-    crate::indexed::gather(
+    crate::indexed::gather_direct(
         exec,
-        crate::api::iter::lower::<R, _>(values),
+        crate::api::iter::lower_fixed::<R, _>(values),
         crate::ReverseCounting::new(len),
-        output.lower_output_from::<Values::Item>(),
+        output.lower_output(),
     )
 }

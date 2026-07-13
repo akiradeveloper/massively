@@ -1536,7 +1536,7 @@ fn finish_fixed_reduce<R, Item, Op>(
 ) -> Result<Item, Error>
 where
     R: Runtime,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: ReducePassDispatch<
             R,
@@ -1578,7 +1578,7 @@ impl<R, Input, Item, Op, Slots> ReduceDispatch<R, Input, Item, Op, Slots> for Di
 where
     R: Runtime,
     Input: ReadExpression<Item = Item> + LowerReadExpression + StageRead<R, Env0>,
-    Item: crate::api::iter::MItem<R>,
+    Item: crate::api::iter::MItem<R> + crate::CanonicalAlloc<R>,
     Op: ReductionOp<Item>,
     Dispatch<A13, S12>: ReducePassDispatch<
             R,

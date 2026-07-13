@@ -5,7 +5,6 @@ use cubecl::prelude::*;
 use crate::{
     A1, CanonicalAlloc, CanonicalStorage, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch,
     Error, Executor, ReadExpression, S1, StorageLayout, Transform, Zip,
-    allocation::NormalizeInput,
     indexed::GatherInput,
     masked::MaskedCopyInput,
     op::UnaryOp,
@@ -454,7 +453,7 @@ impl<R: Runtime> SelectionControl<R> {
     }
 }
 
-/// Internal capability proving a canonical `Permute` materialization exists.
+/// Internal capability for copying selected rows from a readable expression.
 #[doc(hidden)]
 pub trait CopySelected<R: Runtime, Output>: ReadExpression + Sized {
     fn source_len(&self) -> Result<usize, Error>;
@@ -469,9 +468,7 @@ pub trait CopySelected<R: Runtime, Output>: ReadExpression + Sized {
 impl<R, Input, Output> CopySelected<R, Output> for Input
 where
     R: Runtime,
-    Input: NormalizeInput<R> + StageRead<R, Env0>,
-    Input::Storage: CanonicalStorage<R>,
-    <Input::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Column<u32>, Output>,
+    Input: GatherInput<R, Column<u32>, Output> + StageRead<R, Env0>,
     Output: OutputExpression,
 {
     fn source_len(&self) -> Result<usize, Error> {
@@ -502,10 +499,7 @@ where
         if count == 0 {
             return Ok(0);
         }
-        let storage = self.normalize(exec)?;
-        storage
-            .read()
-            .gather(exec, control.indices.column(), output)?;
+        self.gather(exec, control.indices.column(), output)?;
         Ok(count)
     }
 }

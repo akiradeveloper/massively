@@ -66,25 +66,22 @@ where
     R: Runtime,
     Left: MIter<R>,
     Right: MIter<R, Item = Left::Item>,
+    Left::Item: Materializable<R>,
     Less: BinaryPredicateOp<Left::Item>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Left::Item>,
 {
-    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
-    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
+    let left =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower_fixed::<R, _>(left))?;
+    let right =
+        crate::allocation::normalize_lowered(exec, crate::api::iter::lower_fixed::<R, _>(right))?;
     let control = crate::merge::merge_control_fixed(
         exec,
         crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
         crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
         less,
     )?;
-    crate::merge::apply_canonical(
-        exec,
-        &left,
-        &right,
-        &control,
-        output.lower_output_from::<Left::Item>(),
-    )
+    crate::merge::apply_canonical(exec, &left, &right, &control, output.lower_output())
 }
 
 /// Stably merges key/value ranges using the ordering of the keys.
@@ -188,16 +185,22 @@ where
     LeftValues: MIter<R>,
     RightKeys: MIter<R, Item = LeftKeys::Item>,
     RightValues: MIter<R, Item = LeftValues::Item>,
+    LeftKeys::Item: Materializable<R>,
+    LeftValues::Item: Materializable<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
     KeyOutput: MIterMut<R>,
     KeyOutput::Item: WritableFrom<LeftKeys::Item>,
     ValueOutput: MIterMut<R>,
     ValueOutput::Item: WritableFrom<LeftValues::Item>,
 {
-    let left_keys =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left_keys))?;
-    let right_keys =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right_keys))?;
+    let left_keys = crate::allocation::normalize_lowered(
+        exec,
+        crate::api::iter::lower_fixed::<R, _>(left_keys),
+    )?;
+    let right_keys = crate::allocation::normalize_lowered(
+        exec,
+        crate::api::iter::lower_fixed::<R, _>(right_keys),
+    )?;
     let control = crate::merge::merge_control_fixed(
         exec,
         crate::read::FixedReassociate::<_, LeftKeys::Item>::new(crate::CanonicalStorage::read(
@@ -213,18 +216,22 @@ where
         &left_keys,
         &right_keys,
         &control,
-        key_output.lower_output_from::<LeftKeys::Item>(),
+        key_output.lower_output(),
     )?;
 
-    let left_values =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left_values))?;
-    let right_values =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right_values))?;
+    let left_values = crate::allocation::normalize_lowered(
+        exec,
+        crate::api::iter::lower_fixed::<R, _>(left_values),
+    )?;
+    let right_values = crate::allocation::normalize_lowered(
+        exec,
+        crate::api::iter::lower_fixed::<R, _>(right_values),
+    )?;
     crate::merge::apply_canonical(
         exec,
         &left_values,
         &right_values,
         &control,
-        value_output.lower_output_from::<LeftValues::Item>(),
+        value_output.lower_output(),
     )
 }

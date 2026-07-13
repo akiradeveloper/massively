@@ -43,7 +43,7 @@ pub trait Allocable<R: Runtime>: MItem<R> {
 /// This is only a runtime-independent type-level normalization. It does not
 /// imply that storage can be allocated or that values can be written into the
 /// canonical shape.
-pub trait Canonicalizable: CubeType {
+pub trait Canonicalizable: CubeType + Sized {
     type Canonical: CubeType;
 }
 
@@ -55,14 +55,50 @@ pub trait Canonicalizable: CubeType {
 /// [`WritableFrom`]. Algorithms that create owned output use this bound; APIs that
 /// write into caller-provided output continue to state their `WritableFrom`
 /// relation directly.
+#[allow(private_bounds)]
 pub trait Materializable<R: Runtime>:
-    MItem<R> + Canonicalizable<Canonical = Self::Materialized>
+    MaterializationAbi<R> + Canonicalizable<Canonical = Self::Materialized>
 {
     /// The canonical item written to owned storage.
     #[doc(hidden)]
-    type Materialized: Allocable<R, Storage = Self::Storage> + WritableFrom<Self>;
+    type Materialized: Allocable<R, Storage = Self::Storage>
+        + WritableFrom<Self>
+        + SameStorageLayout<Self>;
 
     type Storage: MStorage<R, Item = Self::Materialized>;
+}
+
+/// Sealed physical contract used to implement [`Materializable`] with the
+/// current fixed-width storage backend. It is not a user-facing capability.
+#[doc(hidden)]
+pub(crate) trait MaterializationAbi<R: Runtime>:
+    MItem<R> + crate::CanonicalAlloc<R>
+{
+}
+
+impl<R, Item> MaterializationAbi<R> for Item
+where
+    R: Runtime,
+    Item: MItem<R> + crate::CanonicalAlloc<R>,
+{
+}
+
+/// Sealed equality witness for the storage ABI before and after canonical
+/// tuple reassociation.
+#[doc(hidden)]
+pub(crate) trait SameStorageLayout<Source: crate::StorageLayout>:
+    crate::StorageLayout<StorageArity = Source::StorageArity, StorageLeaves = Source::StorageLeaves>
+{
+}
+
+impl<Source, Target> SameStorageLayout<Source> for Target
+where
+    Source: crate::StorageLayout,
+    Target: crate::StorageLayout<
+            StorageArity = Source::StorageArity,
+            StorageLeaves = Source::StorageLeaves,
+        >,
+{
 }
 
 /// Owned canonical device storage for a logical item type.
@@ -96,15 +132,25 @@ where
     (start as usize, (end - start) as usize)
 }
 
-/// Materializes an index iterator through the fixed read ABI.
-pub(crate) fn lower<R, Input>(
-    input: Input,
-) -> impl private::KernelInput<R> + crate::read::ReadExpression<Item = Input::Item>
+/// Lowers a logical iterator while preserving its actual physical read arity.
+pub(crate) fn lower<R, Input>(input: Input) -> Input::Read
 where
     R: Runtime,
     Input: MIter<R>,
 {
     input.lower_read()
+}
+
+/// Lowers a logical iterator and selects the current fixed thirteen-slot ABI.
+///
+/// Keeping this conversion explicit at consumer call sites leaves room for an
+/// exact-arity launch policy without changing [`MIter`] or read expressions.
+pub(crate) fn lower_fixed<R, Input>(input: Input) -> crate::read::FixedRead<Input::Read>
+where
+    R: Runtime,
+    Input: MIter<R>,
+{
+    private::KernelInput::into_fixed(lower::<R, _>(input))
 }
 
 /// Materializes an index iterator through the fixed read ABI.
@@ -118,20 +164,24 @@ where
 {
     let len = input.len()? as usize;
     let output = exec.alloc::<MIndex>(len);
-    let input = lower::<R, _>(input);
+    let input = lower_fixed::<R, _>(input);
     let output_view = output.slice_mut(..);
     crate::transform::materialize_fixed(exec, &input, &output_view)?;
     Ok(output)
 }
 
-/// Logical item supported by the public iterator and storage facade.
+/// Internal marker for values supported by the physical storage ABI.
+///
+/// This is deliberately not required by [`MIter`]; read-only semantic values
+/// may have no storage layout. Implementing this marker does not imply that
+/// new owned storage can be allocated.
 #[doc(hidden)]
 pub trait MItem<R: Runtime>:
     crate::StorageLayout<
         StorageLeaves: private::KernelValue<
             StorageArity = <Self as crate::StorageLayout>::StorageArity,
-        >,
-    > + crate::CanonicalAlloc<R>
+        > + private::KernelOutputLeaves,
+    >
 {
 }
 
@@ -139,9 +189,9 @@ pub trait MItem<R: Runtime>:
 impl<R, Item> MItem<R> for Item
 where
     R: Runtime,
-    Item: crate::StorageLayout + crate::CanonicalAlloc<R>,
-    Item::StorageLeaves:
-        private::KernelValue<StorageArity = <Item as crate::StorageLayout>::StorageArity>,
+    Item: crate::StorageLayout,
+    Item::StorageLeaves: private::KernelValue<StorageArity = <Item as crate::StorageLayout>::StorageArity>
+        + private::KernelOutputLeaves,
 {
 }
 
@@ -164,7 +214,15 @@ where
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![11, 12, 13]);
 /// ```
 pub trait MIter<R: Runtime>: Clone + Sized {
-    type Item: MItem<R>;
+    /// Semantic value produced by one indexed read.
+    ///
+    /// Reading does not imply that the value has a storage layout, can be
+    /// allocated, or can cross a write boundary.
+    type Item: CubeType + Send + Sync + 'static;
+
+    /// Exact-arity device read plan for this iterator.
+    #[doc(hidden)]
+    type Read: private::KernelInput<R, Item = Self::Item>;
 
     #[doc(hidden)]
     type Slice: MIter<R, Item = Self::Item>;
@@ -181,9 +239,7 @@ pub trait MIter<R: Runtime>: Clone + Sized {
     }
 
     #[doc(hidden)]
-    fn lower_read(
-        self,
-    ) -> impl private::KernelInput<R> + crate::read::ReadExpression<Item = Self::Item>;
+    fn lower_read(self) -> Self::Read;
 }
 
 /// Internal bridge from a logical row stream to GPU algorithm dispatch.
@@ -656,6 +712,10 @@ where
 ///
 /// Device mutable slices and [`Zip`] trees of mutable slices implement this trait.
 pub trait MIterMut<R: Runtime>: Sized {
+    /// Semantic value stored by one output row.
+    ///
+    /// A preallocated destination needs a physical storage layout, but it does
+    /// not need to be allocatable as new owned storage.
     type Item: MItem<R>;
 
     #[doc(hidden)]
@@ -693,30 +753,13 @@ pub trait MIterMut<R: Runtime>: Sized {
     type LoweredOutput: crate::output::OutputExpression<Item = Self::Item>
         + crate::output::LowerOutputExpression<Slots = Self::OutputSlots>
         + crate::output::StageOutput<R, crate::read::Env0>
+        + private::KernelOutput<R>
         + crate::selection::FillOutput<R>
         + crate::selection::ReplaceOutput<R>
         + crate::output::SliceOutput;
 
     #[doc(hidden)]
     fn lower_output(self) -> Self::LoweredOutput;
-
-    #[doc(hidden)]
-    type ReboundOutput<Source>: crate::output::OutputExpression<Item = Source>
-        + crate::output::LowerOutputExpression<
-            Slots = <Source::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-        > + crate::output::StageOutput<R, crate::read::Env0>
-        + crate::output::SliceOutput
-    where
-        Source: MItem<R>,
-        Source::StorageLeaves: private::KernelValue,
-        Self::Item: crate::WritableFrom<Source>;
-
-    #[doc(hidden)]
-    fn lower_output_from<Source>(self) -> Self::ReboundOutput<Source>
-    where
-        Source: MItem<R>,
-        Source::StorageLeaves: private::KernelValue,
-        Self::Item: crate::WritableFrom<Source>;
 
     #[doc(hidden)]
     fn fill_with(self, exec: &Executor<R>, value: Self::Item) -> Result<(), Error> {
@@ -733,32 +776,6 @@ pub trait MIterMut<R: Runtime>: Sized {
         let flags = crate::selection::FlagInput::materialize_flags(flags, exec)?;
         crate::selection::ReplaceOutput::replace_output(self.lower_output(), exec, value, &flags)
     }
-
-    #[doc(hidden)]
-    fn scatter_combine_storage<Op>(
-        self,
-        exec: &Executor<R>,
-        values: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
-        indices: &crate::DeviceVec<R, MIndex>,
-    ) -> Result<(), Error>
-    where
-        Op: crate::op::ReductionOp<Self::Item>;
-
-    #[doc(hidden)]
-    fn scatter_combine_with<Values, Op>(
-        self,
-        exec: &Executor<R>,
-        values: Values,
-        indices: crate::DeviceVec<R, MIndex>,
-    ) -> Result<(), Error>
-    where
-        Values: MIter<R, Item = Self::Item>,
-        Op: crate::op::ReductionOp<Self::Item>,
-    {
-        let values =
-            crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(values))?;
-        self.scatter_combine_storage::<Op>(exec, &values, &indices)
-    }
 }
 
 #[doc(hidden)]
@@ -767,13 +784,13 @@ where
     R: Runtime,
     Input: Clone
         + private::IterLength
-        + crate::read::ReadExpression<Item = Item>
+        + private::KernelInput<R, Item = Item>
         + crate::read::SliceExpression
-        + crate::read::LowerReadExpression
-        + crate::reduce::StageRead<R, crate::read::Env0>,
-    Item: MItem<R>,
+        + crate::read::LowerReadExpression,
+    Item: CubeType + Send + Sync + 'static,
 {
     type Item = Item;
+    type Read = Input;
     type Slice = crate::read::Slice<R, Input>;
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
@@ -792,10 +809,8 @@ where
         MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
     }
 
-    fn lower_read(
-        self,
-    ) -> impl private::KernelInput<R> + crate::read::ReadExpression<Item = Self::Item> {
-        crate::read::FixedRead::new(self)
+    fn lower_read(self) -> Self::Read {
+        self
     }
 }
 
@@ -1613,21 +1628,10 @@ where
         + crate::selection::ReplaceOutput<R>
         + crate::output::SliceOutput,
     Output::Item: MItem<R>,
-    <Output::Item as crate::StorageLayout>::StorageLeaves: private::KernelValue,
     Output::Slots: crate::output::PaddedOutputSlots<
             Leaves = <Output::Item as crate::StorageLayout>::StorageLeaves,
         > + crate::output::OutputSlotEnvironment<
             StorageArity = <Output::Item as crate::StorageLayout>::StorageArity,
-        >,
-    <Output::Item as crate::CanonicalAlloc<R>>::CanonicalStorage: crate::CanonicalStorage<R>,
-    crate::Dispatch<crate::A13, Output::StorageArity>:
-        crate::core::scatter_reduce::ScatterCombineDispatch<
-            R,
-            crate::read::FixedReassociate<
-                <<Output::Item as crate::CanonicalAlloc<R>>::CanonicalStorage as crate::CanonicalStorage<R>>::Read,
-                Output::Item,
-            >,
-            Output,
         >,
 {
     type Item = <Output as crate::output::OutputExpression>::Item;
@@ -1635,16 +1639,6 @@ where
     type SliceMut = crate::output::Slice<R, Output>;
     type OutputSlots = Output::Slots;
     type LoweredOutput = Output;
-    type ReboundOutput<Source>
-        = crate::output::ReassociatedOutput<
-        Output,
-        Source,
-        <Source::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
-    >
-    where
-        Source: MItem<R>,
-        Source::StorageLeaves: private::KernelValue,
-        Self::Item: crate::WritableFrom<Source>;
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
         Bounds: RangeBounds<MIndex>,
@@ -1674,30 +1668,6 @@ where
 
     fn lower_output(self) -> Self::LoweredOutput {
         self
-    }
-
-    fn lower_output_from<Source>(self) -> Self::ReboundOutput<Source>
-    where
-        Source: MItem<R>,
-        Source::StorageLeaves: private::KernelValue,
-        Self::Item: crate::WritableFrom<Source>,
-    {
-        crate::output::ReassociatedOutput::new(self)
-    }
-
-    fn scatter_combine_storage<Op>(
-        self,
-        exec: &Executor<R>,
-        values: &<Self::Item as crate::CanonicalAlloc<R>>::CanonicalStorage,
-        indices: &crate::DeviceVec<R, MIndex>,
-    ) -> Result<(), Error>
-    where
-        Op: crate::op::ReductionOp<Self::Item>,
-    {
-        let values = crate::read::FixedReassociate::<_, Self::Item>::new(
-            crate::CanonicalStorage::read(values),
-        );
-        crate::core::scatter_reduce::apply::<R, _, _, Op>(exec, values, indices, self)
     }
 }
 
@@ -1976,4 +1946,224 @@ pub fn unzip12<A, B, C, D, E, F, G, H, I, J, K, L>(
     let (abcdefghijk, l) = zipped.into_parts();
     let (a, b, c, d, e, f, g, h, i, j, k) = unzip11(abcdefghijk);
     (a, b, c, d, e, f, g, h, i, j, k, l)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{A1, A2, A13, ReadExpression, StorageLayout, read::FixedRead};
+    use cubecl::prelude::*;
+    use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
+    use static_assertions::{assert_impl_all, assert_not_impl_any, assert_type_eq_all};
+
+    #[derive(CubeType, Clone, Copy)]
+    struct ReadOnlyValue {
+        value: u32,
+    }
+
+    #[derive(CubeType, Clone, Copy)]
+    struct StoredOnlyValue {
+        value: u32,
+    }
+
+    struct StoredOnlyLayout;
+
+    #[cubecl::cube]
+    impl crate::storage::Decompose<StoredOnlyValue> for StoredOnlyLayout {
+        type Leaves = crate::storage::Last<u32>;
+
+        fn decompose(item: StoredOnlyValue) -> Self::Leaves {
+            crate::storage::Last::new(item.value)
+        }
+    }
+
+    #[cubecl::cube]
+    impl crate::storage::Recompose<StoredOnlyValue> for StoredOnlyLayout {
+        type Leaves = crate::storage::Last<u32>;
+
+        fn recompose(leaves: Self::Leaves) -> StoredOnlyValue {
+            StoredOnlyValue {
+                value: leaves.value,
+            }
+        }
+    }
+
+    impl StorageLayout for StoredOnlyValue {
+        type StorageArity = crate::S1;
+        type StorageLeaves = crate::storage::Last<u32>;
+        type DeviceLayout = StoredOnlyLayout;
+
+        fn into_storage_leaves(self) -> Self::StorageLeaves {
+            crate::storage::Last::<u32> { value: self.value }
+        }
+
+        fn from_storage_leaves(leaves: Self::StorageLeaves) -> Self {
+            Self {
+                value: leaves.value,
+            }
+        }
+    }
+
+    struct MakeReadOnly;
+
+    struct MakeReadOnlyFromU64;
+
+    struct ReadOnlyEqual;
+
+    struct ReadOnlyLess;
+
+    #[cubecl::cube]
+    impl crate::op::UnaryOp<u32> for MakeReadOnly {
+        type Output = ReadOnlyValue;
+
+        fn apply(value: u32) -> ReadOnlyValue {
+            ReadOnlyValue { value }
+        }
+    }
+
+    #[cubecl::cube]
+    impl crate::op::UnaryOp<u64> for MakeReadOnlyFromU64 {
+        type Output = ReadOnlyValue;
+
+        fn apply(value: u64) -> ReadOnlyValue {
+            ReadOnlyValue {
+                value: value as u32,
+            }
+        }
+    }
+
+    #[cubecl::cube]
+    impl crate::op::BinaryPredicateOp<ReadOnlyValue> for ReadOnlyEqual {
+        fn apply(lhs: ReadOnlyValue, rhs: ReadOnlyValue) -> bool {
+            lhs.value == rhs.value
+        }
+    }
+
+    #[cubecl::cube]
+    impl crate::op::BinaryPredicateOp<ReadOnlyValue> for ReadOnlyLess {
+        fn apply(lhs: ReadOnlyValue, rhs: ReadOnlyValue) -> bool {
+            lhs.value < rhs.value
+        }
+    }
+
+    #[cubecl::cube]
+    impl WritableFrom<ReadOnlyValue> for u32 {
+        fn write_from(source: ReadOnlyValue) -> u32 {
+            source.value
+        }
+
+        fn read_source(output: u32) -> ReadOnlyValue {
+            ReadOnlyValue { value: output }
+        }
+    }
+
+    #[cubecl::cube]
+    impl WritableFrom<ReadOnlyValue> for StoredOnlyValue {
+        fn write_from(source: ReadOnlyValue) -> StoredOnlyValue {
+            StoredOnlyValue {
+                value: source.value,
+            }
+        }
+
+        fn read_source(output: StoredOnlyValue) -> ReadOnlyValue {
+            ReadOnlyValue {
+                value: output.value,
+            }
+        }
+    }
+
+    type ReadOnlyIter = crate::read::Transform<crate::Counting, MakeReadOnly>;
+    type ExactRead = <ReadOnlyIter as MIter<WgpuRuntime>>::Read;
+    type TwoColumnRead = <Zip<crate::Counting, crate::Counting> as MIter<WgpuRuntime>>::Read;
+    type Fixed = FixedRead<ExactRead>;
+
+    #[test]
+    fn readable_item_does_not_require_a_storage_layout() {
+        assert_not_impl_any!(ReadOnlyValue: StorageLayout);
+        assert_impl_all!(ReadOnlyIter: MIter<WgpuRuntime>);
+    }
+
+    #[test]
+    fn logical_lowering_retains_exact_arity_until_fixed_adapter() {
+        assert_type_eq_all!(<ExactRead as ReadExpression>::ReadArity, A1);
+        assert_type_eq_all!(<TwoColumnRead as ReadExpression>::ReadArity, A2);
+        assert_type_eq_all!(<Fixed as ReadExpression>::ReadArity, A13);
+    }
+
+    #[test]
+    fn non_storage_value_can_cross_an_explicit_write_boundary() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let input = crate::read::Transform::new(crate::Counting::new(7, 3), MakeReadOnly);
+        let output = exec.alloc::<u32>(3);
+
+        crate::api::algorithm::transform::transform_into(
+            &exec,
+            input,
+            crate::op::Identity,
+            output.slice_mut(..),
+        )
+        .unwrap();
+
+        assert_eq!(exec.to_host(&output).unwrap(), vec![7, 8, 9]);
+    }
+
+    #[test]
+    fn preallocated_output_does_not_require_allocation_capability() {
+        type Output = crate::output::ReassociatedOutput<
+            crate::DeviceSliceMut<u32>,
+            StoredOnlyValue,
+            crate::read::Env1<u32>,
+        >;
+
+        assert_impl_all!(StoredOnlyValue: MItem<WgpuRuntime>);
+        assert_not_impl_any!(StoredOnlyValue: Materializable<WgpuRuntime>);
+        assert_impl_all!(Output: MIterMut<WgpuRuntime>);
+
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let input = crate::read::Transform::new(crate::Counting::new(4, 3), MakeReadOnly);
+        let backing = exec.alloc::<u32>(3);
+        let output =
+            crate::output::ReassociatedOutput::<_, StoredOnlyValue, crate::read::Env1<u32>>::new(
+                backing.slice_mut(..),
+            );
+
+        crate::api::algorithm::transform::transform_into(&exec, input, crate::op::Identity, output)
+            .unwrap();
+
+        assert_eq!(exec.to_host(&backing).unwrap(), vec![4, 5, 6]);
+    }
+
+    #[test]
+    fn non_storage_keys_support_comparison_without_materialization() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let keys = crate::read::Transform::new(crate::Counting::new(7, 3), MakeReadOnly);
+
+        assert!(crate::vector::is_sorted(&exec, keys, ReadOnlyLess).unwrap());
+    }
+
+    #[test]
+    fn non_storage_keys_can_build_a_sort_permutation() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let backing = exec.to_device(&[9_u32, 7, 8]);
+        let keys = crate::read::Transform::new(backing.column(), MakeReadOnly);
+
+        let permutation = crate::ordering::sort_control_with(
+            &exec,
+            lower_fixed::<WgpuRuntime, _>(keys),
+            ReadOnlyLess,
+        )
+        .unwrap();
+
+        assert_eq!(exec.to_host(&permutation).unwrap(), vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn two_input_comparison_accepts_independent_physical_slot_types() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let left = crate::read::Transform::new(crate::Counting::new(7, 3), MakeReadOnly);
+        let right_values = exec.to_device(&[7_u64, 8, 9]);
+        let right = crate::read::Transform::new(right_values.column(), MakeReadOnlyFromU64);
+
+        assert!(crate::vector::equal(&exec, left, right, ReadOnlyEqual).unwrap());
+    }
 }

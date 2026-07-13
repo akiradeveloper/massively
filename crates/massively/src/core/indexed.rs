@@ -3,16 +3,13 @@
 use cubecl::prelude::*;
 
 use crate::{
-    CanonicalAlloc, CanonicalStorage, Dispatch, Error, Executor, Permute, ReadExpression,
-    ReverseCounting, StorageLayout,
-    allocation::NormalizeInput,
-    masked::{MaskedCopyDispatch, MaskedCopyInput},
+    Dispatch, Error, Executor, ReadExpression,
+    masked::MaskedCopyDispatch,
     output::{
         KernelOutputSlots, LowerOutputExpression, OutputExpression, PaddedOutputSlots, StageOutput,
     },
     read::{Env0, KernelReadSlots, LowerReadExpression},
     reduce::StageRead,
-    transform::{MaterializeDispatch, materialize},
 };
 
 /// Internal capability proving the combined value/index arity is supported.
@@ -307,173 +304,15 @@ pub(crate) fn apply_permutation<R, Input, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Input: GatherNormalized<R, crate::Column<u32>, Output>,
+    Input: GatherInput<R, crate::Column<u32>, Output>,
 {
-    gather(exec, input, indices, output)
-}
-
-/// Internal public-API capability that normalizes values and indices
-/// independently before applying the permutation.
-#[doc(hidden)]
-pub trait GatherNormalized<R: Runtime, Indices, Output>: NormalizeInput<R> {
-    fn gather_normalized(
-        self,
-        exec: &Executor<R>,
-        indices: Indices,
-        output: Output,
-    ) -> Result<(), Error>;
-}
-
-impl<R, Values, Indices, Output> GatherNormalized<R, Indices, Output> for Values
-where
-    R: Runtime,
-    Values: NormalizeInput<R>,
-    Values::Storage: CanonicalStorage<R>,
-    Indices: crate::selection::FlagInput<R>,
-    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Indices, Output>,
-{
-    fn gather_normalized(
-        self,
-        exec: &Executor<R>,
-        indices: Indices,
-        output: Output,
-    ) -> Result<(), Error> {
-        let values = self.normalize(exec)?;
-        gather_direct(exec, values.read(), indices, output)
-    }
-}
-
-/// Gathers `values[indices[i]]` into preallocated output storage.
-pub(crate) fn gather<R, Values, Indices, Output>(
-    exec: &Executor<R>,
-    values: Values,
-    indices: Indices,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Values: GatherNormalized<R, Indices, Output>,
-{
-    values.gather_normalized(exec, indices, output)
-}
-
-/// Internal public-API capability for masked gather.
-#[doc(hidden)]
-pub trait GatherWhereInput<R: Runtime, Indices, Stencil, Output>: NormalizeInput<R> {
-    fn gather_where_normalized(
-        self,
-        exec: &Executor<R>,
-        indices: Indices,
-        stencil: Stencil,
-        output: Output,
-    ) -> Result<(), Error>;
-}
-
-impl<R, Values, Indices, Stencil, Output> GatherWhereInput<R, Indices, Stencil, Output> for Values
-where
-    R: Runtime,
-    Values: NormalizeInput<R>,
-    Values::Item: CanonicalAlloc<R>,
-    Values::Storage: CanonicalStorage<R>,
-    <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    Indices: crate::selection::FlagInput<R>,
-    <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<
-            R,
-            Indices,
-            <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
-        >,
-    <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read:
-        MaskedCopyInput<R, Output>,
-    Stencil: crate::selection::FlagInput<R>,
-    Output: OutputExpression,
-{
-    fn gather_where_normalized(
-        self,
-        exec: &Executor<R>,
-        indices: Indices,
-        stencil: Stencil,
-        output: Output,
-    ) -> Result<(), Error> {
-        let stencil_len = stencil.flag_len()?;
-        let output_len = output.logical_len()?;
-        if stencil_len != output_len {
-            return Err(Error::LengthMismatch {
-                left: stencil_len,
-                right: output_len,
-            });
-        }
-        let values = self.normalize(exec)?;
-        let gathered = exec.alloc_canonical::<Values::Item>(output_len);
-        gather_direct(exec, values.read(), indices, gathered.write())?;
-        let flags = stencil.materialize_flags(exec)?;
-        gathered.read().masked_copy(exec, &flags, output)
-    }
-}
-
-/// Gathers only rows whose stencil is nonzero, preserving other output rows.
-pub(crate) fn gather_where<R, Values, Indices, Stencil, Output>(
-    exec: &Executor<R>,
-    values: Values,
-    indices: Indices,
-    stencil: Stencil,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Values: GatherWhereInput<R, Indices, Stencil, Output>,
-{
-    values.gather_where_normalized(exec, indices, stencil, output)
-}
-
-/// Internal capability proving reverse permutation has a canonical evaluator.
-#[doc(hidden)]
-pub trait ReverseInput<R: Runtime, Output>: ReadExpression + Sized {
-    fn reverse(self, exec: &Executor<R>, output: Output) -> Result<(), Error>;
-}
-
-impl<R, Values, Output> ReverseInput<R, Output> for Values
-where
-    R: Runtime,
-    Values: ReadExpression + StageRead<R, Env0>,
-    Values::Item: StorageLayout,
-    Permute<Values, ReverseCounting>:
-        ReadExpression<Item = Values::Item> + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Item: crate::WritableFrom<Values::Item>,
-    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
-            R,
-            Permute<Values, ReverseCounting>,
-            Output,
-            crate::read::KernelReadSlots<
-                <Permute<Values, ReverseCounting> as LowerReadExpression>::Slots,
-            >,
-            crate::output::KernelOutputSlots<Output::Slots>,
-        >,
-    Output::Slots: PaddedOutputSlots,
-{
-    fn reverse(self, exec: &Executor<R>, output: Output) -> Result<(), Error> {
-        let len = self.logical_len()?;
-        materialize(exec, Permute::new(self, ReverseCounting::new(len)), output)
-    }
-}
-
-/// Reverses values into preallocated output storage.
-pub(crate) fn reverse<R, Values, Output>(
-    exec: &Executor<R>,
-    values: Values,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Values: ReverseInput<R, Output>,
-{
-    values.reverse(exec, output)
+    gather_direct(exec, input, indices, output)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanonicalStorage, Counting, Permute, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, ReverseCounting, Zip, read::FixedRead};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
@@ -517,7 +356,7 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        gather(&exec, values, indices.column(), output).unwrap();
+        gather_direct(&exec, FixedRead::new(values), indices.column(), output).unwrap();
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(output).unwrap(),
@@ -566,7 +405,13 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        reverse(&exec, values, output).unwrap();
+        gather_direct(
+            &exec,
+            FixedRead::new(values),
+            ReverseCounting::new(3),
+            output,
+        )
+        .unwrap();
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(output).unwrap(),
@@ -580,7 +425,7 @@ mod tests {
     }
 
     #[test]
-    fn gather_normalizes_eval8_values_and_lazy_indices_independently() {
+    fn gather_accepts_fixed_eval8_values_and_lazy_indices_independently() {
         type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let inputs: Vec<_> = (0_u32..7)
@@ -607,7 +452,7 @@ mod tests {
         let indices = Permute::new(raw_indices.column(), Counting::new(0, 2));
         let output = exec.alloc_canonical::<Seven>(2);
 
-        gather(&exec, values, indices, output.write()).unwrap();
+        gather_direct(&exec, FixedRead::new(values), indices, output.write()).unwrap();
         assert_eq!(exec.to_host(&output.0.0.0.0.0.0).unwrap(), vec![3, 1]);
         assert_eq!(exec.to_host(&output.1).unwrap(), vec![63, 61]);
     }
@@ -620,9 +465,9 @@ mod tests {
         let stencil = exec.to_device(&[1_u32, 0, 1, 0]);
         let output = exec.to_device(&[100_u32, 200, 300, 400]);
 
-        gather_where(
+        gather_where_direct(
             &exec,
-            values.column(),
+            FixedRead::new(values.column()),
             indices.column(),
             stencil.column(),
             output.slice_mut(..),

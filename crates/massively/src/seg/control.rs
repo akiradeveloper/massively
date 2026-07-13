@@ -1,8 +1,8 @@
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceVec, Error, Executor, MIndex, MItem, MIter, MIterMut, WritableFrom,
-    op::BinaryPredicateOp, op::ReductionOp,
+    DeviceVec, Error, Executor, MIndex, MIter, MIterMut, WritableFrom, op::BinaryPredicateOp,
+    op::ReductionOp,
 };
 
 const BLOCK_SIZE: u32 = 256;
@@ -374,8 +374,6 @@ impl<R: Runtime> SegmentControl<R> {
     ) -> Result<MIndex, Error>
     where
         Input: crate::core::facade::KernelInput<R>,
-        Input::Item: MItem<R>,
-        <Input::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
         Output: MIterMut<R>,
         Output::Item: WritableFrom<Input::Item>,
         OutputOffsets: MIterMut<R, Item = MIndex>,
@@ -419,7 +417,7 @@ impl<R: Runtime> SegmentControl<R> {
             exec,
             input,
             selection.indices().column(),
-            output.lower_output_from::<Input::Item>(),
+            output.lower_output(),
         )?;
         Ok(selection.count())
     }

@@ -56,9 +56,9 @@ where
 {
     crate::selection::copy_where(
         exec,
-        crate::api::iter::lower::<R, _>(input),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output_from::<Input::Item>(),
+        crate::api::iter::lower_fixed::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(stencil),
+        output.lower_output(),
     )
 }
 
@@ -113,9 +113,9 @@ where
 {
     crate::selection::remove_where(
         exec,
-        crate::api::iter::lower::<R, _>(input),
-        crate::api::iter::lower::<R, _>(stencil),
-        output.lower_output_from::<Input::Item>(),
+        crate::api::iter::lower_fixed::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(stencil),
+        output.lower_output(),
     )
 }
 
@@ -180,9 +180,9 @@ where
 {
     crate::selection::partition(
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(input),
         pred,
-        output.lower_output_from::<Input::Item>(),
+        output.lower_output(),
     )
 }
 
@@ -258,7 +258,7 @@ where
     Output: MIterMut<R>,
 {
     let flags = crate::selection::FlagInput::materialize_flags(
-        crate::api::iter::lower::<R, _>(stencil),
+        crate::api::iter::lower_fixed::<R, _>(stencil),
         exec,
     )?;
     output.replace_with_flags(exec, value, flags.column())
@@ -318,11 +318,11 @@ where
     Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
 {
     let flags = crate::selection::FlagInput::materialize_flags(
-        crate::api::iter::lower::<R, _>(stencil),
+        crate::api::iter::lower_fixed::<R, _>(stencil),
         exec,
     )?;
     crate::masked::MaskedCopyInput::masked_copy(
-        crate::Transform::new(crate::api::iter::lower::<R, _>(input), op),
+        crate::Transform::new(crate::api::iter::lower_fixed::<R, _>(input), op),
         exec,
         &flags,
         output.lower_output(),

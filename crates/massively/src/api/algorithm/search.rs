@@ -40,18 +40,10 @@ where
     Needles: MIter<R, Item = Source::Item>,
     Equal: BinaryPredicateOp<Source::Item>,
 {
-    let source =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(source))?;
-    let needles =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(needles))?;
     crate::search::find_first_of(
         exec,
-        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
-            &source,
-        )),
-        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
-            &needles,
-        )),
+        crate::api::iter::lower_fixed::<R, _>(source),
+        crate::api::iter::lower_fixed::<R, _>(needles),
         equal,
     )
 }
@@ -118,18 +110,10 @@ where
     Output::Item: WritableFrom<MIndex>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    let source =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(source))?;
-    let values =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(values))?;
     let bounds = crate::search::lower_bounds_storage(
         exec,
-        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
-            &source,
-        )),
-        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
-            &values,
-        )),
+        crate::api::iter::lower_fixed::<R, _>(source),
+        crate::api::iter::lower_fixed::<R, _>(values),
         less,
     )?;
     crate::transform::materialize(exec, bounds.column(), output.lower_output())
@@ -197,18 +181,10 @@ where
     Output::Item: WritableFrom<MIndex>,
     Less: BinaryPredicateOp<Source::Item>,
 {
-    let source =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(source))?;
-    let values =
-        crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(values))?;
     let bounds = crate::search::upper_bounds_storage(
         exec,
-        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
-            &source,
-        )),
-        crate::read::FixedReassociate::<_, Source::Item>::new(crate::CanonicalStorage::read(
-            &values,
-        )),
+        crate::api::iter::lower_fixed::<R, _>(source),
+        crate::api::iter::lower_fixed::<R, _>(values),
         less,
     )?;
     crate::transform::materialize(exec, bounds.column(), output.lower_output())
@@ -250,12 +226,10 @@ where
     Right: MIter<R, Item = Left::Item>,
     Equal: BinaryPredicateOp<Left::Item>,
 {
-    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
-    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
     crate::search::equal(
         exec,
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        crate::api::iter::lower_fixed::<R, _>(left),
+        crate::api::iter::lower_fixed::<R, _>(right),
         equal,
     )
 }
@@ -296,12 +270,10 @@ where
     Right: MIter<R, Item = Left::Item>,
     Equal: BinaryPredicateOp<Left::Item>,
 {
-    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
-    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
     crate::search::mismatch(
         exec,
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        crate::api::iter::lower_fixed::<R, _>(left),
+        crate::api::iter::lower_fixed::<R, _>(right),
         equal,
     )
 }
@@ -344,12 +316,10 @@ where
     Right: MIter<R, Item = Left::Item>,
     Less: BinaryPredicateOp<Left::Item>,
 {
-    let left = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(left))?;
-    let right = crate::allocation::normalize_lowered(exec, crate::api::iter::lower::<R, _>(right))?;
     crate::search::lexicographical_compare(
         exec,
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&left)),
-        crate::read::FixedReassociate::<_, Left::Item>::new(crate::CanonicalStorage::read(&right)),
+        crate::api::iter::lower_fixed::<R, _>(left),
+        crate::api::iter::lower_fixed::<R, _>(right),
         less,
     )
 }

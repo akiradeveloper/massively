@@ -56,15 +56,20 @@ pub(crate) fn inclusive_scan_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: Materializable<R>,
     Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>
+        + crate::StorageLayout<
+            StorageArity = <Input::Item as crate::StorageLayout>::StorageArity,
+            StorageLeaves = <Input::Item as crate::StorageLayout>::StorageLeaves,
+        >,
     Op: ReductionOp<Input::Item>,
 {
     crate::scan::inclusive_scan(
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(input),
         op,
-        output.lower_output_from::<Input::Item>(),
+        output.lower_output(),
     )
 }
 
@@ -120,15 +125,16 @@ pub(crate) fn adjacent_difference_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: crate::StorageLayout,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Input::Item>,
     Op: ReductionOp<Input::Item>,
 {
     crate::scan::adjacent_difference(
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(input),
         op,
-        output.lower_output_from::<Input::Item>(),
+        output.lower_output(),
     )
 }
 
@@ -186,15 +192,20 @@ pub(crate) fn exclusive_scan_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: Materializable<R>,
     Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>,
+    Output::Item: WritableFrom<Input::Item>
+        + crate::StorageLayout<
+            StorageArity = <Input::Item as crate::StorageLayout>::StorageArity,
+            StorageLeaves = <Input::Item as crate::StorageLayout>::StorageLeaves,
+        >,
     Op: ReductionOp<Input::Item>,
 {
     crate::scan::exclusive_scan(
         exec,
-        crate::api::iter::lower::<R, _>(input),
+        crate::api::iter::lower_fixed::<R, _>(input),
         init,
         op,
-        output.lower_output_from::<Input::Item>(),
+        output.lower_output(),
     )
 }

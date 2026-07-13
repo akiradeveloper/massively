@@ -209,7 +209,7 @@ fn segmented_lowered_storage<R, Values, Op>(
 where
     R: Runtime,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R>,
+    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
     <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
     <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
@@ -233,18 +233,14 @@ where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R>,
+    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
     <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
     <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
         WritableFrom<Values::Item>,
     Op: crate::op::ReductionOp<Values::Item>,
-    Output: crate::output::OutputExpression<Item = Values::Item>
-        + crate::output::LowerOutputExpression
-        + crate::output::StageOutput<R, crate::read::Env0>,
-    Output::Slots: crate::output::PaddedOutputSlots<
-            Leaves = <Values::Item as crate::StorageLayout>::StorageLeaves,
-        >,
+    Output: crate::core::facade::KernelOutput<R>,
+    Output::Item: WritableFrom<Values::Item>,
 {
     let heads = keys.segment_heads(exec)?;
     let scanned = segmented_lowered_storage(exec, values, &heads, None, op, 0)?;
@@ -266,18 +262,14 @@ where
     R: Runtime,
     Keys: SegmentKeyInput<R, Equal>,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R>,
+    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
     <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
     <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
         WritableFrom<Values::Item>,
     Op: crate::op::ReductionOp<Values::Item>,
-    Output: crate::output::OutputExpression<Item = Values::Item>
-        + crate::output::LowerOutputExpression
-        + crate::output::StageOutput<R, crate::read::Env0>,
-    Output::Slots: crate::output::PaddedOutputSlots<
-            Leaves = <Values::Item as crate::StorageLayout>::StorageLeaves,
-        >,
+    Output: crate::core::facade::KernelOutput<R>,
+    Output::Item: WritableFrom<Values::Item>,
 {
     let heads = keys.segment_heads(exec)?;
     let scanned = segmented_lowered_storage(exec, values, &heads, Some(init), op, 1)?;
@@ -299,27 +291,17 @@ pub(crate) fn reduce_by_key_lowered<R, Keys, Values, Equal, Op, KeyOutput, Value
 where
     R: Runtime,
     Keys: crate::core::facade::KernelInput<R> + SegmentKeyInput<R, Equal>,
-    Keys::Item: crate::api::iter::MItem<R>,
-    <Keys::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
     Values: crate::core::facade::KernelInput<R>,
-    Values::Item: crate::api::iter::MItem<R>,
+    Values::Item: crate::api::iter::MItem<R> + CanonicalAlloc<R>,
     <Values::Item as crate::StorageLayout>::StorageLeaves: crate::core::facade::KernelValue,
     <Values::Item as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
     <<Values::Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Item:
         WritableFrom<Values::Item>,
     Op: crate::op::ReductionOp<Values::Item>,
-    KeyOutput: crate::output::OutputExpression<Item = Keys::Item>
-        + crate::output::LowerOutputExpression
-        + crate::output::StageOutput<R, crate::read::Env0>,
-    KeyOutput::Slots: crate::output::PaddedOutputSlots<
-            Leaves = <Keys::Item as crate::StorageLayout>::StorageLeaves,
-        >,
-    ValueOutput: crate::output::OutputExpression<Item = Values::Item>
-        + crate::output::LowerOutputExpression
-        + crate::output::StageOutput<R, crate::read::Env0>,
-    ValueOutput::Slots: crate::output::PaddedOutputSlots<
-            Leaves = <Values::Item as crate::StorageLayout>::StorageLeaves,
-        >,
+    KeyOutput: crate::core::facade::KernelOutput<R>,
+    KeyOutput::Item: WritableFrom<Keys::Item>,
+    ValueOutput: crate::core::facade::KernelOutput<R>,
+    ValueOutput::Item: WritableFrom<Values::Item>,
 {
     let heads = keys.clone().segment_heads(exec)?;
     let reduced = segmented_lowered_storage(exec, values, &heads, Some(init), op, 2)?;

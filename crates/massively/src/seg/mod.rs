@@ -304,34 +304,29 @@ where
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
 
-        let values = crate::api::iter::lower::<R, _>(values);
+        let values = crate::api::iter::lower_fixed::<R, _>(values);
         let ordering = crate::ordering::sort_control_with(exec, values.clone(), less)?;
         let sorted_ids = exec.alloc::<u32>(value_len);
         crate::indexed::apply_permutation(
             exec,
-            crate::api::iter::lower::<R, _>(control.ids.slice(..)),
+            crate::api::iter::lower_fixed::<R, _>(control.ids.slice(..)),
             ordering.column(),
             <crate::DeviceSliceMut<u32> as MIterMut<R>>::lower_output(sorted_ids.slice_mut(..)),
         )?;
 
         let id_ordering = crate::ordering::sort_control_with(
             exec,
-            crate::api::iter::lower::<R, _>(sorted_ids.slice(..)),
+            crate::api::iter::lower_fixed::<R, _>(sorted_ids.slice(..)),
             control::LessU32,
         )?;
         let permutation = exec.alloc::<u32>(value_len);
         crate::indexed::apply_permutation(
             exec,
-            crate::api::iter::lower::<R, _>(ordering.slice(..)),
+            crate::api::iter::lower_fixed::<R, _>(ordering.slice(..)),
             id_ordering.column(),
             <crate::DeviceSliceMut<u32> as MIterMut<R>>::lower_output(permutation.slice_mut(..)),
         )?;
-        crate::indexed::apply_permutation(
-            exec,
-            values,
-            permutation.column(),
-            output.lower_output_from::<Input::Item>(),
-        )
+        crate::indexed::apply_permutation(exec, values, permutation.column(), output.lower_output())
     }
 }
 
@@ -340,6 +335,7 @@ impl<R, Input, InputOffsets, Output, Op> MapLikeExecutableInto<R, Input, InputOf
 where
     R: Runtime,
     Input: MIter<R> + Clone,
+    Input::Item: crate::StorageLayout,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Input::Item>,
@@ -372,6 +368,7 @@ impl<R, Input, InputOffsets, Output, Op> MapLikeExecutableInto<R, Input, InputOf
 where
     R: Runtime,
     Input: MIter<R>,
+    Input::Item: Materializable<R>,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Op: ReductionOp<Input::Item>,
@@ -473,7 +470,7 @@ where
         let (values, offsets) = input.into_parts();
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
-        let values = crate::api::iter::lower::<R, _>(values);
+        let values = crate::api::iter::lower_fixed::<R, _>(values);
         let flags = crate::ordering::unique_head_flags::<R, _, Equal>(exec, values.clone())?;
         control.merge_heads(exec, &flags)?;
         let (output_values, output_offsets) = output.into_parts();
@@ -543,7 +540,7 @@ pub(crate) fn reduce_segments<R, Values, Offsets, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R> + Copy,
+    Values::Item: Allocable<R> + Materializable<R> + Copy,
     Offsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Values::Item>,
@@ -621,7 +618,7 @@ where
         let (output_values, output_offsets) = output.into_parts();
         control.compact(
             exec,
-            crate::api::iter::lower::<R, _>(values),
+            crate::api::iter::lower_fixed::<R, _>(values),
             flags,
             output_values,
             output_offsets,
@@ -636,7 +633,7 @@ where
     Input: MIter<R, Item = Init>,
     InputOffsets: MIter<R, Item = MIndex>,
     Output: MIterMut<R>,
-    Init: CubeType + Allocable<R> + Copy,
+    Init: CubeType + Allocable<R> + Materializable<R> + Copy,
     Op: ReductionOp<Input::Item>,
     Output::Item: WritableFrom<Input::Item>,
 {
@@ -718,7 +715,7 @@ where
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
         let breaks = crate::ordering::sorted_break_flags::<R, _, Less>(
             exec,
-            crate::api::iter::lower::<R, _>(values),
+            crate::api::iter::lower_fixed::<R, _>(values),
         )?;
         control.clear_heads(exec, &breaks)?;
         let ordered = exec.alloc::<u32>(value_len);
@@ -760,7 +757,7 @@ where
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
         let breaks = crate::ordering::sorted_break_flags::<R, _, Less>(
             exec,
-            crate::api::iter::lower::<R, _>(values),
+            crate::api::iter::lower_fixed::<R, _>(values),
         )?;
         let candidates = control.sorted_until_candidates(exec, &breaks)?;
         let reduced = exec.alloc::<u32>(control.segment_count);
