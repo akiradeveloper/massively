@@ -23,8 +23,9 @@ The algorithms are organized into three complementary families:
   indexed movement
 - segment algorithms that apply map, scan, reduction, ordering, and selection
   independently to offset-delimited regions
-- graph algorithms expressed through edge computation, aggregation, state
-  updates, frontier relaxation, and batched adjacency operations
+- graph algorithms expressed with Traversal Algebra through edge computation,
+  aggregation, state updates, frontier relaxation, and batched adjacency
+  operations
 
 Memory movement is explicit, outputs are preallocated, and user-defined
 operations are compiled into GPU kernels. Lazy transforms, permutations, and
@@ -90,9 +91,35 @@ fn main() -> Result<(), massively::Error> {
 
 ## Graph Algorithms
 
-`massively::graph` is a graph programming layer built from the same device
-storage, lazy expressions, multi-column values, and parallel primitives as the
-vector API. It is part of the main crate rather than a separate framework.
+`massively::graph` introduces **Traversal Algebra**, a compositional way to
+describe frontier-based graph algorithms. A program says which edges are
+active, which source, destination, or edge values to read, how to transform
+them, and how to emit or combine the results. It does not bake a particular
+GPU expansion or conflict-resolution strategy into the algorithm.
+
+The basic flow is:
+
+```text
+frontier -> traverse -> pull values -> map -> push/reduce -> update -> next frontier
+```
+
+Traversal Algebra has a machine-checked mathematical foundation. For the
+precisely defined finite frontier/BSP fragment, Lean proves that the algebra
+and its reference BSP model can represent one another without changing program
+results. It also proves that normalization does not introduce an algorithmic
+blow-up under the stated language-level cost model. These claims concern the
+algebra, not the speed of a particular GPU or the formal correctness of every
+Rust graph algorithm. The Rust/CubeCL implementation is checked separately
+against a compiled Lean oracle with generated property tests.
+
+The non-specialist summary, exact proof boundary, Lean development, and oracle
+are collected in the [Traversal Algebra artifact](traversal-algebra/). The
+current research paper is also available as a
+[prebuilt PDF](traversal-algebra/paper.pdf).
+
+The graph layer uses the same device storage, lazy expressions, multi-column
+values, and parallel primitives as the vector API. It is part of the main crate
+rather than a separate framework.
 
 Graph programs describe the meaning of an edge computation instead of choosing
 a low-level expansion strategy. A traversal selects outgoing CSR edges from a
@@ -168,12 +195,14 @@ lowering, future implementations can fuse edge expressions into terminals and
 choose atomic, sort-reduce, hierarchical, push/pull, or degree-aware
 intersection strategies without changing graph programs.
 
-The `graph-algorithms` crate includes breadth-first search, single-source shortest paths,
-PageRank, personalized PageRank, HITS, graph coloring, k-core decomposition,
-minimum spanning tree, Boolean SpGEMM, SpMV, triangle counting, betweenness
-centrality, Forman–Ricci curvature, and graph-based geolocation. See
-[`crates/graph-algorithms`](crates/graph-algorithms) for the tested compositions,
-independent CPU references, and generated graph property tests.
+The `graph-algorithms` crate implements all 12 applications that Gunrock's
+published table marks as supported by current Gunrock, plus all four priority
+future ports: connected components, Louvain modularity,
+random walk, and subgraph matching. It also includes personalized PageRank,
+Boolean SpGEMM, and Forman–Ricci curvature. See the
+[`Gunrock comparison table`](traversal-algebra/graph-algorithms#gunrock-comparison)
+for the exact scope, tested compositions, independent CPU references, and
+generated graph property tests.
 
 ## Core Model
 
@@ -292,15 +321,15 @@ Every public algorithm has a runnable, single-column example in the
 under `crates/massively/tests/vector` and `crates/massively/tests/seg`. Their
 oracle tests compare public functions against CPU AoS references and cover the
 full transform input/output arity matrix. Complete graph algorithm oracles live
-under `crates/graph-algorithms/tests` and compare every algorithm with
+under `traversal-algebra/graph-algorithms/tests` and compare every algorithm with
 independent CPU implementations on generated CSR graphs. Tests in `massively`
 itself cover the graph traversal primitives.
 
 ### Graph Algorithms
 
-Complete algorithms written with the graph traversal algebra, together with
-generated property tests and end-to-end benchmarks, live in the separate
-`graph-algorithms` crate.
+Complete algorithms written with Traversal Algebra, together with generated
+property tests and end-to-end benchmarks, live in the `graph-algorithms` crate
+inside the Traversal Algebra artifact.
 
 ```sh
 cargo nextest run -p graph-algorithms --test oracle

@@ -1,0 +1,92 @@
+\section{Machine-checked and executable artifact}
+
+The Lean development~\cite{demoura2021lean4} mirrors the definitions above.
+Table~\ref{tab:correspondence} records stable declaration names rather than
+depending only on document numbering.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.30\textwidth}
+                    >{\raggedright\arraybackslash}p{0.66\textwidth}@{}}
+\toprule
+Paper object & Lean declaration \\
+\midrule
+Ordered multigraph & \path{TraversalAlgebra.Graph} \\
+Edge context & \path{TraversalAlgebra.EdgeContext} \\
+$\trav_G$ & \path{TraversalAlgebra.Graph.traverse} \\
+Emission & \path{TraversalAlgebra.emit} \\
+Source reduction & \path{TraversalAlgebra.reduceBySource} \\
+Destination reduction & \path{TraversalAlgebra.reduceByDestination} \\
+Theorem~\ref{thm:frontier-homomorphism} & \path{traverse_append} \\
+Theorem~\ref{thm:emission-fusion} & \path{emit_map_fusion} \\
+Type-safe completeness graph & \path{Verified.OrderedGraph} \\
+Type-safe \TA{} terminals & \path{Verified.TraversalAlgebra.emit},
+  \path{reduceBySource}, \path{reduceByDestination} \\
+Semantic BSP source & \path{Verified.MonoidalFrontierBSP.Program} \\
+Semantic pull--map--push target & \path{Verified.PullMapPush.Plan} \\
+Schedule independence & \path{Verified.PullMapPush.inboxAt_schedule_independent} \\
+Theorem~\ref{thm:step-simulation} & \path{Verified.compile_step_correct} \\
+Corollary~\ref{cor:run-simulation} & \path{Verified.compile_run_correct} \\
+Typed values and sharing terms & \path{Typed.ValueType}, \path{Typed.Term.let1},
+  \path{Typed.Term.share} \\
+Typed BSP source & \path{Typed.MonoidalFrontierBSP.Program} \\
+Typed pull--map--push target & \path{Typed.PullMapPush.Program} \\
+Theorem~\ref{thm:typed-denotation} & \path{Typed.compile_denoteAt} \\
+Corollary~\ref{cor:typed-run} & \path{Typed.compile_run_correct} \\
+Compositional \TA{} grammar &
+  \path{Typed.TraversalAlgebra.Expression.Traversal}, \path{Program} \\
+Lemma~\ref{lem:ta-pointwise-normalization} &
+  \path{Traversal.evaluateAt_normalize}, \path{evaluate_normalize} \\
+Theorem~\ref{thm:ta-normalization} &
+  \path{Program.normalize_run_correct} \\
+Theorem~\ref{thm:quantitative-normalization} &
+  \path{Expression.Program.normalize_nodeCount}, \path{normalize_work},
+  \path{normalize_depth}, \path{normalize_scalarTemporaries} \\
+Single-push \TA{} normal form & \path{Typed.TraversalAlgebra.Program} \\
+Nested BSP fold equals TA terminal & \path{encode_inbox_correct} \\
+Theorem~\ref{thm:syntax-equivalence} (normal form) &
+  \path{decode_encode}, \path{encode_decode} \\
+Theorem~\ref{thm:ta-bsp-equivalence} &
+  \path{Program.ofBSP_run_correct}, \path{toBSP_run_correct} \\
+Empty-frontier termination &
+  \path{Program.ofBSP_terminates_iff}, \path{toBSP_terminates_iff} \\
+Theorem~\ref{thm:sparse-frontier} &
+  \path{OrderedGraph.traversalDestinations_eq_nestedDestinations},
+  \path{FrontierPolicy.sparsePreserve_count} \\
+Theorem~\ref{thm:terminal-observation} &
+  \path{Observation.Terminal.toBSP_observe_correct},
+  \path{Observation.BSP.Terminal.toTA_observe_correct} \\
+Certified signature translation & \path{Typed.Signature.Lowering} \\
+Lemma~\ref{lem:term-lowering} & \path{Typed.Term.evaluate_lower} \\
+Theorem~\ref{thm:lowering-naturality} & \path{Typed.compile_lower},
+  \path{Typed.lower_compile_run_correct} \\
+\bottomrule
+\end{tabular}
+\caption{Paper-to-Lean declaration map.  Rows beginning ``Typed'' are nested
+below ``Verified''; expression-program names are in
+\texttt{Typed.TraversalAlgebra.Expression}, while normal-form names are in
+\texttt{Typed.TraversalAlgebra}; observer names continue below its
+\texttt{Observation} namespace.  All names omit the common top-level
+namespace.}
+\label{tab:correspondence}
+\end{table}
+
+The proof project contains no admitted theorem.  Its executable definitions
+provide two implementation checks.  First, Lean evaluates a named regression
+corpus containing empty graphs, isolated vertices, parallel edges, self-loops,
+and repeated frontier entries, then emits the inputs and expected results as
+Rust source.  Second, the same definitions compile to a native oracle accepting
+arbitrary valid CSR graphs and frontiers.  A property-based Rust harness
+generates bounded inputs, queries this Lean oracle, and compares edge contexts
+and both reductions with the public Massively GPU operations.  Counterexamples
+are shrunk at the graph and frontier level; no independent Rust traversal
+semantics is present in the harness.
+
+Passing finitely many generated inputs demonstrates agreement on those inputs;
+it does not prove universal implementation correspondence.  The trusted
+boundary includes the Lean compiler, a small textual protocol, the Rust test
+harness, CubeCL, and the device stack.  End-to-end verification of that stack
+is explicitly outside the theorem's scope: the running implementation and
+property tests establish artifact-level implementability, while
+Theorem~\ref{thm:ta-bsp-equivalence} concerns the mathematical languages.

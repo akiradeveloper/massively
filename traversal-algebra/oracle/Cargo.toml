@@ -1,0 +1,27 @@
+[package]
+autotests = false
+authors.workspace = true
+description = "Lean-generated conformance oracle for Massively Traversal Algebra verification."
+edition.workspace = true
+license.workspace = true
+name = "traversal-algebra-oracle"
+publish = false
+repository.workspace = true
+version = "0.1.0"
+
+[dependencies]
+cubecl.workspace = true
+massively = { path = "../../crates/massively", default-features = false }
+
+[dev-dependencies]
+proptest = "1"
+
+[[test]]
+name = "conformance"
+path = "tests/conformance.rs"
+
+[features]
+default = ["wgpu"]
+cuda = ["cubecl/cuda", "massively/cuda"]
+hip = ["cubecl/hip", "massively/hip"]
+wgpu = ["cubecl/wgpu", "massively/wgpu"]

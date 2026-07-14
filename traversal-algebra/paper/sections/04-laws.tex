@@ -1,0 +1,44 @@
+\section{Foundational laws}
+
+\begin{theorem}[Frontier homomorphism]\label{thm:frontier-homomorphism}
+For all frontier sequences $F_1,F_2$,
+\[
+  \trav_G(F_1+\!+F_2)=\trav_G(F_1)+\!+\trav_G(F_2).
+\]
+\end{theorem}
+
+\begin{proof}
+By definition, $\trav_G$ is the sequence \texttt{flatMap} of $X_G$ over its
+frontier argument.  Distributivity of \texttt{flatMap} over concatenation gives
+the result.
+\end{proof}
+
+\begin{theorem}[Emission fusion]\label{thm:emission-fusion}
+For $p:C_G\to A$ and $q:A\to B$,
+\[
+  \mathsf{map}(q,\emit_G(F,p,\mathsf{id}))
+  =\emit_G(F,q\circ p,\mathsf{id}).
+\]
+\end{theorem}
+
+\begin{proof}
+This is the functor composition law for finite sequences:
+$\mathsf{map}(q,\mathsf{map}(p,x))=\mathsf{map}(q\circ p,x)$.
+\end{proof}
+
+\begin{theorem}[Source-reduction decomposition]
+For frontier sequences $F_1,F_2$,
+\[
+  \reduceSrc_G(F_1+\!+F_2,e,f,M)
+  =\reduceSrc_G(F_1,e,f,M)+\!+\reduceSrc_G(F_2,e,f,M).
+\]
+\end{theorem}
+
+\begin{proof}
+Source reduction maps an independent row fold over every frontier occurrence.
+The sequence map operation distributes over concatenation.
+\end{proof}
+
+These laws are intentionally extensional.  They justify fusion and partitioned
+execution while leaving the choice of scans, segmented reductions, atomics, and
+materialization to the implementation.

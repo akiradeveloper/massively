@@ -1,0 +1,77 @@
+\documentclass[11pt]{article}
+
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+\usepackage{microtype}
+
+\newtheorem{definition}{Definition}[section]
+\newtheorem{theorem}[definition]{Theorem}
+\newtheorem{lemma}[definition]{Lemma}
+\newtheorem{corollary}[definition]{Corollary}
+\newtheorem{conjecture}[definition]{Conjecture}
+\newtheorem{remark}[definition]{Remark}
+
+\newcommand{\TA}{\textnormal{\textsc{Traversal Algebra}}}
+\newcommand{\trav}{\mathsf{trav}}
+\newcommand{\emit}{\mathsf{emit}}
+\newcommand{\reduceSrc}{\mathsf{reduceSrc}}
+\newcommand{\reduceDst}{\mathsf{reduceDst}}
+\newcommand{\denote}[1]{\lbrack\!\lbrack #1 \rbrack\!\rbrack}
+\newcommand{\PaperRevision}{unversioned build}
+\InputIfFileExists{build/revision.tex}{}{}
+
+\title{Traversal Algebra:\\A Pull--Map--Push Calculus for Parallel Graph Programs}
+\author{Akira Hayakawa}
+\date{Research draft\\Revision: \PaperRevision}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We develop \TA, a small algebra for expressing frontier-oriented graph
+programs independently of a particular GPU execution strategy.  A traversal
+pulls vertex and edge data to an ordered stream of edge contexts, a pure map
+constructs messages, and monoidal terminals either emit the stream or push
+messages back to source or destination vertices.  This draft fixes the finite
+ordered multigraph semantics and proves the foundational sequence and fusion
+laws.  The definitions and theorems in this slice are checked in Lean~4, and
+the executable Lean semantics generates conformance cases for the Massively
+GPU implementation.  We additionally define Monoidal Frontier BSP as an
+independent source machine and machine-check a forward simulation into the
+pull--map--push semantic core for one superstep and every finite execution.
+We then give a signature-relative, callback-free typed syntax and prove that
+syntax-directed compilation commutes with denotation and preserves every
+finite execution.  For the closed frontier-to-frontier fragment we define an
+independently compositional \TA{} syntax with structural pulls and arbitrarily
+nested map/zip trees.  We prove that sharing-aware normalization of every such
+tree into a typed single-push normal form preserves pointwise values,
+destination inboxes, every finite execution, and empty-frontier termination.
+Combining normalization with translations to and from typed Monoidal Frontier
+BSP establishes signature-relative semantic equivalence in both directions
+for the complete closed expression language.  Explicit let bindings avoid the
+exponential duplication possible with tree substitution.  A machine-checked
+language-level cost semantics proves exact preservation of syntax size, unit
+work, dependence depth, and local scalar storage, while proving non-increase
+of full-stream temporary and materialization measures.  We also prove exact
+order and multiplicity semantics for sparse candidate frontiers and give
+explicit, bidirectionally equivalent observations for emission, source
+reduction, and destination reduction.  The Massively/CubeCL implementation is
+validated separately as an executable artifact and is not an assumption of these
+language theorems.
+\end{abstract}
+
+\input{sections/01-introduction}
+\input{sections/02-model}
+\input{sections/03-calculus}
+\input{sections/04-laws}
+\input{sections/05-artifact}
+\input{sections/06-completeness}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

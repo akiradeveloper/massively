@@ -63,15 +63,17 @@ Each test area has a specific role.
   guide internal implementation improvements. Because we do not add
   single-column-specific optimizations, improving the single-column foundation
   should also improve multi-column cases.
-- `massively/tests/vector`: Vector API, multi-column, oracle, and scale property
-  tests.
-- `massively/tests/seg`: Segmented API and property tests against the CPU
-  reference.
+- `massively/tests/vector`: Vector API and multi-column contract tests.
+- `massively/tests/seg`: Segmented API contract tests.
+- `oracle/tests/vector`: Vector and scale property tests against the independent
+  CPU oracle.
+- `oracle/tests/seg`: Segmented property tests against the independent CPU
+  oracle.
 - `massively` graph unit tests: Traversal, edge expression, terminal, and
   intersection primitive semantics.
-- `graph-algorithms/tests`: Complete graph algorithm property tests against
-  independent CPU implementations on generated CSR graphs.
-- `graph-algorithms/benches`: Complete graph algorithm performance. Benchmark
-  targets must be device-resident: upload graph and bulk inputs before timing,
-  include an explicit synchronization in the timed iteration, and do not time
-  bulk host/device transfers.
+- `traversal-algebra/graph-algorithms/tests`: Complete graph algorithm property
+  tests against independent CPU implementations on generated CSR graphs.
+- `traversal-algebra/graph-algorithms/benches`: Complete graph algorithm
+  performance. Benchmark targets must be device-resident: upload graph and bulk
+  inputs before timing, include an explicit synchronization in the timed
+  iteration, and do not time bulk host/device transfers.

@@ -1,0 +1,49 @@
+\section{Finite ordered multigraphs}
+
+\begin{definition}[Ordered directed multigraph]
+An ordered directed multigraph is a tuple
+\[
+  G=(V,E,s,d,\prec)
+\]
+where $V=\{0,\ldots,n-1\}$ and $E=\{0,\ldots,m-1\}$ are finite,
+$s,d:E\to V$ give the source and destination of each edge, and $\prec$
+totally orders the outgoing edges of every vertex.  Parallel edges and
+self-loops are permitted.
+\end{definition}
+
+The executable model represents $G$ as an adjacency-row sequence
+$R_G=[R_0,\ldots,R_{n-1}]$.  Each $R_v$ is an ordered sequence of destination
+identifiers.  The global edge identifier of the $i$th item in $R_v$ is
+\[
+  \mathsf{base}_G(v)+i,
+  \qquad
+  \mathsf{base}_G(v)=\sum_{u<v}|R_u|.
+\]
+This is precisely the logical information carried by a canonical CSR layout,
+without making CSR part of the abstract interface.
+
+\begin{definition}[Frontier]
+A frontier is a finite sequence $F\in V^*$.  It is not a set.  Its order and
+multiplicity are observable: if $v$ occurs twice, its outgoing row is traversed
+twice.
+\end{definition}
+
+\begin{definition}[Edge context]
+An edge context is a triple
+\[
+  c=(\mathsf{src}(c),\mathsf{dst}(c),\mathsf{eid}(c))\in V\times V\times E.
+\]
+For $v\in V$, let $X_G(v)$ be the sequence of contexts obtained from $R_v$ in
+row order.  For $F=[v_0,\ldots,v_{k-1}]$, define
+\[
+  \trav_G(F)=X_G(v_0)\mathbin{+\!+}\cdots\mathbin{+\!+}X_G(v_{k-1}),
+\]
+where $+\!+$ denotes sequence concatenation.
+\end{definition}
+
+The regression-oracle model uses natural-number identifiers and assigns no
+meaning to an invalid graph or to a frontier identifier outside $V$; its Lean
+functions remain total for convenient execution.  The completeness model uses
+the type \texttt{Fin $n$} for every vertex reference instead.  Valid sources,
+destinations, and frontier entries are therefore enforced by construction in
+the simulation theorems rather than carried as side conditions.

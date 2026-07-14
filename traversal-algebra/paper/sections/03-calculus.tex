@@ -1,0 +1,40 @@
+\section{The pull--map--push calculus}
+
+An edge expression denotes a function from contexts to values.  The structural
+fragment contains
+\[
+  \mathsf{sourceId},\quad \mathsf{destinationId},\quad \mathsf{edgeId}.
+\]
+Attribute expressions extend this fragment by precomposition with $s$, $d$, or
+the edge identifier.  Thus a source attribute $a:V\to A$ denotes
+$a\circ\mathsf{src}$, and similarly for destination and edge attributes.  This
+is the \emph{pull} phase.
+
+For an expression $e:C_G\to A$ and pure function $f:A\to B$, mapping and
+emission have the denotation
+\[
+  \emit_G(F,e,f)=\mathsf{map}(f\circ e,\trav_G(F)).
+\]
+The implementation is not required to construct the intermediate context or
+expression streams.
+
+Let $M=(A,\oplus,0)$ be a monoid.  Source reduction produces one value for
+every frontier occurrence:
+\[
+  \reduceSrc_G(F,e,f,M)[i]
+  = \mathop{\bigoplus}_{c\in X_G(F[i])} f(e(c)).
+\]
+An isolated vertex therefore contributes $0$, and a repeated vertex produces
+repeated output positions.
+
+Destination reduction pushes values back to a dense vertex domain:
+\[
+  \reduceDst_G(F,e,f,M)[v]
+  = \mathop{\bigoplus}_{\substack{c\in\trav_G(F)\\\mathsf{dst}(c)=v}}
+      f(e(c)).
+\]
+Associativity and identity justify parallel tree reduction.  If the lowering
+may reorder colliding messages, commutativity is additionally required for a
+deterministic result.  Floating-point addition therefore needs either a weaker
+equivalence relation or a lowering with an explicitly specified order; it is
+not silently treated as an exact commutative monoid.

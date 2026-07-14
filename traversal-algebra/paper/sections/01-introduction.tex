@@ -1,0 +1,46 @@
+\section{Introduction}
+
+GPU graph systems commonly organize work around a changing frontier and a
+bulk-synchronous sequence of parallel edge operations.  Gunrock makes the
+frontier explicit~\cite{wang2016gunrock}; Ligra separates sparse and dense
+edge traversals~\cite{shun2013ligra}; and PowerGraph exposes a
+gather--apply--scatter decomposition~\cite{gonzalez2012powergraph}.  GraphBLAS
+instead specifies graph algorithms using sparse linear algebra over user
+selected semirings~\cite{kepner2016graphblas}.  These systems demonstrate that
+a small set of composable operations can cover many important algorithms, but
+coverage by examples alone does not identify the exact expressive boundary.
+
+\TA{} is intended to make that boundary a theorem.  Its central object is not
+a materialized edge list or a particular kernel.  It is the denotation of an
+ordered frontier traversal.  Expressions pull source, destination, and edge
+attributes into an edge context; a map transforms each context; and a terminal
+emits or reduces the resulting values.  Implementations may fuse these stages,
+change materialization strategies, or select different parallel primitives as
+long as they preserve the denotation.
+
+The principal result is a characterization theorem, not a collection of
+examples: for one arbitrary fixed scalar signature, every program in the
+stated closed, typed, frontier-to-frontier \TA{} grammar has a
+semantics-equivalent Monoidal Frontier BSP program, and conversely.  The proof
+passes through an independently defined compositional syntax and a
+sharing-aware single-push normal form.  It preserves complete finite runs and
+empty-frontier termination, has factor-one syntax growth with exact
+language-level work/depth/local-storage equations, covers dense and stable
+sparse frontier selection, and separately equates the ordered observations of
+emission and source/destination reduction.  These qualifications identify the
+proved boundary without calling it unrestricted graph or Turing completeness.
+
+This document has three deliberately separated levels of assurance:
+
+\begin{enumerate}
+  \item mathematical definitions and proofs presented here;
+  \item kernel-checked counterparts of the foundational results in Lean~4;
+  \item differential conformance tests between Lean-evaluated cases and the
+        public \texttt{massively::graph} implementation.
+\end{enumerate}
+
+The third level is empirical and does not turn the Rust or CubeCL compiler into
+part of the formal proof.  Conversely, the Lean development proves statements
+about the mathematical model without assuming that the implementation is
+correct.  Keeping these claims distinct is essential to making later results
+auditable.
