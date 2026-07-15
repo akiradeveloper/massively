@@ -33,6 +33,21 @@ the paper and the Lean development.
   monoid laws.
 - `Verified.TraversalAlgebra.emit`, `reduceBySource`, and
   `reduceByDestination` define the three type-safe public TA terminals.
+- `Oracle.Typed.CheckedCsr` retains exact offset/destination round-trip
+  equations and graph validity for each accepted concrete CSR input.
+  `toOrderedGraph_destinations` and `toOrderedGraph_edgeIds` prove that its
+  typed adjacency rows preserve concrete destinations and global CSR edge
+  positions.
+- Serializable oracle expressions compile to the intrinsically typed TA
+  traversal grammar. `evaluate_correct` identifies execution with
+  `Observation.Terminal.observe`; `emit_zip_values` proves the recursive
+  product reconstruction used by the Rust façade.
+- `evaluateDestinationCsr_correct` proves that the executable one-pass dense
+  array reduction equals the extensional typed destination terminal, and
+  `evaluateCsr_correct` lifts this to every supported terminal.
+- `activeEdgeCount_corresponds` proves that typed and concrete CSR traversals
+  have exactly the same active-edge count, including repeated frontier
+  occurrences.
 
 ### Typed syntax and compiler
 
@@ -118,6 +133,47 @@ the paper and the Lean development.
   work; `sparsePreserve_work_le_dense` proves the dense comparison under the
   explicit assumption that candidate count is at most vertex count.
 
+### Abstract CubeCL resource refinement
+
+- `CubeCL.Machine` models workgroup and subgroup geometry. `Kernel`, `Plan`,
+  and `Cost` give exact symbolic counters for logical/padded work-items,
+  scheduled subgroups, scalar work, span, global traffic, host-visible reads,
+  atomics, barriers, launches, allocation volume, and full-stream
+  materializations.
+- Recursive `ValueType.words` makes physical width additive over arbitrary
+  product trees. `normalize_globalLoadWords` proves that sharing-aware
+  normalization preserves global words pulled per active edge.
+- A costed CubeCL `Program` is a closed typed target instruction: emission,
+  source reduction, destination sort/reduce, destination atomic, or a
+  materialized-CSR-control prefix. There is deliberately no public constructor
+  that pairs arbitrary observer code with an unrelated cheap plan. Each
+  instruction determines both execution and resources. `lower_correct` and
+  the four specialized `lower*_*correct` theorems prove exact public TA
+  observations.
+- `AtomicImplementation.correct` requires a backend atomic action to equal the
+  declared monoid combination, while `operationCount` states the modeled
+  scalar-atomic count for that representation. The atomic destination target
+  cannot be constructed without this data; arbitrary lawful monoids therefore
+  remain on the general sort/reduce path.
+- `lowerEmit_scalarWork`, `lowerEmit_globalLoads`, and
+  `lowerEmit_globalStores` give exact fused emission counts.
+  `lowerSource_scalarWork` is linear in frontier plus active-edge occurrences.
+  `lowerDestinationAtomic_scalarWork` is exactly dense vertex initialization
+  plus one expression/monoid action per active edge; its atomic count is exact.
+  `lowerDestinationSort_scalarWork` exposes the additional
+  `activeEdges * reductionDepth activeEdges` sorting term.
+- `materializedCsrControl_scalarWork` exposes every high-level current CSR
+  control term, including whole-topology canonicalization.
+  `materializedCsrControl_linearWork` proves the closed bound
+  `topologyEdges + vertices + 6*frontier + 11*activeEdges + 3`; it therefore
+  does not hide sparse-frontier overhead behind an active-edge-only claim.
+- `Oracle.Typed.CubeCL.programWithMaterializedCsrControl_result_correct`
+  connects the costed target back to `evaluateCsr`. The exported-certificate
+  theorems preserve exact emission/source/destination formulas;
+  `certificate_activeEdges` proves the concrete CSR traversal length and
+  `certificate_withMaterializedCsrControl` proves exact sequential cost
+  decomposition.
+
 ### Explicit terminal observations
 
 - `Typed.TraversalAlgebra.Observation.Result` distinguishes emitted lists,
@@ -173,10 +229,14 @@ signature, and well-typed syntax. They are proofs, not bounded tests.
   dense or sparse frontier selection. Emission and source reduction are
   covered by their explicit observation theorem rather than misrepresented as
   barrier-state transitions.
-- The cost theorems concern the stated language-level unit model. Primitive
-  symbols currently have unit invocation cost; `reductionDepth` is an abstract
-  balanced-tree bound. These theorems do not predict a particular GPU kernel,
-  memory allocator, or transfer schedule.
+- Scalar instruction work remains unit-weighted and `reductionDepth` is an
+  abstract balanced-tree/sort-round bound. The CubeCL resource layer counts
+  work, traffic, launches, allocation volume, and synchronization but assigns
+  no hardware latency to them.
+- `scanU32` is a high-level resource contract for the hierarchical scan, not a
+  derivation from CubeCL IR instructions. `materializedCsrControlPlan` mirrors
+  the current Rust call structure at that contract boundary; it is not a
+  universal theorem about arbitrary future Rust or CubeCL compiler revisions.
 - Both languages use the same arbitrary but fixed signature. Signature
   transport and execution-platform lowering are not premises of equivalence.
 
@@ -184,10 +244,10 @@ signature, and well-typed syntax. They are proofs, not bounded tests.
 
 - refinement from arbitrary parallel reduction-tree shapes to the
   permutation-invariant sequential denotation;
-- signature- or backend-weighted primitive, transfer, allocation, residency,
-  and concrete storage costs;
-- correspondence between the verified extensional graph and a concrete CSR
-  representation;
+- refinement from emitted CubeCL IR/kernel traces to the abstract resource
+  certificate;
+- backend-weighted primitive latency, cache/coalescing behavior, atomic
+  contention time, and peak allocation liveness;
 - coverage of the full intended algorithm surface, such as the Gunrock suite;
 - universal correspondence with Rust, CubeCL, a device compiler, or hardware.
 
@@ -201,8 +261,18 @@ they are no longer entries in the open-proof list.
 
 ## Executable implementation validation
 
-The native Lean oracle plus Rust `proptest` compare generated valid
-CSR/frontier inputs with the public Massively GPU operations. This is strong
-artifact-level evidence and produces shrinkable counterexamples, but remains
-logically separate from the universal language theorems. Universal
-Rust/CubeCL correspondence is deliberately not inferred from finite tests.
+The persistent native Lean oracle plus Rust `proptest` compare generated valid
+CSR/frontier/value-column inputs with the public Massively GPU operations.
+The default campaign mixes shrinkable rows with seeded multigraph, hub,
+bipartite, regular, and parallel/self-loop families; a separate scale case has
+1,025 vertices. The tests observe structural IDs, source/destination/edge
+pulls, recursive products, pointwise maps, ordered emission, and source and
+destination reduction. This is strong artifact-level evidence and produces
+reproducible counterexamples, but remains logically separate from universal
+Rust/CubeCL, compiler, or hardware correspondence.
+
+The protocol also exports proof-backed CubeCL resource certificates. A
+separate generated-graph campaign checks concrete topology/frontier/active-edge
+dimensions, varied workgroup/subgroup geometry, exact scalar emission/source/
+destination formulas, atomic counts, current CSR-control work, and the full
+fieldwise decomposition of control prefix plus fused terminal costs.

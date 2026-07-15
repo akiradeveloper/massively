@@ -603,15 +603,77 @@ example in \path{TraversalAlgebra.TypedExample} merely witnesses transport
 between two mathematical symbol datatypes.  It is not implementation
 verification and is not needed by the BSP--\TA{} equivalence.
 
-The proved boundary is now semantic and quantitative at the language level,
-including all three terminal observations and both frontier policies.  The
-remaining refinement programme is narrower:
+\subsection{Abstract CubeCL resource refinement}
+
+The platform-independent equivalence above is complemented, rather than
+replaced, by a typed abstract CubeCL target.  Its machine parameters are a
+one-dimensional workgroup size and subgroup size.  A cost vector records
+logical and padded work-items, scheduled subgroups, scalar work, critical-path
+span, global loads and stores, host-visible reads, atomic operations, barriers,
+launches, allocation volume, and full-stream materializations.  Sequential
+kernel plans compose these vectors fieldwise.
+
+The target program is a closed instruction datatype for emission, source
+reduction, destination sort/reduce, destination atomic reduction, and a
+materialized CSR-control prefix.  It is not a record in which arbitrary
+semantic code can be paired with an unrelated inexpensive plan: execution and
+resource interpretation are both determined by the same instruction.  An
+atomic instruction additionally carries an action, a proof that the action is
+the declared monoid combination, and its scalar atomic-operation count under a
+chosen storage-width interpretation.
+
+\begin{theorem}[Abstract CubeCL terminal resources]
+\label{thm:cubecl-resource}
+Let $m$ be active-edge occurrences, $f$ frontier occurrences, $v$ vertices,
+$w$ normalized expression work, $q$ output storage words, $\ell$ global-load
+words per edge, and $r(m)=0$ for $m=0$ and
+$\lfloor\log_2 m\rfloor+1$ otherwise.  The typed lowering preserves the exact
+terminal observation.  Its fused emission has work $m(w+q)$, loads $m\ell$,
+stores $mq$, and no expression-stream materialization.  Source reduction has
+work $f+m(w+1)$.  Given atomic evidence with $a$ scalar atomics per combine,
+destination reduction has work $v+m(w+1)$ and exactly $ma$ atomics.  The
+general destination path has work
+\[
+  v + mw + m r(m) + m.
+\]
+For the modeled current CSR-control prefix, work is bounded by
+\[
+  |E| + v + 6f + 11m + 3,
+\]
+where the whole-topology term $|E|$ remains explicit.  Prefixing this control
+plan changes cost by exact sequential composition and does not change the
+observation.
+\end{theorem}
+
+\begin{proof}\raggedright
+Semantic refinement is \path{CubeCL.lower_correct}; atomic action refinement
+is \path{Program.execute_destinationAtomic}.  The exact terminal equations are
+\path{lowerEmit_scalarWork}, \path{lowerEmit_globalLoads},
+\path{lowerEmit_globalStores}, \path{lowerSource_scalarWork},
+\path{lowerDestinationAtomic_scalarWork},
+\path{lowerDestinationAtomic_operations}, and
+\path{lowerDestinationSort_scalarWork}.  The CSR bound and composition are
+\path{materializedCsrControl_linearWork} and
+\path{Program.cost_withMaterializedCsrControl}.
+\end{proof}
+
+These are exact equations in the stated symbolic machine, not elapsed-time
+predictions.  The scan primitive is represented by a high-level hierarchical
+resource contract.  Cache and coalescing effects, occupancy limits, atomic
+contention latency, and peak allocation liveness are deliberately not assigned
+hardware weights, and no theorem currently derives this certificate from
+emitted CubeCL IR.
+
+The proved boundary is now semantic and quantitative at both the language and
+abstract-target levels, including all three terminal observations and both
+frontier policies.  The remaining refinement programme is narrower:
 
 \begin{enumerate}
   \item refine arbitrary parallel reduction-tree shapes to the
         permutation-invariant denotation already proved;
-  \item replace unit scalar costs with signature- and backend-weighted costs,
-        then refine transfer, allocation, residency, and CSR storage bounds;
+  \item prove refinement from emitted CubeCL kernel traces to the abstract
+        target, then calibrate backend-weighted latency, cache/coalescing,
+        contention, transfer, and peak-residency bounds;
   \item derive representative algorithms, including the Gunrock suite, as
         coverage evidence rather than as the completeness proof itself.
 \end{enumerate}

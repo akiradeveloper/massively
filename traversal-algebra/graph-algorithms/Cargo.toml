@@ -12,7 +12,7 @@ version = "0.1.0"
 
 [dependencies]
 cubecl.workspace = true
-massively = { path = "../../crates/massively", default-features = false }
+massively = { path = "../../massively/massively", default-features = false }
 
 [dev-dependencies]
 criterion = "0.5"

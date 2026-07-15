@@ -34,13 +34,15 @@ This document has three deliberately separated levels of assurance:
 
 \begin{enumerate}
   \item mathematical definitions and proofs presented here;
-  \item kernel-checked counterparts of the foundational results in Lean~4;
-  \item differential conformance tests between Lean-evaluated cases and the
-        public \texttt{massively::graph} implementation.
+  \item kernel-checked counterparts of the language results and a typed
+        abstract CubeCL resource semantics in Lean~4;
+  \item differential value tests against the public
+        \texttt{massively::graph} implementation, plus generated checks of the
+        serialized abstract resource certificates.
 \end{enumerate}
 
 The third level is empirical and does not turn the Rust or CubeCL compiler into
 part of the formal proof.  Conversely, the Lean development proves statements
-about the mathematical model without assuming that the implementation is
-correct.  Keeping these claims distinct is essential to making later results
-auditable.
+about the mathematical language and abstract target without assuming that the
+emitted CubeCL IR or implementation is correct.  Keeping these claims distinct
+is essential to making later results auditable.

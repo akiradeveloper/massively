@@ -59,16 +59,16 @@ values.
 
 Each test area has a specific role.
 
-- `massively/benches`: Measure single-column performance and use the results to
-  guide internal implementation improvements. Because we do not add
+- `massively/massively/benches`: Measure single-column performance and use the
+  results to guide internal implementation improvements. Because we do not add
   single-column-specific optimizations, improving the single-column foundation
   should also improve multi-column cases.
-- `massively/tests/vector`: Vector API and multi-column contract tests.
-- `massively/tests/seg`: Segmented API contract tests.
-- `oracle/tests/vector`: Vector and scale property tests against the independent
+- `massively/massively/tests/vector`: Vector API and multi-column contract tests.
+- `massively/massively/tests/seg`: Segmented API contract tests.
+- `massively/oracle/tests/vector`: Vector and scale property tests against the
+  independent CPU oracle.
+- `massively/oracle/tests/seg`: Segmented property tests against the independent
   CPU oracle.
-- `oracle/tests/seg`: Segmented property tests against the independent CPU
-  oracle.
 - `massively` graph unit tests: Traversal, edge expression, terminal, and
   intersection primitive semantics.
 - `traversal-algebra/graph-algorithms/tests`: Complete graph algorithm property

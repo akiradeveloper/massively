@@ -318,7 +318,8 @@ graph algorithms share improvements to Massively's underlying primitives.
 
 Every public algorithm has a runnable, single-column example in the
 [API documentation](https://docs.rs/massively). Integration tests are grouped
-under `crates/massively/tests/vector` and `crates/massively/tests/seg`. Their
+under `massively/massively/tests/vector` and `massively/massively/tests/seg`.
+Their
 oracle tests compare public functions against CPU AoS references and cover the
 full transform input/output arity matrix. Complete graph algorithm oracles live
 under `traversal-algebra/graph-algorithms/tests` and compare every algorithm with

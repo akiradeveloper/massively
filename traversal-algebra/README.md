@@ -29,6 +29,9 @@ without installing LaTeX or running Docker.
 - Lean proves that converting compositional programs into their normalized
   form preserves results and does not introduce an algorithmic cost blow-up in
   the defined abstract cost model.
+- Lean refines terminal execution into a backend-neutral CubeCL hierarchy and
+  proves exact symbolic work, span, traffic, synchronization, launch,
+  allocation, and materialization formulas.
 - A Lean-compiled oracle and Rust `proptest` compare the mathematical model
   with `massively::graph` over generated graphs on the host GPU stack.
 
@@ -48,15 +51,18 @@ The following is the plain-language interpretation of the formal results:
 | Normalization has no hidden algorithmic blow-up | Under the stated language-level model, normalization preserves abstract work, dependency depth, and local temporary bounds, and does not add full-stream materialization compared with the defined reference schedule. |
 | The public result shapes agree | Ordered emission, reduction by source, and reduction by destination are preserved by the translations. |
 | Sparse-frontier behavior is specified | Candidate order and duplicate occurrences are preserved, and sparse work has an exact bound with an explicit condition for comparison with dense work. |
+| CubeCL resource plans preserve meaning | Erasing a cost certificate yields the same TA observation. Atomic destination reduction has a capability-gated linear bound; the general path exposes its sort/reduce term. |
+| Current CSR-control overhead is explicit | The materialized-control contract contains whole-topology, frontier, and active-edge terms instead of claiming active-edge-only work. |
 
 Here, “complete” means equivalent in expressive power to the defined Monoidal
 Frontier BSP fragment. It does not mean Turing complete, and it does not claim
 to cover every imaginable graph language.
 
-The cost result also has a precise boundary. It shows that the algebra's
-normalization does not add overhead in its abstract unit-cost model. It does
-not prove that every generated GPU kernel is fast, that the cost is globally
-minimal, or that transfers and allocations are free.
+The cost result also has a precise boundary. It proves symbolic counters in an
+abstract CubeCL hierarchy, including global traffic, host-visible reads,
+launches, and allocation volume. It does not assign hardware latency to those
+counters, prove global optimality, or derive the certificate from emitted
+CubeCL IR.
 
 ## What this says about graph algorithms
 
@@ -92,8 +98,9 @@ assumption, and open-boundary ledger.
 ## What is not claimed
 
 - The Rust, CubeCL, compiler, and GPU stack are not formally verified.
-- Real execution time, memory traffic, allocation cost, and host/device
-  transfers are not predicted by the current abstract cost theorem.
+- Real execution time, cache/coalescing effects, atomic contention latency,
+  and peak allocator residency are not predicted. Abstract traffic,
+  host-visible reads, and allocation volume are counted symbolically.
 - The proof does not establish the domain-level correctness of every complete
   graph algorithm in the repository.
 - The model currently concerns finite, ordered, static graphs and finite runs.
@@ -122,12 +129,26 @@ The same recipes work without the `ta::` prefix from this directory. Docker
 builds the paper, Lean proofs, native oracle, and generated Rust fixtures. The
 comparison with Massively runs on the host so CubeCL can use its GPU stack.
 
-By default, `proptest` checks 256 generated valid CSR/frontier inputs and
-shrinks failures to smaller counterexamples. A larger campaign can be run with:
+By default, `proptest` checks 256 mixed shrinkable and seeded graph-family
+cases. A separate semantic campaign exercises vertex/edge pulls, recursive
+products, maps, and all three observation terminals, and a deterministic
+1,025-vertex case provides scale coverage. A larger campaign can be run with:
 
 ```text
 TRAVERSAL_ALGEBRA_PROPTEST_CASES=4096 just ta::oracle
 ```
+
+The Rust oracle façade keeps a single versioned Lean protocol process alive
+and uploads each CSR graph once. Lean compiles protocol expressions into the
+intrinsically typed traversal syntax. A proved one-pass CSR destination
+lowering keeps larger comparisons practical without replacing the formal
+semantics with an unrelated reference implementation.
+
+The same persistent process serves `CubeClCertificate` values. Certificate
+property tests compare CSR dimensions, varied machine geometry, exact terminal
+and CSR-control formulas, and their fieldwise sequential composition on
+generated graphs. This validates the executable boundary; the universal
+theorems remain in `CubeCLCost.lean` and `OracleCubeCL.lean`.
 
 No finite test campaign replaces the Lean theorems. Its job is to check that
 the implementation continues to behave like the proved executable model on a

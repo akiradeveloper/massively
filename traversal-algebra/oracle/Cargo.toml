@@ -9,11 +9,9 @@ publish = false
 repository.workspace = true
 version = "0.1.0"
 
-[dependencies]
-cubecl.workspace = true
-massively = { path = "../../crates/massively", default-features = false }
-
 [dev-dependencies]
+cubecl.workspace = true
+massively = { path = "../../massively/massively", default-features = false }
 proptest = "1"
 
 [[test]]

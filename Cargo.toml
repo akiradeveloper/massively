@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/massively",
-    "crates/oracle",
+    "massively/massively",
+    "massively/oracle",
     "traversal-algebra/graph-algorithms",
     "traversal-algebra/oracle",
 ]

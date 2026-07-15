@@ -1,9 +1,12 @@
 import TraversalAlgebra.Algebra
+import TraversalAlgebra.CubeCLCost
 import TraversalAlgebra.Expression
 import TraversalAlgebra.FrontierBSP
 import TraversalAlgebra.Graph
 import TraversalAlgebra.Laws
 import TraversalAlgebra.Oracle
+import TraversalAlgebra.OracleCubeCL
+import TraversalAlgebra.OracleTyped
 import TraversalAlgebra.PullMapPush
 import TraversalAlgebra.Semantics
 import TraversalAlgebra.SignatureLowering

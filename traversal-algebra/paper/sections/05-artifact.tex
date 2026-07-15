@@ -61,6 +61,11 @@ Certified signature translation & \path{Typed.Signature.Lowering} \\
 Lemma~\ref{lem:term-lowering} & \path{Typed.Term.evaluate_lower} \\
 Theorem~\ref{thm:lowering-naturality} & \path{Typed.compile_lower},
   \path{Typed.lower_compile_run_correct} \\
+Abstract CubeCL target and cost vector & \path{Typed.CubeCL.Program},
+  \path{Typed.CubeCL.Cost} \\
+Theorem~\ref{thm:cubecl-resource} & \path{Typed.CubeCL.lower_correct},
+  \path{lowerEmit_scalarWork}, \path{lowerDestinationSort_scalarWork},
+  \path{materializedCsrControl_linearWork} \\
 \bottomrule
 \end{tabular}
 \caption{Paper-to-Lean declaration map.  Rows beginning ``Typed'' are nested
@@ -82,6 +87,14 @@ generates bounded inputs, queries this Lean oracle, and compares edge contexts
 and both reductions with the public Massively GPU operations.  Counterexamples
 are shrunk at the graph and frontier level; no independent Rust traversal
 semantics is present in the harness.
+
+The persistent oracle also serializes the proved abstract CubeCL resource
+certificate for scalar queries.  Generated tests vary workgroup and subgroup
+geometry and check graph dimensions, exact fused emission/source/destination
+formulas, the modeled CSR-control work, atomic counts, and every field of the
+sequential control-plus-terminal decomposition.  These checks validate the
+protocol boundary; the universal equations are Lean theorems rather than
+conclusions drawn from the finite campaign.
 
 Passing finitely many generated inputs demonstrates agreement on those inputs;
 it does not prove universal implementation correspondence.  The trusted

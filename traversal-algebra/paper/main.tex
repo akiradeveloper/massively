@@ -59,9 +59,13 @@ work, dependence depth, and local scalar storage, while proving non-increase
 of full-stream temporary and materialization measures.  We also prove exact
 order and multiplicity semantics for sparse candidate frontiers and give
 explicit, bidirectionally equivalent observations for emission, source
-reduction, and destination reduction.  The Massively/CubeCL implementation is
-validated separately as an executable artifact and is not an assumption of these
-language theorems.
+reduction, and destination reduction.  A separate typed abstract CubeCL target
+then derives execution and symbolic workgroup, subgroup, traffic,
+synchronization, allocation, and materialization costs from the same closed
+instructions, with exact linear or quasilinear terminal formulas.  The
+Massively/CubeCL implementation is validated separately as an executable
+artifact and is not an assumption of these language or abstract-machine
+theorems.
 \end{abstract}
 
 \input{sections/01-introduction}
