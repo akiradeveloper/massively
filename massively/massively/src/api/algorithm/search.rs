@@ -1,6 +1,6 @@
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec, WritableFrom, op::BinaryPredicateOp};
+use crate::{Error, Executor, MIter, MIterMut, MVec, WritableFrom, op::BinaryPredicateOp};
 
 /// Finds the first source item equal to any needle.
 ///
@@ -9,12 +9,12 @@ use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec, WritableFrom, op::Bi
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::find_first_of};
+/// use massively::{op, Executor, vector::find_first_of};
 ///
 /// struct Equal;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Equal {
+/// impl op::BinaryPredicateOp<u32> for Equal {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs == rhs
 ///     }
@@ -33,7 +33,7 @@ pub fn find_first_of<R, Source, Needles, Equal>(
     source: Source,
     needles: Needles,
     equal: Equal,
-) -> Result<Option<MIndex>, Error>
+) -> Result<Option<usize>, Error>
 where
     R: Runtime,
     Source: MIter<R>,
@@ -46,6 +46,7 @@ where
         crate::api::iter::lower_fixed::<R, _>(needles),
         equal,
     )
+    .map(|index| index.map(|index| index as usize))
 }
 
 /// Finds the lower bound of each value.
@@ -57,12 +58,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::lower_bound};
+/// use massively::{op, Executor, vector::lower_bound};
 ///
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Less {
+/// impl op::BinaryPredicateOp<u32> for Less {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs < rhs
 ///     }
@@ -80,7 +81,7 @@ pub fn lower_bound<R, Source, Values, Less>(
     source: Source,
     values: Values,
     less: Less,
-) -> Result<MVec<R, MIndex>, Error>
+) -> Result<MVec<R, u32>, Error>
 where
     R: Runtime,
     Source: MIter<R>,
@@ -88,7 +89,7 @@ where
     Less: BinaryPredicateOp<Source::Item>,
 {
     let len = values.len()? as usize;
-    let output = exec.alloc_mvec::<MIndex>(len);
+    let output = exec.alloc::<u32>(len);
     lower_bound_into(exec, source, values, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -107,7 +108,7 @@ where
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
     Output: MIterMut<R>,
-    Output::Item: WritableFrom<MIndex>,
+    Output::Item: WritableFrom<u32>,
     Less: BinaryPredicateOp<Source::Item>,
 {
     let bounds = crate::search::lower_bounds_storage(
@@ -128,12 +129,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::upper_bound};
+/// use massively::{op, Executor, vector::upper_bound};
 ///
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Less {
+/// impl op::BinaryPredicateOp<u32> for Less {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs < rhs
 ///     }
@@ -151,7 +152,7 @@ pub fn upper_bound<R, Source, Values, Less>(
     source: Source,
     values: Values,
     less: Less,
-) -> Result<MVec<R, MIndex>, Error>
+) -> Result<MVec<R, u32>, Error>
 where
     R: Runtime,
     Source: MIter<R>,
@@ -159,7 +160,7 @@ where
     Less: BinaryPredicateOp<Source::Item>,
 {
     let len = values.len()? as usize;
-    let output = exec.alloc_mvec::<MIndex>(len);
+    let output = exec.alloc::<u32>(len);
     upper_bound_into(exec, source, values, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -178,7 +179,7 @@ where
     Source: MIter<R>,
     Values: MIter<R, Item = Source::Item>,
     Output: MIterMut<R>,
-    Output::Item: WritableFrom<MIndex>,
+    Output::Item: WritableFrom<u32>,
     Less: BinaryPredicateOp<Source::Item>,
 {
     let bounds = crate::search::upper_bounds_storage(
@@ -197,12 +198,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::equal};
+/// use massively::{op, Executor, vector::equal};
 ///
 /// struct Equal;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Equal {
+/// impl op::BinaryPredicateOp<u32> for Equal {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs == rhs
 ///     }
@@ -241,12 +242,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::mismatch};
+/// use massively::{op, Executor, vector::mismatch};
 ///
 /// struct Equal;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Equal {
+/// impl op::BinaryPredicateOp<u32> for Equal {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs == rhs
 ///     }
@@ -263,7 +264,7 @@ pub fn mismatch<R, Left, Right, Equal>(
     left: Left,
     right: Right,
     equal: Equal,
-) -> Result<Option<MIndex>, Error>
+) -> Result<Option<usize>, Error>
 where
     R: Runtime,
     Left: MIter<R>,
@@ -276,6 +277,7 @@ where
         crate::api::iter::lower_fixed::<R, _>(right),
         equal,
     )
+    .map(|index| index.map(|index| index as usize))
 }
 
 /// Lexicographically compares two ranges.
@@ -285,12 +287,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::lexicographical_compare};
+/// use massively::{op, Executor, vector::lexicographical_compare};
 ///
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Less {
+/// impl op::BinaryPredicateOp<u32> for Less {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs < rhs
 ///     }

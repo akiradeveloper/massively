@@ -292,10 +292,34 @@ where
     let reduced = segmented_lowered_storage(exec, values, &heads, Some(init), op, 2)?;
     let head_control = SelectionControl::from_flags(exec, heads)?;
     let tail_control = tail_control_from_heads(exec, &head_control)?;
-    crate::indexed::gather_direct(exec, keys, head_control.indices().column(), key_output)?;
+    crate::indexed::gather_u32(exec, keys, head_control.indices().column(), key_output)?;
     let reduced = crate::read::FixedReassociate::<_, Values::Item>::new(reduced.read());
-    crate::indexed::gather_direct(exec, reduced, tail_control.indices().column(), value_output)?;
+    crate::indexed::gather_u32(exec, reduced, tail_control.indices().column(), value_output)?;
     Ok(head_control.count())
+}
+
+/// Reduces values using an already-computed segment-head control.
+pub(crate) fn reduce_values_by_heads_lowered<R, Values, Op, Output>(
+    exec: &Executor<R>,
+    values: Values,
+    heads: &DeviceVec<R, u32>,
+    head_control: &SelectionControl<R>,
+    init: Values::Item,
+    op: Op,
+    output: Output,
+) -> Result<(), Error>
+where
+    R: Runtime,
+    Values: crate::core::facade::KernelInput<R>,
+    Values::Item: ScratchStorage<R>,
+    Op: crate::op::ReductionOp<Values::Item>,
+    Output: crate::core::facade::KernelOutput<R>,
+    Output::Item: WritableFrom<Values::Item>,
+{
+    let reduced = segmented_lowered_storage(exec, values, heads, Some(init), op, 2)?;
+    let tail_control = tail_control_from_heads(exec, head_control)?;
+    let reduced = crate::read::FixedReassociate::<_, Values::Item>::new(reduced.read());
+    crate::indexed::gather_u32(exec, reduced, tail_control.indices().column(), output)
 }
 
 /// Inclusive segmented scan over values grouped by adjacent equal keys.
@@ -316,11 +340,12 @@ mod legacy_by_key_algorithms {
         Keys: SegmentKeyInput<R, Equal>,
         Values: SegmentedValues<R, Op>,
         Values::Storage: CanonicalStorage<R>,
-        <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+        <Values::Storage as CanonicalStorage<R>>::Read:
+            GatherInput<R, Transform<Counting, crate::op::U32ToUsize>, Output>,
     {
         let heads = keys.segment_heads(exec)?;
         let scanned = values.inclusive_storage(exec, &heads)?;
-        crate::indexed::gather_direct(exec, scanned.read(), Counting::new(0, heads.len()), output)
+        crate::indexed::gather_u32(exec, scanned.read(), Counting::new(0, heads.len()), output)
     }
 
     /// Exclusive segmented scan over values grouped by adjacent equal keys.
@@ -338,11 +363,12 @@ mod legacy_by_key_algorithms {
         Keys: SegmentKeyInput<R, Equal>,
         Values: SegmentedValues<R, Op>,
         Values::Storage: CanonicalStorage<R>,
-        <Values::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+        <Values::Storage as CanonicalStorage<R>>::Read:
+            GatherInput<R, Transform<Counting, crate::op::U32ToUsize>, Output>,
     {
         let heads = keys.segment_heads(exec)?;
         let scanned = values.exclusive_storage(exec, &heads, init)?;
-        crate::indexed::gather_direct(exec, scanned.read(), Counting::new(0, heads.len()), output)
+        crate::indexed::gather_u32(exec, scanned.read(), Counting::new(0, heads.len()), output)
     }
 
     /// Reduces each adjacent equal-key segment, emitting its first key and one
@@ -379,59 +405,46 @@ mod legacy_by_key_algorithms {
 
 /// Key phase for stable adjacent-key deduplication.
 ///
-/// This trait mentions keys and key output only.  The resulting selection
-/// control is applied to values by a separate trait, avoiding key-arity ×
-/// value-arity dispatch.
+/// The resulting selection control is applied only to values, avoiding both
+/// key materialization and key-arity × value-arity dispatch.
 #[doc(hidden)]
-pub trait UniqueByKeyKeys<R: Runtime, Equal, KeyOutput>: ReadExpression + Sized {
+pub trait UniqueByKeyKeys<R: Runtime, Equal>: ReadExpression + Sized {
     fn unique_key_len(&self) -> Result<usize, Error>;
-    fn unique_key_control(
-        self,
-        exec: &Executor<R>,
-        output: KeyOutput,
-    ) -> Result<SelectionControl<R>, Error>;
+    fn unique_key_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
 }
 
-impl<R, Keys, Equal, KeyOutput> UniqueByKeyKeys<R, Equal, KeyOutput> for Keys
+impl<R, Keys, Equal> UniqueByKeyKeys<R, Equal> for Keys
 where
     R: Runtime,
     Keys: ReadExpression
-        + Clone
         + AdjacentFlagInput<R, UniqueHead<Equal>>
-        + CopySelected<R, KeyOutput>,
+        + crate::reduce::StageRead<R, crate::read::Env0>,
     Equal: BinaryPredicateOp<Keys::Item>,
 {
     fn unique_key_len(&self) -> Result<usize, Error> {
-        self.source_len()
+        crate::reduce::StageRead::logical_len(self)
     }
 
-    fn unique_key_control(
-        self,
-        exec: &Executor<R>,
-        output: KeyOutput,
-    ) -> Result<SelectionControl<R>, Error> {
-        let flags = unique_head_flags::<R, _, Equal>(exec, self.clone())?;
-        let control = SelectionControl::from_flags(exec, flags)?;
-        self.copy_selected(exec, &control, output)?;
-        Ok(control)
+    fn unique_key_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error> {
+        let flags = unique_head_flags::<R, _, Equal>(exec, self)?;
+        SelectionControl::from_flags(exec, flags)
     }
 }
 
-/// Keeps the first key and value of every adjacent equal-key run.
+/// Keeps the first value of every adjacent equal-key run.
 ///
-/// `key_output` and `value_output` are preallocated and may be larger than the
-/// returned logical length.
-pub(crate) fn unique_by_key<R, Keys, Values, Equal, KeyOutput, ValueOutput>(
+/// `value_output` is preallocated and may be larger than the returned logical
+/// length.
+pub(crate) fn unique_by_key<R, Keys, Values, Equal, ValueOutput>(
     exec: &Executor<R>,
     keys: Keys,
     values: Values,
     _equal: Equal,
-    key_output: KeyOutput,
     value_output: ValueOutput,
 ) -> Result<u32, Error>
 where
     R: Runtime,
-    Keys: UniqueByKeyKeys<R, Equal, KeyOutput>,
+    Keys: UniqueByKeyKeys<R, Equal>,
     Values: CopySelected<R, ValueOutput>,
 {
     let key_len = keys.unique_key_len()?;
@@ -442,14 +455,14 @@ where
             right: value_len,
         });
     }
-    let control = keys.unique_key_control(exec, key_output)?;
+    let control = keys.unique_key_control(exec)?;
     values.copy_selected(exec, &control, value_output)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanonicalStorage, Counting, Permute, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Transform, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Three = (u32, (u32, u32));
@@ -516,7 +529,6 @@ mod tests {
                 ])
             })
             .collect();
-        let out_keys: Vec<_> = (0..3).map(|_| exec.to_device(&[0_u32; 5])).collect();
         let out_values: Vec<_> = (0..7).map(|_| exec.to_device(&[0_u32; 5])).collect();
 
         let keys = Zip::new(k0.column(), Zip::new(k1.column(), k2.column()));
@@ -536,10 +548,6 @@ mod tests {
                 ),
             ),
         );
-        let key_output = Zip::new(
-            Zip::new(out_keys[0].slice_mut(..), out_keys[1].slice_mut(..)),
-            out_keys[2].slice_mut(..),
-        );
         let value_output = Zip::new(
             Zip::new(
                 Zip::new(
@@ -557,19 +565,8 @@ mod tests {
             out_values[6].slice_mut(..),
         );
 
-        let count = unique_by_key(
-            &exec,
-            keys,
-            value_input,
-            EqualThree,
-            key_output,
-            value_output,
-        )
-        .unwrap();
+        let count = unique_by_key(&exec, keys, value_input, EqualThree, value_output).unwrap();
         assert_eq!(count, 3);
-        assert_eq!(exec.to_host(&out_keys[0]).unwrap()[..3], [1, 1, 2]);
-        assert_eq!(exec.to_host(&out_keys[1]).unwrap()[..3], [10, 11, 10]);
-        assert_eq!(exec.to_host(&out_keys[2]).unwrap()[..3], [100, 100, 200]);
         for (column, output) in out_values.iter().enumerate() {
             let base = column as u32 * 100;
             assert_eq!(
@@ -580,11 +577,10 @@ mod tests {
     }
 
     #[test]
-    fn unique_by_key_rejects_key_value_length_mismatch_before_control_build() {
+    fn unique_by_key_rejects_key_value_length_mismatch() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let keys = exec.to_device(&[1_u32, 1]);
         let values = exec.to_device(&[10_u32]);
-        let out_keys = exec.to_device(&[0_u32; 2]);
         let out_values = exec.to_device(&[0_u32; 2]);
         assert_eq!(
             unique_by_key(
@@ -592,7 +588,6 @@ mod tests {
                 keys.column(),
                 values.column(),
                 EqualU32,
-                out_keys.slice_mut(..),
                 out_values.slice_mut(..),
             ),
             Err(Error::LengthMismatch { left: 2, right: 1 })
@@ -627,7 +622,10 @@ mod tests {
                     ),
                 ),
             );
-            Permute::new(seven, Counting::new(0, len))
+            Permute::new(
+                seven,
+                Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
+            )
         };
 
         let inclusive = exec.alloc_canonical::<Seven>(len);

@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn transform_a1_s1_writes_preallocated_slice() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let input: DeviceVec<_, u32> = exec.to_device(&[1, 2, 3, 4]);
+        let input: DeviceVec<_, u32> = exec.to_device(&[1_u32, 2, 3, 4]);
         let output = exec.to_device(&[99_u32; 6]);
 
         transform(&exec, input.slice(1..4), Double, output.slice_mut(2..5)).unwrap();
@@ -409,7 +409,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, 3));
+        let input = Permute::new(
+            seven,
+            crate::Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
+        );
         let output = Zip::new(
             Zip::new(
                 Zip::new(

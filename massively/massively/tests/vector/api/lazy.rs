@@ -1,19 +1,19 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, MIter, lazy, op::ReductionOp, op::UnaryOp, vector::reduce, vector::transform, zip2,
-    zip7,
+    Executor, MIter, lazy, op::ReductionOp, op::UnaryOp, vector::gather, vector::reduce,
+    vector::transform, zip2, zip7,
 };
 
 struct Double;
 struct Sum;
 
 #[cubecl::cube]
-impl UnaryOp<u32> for Double {
+impl UnaryOp<usize> for Double {
     type Output = u32;
 
-    fn apply(input: u32) -> u32 {
-        input * 2u32
+    fn apply(input: usize) -> u32 {
+        input as u32 * 2u32
     }
 }
 
@@ -54,7 +54,8 @@ fn taken_tracks_nested_slice_offsets() {
     let sliced = taken.slice(2..6).slice(1..3);
 
     assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 2);
-    let output = transform(&exec, sliced, massively::op::Identity).unwrap();
+    let values = exec.to_device(&(0_u32..20).collect::<Vec<_>>());
+    let output = gather(&exec, values.slice(..), sliced).unwrap();
 
     assert_eq!(exec.to_host(&output).unwrap(), vec![13, 14]);
 }
@@ -65,7 +66,8 @@ fn slicing_a_lazy_permutation_slices_its_logical_rows() {
     let values = exec.to_device(&[10_u32, 20, 30, 40, 50, 60]);
     let indices = exec.to_device(&[4_u32, 1, 5, 0, 3, 2]);
 
-    let sliced = lazy::permute(values.slice(..), indices.slice(..))
+    let indices = lazy::transform(indices.slice(..), massively::op::U32ToUsize);
+    let sliced = lazy::permute(values.slice(..), indices)
         .slice(1..5)
         .slice(1..3);
     assert_eq!(MIter::<WgpuRuntime>::len(&sliced).unwrap(), 2);

@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor,
+    Executor, lazy,
     op::{BinaryPredicateOp, PredicateOp, ReductionOp, UnaryOp},
     unzip3, vector,
 };
@@ -76,7 +76,8 @@ fn owned_vector_apis_return_device_storage() {
     assert_eq!(exec.to_host(&exclusive).unwrap(), vec![0, 3, 4, 6]);
     assert_eq!(exec.to_host(&adjacent).unwrap(), vec![3, 4, 3, 4]);
 
-    let gathered = vector::gather(&exec, input.slice(..), indices.slice(..)).unwrap();
+    let indices = lazy::transform(indices.slice(..), massively::op::U32ToUsize);
+    let gathered = vector::gather(&exec, input.slice(..), indices).unwrap();
     let reversed = vector::reverse(&exec, input.slice(..)).unwrap();
     assert_eq!(exec.to_host(&gathered).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&reversed).unwrap(), vec![2, 2, 1, 3]);
@@ -87,10 +88,21 @@ fn owned_vector_apis_return_device_storage() {
     assert_eq!(unique.len(), 3);
     assert_eq!(exec.to_host(&unique).unwrap(), vec![1, 2, 3]);
 
-    let copied = vector::copy_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
-    let removed = vector::remove_where(&exec, input.slice(..), stencil.slice(..)).unwrap();
+    let copied = vector::copy_where(
+        &exec,
+        input.slice(..),
+        lazy::transform(stencil.slice(..), massively::op::U32ToBool),
+    )
+    .unwrap();
+    let removed = vector::remove_where(
+        &exec,
+        input.slice(..),
+        lazy::transform(stencil.slice(..), massively::op::U32ToBool),
+    )
+    .unwrap();
     let (partitioned, boundary) = vector::partition(&exec, input.slice(..), Even).unwrap();
-    let filled = vector::fill(&exec, 3, 7_u32).unwrap();
+    let filled = exec.alloc::<u32>(3);
+    vector::fill(&exec, 7_u32, filled.slice_mut(..)).unwrap();
     assert_eq!(exec.to_host(&copied).unwrap(), vec![3, 2]);
     assert_eq!(exec.to_host(&removed).unwrap(), vec![1, 2]);
     assert_eq!(boundary, 2);
@@ -117,6 +129,22 @@ fn owned_vector_apis_return_device_storage() {
 }
 
 #[test]
+fn u32_stencil_transform_treats_every_nonzero_value_as_true() {
+    let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+    let input = exec.to_device(&[10_u32, 20, 30, 40]);
+    let stencil = exec.to_device(&[0_u32, 7, u32::MAX, 0]);
+
+    let copied = vector::copy_where(
+        &exec,
+        input.slice(..),
+        lazy::transform(stencil.slice(..), massively::op::U32ToBool),
+    )
+    .unwrap();
+
+    assert_eq!(exec.to_host(&copied).unwrap(), vec![20, 30]);
+}
+
+#[test]
 fn owned_by_key_and_canonical_tuple_results() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     let input = exec.to_device(&[1_u32, 2]);
@@ -128,8 +156,8 @@ fn owned_by_key_and_canonical_tuple_results() {
 
     let keys = exec.to_device(&[2_u32, 1, 1, 3]);
     let values = exec.to_device(&[20_u32, 10, 11, 30]);
-    let (sorted_keys, sorted_values) =
-        vector::sort_by_key(&exec, keys.slice(..), values.slice(..), Less).unwrap();
+    let sorted_keys = vector::sort(&exec, keys.slice(..), Less).unwrap();
+    let sorted_values = vector::sort_by_key(&exec, keys.slice(..), values.slice(..), Less).unwrap();
     assert_eq!(exec.to_host(&sorted_keys).unwrap(), vec![1, 1, 2, 3]);
     assert_eq!(exec.to_host(&sorted_values).unwrap(), vec![10, 11, 20, 30]);
 
@@ -162,19 +190,18 @@ fn owned_by_key_and_canonical_tuple_results() {
         Add,
     )
     .unwrap();
-    let (unique_keys, unique_values) =
+    let unique_values =
         vector::unique_by_key(&exec, sorted_keys.slice(..), sorted_values.slice(..), Equal)
             .unwrap();
     assert_eq!(exec.to_host(&reduced_keys).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&reduced_values).unwrap(), vec![21, 20, 30]);
-    assert_eq!(exec.to_host(&unique_keys).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&unique_values).unwrap(), vec![10, 20, 30]);
 
     let left_keys = exec.to_device(&[1_u32, 3]);
     let left_values = exec.to_device(&[10_u32, 30]);
     let right_keys = exec.to_device(&[2_u32, 4]);
     let right_values = exec.to_device(&[20_u32, 40]);
-    let (merged_keys, merged_values) = vector::merge_by_key(
+    let merged_values = vector::merge_by_key(
         &exec,
         left_keys.slice(..),
         left_values.slice(..),
@@ -183,6 +210,5 @@ fn owned_by_key_and_canonical_tuple_results() {
         Less,
     )
     .unwrap();
-    assert_eq!(exec.to_host(&merged_keys).unwrap(), vec![1, 2, 3, 4]);
     assert_eq!(exec.to_host(&merged_values).unwrap(), vec![10, 20, 30, 40]);
 }

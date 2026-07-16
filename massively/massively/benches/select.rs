@@ -25,14 +25,16 @@ fn bench_select(c: &mut Criterion) {
             group.bench_function(BenchmarkId::new(format!("copy_where_{rate}"), len), |b| {
                 b.iter(|| {
                     criterion::black_box(
-                        copy_where(&exec, input.slice(..), flags.slice(..)).unwrap(),
+                        copy_where(&exec, input.slice(..), common::as_stencil(flags.slice(..)))
+                            .unwrap(),
                     );
                 })
             });
             group.bench_function(BenchmarkId::new(format!("remove_where_{rate}"), len), |b| {
                 b.iter(|| {
                     criterion::black_box(
-                        remove_where(&exec, input.slice(..), flags.slice(..)).unwrap(),
+                        remove_where(&exec, input.slice(..), common::as_stencil(flags.slice(..)))
+                            .unwrap(),
                     );
                 })
             });
@@ -64,7 +66,7 @@ fn bench_select(c: &mut Criterion) {
                             columns[5].slice(..),
                             columns[6].slice(..),
                         ),
-                        flags.slice(..),
+                        common::as_stencil(flags.slice(..)),
                     )
                     .unwrap(),
                 );

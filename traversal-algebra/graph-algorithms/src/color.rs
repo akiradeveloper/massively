@@ -41,13 +41,13 @@ pub fn solve<R: Runtime>(
 ) -> common::Result<DeviceVec<R, u32>> {
     let n = graph.vertex_count();
     let degree = common::resident_degrees(exec, graph)?;
-    let (_, order) = vector::sort_by_key(
+    let order = vector::sort_by_key(
         exec,
         degree.slice(..),
-        lazy::counting(0).take(n),
+        common::counting_u32(0, n as usize),
         GreaterU32,
     )?;
-    let colors = vector::fill(exec, n as usize, u32::MAX)?;
+    let colors = common::filled(exec, n as usize, u32::MAX)?;
 
     for position in 0..n as usize {
         let vertex = read_u32(exec, &order, position)?;
@@ -57,13 +57,13 @@ pub fn solve<R: Runtime>(
             .slice(offsets[0] as usize..offsets[1] as usize);
         let neighbor_count = offsets[1] - offsets[0];
 
-        let mut color = 0;
+        let mut color = 0u32;
         loop {
             let used = vector::count_if(
                 exec,
                 zip2(
-                    lazy::permute(colors.slice(..), neighbors.clone()),
-                    lazy::constant(color).take(neighbor_count),
+                    lazy::permute(colors.slice(..), common::indices(neighbors.clone())),
+                    lazy::constant(color).take(neighbor_count as usize),
                 ),
                 EqualPair,
             )?;
@@ -76,7 +76,7 @@ pub fn solve<R: Runtime>(
         vector::scatter(
             exec,
             lazy::constant(color).take(1),
-            lazy::constant(vertex).take(1),
+            common::indices(lazy::constant(vertex).take(1)),
             colors.slice_mut(..),
         )?;
     }

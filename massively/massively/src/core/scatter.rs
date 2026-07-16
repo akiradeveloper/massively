@@ -1,69 +1,8 @@
-//! Scatter primitives using the fixed 13-read/12-write kernel ABI.
+//! Scatter primitives with logical index expressions.
 
-use cubecl::prelude::*;
+use cubecl::prelude::Runtime;
 
-use crate::{
-    A13, Dispatch, Error, Executor, ReadExpression, S12,
-    masked::MaskedCopyDispatch,
-    output::{
-        KernelOutputSlots, LowerOutputExpression, OutputExpression, PaddedOutputSlots, StageOutput,
-    },
-    read::{Env0, KernelReadSlots, LowerReadExpression},
-    reduce::StageRead,
-    selection::FlagInput,
-};
-
-#[doc(hidden)]
-pub trait ScatterInput<R: Runtime, Indices, Output>: ReadExpression + Sized {
-    fn scatter_input(
-        self,
-        exec: &Executor<R>,
-        indices: Indices,
-        flags: Option<&crate::DeviceVec<R, u32>>,
-        output: Output,
-    ) -> Result<(), Error>;
-}
-
-impl<R, Values, Indices, Output> ScatterInput<R, Indices, Output> for Values
-where
-    R: Runtime,
-    Values: ReadExpression + LowerReadExpression + StageRead<R, Env0>,
-    Output: OutputExpression + LowerOutputExpression + StageOutput<R, Env0>,
-    Output::Slots: PaddedOutputSlots,
-    Dispatch<A13, S12>: MaskedCopyDispatch<
-            R,
-            Values,
-            Output,
-            KernelReadSlots<Values::Slots>,
-            KernelOutputSlots<Output::Slots>,
-        >,
-    Indices: FlagInput<R>,
-{
-    fn scatter_input(
-        self,
-        exec: &Executor<R>,
-        indices: Indices,
-        flags: Option<&crate::DeviceVec<R, u32>>,
-        output: Output,
-    ) -> Result<(), Error> {
-        let len = self.logical_len()?;
-        let indices_len = indices.flag_len()?;
-        if indices_len != len {
-            return Err(Error::LengthMismatch {
-                left: len,
-                right: indices_len,
-            });
-        }
-        let indices = indices.materialize_flags(exec)?;
-        <Dispatch<A13, S12> as MaskedCopyDispatch<
-            R,
-            Values,
-            Output,
-            KernelReadSlots<Values::Slots>,
-            KernelOutputSlots<Output::Slots>,
-        >>::run(exec, &self, Some(&indices), false, flags, &output)
-    }
-}
+use crate::{Error, Executor, ReadExpression, indexed::IndexedCopyInput, read::Env0};
 
 /// Writes each input item to the output position given by its index.
 pub(crate) fn scatter<R, Values, Indices, Output>(
@@ -74,12 +13,12 @@ pub(crate) fn scatter<R, Values, Indices, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: ScatterInput<R, Indices, Output>,
+    Values: IndexedCopyInput<R, Indices, Output>,
 {
-    values.scatter_input(exec, indices, None, output)
+    values.indexed_copy(exec, indices, false, output)
 }
 
-/// Scatters rows whose stencil is nonzero, preserving other output rows.
+/// Scatters rows whose logical stencil is true.
 pub(crate) fn scatter_where<R, Values, Indices, Stencil, Output>(
     exec: &Executor<R>,
     values: Values,
@@ -89,86 +28,110 @@ pub(crate) fn scatter_where<R, Values, Indices, Stencil, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Values: ScatterInput<R, Indices, Output>,
-    Stencil: FlagInput<R>,
+    Values: IndexedCopyInput<R, Indices, Output> + crate::reduce::StageRead<R, Env0>,
+    Indices: ReadExpression<Item = usize> + crate::reduce::StageRead<R, Env0>,
+    Stencil: crate::selection::FlagInput<R>,
+    Output: crate::output::OutputExpression,
 {
-    let flags = stencil.materialize_flags(exec)?;
-    values.scatter_input(exec, indices, Some(&flags), output)
+    let values_len = values.logical_len()?;
+    let indices_len = indices.logical_len()?;
+    let stencil_len = stencil.flag_len()?;
+    if values_len != indices_len {
+        return Err(Error::LengthMismatch {
+            left: values_len,
+            right: indices_len,
+        });
+    }
+    if values_len != stencil_len {
+        return Err(Error::LengthMismatch {
+            left: values_len,
+            right: stencil_len,
+        });
+    }
+    let output_len = output.logical_len()?;
+    if output_len < values_len {
+        return Err(Error::OutputTooShort {
+            input: values_len,
+            output: output_len,
+        });
+    }
+
+    let control = stencil.selected_control(exec)?;
+    values.indexed_copy_selected(exec, indices, Some(control.indices()), false, output)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Counting, Permute, Zip};
+    use crate::{Counting, Permute, Transform, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     #[test]
-    fn scatter_accepts_eval8_source_and_storage7_output() {
+    fn scatter_accepts_multicolumn_values_and_logical_indices() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-        let inputs: Vec<_> = (0_u32..7)
-            .map(|base| exec.to_device(&[base * 10 + 1, base * 10 + 2, base * 10 + 3]))
-            .collect();
-        let outputs: Vec<_> = (0..7).map(|_| exec.to_device(&[0_u32; 4])).collect();
-        let indices = exec.to_device(&[2_u32, 0, 3]);
-        let seven = Zip::new(
-            inputs[0].column(),
-            Zip::new(
-                inputs[1].column(),
-                Zip::new(
-                    inputs[2].column(),
-                    Zip::new(
-                        inputs[3].column(),
-                        Zip::new(
-                            inputs[4].column(),
-                            Zip::new(inputs[5].column(), inputs[6].column()),
-                        ),
-                    ),
-                ),
-            ),
-        );
-        let values = Permute::new(seven, Counting::new(0, 3));
-        let output = Zip::new(
-            Zip::new(
-                Zip::new(
-                    Zip::new(
-                        Zip::new(
-                            Zip::new(outputs[0].slice_mut(..), outputs[1].slice_mut(..)),
-                            outputs[2].slice_mut(..),
-                        ),
-                        outputs[3].slice_mut(..),
-                    ),
-                    outputs[4].slice_mut(..),
-                ),
-                outputs[5].slice_mut(..),
-            ),
-            outputs[6].slice_mut(..),
-        );
+        let left = exec.to_device(&[1_u32, 2, 3]);
+        let right = exec.to_device(&[10_u32, 20, 30]);
+        let encoded = exec.to_device(&[2_u32, 0, 3]);
+        let indices = Transform::new(encoded.column(), crate::op::U32ToUsize);
+        let out_left = exec.to_device(&[0_u32; 4]);
+        let out_right = exec.to_device(&[0_u32; 4]);
 
-        scatter(&exec, values, indices.column(), output).unwrap();
-        for (column, output) in outputs.iter().enumerate() {
-            let base = column as u32 * 10;
-            assert_eq!(
-                exec.to_host(output).unwrap(),
-                vec![base + 2, 0, base + 1, base + 3]
-            );
-        }
+        scatter(
+            &exec,
+            Zip::new(left.column(), right.column()),
+            indices,
+            Zip::new(out_left.slice_mut(..), out_right.slice_mut(..)),
+        )
+        .unwrap();
+
+        assert_eq!(exec.to_host(&out_left).unwrap(), vec![2, 0, 1, 3]);
+        assert_eq!(exec.to_host(&out_right).unwrap(), vec![20, 0, 10, 30]);
     }
 
     #[test]
-    fn scatter_where_leaves_unselected_destinations_unchanged() {
+    fn scatter_keeps_value_and_index_expressions_independent() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let values = exec.to_device(&[10_u32, 20, 30]);
         let indices = exec.to_device(&[2_u32, 0, 1]);
-        let flags = exec.to_device(&[1_u32, 0, 1]);
         let output = exec.to_device(&[99_u32; 3]);
-        scatter_where(
+
+        scatter(
             &exec,
-            values.column(),
-            indices.column(),
-            flags.column(),
+            Permute::new(
+                values.column(),
+                Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
+            ),
+            Transform::new(
+                Permute::new(
+                    indices.column(),
+                    Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
+                ),
+                crate::op::U32ToUsize,
+            ),
             output.slice_mut(..),
         )
         .unwrap();
-        assert_eq!(exec.to_host(&output).unwrap(), vec![99, 30, 10]);
+
+        assert_eq!(exec.to_host(&output).unwrap(), vec![20, 30, 10]);
+    }
+
+    #[test]
+    fn scatter_where_does_not_evaluate_rejected_indices() {
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+        let values = exec.to_device(&[10_u32, 20, 30]);
+        let encoded_indices = exec.to_device(&[2_u32, u32::MAX, 1]);
+        let encoded_stencil = exec.to_device(&[1_u32, 0, 1]);
+        let output = exec.to_device(&[0_u32; 3]);
+
+        scatter_where(
+            &exec,
+            values.column(),
+            Transform::new(encoded_indices.column(), crate::op::U32ToUsize),
+            Transform::new(encoded_stencil.column(), crate::op::U32ToBool),
+            output.slice_mut(..),
+        )
+        .unwrap();
+
+        assert_eq!(exec.to_host(&output).unwrap(), vec![0, 30, 10]);
     }
 }

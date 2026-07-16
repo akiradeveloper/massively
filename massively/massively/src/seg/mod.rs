@@ -18,8 +18,8 @@ use cubecl::prelude::*;
 use std::marker::PhantomData;
 
 use crate::{
-    Allocable, Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable,
-    WritableFrom, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
+    CanonicalForm, Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
+    op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
 };
 
 /// A flat value stream and the offsets delimiting its segments.
@@ -151,7 +151,7 @@ pub(crate) trait LengthPreservingExecutableInto<R, Input, InputOffsets, Output>:
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
 {
     /// Executes the algorithm for every segment.
@@ -174,9 +174,9 @@ pub(crate) trait CompactingExecutableInto<R, Input, InputOffsets, Output, Output
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
-    OutputOffsets: MIterMut<R, Item = MIndex>,
+    OutputOffsets: MIterMut<R, Item = u32>,
 {
     /// Executes the algorithm for every segment.
     fn run_into(
@@ -184,7 +184,7 @@ where
         exec: &Executor<R>,
         input: SegmentIterator<Input, InputOffsets>,
         output: SegmentedMut<Output, OutputOffsets>,
-    ) -> Result<MIndex, Error>;
+    ) -> Result<u32, Error>;
 }
 
 /// Execution contract for segment algorithms that write one item per segment.
@@ -193,7 +193,7 @@ pub(crate) trait SummarizingExecutableInto<R, Input, InputOffsets, Output>: Size
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
 {
     /// Executes the algorithm for every segment.
@@ -215,7 +215,7 @@ pub trait Executable<R, Input, InputOffsets>: Sized
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
 {
     /// Complete owned result selected by the segment algorithm.
     type Output;
@@ -233,9 +233,9 @@ impl<R, Input, InputOffsets, Op> Executable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: Materializable<R>,
+    Op::Output: ToCanonical<R>,
 {
     type Output = SegmentIterator<MVec<R, Op::Output>, InputOffsets>;
 
@@ -256,7 +256,7 @@ impl<R, Input, InputOffsets, Output, Op>
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Op: UnaryOp<Input::Item>,
     Output::Item: WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
@@ -278,7 +278,7 @@ impl<R, Input, InputOffsets, Output, Less>
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
     Output::Item: WritableFrom<Input::Item>,
@@ -327,7 +327,7 @@ where
     R: Runtime,
     Input: MIter<R> + Clone,
     Input::Item: crate::StorageLayout,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Input::Item>,
     Output::SliceMut: MIterMut<R>,
@@ -344,7 +344,7 @@ where
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
         crate::vector::adjacent_difference_into(exec, values.clone(), op, output.slice_mut(..))?;
-        crate::vector::transform_where(
+        crate::vector::transform_where_raw(
             exec,
             values,
             crate::op::Identity,
@@ -360,8 +360,8 @@ impl<R, Input, InputOffsets, Output, Op>
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: Materializable<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    Input::Item: crate::api::iter::ScratchAbi<R>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Op: ReductionOp<Input::Item>,
     Output::Item: WritableFrom<Input::Item>,
@@ -392,9 +392,9 @@ impl<R, Input, InputOffsets, Output, Op, Init>
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
-    Init: Materializable<R>,
+    Init: crate::api::iter::ScratchAbi<R>,
     Op: ReductionOp<Init>,
     Output::Item: WritableFrom<Input::Item>,
 {
@@ -424,7 +424,7 @@ impl<R, Input, InputOffsets, Output> LengthPreservingExecutableInto<R, Input, In
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Input::Item>,
 {
@@ -437,7 +437,7 @@ where
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets, values.len()? as usize)?;
         let indices = control.reverse_indices(exec)?;
-        crate::vector::gather_into(exec, values, indices.slice(..), output)
+        crate::vector::gather_raw_into(exec, values, indices.slice(..), output)
     }
 }
 
@@ -447,9 +447,9 @@ impl<R, Input, InputOffsets, Output, OutputOffsets, Equal>
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
-    OutputOffsets: MIterMut<R, Item = MIndex>,
+    OutputOffsets: MIterMut<R, Item = u32>,
     Equal: BinaryPredicateOp<Input::Item>,
     Output::Item: WritableFrom<Input::Item>,
 {
@@ -458,7 +458,7 @@ where
         exec: &Executor<R>,
         input: SegmentIterator<Input, InputOffsets>,
         output: SegmentedMut<Output, OutputOffsets>,
-    ) -> Result<MIndex, Error> {
+    ) -> Result<u32, Error> {
         let Unique(_equal) = self.0;
         let (values, offsets) = input.into_parts();
         let value_len = values.len()? as usize;
@@ -533,8 +533,8 @@ pub(crate) fn reduce_segments<R, Values, Offsets, Output, Op>(
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R> + Materializable<R> + Copy,
-    Offsets: MIter<R, Item = MIndex>,
+    Values::Item: CanonicalForm<R> + crate::api::iter::ScratchAbi<R> + Copy,
+    Offsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Values::Item>,
     Op: ReductionOp<Values::Item>,
@@ -543,7 +543,10 @@ where
     let value_len = values.len()? as usize;
     let control = control::SegmentControl::new(exec, offsets, value_len)?;
     let keys = exec.alloc::<u32>(control.segment_count);
-    let reduced = <Values::Item as Allocable<R>>::alloc(exec, control.segment_count);
+    let reduced = <<Values::Item as CanonicalForm<R>>::Storage as MStorage<R>>::allocate(
+        exec,
+        control.segment_count,
+    );
     let count = crate::vector::reduce_by_key_into(
         exec,
         control.ids.slice(..),
@@ -555,7 +558,10 @@ where
         reduced.slice_mut(..),
     )?;
 
-    let result = <Values::Item as Allocable<R>>::alloc(exec, control.segment_count);
+    let result = <<Values::Item as CanonicalForm<R>>::Storage as MStorage<R>>::allocate(
+        exec,
+        control.segment_count,
+    );
     result.slice_mut(..).fill_with(exec, init)?;
     if count != 0 {
         let indices = exec.alloc::<u32>(count as usize);
@@ -565,9 +571,9 @@ where
             Decrement,
             indices.slice_mut(..),
         )?;
-        crate::vector::scatter(
+        crate::vector::scatter_raw(
             exec,
-            reduced.slice(..count),
+            reduced.slice(..count as usize),
             indices.slice(..),
             result.slice_mut(..),
         )?;
@@ -586,9 +592,9 @@ impl<R, Input, InputOffsets, Output, OutputOffsets, Pred>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
-    OutputOffsets: MIterMut<R, Item = MIndex>,
+    OutputOffsets: MIterMut<R, Item = u32>,
     Pred: PredicateOp<Input::Item>,
     Output::Item: WritableFrom<Input::Item>,
 {
@@ -597,7 +603,7 @@ where
         exec: &Executor<R>,
         input: SegmentIterator<Input, InputOffsets>,
         output: SegmentedMut<Output, OutputOffsets>,
-    ) -> Result<MIndex, Error> {
+    ) -> Result<u32, Error> {
         let (values, offsets) = input.into_parts();
         let value_len = values.len()? as usize;
         let control = control::SegmentControl::new(exec, offsets, value_len)?;
@@ -624,9 +630,9 @@ impl<R, Input, InputOffsets, Output, Op, Init>
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
-    Init: CubeType + Allocable<R> + Materializable<R> + Copy,
+    Init: CubeType + CanonicalForm<R> + crate::api::iter::ScratchAbi<R> + Copy,
     Op: ReductionOp<Input::Item>,
     Output::Item: WritableFrom<Input::Item>,
 {
@@ -649,10 +655,10 @@ macro_rules! impl_predicate_summary {
         where
             R: Runtime,
             Input: MIter<R>,
-            InputOffsets: MIter<R, Item = MIndex>,
+            InputOffsets: MIter<R, Item = u32>,
             Output: MIterMut<R>,
             Pred: PredicateOp<Input::Item>,
-            Output::Item: WritableFrom<MIndex>,
+            Output::Item: WritableFrom<u32>,
         {
             fn run_into(
                 self,
@@ -691,10 +697,10 @@ impl<R, Input, InputOffsets, Output, Less> SummarizingExecutableInto<R, Input, I
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WritableFrom<MIndex>,
+    Output::Item: WritableFrom<u32>,
 {
     fn run_into(
         self,
@@ -733,10 +739,10 @@ impl<R, Input, InputOffsets, Output, Less> SummarizingExecutableInto<R, Input, I
 where
     R: Runtime,
     Input: MIter<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    InputOffsets: MIter<R, Item = u32>,
     Output: MIterMut<R>,
     Less: BinaryPredicateOp<Input::Item>,
-    Output::Item: WritableFrom<MIndex>,
+    Output::Item: WritableFrom<u32>,
 {
     fn run_into(
         self,
@@ -778,8 +784,8 @@ macro_rules! impl_owned_length_preserving_input {
         where
             R: Runtime,
             Input: MIter<R>,
-            Input::Item: Materializable<R>,
-            InputOffsets: MIter<R, Item = MIndex>,
+            Input::Item: ToCanonical<R>,
+            InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
             type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -790,7 +796,7 @@ macro_rules! impl_owned_length_preserving_input {
                 input: SegmentIterator<Input, InputOffsets>,
             ) -> Result<Self::Output, Error> {
                 let (values, offsets) = input.into_parts();
-                let output = exec.alloc_mvec::<Input::Item>(values.len()? as usize);
+                let output = exec.alloc::<Input::Item>(values.len()? as usize);
                 LengthPreservingExecutableInto::run_into(
                     self,
                     exec,
@@ -804,15 +810,17 @@ macro_rules! impl_owned_length_preserving_input {
 }
 
 impl_owned_length_preserving_input!(Sort<Op>, Op: BinaryPredicateOp<Input::Item>);
-impl_owned_length_preserving_input!(InclusiveScan<Op>, Op: ReductionOp<Input::Item>);
+impl_owned_length_preserving_input!(InclusiveScan<Op>,
+    Op: ReductionOp<Input::Item>
+);
 
 impl<R, Input, InputOffsets, Op, Init> Executable<R, Input, InputOffsets>
     for ForEachSegment<ExclusiveScan<Op, Init>>
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
-    InputOffsets: MIter<R, Item = MIndex>,
-    Init: Materializable<R>,
+    InputOffsets: MIter<R, Item = u32>,
+    Init: ToCanonical<R>,
     Op: ReductionOp<Init>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -823,7 +831,7 @@ where
         input: SegmentIterator<Input, InputOffsets>,
     ) -> Result<Self::Output, Error> {
         let (values, offsets) = input.into_parts();
-        let output = exec.alloc_mvec::<Input::Item>(values.len()? as usize);
+        let output = exec.alloc::<Input::Item>(values.len()? as usize);
         LengthPreservingExecutableInto::run_into(
             self,
             exec,
@@ -838,8 +846,8 @@ impl<R, Input, InputOffsets> Executable<R, Input, InputOffsets> for ForEachSegme
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: Materializable<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    Input::Item: ToCanonical<R>,
+    InputOffsets: MIter<R, Item = u32>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
 
@@ -849,7 +857,7 @@ where
         input: SegmentIterator<Input, InputOffsets>,
     ) -> Result<Self::Output, Error> {
         let (values, offsets) = input.into_parts();
-        let output = exec.alloc_mvec::<Input::Item>(values.len()? as usize);
+        let output = exec.alloc::<Input::Item>(values.len()? as usize);
         LengthPreservingExecutableInto::run_into(
             self,
             exec,
@@ -865,8 +873,8 @@ impl<R, Input, InputOffsets, Op> Executable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R> + Clone,
-    Input::Item: Materializable<R>,
-    InputOffsets: MIter<R, Item = MIndex>,
+    Input::Item: ToCanonical<R>,
+    InputOffsets: MIter<R, Item = u32>,
     Op: ReductionOp<Input::Item>,
 {
     type Output = SegmentIterator<MVec<R, Input::Item>, InputOffsets>;
@@ -880,7 +888,7 @@ where
         let (values, offsets) = input.into_parts();
         let control = control::SegmentControl::new(exec, offsets.clone(), values.len()? as usize)?;
         let output = crate::vector::adjacent_difference(exec, values.clone(), op)?;
-        crate::vector::transform_where(
+        crate::vector::transform_where_raw(
             exec,
             values,
             crate::op::Identity,
@@ -898,26 +906,26 @@ macro_rules! impl_owned_compacting {
         where
             R: Runtime,
             Input: MIter<R> + Clone,
-            Input::Item: Materializable<R>,
-            InputOffsets: MIter<R, Item = MIndex>,
+            Input::Item: ToCanonical<R>,
+            InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
-            type Output = SegmentIterator<MVec<R, Input::Item>, MVec<R, MIndex>>;
+            type Output = SegmentIterator<MVec<R, Input::Item>, MVec<R, u32>>;
 
             fn run(
                 self,
                 exec: &Executor<R>,
                 input: SegmentIterator<Input, InputOffsets>,
             ) -> Result<Self::Output, Error> {
-                let mut values = exec.alloc_mvec::<Input::Item>(input.values().len()? as usize);
-                let offsets = exec.alloc_mvec::<MIndex>(input.offsets().len()? as usize);
+                let mut values = exec.alloc::<Input::Item>(input.values().len()? as usize);
+                let offsets = exec.alloc::<u32>(input.offsets().len()? as usize);
                 let written = CompactingExecutableInto::run_into(
                     self,
                     exec,
                     input,
                     SegmentedMut::new(values.slice_mut(..), offsets.slice_mut(..)),
                 )?;
-                values.truncate(written);
+                values.truncate(written as usize);
                 Ok(SegmentIterator::new(values, offsets))
             }
         }
@@ -932,8 +940,8 @@ impl<R, Input, InputOffsets, Op, Init> Executable<R, Input, InputOffsets>
 where
     R: Runtime,
     Input: MIter<R, Item = Init>,
-    InputOffsets: MIter<R, Item = MIndex>,
-    Init: Allocable<R> + Materializable<R> + Copy,
+    InputOffsets: MIter<R, Item = u32>,
+    Init: CanonicalForm<R> + ToCanonical<R> + Copy,
     Op: ReductionOp<Init>,
 {
     type Output = MVec<R, Input::Item>;
@@ -947,7 +955,7 @@ where
         let segment_count = offset_len
             .checked_sub(1)
             .ok_or(Error::LengthMismatch { left: 1, right: 0 })?;
-        let output = exec.alloc_mvec::<Input::Item>(segment_count);
+        let output = exec.alloc::<Input::Item>(segment_count);
         SummarizingExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
         Ok(output)
     }
@@ -960,10 +968,10 @@ macro_rules! impl_owned_summary_index {
         where
             R: Runtime,
             Input: MIter<R>,
-            InputOffsets: MIter<R, Item = MIndex>,
+            InputOffsets: MIter<R, Item = u32>,
             $( $bound )+
         {
-            type Output = MVec<R, MIndex>;
+            type Output = MVec<R, u32>;
 
             fn run(
                 self,
@@ -974,7 +982,7 @@ macro_rules! impl_owned_summary_index {
                 let segment_count = offset_len
                     .checked_sub(1)
                     .ok_or(Error::LengthMismatch { left: 1, right: 0 })?;
-                let output = exec.alloc_mvec::<MIndex>(segment_count);
+                let output = exec.alloc::<u32>(segment_count);
                 SummarizingExecutableInto::run_into(self, exec, input, output.slice_mut(..))?;
                 Ok(output)
             }

@@ -53,7 +53,7 @@ fn normalize<R: Runtime>(
     };
     vector::transform(
         exec,
-        zip2(values.slice(..), lazy::constant(scale).take(len)),
+        zip2(values.slice(..), lazy::constant(scale).take(len as usize)),
         Scale,
     )
 }
@@ -65,16 +65,16 @@ pub fn solve<R: Runtime>(
 ) -> common::Result<(DeviceVec<R, f32>, DeviceVec<R, f32>)> {
     let n = graph.vertex_count();
     assert!(n != 0);
-    let mut hubs = vector::fill(exec, n as usize, 1.0f32)?;
-    let mut authorities = vector::fill(exec, n as usize, 1.0f32)?;
+    let mut hubs = common::filled(exec, n as usize, 1.0f32)?;
+    let mut authorities = common::filled(exec, n as usize, 1.0f32)?;
 
     for _ in 0..iterations {
-        authorities = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
+        authorities = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
             .map(graph::source(hubs.slice(..)), Identity)
             .reduce_by_destination(exec, 0.0, SumF32)?;
         authorities = normalize(exec, authorities)?;
 
-        hubs = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
+        hubs = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
             .map(graph::destination(authorities.slice(..)), Identity)
             .reduce_by_source(exec, 0.0, SumF32)?;
         hubs = normalize(exec, hubs)?;

@@ -1,6 +1,8 @@
+#![allow(private_bounds)]
+
 use cubecl::prelude::Runtime;
 
-use crate::{Error, Executor, MIter, Materializable, op::ReductionOp};
+use crate::{Error, Executor, MIter, ToCanonical, op::ReductionOp};
 
 /// Reduces all input items, starting from `init`.
 ///
@@ -9,12 +11,12 @@ use crate::{Error, Executor, MIter, Materializable, op::ReductionOp};
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::ReductionOp, vector::reduce};
+/// use massively::{Executor, op, vector::reduce};
 ///
 /// struct Add;
 ///
 /// #[cubecl::cube]
-/// impl ReductionOp<u32> for Add {
+/// impl op::ReductionOp<u32> for Add {
 ///     fn apply(lhs: u32, rhs: u32) -> u32 {
 ///         lhs + rhs
 ///     }
@@ -36,7 +38,7 @@ pub fn reduce<R, Input, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: Materializable<R>,
+    Input::Item: ToCanonical<R>,
     Op: ReductionOp<Input::Item>,
 {
     crate::reduce::reduce(exec, crate::api::iter::lower_fixed::<R, _>(input), init, op)

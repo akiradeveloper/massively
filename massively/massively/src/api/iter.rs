@@ -1,16 +1,22 @@
 use cubecl::prelude::{CubeType, Runtime};
 use std::ops::{Bound, RangeBounds};
 
-use crate::{Error, Executor, MIndex};
+use crate::{Error, Executor};
 
 pub use crate::core::iter::Zip;
 pub use crate::core::storage::WritableFrom;
 
 /// Owned canonical storage for one left-associated logical item type.
 pub trait MStorage<R: Runtime>: Sized {
-    type Item: Allocable<R, Storage = Self>;
+    type Item: CanonicalForm<R, Storage = Self>;
 
-    fn len(&self) -> Result<MIndex, Error>;
+    /// Allocates uninitialized storage for `len` logical items.
+    ///
+    /// The storage must be completely written before it is read.
+    #[doc(hidden)]
+    fn allocate(exec: &Executor<R>, len: usize) -> Self;
+
+    fn len(&self) -> Result<usize, Error>;
 
     fn is_empty(&self) -> Result<bool, Error> {
         Ok(self.len()? == 0)
@@ -19,67 +25,55 @@ pub trait MStorage<R: Runtime>: Sized {
     /// Shrinks the logical length without copying or reallocating device memory.
     ///
     /// Multi-column storage truncates every physical column to the same length.
-    fn truncate(&mut self, len: MIndex);
+    fn truncate(&mut self, len: usize);
 
     fn slice<Bounds>(&self, range: Bounds) -> impl MIter<R, Item = Self::Item> + '_
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<usize>;
 
     fn slice_mut<Bounds>(&self, range: Bounds) -> impl MIterMut<R, Item = Self::Item> + '_
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<usize>;
 }
 
-/// A left-associated logical item with canonical owned device storage.
-pub trait Allocable<R: Runtime>: MItem<R> {
+/// A canonical logical item with owned device storage.
+///
+/// Only scalar items and canonical left-associated tuple shapes implement
+/// this trait. Semantic tuple association is handled by [`ToCanonical`].
+pub trait CanonicalForm<R: Runtime>: CubeType + WritableFrom<Self> + Sized {
     type Storage: MStorage<R, Item = Self>;
-
-    #[doc(hidden)]
-    fn alloc(exec: &Executor<R>, len: usize) -> <Self as Allocable<R>>::Storage;
 }
 
-/// Maps a semantic item shape to its canonical left-associated item type.
-///
-/// This is only a runtime-independent type-level normalization. It does not
-/// imply that storage can be allocated or that values can be written into the
-/// canonical shape.
-pub trait Canonicalizable: CubeType + Sized {
-    type Canonical: CubeType;
-}
-
-/// A logical item that can be materialized into owned canonical storage.
-///
-/// Materialization combines three independent properties: canonical shape
-/// normalization through [`Canonicalizable`], allocation of that canonical shape
-/// through [`Allocable`], and conversion from the logical item through
-/// [`WritableFrom`]. Algorithms that create owned output use this bound; APIs that
-/// write into caller-provided output continue to state their `WritableFrom`
-/// relation directly.
-#[allow(private_bounds)]
-pub trait Materializable<R: Runtime>:
-    MaterializationAbi<R> + SortAbi<R> + Canonicalizable<Canonical = Self::Materialized>
-{
-    /// The canonical item written to owned storage.
-    #[doc(hidden)]
-    type Materialized: Allocable<R, Storage = <Self as Materializable<R>>::Storage>
-        + WritableFrom<Self>
-        + SameStorageLayout<Self>;
-
-    type Storage: MStorage<R, Item = Self::Materialized>;
-}
-
-/// Sealed physical contract used to implement [`Materializable`] with the
-/// current fixed-width storage backend. It is not a user-facing capability.
+/// Internal runtime-independent mapping to a canonical left-associated shape.
 #[doc(hidden)]
-pub(crate) trait MaterializationAbi<R: Runtime>:
-    MItem<R> + crate::CanonicalAlloc<R> + crate::core::allocation::ScratchStorage<R>
-{
+pub trait CanonicalShape: CubeType + Sized {
+    type Canonical: CubeType + WritableFrom<Self>;
 }
 
-impl<R, Item> MaterializationAbi<R> for Item
+/// Sealed physical contract for algorithms that normalize a semantic item
+/// into canonical storage.
+#[doc(hidden)]
+pub(crate) trait CanonicalAbi<R: Runtime>: MItem<R> + crate::CanonicalAlloc<R> {}
+
+impl<R, Item> CanonicalAbi<R> for Item
 where
     R: Runtime,
-    Item: MItem<R> + crate::CanonicalAlloc<R> + crate::core::allocation::ScratchStorage<R>,
+    Item: MItem<R> + crate::CanonicalAlloc<R>,
+{
+}
+
+/// Sealed physical contract for algorithms that require canonical scratch
+/// storage for a semantic item.
+#[doc(hidden)]
+pub(crate) trait ScratchAbi<R: Runtime>:
+    CanonicalAbi<R> + crate::core::allocation::ScratchStorage<R>
+{
+}
+
+impl<R, Item> ScratchAbi<R> for Item
+where
+    R: Runtime,
+    Item: CanonicalAbi<R> + crate::core::allocation::ScratchStorage<R>,
 {
 }
 
@@ -128,33 +122,49 @@ where
     }
 }
 
-/// Sealed equality witness for the storage ABI before and after canonical
-/// tuple reassociation.
+/// Seals canonicalization while carrying backend-only implementation
+/// capabilities. These are not part of the public materialization model.
 #[doc(hidden)]
-pub(crate) trait SameStorageLayout<Source: crate::StorageLayout>:
-    crate::StorageLayout<StorageArity = Source::StorageArity, StorageLeaves = Source::StorageLeaves>
-{
-}
+pub(crate) trait Sealed<R: Runtime>: ScratchAbi<R> + SortAbi<R> {}
 
-impl<Source, Target> SameStorageLayout<Source> for Target
+impl<R, Item> Sealed<R> for Item
 where
-    Source: crate::StorageLayout,
-    Target: crate::StorageLayout<
-            StorageArity = Source::StorageArity,
-            StorageLeaves = Source::StorageLeaves,
-        >,
+    R: Runtime,
+    Item: ScratchAbi<R> + SortAbi<R>,
 {
 }
 
-/// Owned canonical device storage for a logical item type.
+/// An item that can be written into owned canonical storage on `R`.
+///
+/// This single capability guarantees both that the canonical storage can be
+/// allocated and that the semantic item can be written into it.
+#[allow(private_bounds)]
+pub trait ToCanonical<R: Runtime>: CubeType + Sized + Sealed<R> {
+    /// The unique left-associated item written at an owned-storage boundary.
+    type Canonical: CanonicalForm<R> + WritableFrom<Self>;
+}
+
+#[doc(hidden)]
+#[allow(private_bounds)]
+impl<R, Item> ToCanonical<R> for Item
+where
+    R: Runtime,
+    Item: CanonicalShape + ScratchAbi<R> + SortAbi<R>,
+    <Item as CanonicalShape>::Canonical: CanonicalForm<R>,
+{
+    type Canonical = <Item as CanonicalShape>::Canonical;
+}
+
+/// Owned canonical device storage for a semantic item type.
 ///
 /// A scalar item maps to one [`crate::DeviceVec`]. A multi-column item maps to
-/// a left-associated [`Zip`] tree of `DeviceVec`s.
-pub type MVec<R, Item> = <Item as Materializable<R>>::Storage;
+/// a left-associated [`Zip`] tree of `DeviceVec`s. Non-canonical tuple
+/// association is normalized through [`ToCanonical::Canonical`].
+pub type MVec<R, Item> = <<Item as ToCanonical<R>>::Canonical as CanonicalForm<R>>::Storage;
 
-pub(crate) fn resolve_iter_range<Bounds>(len: MIndex, range: Bounds) -> (usize, usize)
+pub(crate) fn resolve_iter_range<Bounds>(len: usize, range: Bounds) -> (usize, usize)
 where
-    Bounds: RangeBounds<MIndex>,
+    Bounds: RangeBounds<usize>,
 {
     let start = match range.start_bound() {
         Bound::Included(&start) => start,
@@ -174,7 +184,7 @@ where
         end <= len,
         "slice end ({end}) is out of bounds for iterator of length {len}"
     );
-    (start as usize, (end - start) as usize)
+    (start, end - start)
 }
 
 /// Lowers a logical iterator while preserving its actual physical read arity.
@@ -198,17 +208,17 @@ where
     private::KernelInput::into_fixed(lower::<R, _>(input))
 }
 
-/// Materializes an index iterator through the fixed read ABI.
-pub(crate) fn materialize_indices<R, Input>(
+/// Materializes an already-physical `u32` iterator through the fixed read ABI.
+pub(crate) fn materialize_u32<R, Input>(
     exec: &Executor<R>,
     input: Input,
-) -> Result<crate::DeviceVec<R, MIndex>, Error>
+) -> Result<crate::DeviceVec<R, u32>, Error>
 where
     R: Runtime,
-    Input: MIter<R, Item = MIndex>,
+    Input: MIter<R, Item = u32>,
 {
-    let len = input.len()? as usize;
-    let output = exec.alloc::<MIndex>(len);
+    let len = input.len()?;
+    let output = exec.alloc::<u32>(len);
     let input = lower_fixed::<R, _>(input);
     let output_view = output.slice_mut(..);
     crate::transform::materialize_fixed(exec, &input, &output_view)?;
@@ -248,15 +258,15 @@ where
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, MIter, vector::transform};
-/// use massively::{lazy, op::Identity};
+/// use massively::{Executor, MIter, lazy, vector::gather};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-/// let values = lazy::counting(10).take(5);
-/// let middle = values.slice(1..4);
-/// let output = transform(&exec, middle, Identity).unwrap();
+/// let values = exec.to_device(&[10_u32, 20, 30, 40, 50]);
+/// let indices = lazy::counting(0).take(5);
+/// let middle = indices.slice(1..4);
+/// let output = gather(&exec, values.slice(..), middle).unwrap();
 ///
-/// assert_eq!(exec.to_host(&output).unwrap(), vec![11, 12, 13]);
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![20, 30, 40]);
 /// ```
 pub trait MIter<R: Runtime>: Clone + Sized {
     /// Semantic value produced by one indexed read.
@@ -275,9 +285,9 @@ pub trait MIter<R: Runtime>: Clone + Sized {
     /// Returns a zero-copy logical subrange of this iterator.
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<usize>;
 
-    fn len(&self) -> Result<MIndex, Error>;
+    fn len(&self) -> Result<usize, Error>;
 
     fn is_empty(&self) -> Result<bool, Error> {
         Ok(self.len()? == 0)
@@ -299,7 +309,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
     fn lower_read(self) -> Self::Read;
 
     #[doc(hidden)]
-    fn count_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<MIndex, Error>
+    fn count_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<u32, Error>
     where
         Pred: crate::op::PredicateOp<Self::Item>;
 
@@ -319,7 +329,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         Pred: crate::op::PredicateOp<Self::Item>;
 
     #[doc(hidden)]
-    fn find_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<Option<MIndex>, Error>
+    fn find_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<Option<u32>, Error>
     where
         Pred: crate::op::PredicateOp<Self::Item>;
 
@@ -344,13 +354,13 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         self,
         exec: &Executor<R>,
         equal: Equal,
-    ) -> Result<Option<MIndex>, Error>
+    ) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
-    fn is_sorted_until_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<MIndex, Error>
+    fn is_sorted_until_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>;
@@ -362,21 +372,13 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
-    fn min_element_with<Less>(
-        self,
-        exec: &Executor<R>,
-        less: Less,
-    ) -> Result<Option<MIndex>, Error>
+    fn min_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
-    fn max_element_with<Less>(
-        self,
-        exec: &Executor<R>,
-        less: Less,
-    ) -> Result<Option<MIndex>, Error>
+    fn max_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>;
@@ -386,7 +388,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         self,
         exec: &Executor<R>,
         less: Less,
-    ) -> Result<Option<(MIndex, MIndex)>, Error>
+    ) -> Result<Option<(u32, u32)>, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>;
@@ -436,7 +438,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         exec: &Executor<R>,
         equal: Equal,
         output: Output,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Output: MIterMut<R>,
@@ -444,12 +446,12 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         Equal: crate::op::BinaryPredicateOp<Self::Item>;
 
     #[doc(hidden)]
-    fn materialize_u32(self, exec: &Executor<R>) -> Result<crate::DeviceVec<R, MIndex>, Error>
+    fn materialize_u32(self, exec: &Executor<R>) -> Result<crate::DeviceVec<R, u32>, Error>
     where
-        Self: MIterKernel<R, Item = MIndex>,
+        Self: MIterKernel<R, Item = u32>,
     {
         let len = self.len()? as usize;
-        let output = exec.alloc::<MIndex>(len);
+        let output = exec.alloc::<u32>(len);
         crate::api::algorithm::transform::transform_into(
             exec,
             self,
@@ -463,10 +465,10 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
     fn select_with_flags<Output>(
         self,
         exec: &Executor<R>,
-        flags: crate::Column<MIndex>,
+        flags: crate::Column<u32>,
         invert: bool,
         output: Output,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Output: MIterMut<R>,
@@ -478,7 +480,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         exec: &Executor<R>,
         pred: Pred,
         output: Output,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Output: MIterMut<R>,
@@ -489,8 +491,8 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
     fn indexed_with<Output>(
         self,
         exec: &Executor<R>,
-        indices: crate::Column<MIndex>,
-        flags: Option<crate::Column<MIndex>>,
+        indices: crate::Column<u32>,
+        flags: Option<crate::Column<u32>>,
         scatter: bool,
         output: Output,
     ) -> Result<(), Error>
@@ -519,7 +521,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         self,
         exec: &Executor<R>,
         op: Op,
-        flags: crate::Column<MIndex>,
+        flags: crate::Column<u32>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -560,7 +562,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         exec: &Executor<R>,
         right: Right,
         equal: Equal,
-    ) -> Result<Option<MIndex>, Error>
+    ) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Right: MIterStorageKernel<R, Item = Self::Item>,
@@ -584,7 +586,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         exec: &Executor<R>,
         needles: Needles,
         equal: Equal,
-    ) -> Result<Option<MIndex>, Error>
+    ) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Needles: MIterStorageKernel<R, Item = Self::Item>,
@@ -604,7 +606,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         Values: MIterStorageKernel<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
-        Output::Item: crate::WritableFrom<MIndex>;
+        Output::Item: crate::WritableFrom<u32>;
 
     #[doc(hidden)]
     fn merge_with<Right, Less, Output>(
@@ -629,7 +631,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         less: Less,
         output: Output,
         mode: u8,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Right: MIterStorageKernel<R, Item = Self::Item>,
@@ -683,7 +685,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         op: Op,
         key_output: KeyOutput,
         value_output: ValueOutput,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Values: MIterStorageKernel<R>,
@@ -702,7 +704,7 @@ pub trait MIterKernel<R: Runtime>: MIter<R> {
         equal: Equal,
         key_output: KeyOutput,
         value_output: ValueOutput,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Values: MIterStorageKernel<R>,
@@ -773,14 +775,14 @@ pub trait MIterMut<R: Runtime>: Sized {
     /// Returns a read-only zero-copy subrange of this output.
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<usize>;
 
     /// Returns a mutable zero-copy subrange of this output.
     fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut
     where
-        Bounds: RangeBounds<MIndex>;
+        Bounds: RangeBounds<usize>;
 
-    fn len(&self) -> Result<MIndex, Error>;
+    fn len(&self) -> Result<usize, Error>;
 
     fn is_empty(&self) -> Result<bool, Error> {
         Ok(self.len()? == 0)
@@ -801,7 +803,6 @@ pub trait MIterMut<R: Runtime>: Sized {
         + crate::output::StageOutput<R, crate::read::Env0>
         + private::KernelOutput<R>
         + crate::selection::FillOutput<R>
-        + crate::selection::ReplaceOutput<R>
         + crate::output::SliceOutput;
 
     #[doc(hidden)]
@@ -810,17 +811,6 @@ pub trait MIterMut<R: Runtime>: Sized {
     #[doc(hidden)]
     fn fill_with(self, exec: &Executor<R>, value: Self::Item) -> Result<(), Error> {
         crate::selection::fill(exec, value, self.lower_output())
-    }
-
-    #[doc(hidden)]
-    fn replace_with_flags(
-        self,
-        exec: &Executor<R>,
-        value: Self::Item,
-        flags: crate::Column<MIndex>,
-    ) -> Result<(), Error> {
-        let flags = crate::selection::FlagInput::materialize_flags(flags, exec)?;
-        crate::selection::ReplaceOutput::replace_output(self.lower_output(), exec, value, &flags)
     }
 }
 
@@ -841,18 +831,16 @@ where
 
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<MIndex>,
+        Bounds: RangeBounds<usize>,
     {
         let len = private::IterLength::logical_len(self)
             .expect("cannot slice an iterator with an invalid length");
-        let len = MIndex::try_from(len).expect("iterator length exceeds MIndex");
         let (start, len) = resolve_iter_range(len, range);
         crate::read::Slice::new(self.slice_expression(start, len))
     }
 
-    fn len(&self) -> Result<MIndex, Error> {
-        let len = private::IterLength::logical_len(self)?;
-        MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    fn len(&self) -> Result<usize, Error> {
+        private::IterLength::logical_len(self)
     }
 
     fn lower_read(self) -> Self::Read {
@@ -898,7 +886,7 @@ where
         private::Read::new(crate::read::FixedRead::new(self))
     }
 
-    fn count_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<MIndex, Error>
+    fn count_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<u32, Error>
     where
         Pred: crate::op::PredicateOp<Self::Item>,
     {
@@ -938,7 +926,7 @@ where
         >>::none_of(crate::read::FixedRead::new(self), exec, pred)
     }
 
-    fn find_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<Option<MIndex>, Error>
+    fn find_if_with<Pred>(self, exec: &Executor<R>, pred: Pred) -> Result<Option<u32>, Error>
     where
         Pred: crate::op::PredicateOp<Self::Item>,
     {
@@ -978,7 +966,7 @@ where
         self,
         exec: &Executor<R>,
         equal: Equal,
-    ) -> Result<Option<MIndex>, Error>
+    ) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Equal: crate::op::BinaryPredicateOp<Self::Item>,
@@ -989,7 +977,7 @@ where
         >>::adjacent_find(crate::read::FixedRead::new(self), exec, equal)
     }
 
-    fn is_sorted_until_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<MIndex, Error>
+    fn is_sorted_until_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>,
@@ -1011,7 +999,7 @@ where
         >>::is_sorted(crate::read::FixedRead::new(self), exec, less)
     }
 
-    fn min_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<MIndex>, Error>
+    fn min_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>,
@@ -1022,7 +1010,7 @@ where
         >>::min_element(crate::read::FixedRead::new(self), exec, less)
     }
 
-    fn max_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<MIndex>, Error>
+    fn max_element_with<Less>(self, exec: &Executor<R>, less: Less) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>,
@@ -1037,7 +1025,7 @@ where
         self,
         exec: &Executor<R>,
         less: Less,
-    ) -> Result<Option<(MIndex, MIndex)>, Error>
+    ) -> Result<Option<(u32, u32)>, Error>
     where
         Self: MIterStorageKernel<R>,
         Less: crate::op::BinaryPredicateOp<Self::Item>,
@@ -1122,7 +1110,7 @@ where
         exec: &Executor<R>,
         equal: Equal,
         output: Output,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Output: MIterMut<R>,
@@ -1143,10 +1131,10 @@ where
     fn select_with_flags<Output>(
         self,
         exec: &Executor<R>,
-        flags: crate::Column<MIndex>,
+        flags: crate::Column<u32>,
         invert: bool,
         output: Output,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Output: MIterMut<R>,
@@ -1169,7 +1157,7 @@ where
         exec: &Executor<R>,
         pred: Pred,
         output: Output,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Output: MIterMut<R>,
@@ -1190,8 +1178,8 @@ where
     fn indexed_with<Output>(
         self,
         exec: &Executor<R>,
-        indices: crate::Column<MIndex>,
-        flags: Option<crate::Column<MIndex>>,
+        indices: crate::Column<u32>,
+        flags: Option<crate::Column<u32>>,
         scatter: bool,
         output: Output,
     ) -> Result<(), Error>
@@ -1217,7 +1205,7 @@ where
         self,
         exec: &Executor<R>,
         op: Op,
-        flags: crate::Column<MIndex>,
+        flags: crate::Column<u32>,
         output: Output,
     ) -> Result<(), Error>
     where
@@ -1285,7 +1273,7 @@ where
         exec: &Executor<R>,
         right: Right,
         equal: Equal,
-    ) -> Result<Option<MIndex>, Error>
+    ) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Right: MIterStorageKernel<R, Item = Self::Item>,
@@ -1319,7 +1307,7 @@ where
         exec: &Executor<R>,
         needles: Needles,
         equal: Equal,
-    ) -> Result<Option<MIndex>, Error>
+    ) -> Result<Option<u32>, Error>
     where
         Self: MIterStorageKernel<R>,
         Needles: MIterStorageKernel<R, Item = Self::Item>,
@@ -1344,7 +1332,7 @@ where
         Values: MIterStorageKernel<R, Item = Self::Item>,
         Less: crate::op::BinaryPredicateOp<Self::Item>,
         Output: MIterMut<R>,
-        Output::Item: crate::WritableFrom<MIndex>,
+        Output::Item: crate::WritableFrom<u32>,
     {
         let source = <Self::Read as private::AnyRead<R>>::normalize(self.lower_read(), exec)?;
         let values = <Values::Read as private::AnyRead<R>>::normalize(values.lower_read(), exec)?;
@@ -1394,7 +1382,7 @@ where
         less: Less,
         output: Output,
         mode: u8,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Right: MIterStorageKernel<R, Item = Self::Item>,
@@ -1498,7 +1486,7 @@ where
         op: Op,
         key_output: KeyOutput,
         value_output: ValueOutput,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Values: MIterStorageKernel<R>,
@@ -1555,7 +1543,7 @@ where
         equal: Equal,
         key_output: KeyOutput,
         value_output: ValueOutput,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Self: MIterStorageKernel<R>,
         Values: MIterStorageKernel<R>,
@@ -1671,7 +1659,6 @@ where
         + crate::output::ReadOutput
         + crate::output::StageOutput<R, crate::read::Env0>
         + crate::selection::FillOutput<R>
-        + crate::selection::ReplaceOutput<R>
         + crate::output::SliceOutput,
     Output::Item: MItem<R> + crate::core::allocation::ScratchStorage<R>,
     Output::Slots: crate::output::PaddedOutputSlots<
@@ -1687,29 +1674,26 @@ where
     type LoweredOutput = Output;
     fn slice<Bounds>(&self, range: Bounds) -> Self::Slice
     where
-        Bounds: RangeBounds<MIndex>,
+        Bounds: RangeBounds<usize>,
     {
         let len = crate::output::OutputExpression::logical_len(self)
             .expect("cannot slice an output with an invalid length");
-        let len = MIndex::try_from(len).expect("output length exceeds MIndex");
         let (start, len) = resolve_iter_range(len, range);
         crate::read::Slice::new(self.slice_read(start..start + len))
     }
 
     fn slice_mut<Bounds>(&self, range: Bounds) -> Self::SliceMut
     where
-        Bounds: RangeBounds<MIndex>,
+        Bounds: RangeBounds<usize>,
     {
         let len = crate::output::OutputExpression::logical_len(self)
             .expect("cannot slice an output with an invalid length");
-        let len = MIndex::try_from(len).expect("output length exceeds MIndex");
         let (start, len) = resolve_iter_range(len, range);
         crate::output::Slice::new(self.slice_output(start..start + len))
     }
 
-    fn len(&self) -> Result<MIndex, Error> {
-        let len = crate::output::OutputExpression::logical_len(self)?;
-        MIndex::try_from(len).map_err(|_| Error::LengthTooLarge { len })
+    fn len(&self) -> Result<usize, Error> {
+        crate::output::OutputExpression::logical_len(self)
     }
 
     fn lower_output(self) -> Self::LoweredOutput {
@@ -1726,12 +1710,12 @@ use crate::core::facade as private;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::UnaryOp, vector::transform, zip2};
+/// use massively::{Executor, op, vector::transform, zip2};
 ///
 /// struct AddPair;
 ///
 /// #[cubecl::cube]
-/// impl UnaryOp<(u32, u32)> for AddPair {
+/// impl op::UnaryOp<(u32, u32)> for AddPair {
 ///     type Output = u32;
 ///
 ///     fn apply(value: (u32, u32)) -> u32 {
@@ -2162,7 +2146,7 @@ mod tests {
         >;
 
         assert_impl_all!(StoredOnlyValue: MItem<WgpuRuntime>);
-        assert_not_impl_any!(StoredOnlyValue: Materializable<WgpuRuntime>);
+        assert_not_impl_any!(StoredOnlyValue: ToCanonical<WgpuRuntime>);
         assert_impl_all!(Output: MIterMut<WgpuRuntime>);
 
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
@@ -2201,6 +2185,51 @@ mod tests {
         .unwrap();
 
         assert_eq!(exec.to_host(&permutation).unwrap(), vec![1, 2, 0]);
+    }
+
+    #[test]
+    fn value_only_by_key_algorithms_accept_read_only_keys() {
+        assert_not_impl_any!(ReadOnlyValue: ToCanonical<WgpuRuntime>);
+
+        let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
+
+        let sort_key_storage = exec.to_device(&[3_u32, 1, 2]);
+        let sort_keys = crate::read::Transform::new(sort_key_storage.column(), MakeReadOnly);
+        let sort_values = exec.to_device(&[30_u32, 10, 20]);
+        let sorted =
+            crate::vector::sort_by_key(&exec, sort_keys, sort_values.slice(..), ReadOnlyLess)
+                .unwrap();
+        assert_eq!(exec.to_host(&sorted).unwrap(), vec![10, 20, 30]);
+
+        let unique_key_storage = exec.to_device(&[1_u32, 1, 2, 2]);
+        let unique_keys = crate::read::Transform::new(unique_key_storage.column(), MakeReadOnly);
+        let unique_values = exec.to_device(&[10_u32, 11, 20, 21]);
+        let unique = crate::vector::unique_by_key(
+            &exec,
+            unique_keys,
+            unique_values.slice(..),
+            ReadOnlyEqual,
+        )
+        .unwrap();
+        assert_eq!(exec.to_host(&unique).unwrap(), vec![10, 20]);
+
+        let left_key_storage = exec.to_device(&[1_u32, 3]);
+        let right_key_storage = exec.to_device(&[2_u64, 4]);
+        let left_keys = crate::read::Transform::new(left_key_storage.column(), MakeReadOnly);
+        let right_keys =
+            crate::read::Transform::new(right_key_storage.column(), MakeReadOnlyFromU64);
+        let left_values = exec.to_device(&[10_u32, 30]);
+        let right_values = exec.to_device(&[20_u32, 40]);
+        let merged = crate::vector::merge_by_key(
+            &exec,
+            left_keys,
+            left_values.slice(..),
+            right_keys,
+            right_values.slice(..),
+            ReadOnlyLess,
+        )
+        .unwrap();
+        assert_eq!(exec.to_host(&merged).unwrap(), vec![10, 20, 30, 40]);
     }
 
     #[test]

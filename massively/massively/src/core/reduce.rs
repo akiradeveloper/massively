@@ -48,13 +48,12 @@ const TILE_SIZE: usize = BLOCK_SIZE as usize * ITEMS_PER_UNIT;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::reduce};
-/// use massively::op::ReductionOp;
+/// use massively::{Executor, op, vector::reduce};
 ///
 /// struct Add;
 ///
 /// #[cubecl::cube]
-/// impl ReductionOp<u32> for Add {
+/// impl op::ReductionOp<u32> for Add {
 ///     fn apply(lhs: u32, rhs: u32) -> u32 {
 ///         lhs + rhs
 ///     }
@@ -1866,7 +1865,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, len));
+        let input = Permute::new(
+            seven,
+            crate::Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
+        );
         let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
 
         let output = reduce(&exec, input, init, AddSeven).unwrap();

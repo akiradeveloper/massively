@@ -3,10 +3,9 @@
 use cubecl::prelude::*;
 
 use crate::{
-    A1, CanonicalAlloc, CanonicalStorage, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch,
-    Error, Executor, ReadExpression, S1, StorageLayout, Transform, Zip,
+    A1, CanonicalStorage, Column, Constant, DeviceSliceMut, DeviceVec, Dispatch, Error, Executor,
+    ReadExpression, S1, StorageLayout, Transform, Zip,
     indexed::GatherInput,
-    masked::MaskedCopyInput,
     op::UnaryOp,
     output::{LowerOutputExpression, OutputExpression, SliceOutput, StageOutput},
     read::{Env0, Env1, LowerReadExpression},
@@ -39,23 +38,23 @@ fn selected_indices_kernel(positions: &[u32], len: &[u32], invert: &[u32], indic
     }
 }
 
-struct IsNonZero;
+struct IsTrue;
 
 #[cubecl::cube]
-impl UnaryOp<u32> for IsNonZero {
+impl UnaryOp<bool> for IsTrue {
     type Output = u32;
-    fn apply(input: u32) -> u32 {
-        if input != 0u32 { 1u32 } else { 0u32 }
+    fn apply(input: bool) -> u32 {
+        if input { 1u32 } else { 0u32 }
     }
 }
 
-struct IsZero;
+struct IsFalse;
 
 #[cubecl::cube]
-impl UnaryOp<u32> for IsZero {
+impl UnaryOp<bool> for IsFalse {
     type Output = u32;
-    fn apply(input: u32) -> u32 {
-        if input == 0 { 1u32 } else { 0u32 }
+    fn apply(input: bool) -> u32 {
+        if input { 0u32 } else { 1u32 }
     }
 }
 
@@ -65,20 +64,6 @@ struct SumU32;
 impl ReductionOp<u32> for SumU32 {
     fn apply(lhs: u32, rhs: u32) -> u32 {
         lhs + rhs
-    }
-}
-
-#[cubecl::cube(launch_unchecked)]
-fn replace_where_scalar_kernel<T: CubePrimitive>(
-    replacement: &[T],
-    flags: &[u32],
-    len: &[u32],
-    output_offset: &[u32],
-    output: &mut [T],
-) {
-    let index = ABSOLUTE_POS as usize;
-    if index < len[0] as usize && flags[index] != 0 {
-        output[output_offset[0] as usize + index] = replacement[0];
     }
 }
 
@@ -159,158 +144,40 @@ where
     }
 }
 
-/// Recursive conditional replacement over output leaves.
+/// Internal capability to consume a logical stencil expression.
 #[doc(hidden)]
-pub trait ReplaceOutput<R: Runtime>: OutputExpression + Sized {
-    fn replace_output(
-        self,
-        exec: &Executor<R>,
-        value: Self::Item,
-        flags: &DeviceVec<R, u32>,
-    ) -> Result<(), Error>;
-}
-
-impl<R, T> ReplaceOutput<R> for DeviceSliceMut<T>
-where
-    R: Runtime,
-    T: crate::MStorageElement + StorageLayout<StorageArity = S1>,
-{
-    fn replace_output(
-        self,
-        exec: &Executor<R>,
-        value: T,
-        flags: &DeviceVec<R, u32>,
-    ) -> Result<(), Error> {
-        if self.len() != flags.len() {
-            return Err(Error::LengthMismatch {
-                left: flags.len(),
-                right: self.len(),
-            });
-        }
-        if flags.is_empty() {
-            return Ok(());
-        }
-        if self.owner != exec.id() {
-            return Err(Error::ForeignExecutor);
-        }
-        let len =
-            u32::try_from(flags.len()).map_err(|_| Error::LengthTooLarge { len: flags.len() })?;
-        let value_handle = exec.client().create_from_slice(T::as_bytes(&[value]));
-        let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len]));
-        let offset_handle = exec
-            .client()
-            .create_from_slice(u32::as_bytes(&[self.offset]));
-        unsafe {
-            replace_where_scalar_kernel::launch_unchecked::<T, R>(
-                exec.client(),
-                crate::launch::cube_count_1d(flags.len().div_ceil(BLOCK_SIZE as usize))?,
-                CubeDim::new_1d(BLOCK_SIZE),
-                BufferArg::from_raw_parts(value_handle, 1),
-                BufferArg::from_raw_parts(flags.handle.clone(), flags.len()),
-                BufferArg::from_raw_parts(len_handle, 1),
-                BufferArg::from_raw_parts(offset_handle, 1),
-                BufferArg::from_raw_parts(self.handle.clone(), self.buffer_len),
-            );
-        }
-        Ok(())
-    }
-}
-
-impl<R, Left, Right> ReplaceOutput<R> for Zip<Left, Right>
-where
-    R: Runtime,
-    Left: ReplaceOutput<R>,
-    Right: ReplaceOutput<R>,
-    Zip<Left, Right>: OutputExpression<Item = (Left::Item, Right::Item)>,
-{
-    fn replace_output(
-        self,
-        exec: &Executor<R>,
-        value: Self::Item,
-        flags: &DeviceVec<R, u32>,
-    ) -> Result<(), Error> {
-        self.0.replace_output(exec, value.0, flags)?;
-        self.1.replace_output(exec, value.1, flags)
-    }
-}
-
-impl<R, Output, Source, Slots> ReplaceOutput<R>
-    for crate::output::ReassociatedOutput<Output, Source, Slots>
-where
-    R: Runtime,
-    Output: ReplaceOutput<R>,
-    Source: StorageLayout,
-    Output::Item: crate::WritableFrom<Source>,
-    Slots: crate::output::OutputSlotEnvironment<StorageArity = Source::StorageArity>,
-{
-    fn replace_output(
-        self,
-        exec: &Executor<R>,
-        value: Source,
-        flags: &DeviceVec<R, u32>,
-    ) -> Result<(), Error> {
-        let value = <Output::Item as crate::WritableFrom<Source>>::write_from(value);
-        self.into_inner().replace_output(exec, value, flags)
-    }
-}
-
-impl<R, Output> ReplaceOutput<R> for crate::output::Slice<R, Output>
-where
-    R: Runtime,
-    Output: ReplaceOutput<R>,
-{
-    fn replace_output(
-        self,
-        exec: &Executor<R>,
-        value: Self::Item,
-        flags: &DeviceVec<R, u32>,
-    ) -> Result<(), Error> {
-        self.into_inner().replace_output(exec, value, flags)
-    }
-}
-
-/// Internal capability to normalize an arbitrary u32 stencil expression.
-#[doc(hidden)]
-pub trait FlagInput<R: Runtime>: ReadExpression<Item = u32> + Sized {
+pub trait FlagInput<R: Runtime>: ReadExpression<Item = bool> + Sized {
     fn flag_len(&self) -> Result<usize, Error>;
     fn selected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
     fn rejected_control(self, exec: &Executor<R>) -> Result<SelectionControl<R>, Error>;
-    fn materialize_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Stencil> FlagInput<R> for Stencil
 where
     R: Runtime,
-    Stencil: ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Dispatch<crate::A13, crate::S12>: MaterializeDispatch<
-            R,
-            Stencil,
-            DeviceSliceMut<u32>,
-            crate::read::KernelReadSlots<Stencil::Slots>,
-            crate::output::KernelOutputSlots<Env1<u32>>,
-        >,
-    Transform<Stencil, IsNonZero>:
+    Stencil: ReadExpression<Item = bool> + LowerReadExpression + StageRead<R, Env0>,
+    Transform<Stencil, IsTrue>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
-    Transform<Stencil, IsZero>:
+    Transform<Stencil, IsFalse>:
         ReadExpression<Item = u32> + LowerReadExpression + StageRead<R, Env0>,
     Dispatch<crate::A13, crate::S12>: InclusiveScanDispatch<
             R,
-            Transform<Stencil, IsNonZero>,
+            Transform<Stencil, IsTrue>,
             DeviceSliceMut<u32>,
             u32,
             crate::read::KernelReadSlots<
-                <Transform<Stencil, IsNonZero> as LowerReadExpression>::Slots,
+                <Transform<Stencil, IsTrue> as LowerReadExpression>::Slots,
             >,
             crate::output::KernelOutputSlots<Env1<u32>>,
             SumU32,
         >,
     Dispatch<crate::A13, crate::S12>: InclusiveScanDispatch<
             R,
-            Transform<Stencil, IsZero>,
+            Transform<Stencil, IsFalse>,
             DeviceSliceMut<u32>,
             u32,
             crate::read::KernelReadSlots<
-                <Transform<Stencil, IsZero> as LowerReadExpression>::Slots,
+                <Transform<Stencil, IsFalse> as LowerReadExpression>::Slots,
             >,
             crate::output::KernelOutputSlots<Env1<u32>>,
             SumU32,
@@ -326,7 +193,7 @@ where
         let positions = exec.alloc_canonical::<u32>(len);
         inclusive_scan(
             exec,
-            Transform::new(self, IsNonZero),
+            Transform::new(self, IsTrue),
             SumU32,
             positions.slice_mut(..),
         )?;
@@ -338,18 +205,11 @@ where
         let positions = exec.alloc_canonical::<u32>(len);
         inclusive_scan(
             exec,
-            Transform::new(self, IsZero),
+            Transform::new(self, IsFalse),
             SumU32,
             positions.slice_mut(..),
         )?;
         SelectionControl::from_positions(exec, positions, false)
-    }
-
-    fn materialize_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error> {
-        let len = self.logical_len()?;
-        let flags = exec.alloc_canonical::<u32>(len);
-        materialize(exec, self, flags.slice_mut(..))?;
-        Ok(flags)
     }
 }
 
@@ -468,7 +328,8 @@ pub trait CopySelected<R: Runtime, Output>: ReadExpression + Sized {
 impl<R, Input, Output> CopySelected<R, Output> for Input
 where
     R: Runtime,
-    Input: GatherInput<R, Column<u32>, Output> + StageRead<R, Env0>,
+    Input:
+        GatherInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output> + StageRead<R, Env0>,
     Output: OutputExpression,
 {
     fn source_len(&self) -> Result<usize, Error> {
@@ -499,7 +360,11 @@ where
         if count == 0 {
             return Ok(0);
         }
-        self.gather(exec, control.indices.column(), output)?;
+        self.gather(
+            exec,
+            Transform::new(control.indices.column(), crate::op::U32ToUsize),
+            output,
+        )?;
         Ok(count)
     }
 }
@@ -602,7 +467,7 @@ where
     output.fill_output(exec, value)
 }
 
-/// Replaces items whose stencil is nonzero.
+/// Replaces items whose logical stencil is true.
 pub(crate) fn replace_where<R, Stencil, Output>(
     exec: &Executor<R>,
     value: Output::Item,
@@ -612,7 +477,13 @@ pub(crate) fn replace_where<R, Stencil, Output>(
 where
     R: Runtime,
     Stencil: FlagInput<R>,
-    Output: ReplaceOutput<R>,
+    Output: OutputExpression,
+    Output::Item: crate::allocation::ScratchStorage<R>,
+    <Output::Item as crate::allocation::ScratchStorage<R>>::Storage: CanonicalStorage<R>,
+    <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as CanonicalStorage<R>>::Write:
+        FillOutput<R>,
+    <<Output::Item as crate::allocation::ScratchStorage<R>>::Storage as CanonicalStorage<R>>::Read:
+        crate::indexed::IndexedCopyInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output>,
 {
     let stencil_len = stencil.flag_len()?;
     let output_len = output.logical_len()?;
@@ -622,11 +493,27 @@ where
             right: output_len,
         });
     }
-    let flags = stencil.materialize_flags(exec)?;
-    output.replace_output(exec, value, &flags)
+    let control = stencil.selected_control(exec)?;
+    if control.count() == 0 {
+        return Ok(());
+    }
+    let replacements = <Output::Item as crate::allocation::ScratchStorage<R>>::alloc_scratch(
+        exec,
+        control.count() as usize,
+    );
+    let replacement = <<Output::Item as crate::allocation::ScratchStorage<R>>::ScratchItem as crate::WritableFrom<
+        Output::Item,
+    >>::write_from(value);
+    replacements.write().fill_output(exec, replacement)?;
+    crate::core::scatter::scatter(
+        exec,
+        replacements.read(),
+        Transform::new(control.indices().column(), crate::op::U32ToUsize),
+        output,
+    )
 }
 
-/// Internal capability for masked transform through canonical temporary storage.
+/// Internal capability for a transform selected by a logical stencil.
 #[doc(hidden)]
 pub trait TransformWhereInput<R: Runtime, Stencil, Output, Op>: ReadExpression + Sized {
     fn transform_where(
@@ -643,32 +530,12 @@ where
     R: Runtime,
     Input: ReadExpression + StageRead<R, Env0>,
     Op: UnaryOp<Input::Item>,
-    Op::Output: CanonicalAlloc<R>,
-    <Op::Output as StorageLayout>::StorageLeaves: crate::storage::StorePadded12,
-    <Op::Output as CanonicalAlloc<R>>::CanonicalStorage: CanonicalStorage<R>,
-    Transform<Input, Op>: ReadExpression<Item = Op::Output>
-        + LowerReadExpression
-        + StageRead<R, Env0>,
-    <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
-        LowerOutputExpression + StageOutput<R, Env0>,
-    <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots:
-        crate::output::PaddedOutputSlots,
-    <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as OutputExpression>::Item:
-        crate::WritableFrom<<Op as UnaryOp<Input::Item>>::Output>,
-    Dispatch<crate::A13, crate::S12>:
-        MaterializeDispatch<
+    Transform<Input, Op>: ReadExpression<Item = Op::Output>,
+    Transform<Input, Op>: crate::indexed::IndexedCopyInput<
             R,
-            Transform<Input, Op>,
-            <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write,
-                crate::read::KernelReadSlots<
-                    <Transform<Input, Op> as LowerReadExpression>::Slots,
-                >,
-            crate::output::KernelOutputSlots<
-                <<<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write as LowerOutputExpression>::Slots,
-            >,
+            Transform<crate::Counting, crate::op::U32ToUsize>,
+            Output,
         >,
-    <<Op::Output as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read:
-        MaskedCopyInput<R, Output>,
     Stencil: FlagInput<R>,
     Output: OutputExpression,
 {
@@ -683,19 +550,33 @@ where
         let stencil_len = stencil.flag_len()?;
         let output_len = output.logical_len()?;
         if input_len != stencil_len {
-            return Err(Error::LengthMismatch { left: input_len, right: stencil_len });
+            return Err(Error::LengthMismatch {
+                left: input_len,
+                right: stencil_len,
+            });
         }
         if input_len != output_len {
-            return Err(Error::LengthMismatch { left: input_len, right: output_len });
+            return Err(Error::LengthMismatch {
+                left: input_len,
+                right: output_len,
+            });
         }
-        let temporary = exec.alloc_canonical::<Op::Output>(input_len);
-        crate::transform::transform(exec, self, op, temporary.write())?;
-        let flags = stencil.materialize_flags(exec)?;
-        temporary.read().masked_copy(exec, &flags, output)
+        let control = stencil.selected_control(exec)?;
+        if control.count() == 0 {
+            return Ok(());
+        }
+        crate::indexed::IndexedCopyInput::indexed_copy_selected(
+            Transform::new(self, op),
+            exec,
+            Transform::new(crate::Counting::new(0, input_len), crate::op::U32ToUsize),
+            Some(control.indices()),
+            false,
+            output,
+        )
     }
 }
 
-/// Applies `op` only where the stencil is nonzero, preserving other output items.
+/// Applies `op` only where the logical stencil is true.
 pub(crate) fn transform_where<R, Input, Stencil, Output, Op>(
     exec: &Executor<R>,
     input: Input,
@@ -732,7 +613,13 @@ mod tests {
             out_c.slice_mut(..),
         );
 
-        let count = copy_where(&exec, input, flags.column(), output).unwrap();
+        let count = copy_where(
+            &exec,
+            input,
+            Transform::new(flags.column(), crate::op::U32ToBool),
+            output,
+        )
+        .unwrap();
         assert_eq!(count, 2);
         assert_eq!(
             exec.to_host(&out_a.slice(..count as usize)).unwrap(),
@@ -755,7 +642,7 @@ mod tests {
         let positions = exec.alloc_canonical::<u32>(4);
         inclusive_scan(
             &exec,
-            Transform::new(flags.column(), IsNonZero),
+            Transform::new(Transform::new(flags.column(), crate::op::U32ToBool), IsTrue),
             SumU32,
             positions.slice_mut(..),
         )
@@ -804,7 +691,16 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        assert_eq!(copy_where(&exec, input, flags.column(), output).unwrap(), 2);
+        assert_eq!(
+            copy_where(
+                &exec,
+                input,
+                Transform::new(flags.column(), crate::op::U32ToBool),
+                output,
+            )
+            .unwrap(),
+            2
+        );
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(&output.slice(..2)).unwrap(),
@@ -819,8 +715,13 @@ mod tests {
         let input = exec.to_device(&[10_u32, 20, 30, 40]);
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
         let output = exec.to_device(&[0_u32; 4]);
-        let count =
-            remove_where(&exec, input.column(), flags.column(), output.slice_mut(..)).unwrap();
+        let count = remove_where(
+            &exec,
+            input.column(),
+            Transform::new(flags.column(), crate::op::U32ToBool),
+            output.slice_mut(..),
+        )
+        .unwrap();
         assert_eq!(count, 2);
         assert_eq!(exec.to_host(&output.slice(..2)).unwrap(), vec![10, 30]);
     }
@@ -853,7 +754,13 @@ mod tests {
         let output = || Zip::new(Zip::new(a.slice_mut(..), b.slice_mut(..)), c.slice_mut(..));
         fill(&exec, ((7_u32, 2.5_f32), -3_i32), output()).unwrap();
         let flags = exec.to_device(&[0_u32, 1, 0, 1]);
-        replace_where(&exec, ((9_u32, 4.5_f32), -8_i32), flags.column(), output()).unwrap();
+        replace_where(
+            &exec,
+            ((9_u32, 4.5_f32), -8_i32),
+            Transform::new(flags.column(), crate::op::U32ToBool),
+            output(),
+        )
+        .unwrap();
         assert_eq!(exec.to_host(&a).unwrap(), vec![7, 9, 7, 9]);
         assert_eq!(exec.to_host(&b).unwrap(), vec![2.5, 4.5, 2.5, 4.5]);
         assert_eq!(exec.to_host(&c).unwrap(), vec![-3, -8, -3, -8]);
@@ -887,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    fn transform_where_normalizes_eval8_before_masked_storage7_copy() {
+    fn transform_where_normalizes_eval8_before_selected_storage7_copy() {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
         let inputs: Vec<_> = (0_u32..7)
             .map(|base| exec.to_device(&[base * 10 + 1, base * 10 + 2, base * 10 + 3]))
@@ -910,7 +817,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, 3));
+        let input = Permute::new(
+            seven,
+            Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
+        );
         let output = Zip::new(
             Zip::new(
                 Zip::new(
@@ -928,7 +838,14 @@ mod tests {
             outputs[6].slice_mut(..),
         );
 
-        transform_where(&exec, input, IncrementSeven, stencil.column(), output).unwrap();
+        transform_where(
+            &exec,
+            input,
+            IncrementSeven,
+            Transform::new(stencil.column(), crate::op::U32ToBool),
+            output,
+        )
+        .unwrap();
         for (column, output) in outputs.iter().enumerate() {
             assert_eq!(
                 exec.to_host(output).unwrap(),

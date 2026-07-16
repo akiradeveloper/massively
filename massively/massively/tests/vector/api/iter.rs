@@ -281,7 +281,7 @@ fn mutable_slice_adapters_compose_and_can_be_read_back() {
     massively::vector::replace_where(
         &exec,
         (7_u32, 9_u32),
-        lazy::constant(1_u32).take(1),
+        lazy::constant(true).take(1),
         output.slice_mut(1..4).slice_mut(1..2),
     )
     .unwrap();
@@ -320,7 +320,8 @@ fn gather_keeps_an_eval8_value_expression_lazy() {
         SumFour,
     );
     let values = lazy::transform(zip2(left, right), AddPair);
+    let indices = lazy::transform(indices.slice(..), massively::op::U32ToUsize);
 
-    let output = gather(&exec, values, indices.slice(..)).unwrap();
+    let output = gather(&exec, values, indices).unwrap();
     assert_eq!(exec.to_host(&output).unwrap(), vec![188, 28]);
 }

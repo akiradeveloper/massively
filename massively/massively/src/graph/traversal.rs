@@ -6,8 +6,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    Allocable, Canonicalizable, Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec,
-    Materializable, WritableFrom,
+    CanonicalForm, Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
     op::BinaryPredicateOp,
     op::ReductionOp,
     op::UnaryOp,
@@ -19,8 +18,8 @@ use super::{Csr, EdgeExpr, control::TraversalControl, expr::EdgeExprImpl};
 struct IndexLess;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<MIndex> for IndexLess {
-    fn apply(lhs: MIndex, rhs: MIndex) -> bool {
+impl BinaryPredicateOp<u32> for IndexLess {
+    fn apply(lhs: u32, rhs: u32) -> bool {
         lhs < rhs
     }
 }
@@ -28,8 +27,8 @@ impl BinaryPredicateOp<MIndex> for IndexLess {
 struct IndexEqual;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<MIndex> for IndexEqual {
-    fn apply(lhs: MIndex, rhs: MIndex) -> bool {
+impl BinaryPredicateOp<u32> for IndexEqual {
+    fn apply(lhs: u32, rhs: u32) -> bool {
         lhs == rhs
     }
 }
@@ -88,9 +87,9 @@ pub fn traverse<R, Destinations, Offsets, Frontier>(
 ) -> Result<Traversal<R>, Error>
 where
     R: Runtime,
-    Destinations: MIter<R, Item = MIndex>,
-    Offsets: MIter<R, Item = MIndex>,
-    Frontier: MIter<R, Item = MIndex>,
+    Destinations: MIter<R, Item = u32>,
+    Offsets: MIter<R, Item = u32>,
+    Frontier: MIter<R, Item = u32>,
 {
     let (destinations, offsets) = graph.into_parts();
     Ok(Traversal {
@@ -100,7 +99,7 @@ where
 
 impl<R: Runtime> Traversal<R> {
     /// Number of edges selected by this traversal.
-    pub const fn edge_count(&self) -> MIndex {
+    pub const fn edge_count(&self) -> u32 {
         self.control.output_len
     }
 
@@ -119,14 +118,11 @@ where
     R: Runtime,
     Expr: EdgeExpr<R> + EdgeExprImpl<R>,
     Map: UnaryOp<Expr::Item>,
-    Map::Output: Allocable<R>
-        + Canonicalizable<Canonical = Map::Output>
-        + Materializable<R, Materialized = Map::Output>
-        + Copy,
+    Map::Output: ToCanonical<R> + Copy,
 {
     /// Returns one mapped item per traversed edge.
     pub fn emit(self, exec: &Executor<R>) -> Result<MVec<R, Map::Output>, Error> {
-        let output = exec.alloc_mvec::<Map::Output>(self.traversal.control.output_len as usize);
+        let output = exec.alloc::<Map::Output>(self.traversal.control.output_len as usize);
         self.emit_into(exec, output.slice_mut(..))?;
         Ok(output)
     }
@@ -140,7 +136,15 @@ where
         let input = self.expr.materialize(exec, &self.traversal.control)?;
         crate::vector::transform_into(exec, input.slice(..), self.map, output)
     }
+}
 
+impl<R, Expr, Map> MappedTraversal<R, Expr, Map>
+where
+    R: Runtime,
+    Expr: EdgeExpr<R> + EdgeExprImpl<R>,
+    Map: UnaryOp<Expr::Item>,
+    Map::Output: CanonicalForm<R> + ToCanonical<R, Canonical = Map::Output> + Copy,
+{
     /// Maps every selected edge and reduces results independently for each input source.
     pub fn reduce_by_source<ReduceOp>(
         self,
@@ -151,7 +155,7 @@ where
     where
         ReduceOp: ReductionOp<Map::Output>,
     {
-        let output = exec.alloc_mvec::<Map::Output>(self.traversal.control.source_count as usize);
+        let output = exec.alloc::<Map::Output>(self.traversal.control.source_count as usize);
         self.reduce_by_source_into(exec, init, reduce, output.slice_mut(..))?;
         Ok(output)
     }
@@ -170,8 +174,7 @@ where
         ReduceOp: ReductionOp<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        let mapped =
-            <Map::Output as Allocable<R>>::alloc(exec, self.traversal.control.output_len as usize);
+        let mapped = exec.alloc::<Map::Output>(self.traversal.control.output_len as usize);
         crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
         ForEachSegment(Reduce(reduce, init)).run_into(
             exec,
@@ -193,7 +196,8 @@ where
     where
         ReduceOp: ReductionOp<Map::Output>,
     {
-        let output = crate::vector::fill(exec, self.traversal.control.vertex_count as usize, init)?;
+        let output = exec.alloc::<Map::Output>(self.traversal.control.vertex_count as usize);
+        crate::vector::fill(exec, init, output.slice_mut(..))?;
         self.reduce_by_destination_into(exec, init, reduce, output.slice_mut(..))?;
         Ok(output)
     }
@@ -207,14 +211,14 @@ where
         output: Output,
     ) -> Result<(), Error>
     where
+        Map::Output: crate::api::iter::ScratchAbi<R>,
         Output: MIterMut<R, Item = Map::Output>,
         ReduceOp: ReductionOp<Map::Output>,
     {
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        let mapped =
-            <Map::Output as Allocable<R>>::alloc(exec, self.traversal.control.output_len as usize);
+        let mapped = exec.alloc::<Map::Output>(self.traversal.control.output_len as usize);
         crate::vector::transform_into(exec, input.slice(..), self.map, mapped.slice_mut(..))?;
-        crate::vector::scatter_reduce(
+        crate::vector::scatter_reduce_raw(
             exec,
             mapped.slice(..),
             self.traversal.control.destinations.slice(..),
@@ -250,18 +254,19 @@ where
     pub fn relax_min_by_destination<State, StateOutput>(
         self,
         exec: &Executor<R>,
-        infinity: MIndex,
+        infinity: u32,
         state: State,
         state_output: StateOutput,
-    ) -> Result<MVec<R, MIndex>, Error>
+    ) -> Result<MVec<R, u32>, Error>
     where
-        Map: UnaryOp<Expr::Item, Output = MIndex>,
-        State: MIter<R, Item = MIndex>,
-        StateOutput: MIterMut<R, Item = MIndex>,
-        MIndex: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, MIndex>>,
+        Map: UnaryOp<Expr::Item, Output = u32>,
+        State: MIter<R, Item = u32>,
+        StateOutput: MIterMut<R, Item = u32>,
+        u32: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, u32>>
+            + ToCanonical<R, Canonical = u32>,
     {
         let capacity = self.traversal.control.output_len as usize;
-        let mut next = exec.alloc_mvec::<MIndex>(capacity);
+        let mut next = exec.alloc::<u32>(capacity);
         let len = self.relax_min_by_destination_into(
             exec,
             infinity,
@@ -269,7 +274,7 @@ where
             state_output,
             next.slice_mut(..),
         )?;
-        next.truncate(len);
+        next.truncate(len as usize);
         Ok(next)
     }
 
@@ -277,17 +282,17 @@ where
     fn relax_min_by_destination_into<State, StateOutput, Next>(
         self,
         exec: &Executor<R>,
-        infinity: MIndex,
+        infinity: u32,
         state: State,
         state_output: StateOutput,
         next: Next,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
-        Map: UnaryOp<Expr::Item, Output = MIndex>,
-        State: MIter<R, Item = MIndex>,
-        StateOutput: MIterMut<R, Item = MIndex>,
-        Next: MIterMut<R, Item = MIndex>,
-        MIndex: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, MIndex>>,
+        Map: UnaryOp<Expr::Item, Output = u32>,
+        State: MIter<R, Item = u32>,
+        StateOutput: MIterMut<R, Item = u32>,
+        Next: MIterMut<R, Item = u32>,
+        u32: crate::CanonicalAlloc<R, CanonicalStorage = crate::DeviceVec<R, u32>>,
     {
         let edge_count = self.traversal.control.output_len;
         if edge_count == 0 {
@@ -295,11 +300,11 @@ where
         }
 
         let input = self.expr.materialize(exec, &self.traversal.control)?;
-        let proposals = exec.alloc_column::<MIndex>(edge_count as usize);
+        let proposals = exec.alloc_column::<u32>(edge_count as usize);
         crate::vector::transform_into(exec, input.slice(..), self.map, proposals.slice_mut(..))?;
 
-        let sorted_destinations = exec.alloc_column::<MIndex>(edge_count as usize);
-        let sorted_proposals = exec.alloc_column::<MIndex>(edge_count as usize);
+        let sorted_destinations = exec.alloc_column::<u32>(edge_count as usize);
+        let sorted_proposals = exec.alloc_column::<u32>(edge_count as usize);
         crate::vector::sort_by_key_into(
             exec,
             self.traversal.control.destinations.slice(..),
@@ -309,8 +314,8 @@ where
             sorted_proposals.slice_mut(..),
         )?;
 
-        let unique_destinations = exec.alloc_column::<MIndex>(edge_count as usize);
-        let reduced_proposals = exec.alloc_column::<MIndex>(edge_count as usize);
+        let unique_destinations = exec.alloc_column::<u32>(edge_count as usize);
+        let reduced_proposals = exec.alloc_column::<u32>(edge_count as usize);
         let unique_len = crate::vector::reduce_by_key_into(
             exec,
             sorted_destinations.slice(..),
@@ -322,8 +327,8 @@ where
             reduced_proposals.slice_mut(..),
         )?;
 
-        let old_state = exec.alloc_column::<MIndex>(unique_len as usize);
-        crate::vector::gather_into(
+        let old_state = exec.alloc_column::<u32>(unique_len as usize);
+        crate::vector::gather_raw_into(
             exec,
             state,
             unique_destinations.slice(..unique_len as usize),
@@ -336,24 +341,24 @@ where
                 reduced_proposals.slice(..unique_len as usize),
             )
         };
-        let flags = exec.alloc_column::<MIndex>(unique_len as usize);
+        let flags = exec.alloc_column::<u32>(unique_len as usize);
         crate::vector::transform_into(exec, state_and_proposal(), LoweredU32, flags.slice_mut(..))?;
 
-        let new_state = exec.alloc_column::<MIndex>(unique_len as usize);
+        let new_state = exec.alloc_column::<u32>(unique_len as usize);
         crate::vector::transform_into(
             exec,
             state_and_proposal(),
             ApplyMinU32,
             new_state.slice_mut(..),
         )?;
-        crate::vector::scatter(
+        crate::vector::scatter_raw(
             exec,
             new_state.slice(..),
             unique_destinations.slice(..unique_len as usize),
             state_output,
         )?;
 
-        crate::vector::copy_where_into(
+        crate::vector::copy_where_raw_into(
             exec,
             unique_destinations.slice(..unique_len as usize),
             flags.slice(..),

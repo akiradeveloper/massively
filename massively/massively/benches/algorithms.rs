@@ -4,7 +4,7 @@ use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_ma
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 use massively::{
-    Executor, op::BinaryPredicateOp, op::ReductionOp, op::UnaryOp, vector::copy_where,
+    Executor, lazy, op::BinaryPredicateOp, op::ReductionOp, op::UnaryOp, vector::copy_where,
     vector::gather, vector::inclusive_scan, vector::inclusive_scan_by_key, vector::reduce,
     vector::reduce_by_key, vector::scatter, vector::sort_by_key, vector::transform,
 };
@@ -66,7 +66,7 @@ fn bench_linear_algorithms(c: &mut Criterion) {
         let output = exec.alloc::<f32>(len);
         let flags = exec.to_device(
             &(0..len)
-                .map(|index| (index % 2 == 0) as u32)
+                .map(|index| u32::from(index % 2 == 0))
                 .collect::<Vec<_>>(),
         );
         let indices = exec.to_device(&(0..len).rev().map(|index| index as u32).collect::<Vec<_>>());
@@ -89,12 +89,26 @@ fn bench_linear_algorithms(c: &mut Criterion) {
         });
         group.bench_function(BenchmarkId::new("copy_where_half", len), |b| {
             b.iter(|| {
-                black_box(copy_where(&exec, values.slice(..), flags.slice(..)).unwrap());
+                black_box(
+                    copy_where(
+                        &exec,
+                        values.slice(..),
+                        lazy::transform(flags.slice(..), massively::op::U32ToBool),
+                    )
+                    .unwrap(),
+                );
             })
         });
         group.bench_function(BenchmarkId::new("gather_reverse", len), |b| {
             b.iter(|| {
-                black_box(gather(&exec, values.slice(..), indices.slice(..)).unwrap());
+                black_box(
+                    gather(
+                        &exec,
+                        values.slice(..),
+                        lazy::transform(indices.slice(..), massively::op::U32ToUsize),
+                    )
+                    .unwrap(),
+                );
                 exec.sync().unwrap();
             })
         });
@@ -103,7 +117,7 @@ fn bench_linear_algorithms(c: &mut Criterion) {
                 scatter(
                     &exec,
                     values.slice(..),
-                    indices.slice(..),
+                    lazy::transform(indices.slice(..), massively::op::U32ToUsize),
                     output.slice_mut(..),
                 )
                 .unwrap();

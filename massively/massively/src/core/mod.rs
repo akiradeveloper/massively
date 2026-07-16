@@ -8,7 +8,6 @@ pub(crate) mod facade;
 pub(crate) mod indexed;
 pub(crate) mod iter;
 pub(crate) mod launch;
-pub(crate) mod masked;
 pub(crate) mod merge;
 pub(crate) mod op;
 pub(crate) mod ordering;

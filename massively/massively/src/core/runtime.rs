@@ -139,7 +139,8 @@ impl<R: Runtime> Executor<R> {
     /// use massively::{Executor, vector::fill};
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    /// let output = fill(&exec, 4, 7_u32).unwrap();
+    /// let output = exec.alloc::<u32>(4);
+    /// fill(&exec, 7_u32, output.slice_mut(..)).unwrap();
     /// exec.sync().unwrap();
     /// ```
     pub fn sync(&self) -> Result<(), Error> {
@@ -226,7 +227,7 @@ impl<R: Runtime, T> DeviceVec<R, T> {
     ///
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4]);
-    /// replace_where(&exec, 9, lazy::constant(1_u32).take(2), values.slice_mut(1..3)).unwrap();
+    /// replace_where(&exec, 9, lazy::constant(true).take(2), values.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 9, 9, 4]);
     /// ```
@@ -346,7 +347,7 @@ impl<T> DeviceSliceMut<T> {
     /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
     /// let values = exec.to_device(&[1_u32, 2, 3, 4, 5]);
     /// let writable = values.slice_mut(1..5);
-    /// replace_where(&exec, 9, lazy::constant(1_u32).take(2), writable.slice_mut(1..3)).unwrap();
+    /// replace_where(&exec, 9, lazy::constant(true).take(2), writable.slice_mut(1..3)).unwrap();
     ///
     /// assert_eq!(exec.to_host(&values).unwrap(), vec![1, 2, 9, 9, 5]);
     /// ```

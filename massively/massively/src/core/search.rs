@@ -883,7 +883,7 @@ mod tests {
                         ),
                     ),
                 ),
-                Counting::new(0, 3),
+                crate::Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
             )
         };
         let make_right = || {
@@ -904,7 +904,7 @@ mod tests {
                         ),
                     ),
                 ),
-                Counting::new(0, 3),
+                crate::Transform::new(Counting::new(0, 3), crate::op::U32ToUsize),
             )
         };
 

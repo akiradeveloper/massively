@@ -30,13 +30,12 @@ const BLOCK_SIZE: u32 = 256;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::sort};
-/// use massively::op::BinaryPredicateOp;
+/// use massively::{Executor, op, vector::sort};
 ///
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Less {
+/// impl op::BinaryPredicateOp<u32> for Less {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs < rhs
 ///     }
@@ -196,6 +195,8 @@ macro_rules! define_adjacent_flags_kernel {
         >(
             $( $slot: &[$leaf], )+
             offsets: &[u32],
+            order: &[u32],
+            use_order: &[u32],
             len: &[u32],
             flags: &mut [u32],
         ) {
@@ -204,9 +205,19 @@ macro_rules! define_adjacent_flags_kernel {
                 flags[index] = if index == 0usize {
                     Op::first()
                 } else {
+                    let previous = if use_order[0] != 0u32 {
+                        order[index - 1usize] as usize
+                    } else {
+                        index - 1usize
+                    };
+                    let current = if use_order[0] != 0u32 {
+                        order[index] as usize
+                    } else {
+                        index
+                    };
                     Op::apply(
-                        Expr::$method($( $slot, )+ offsets, index - 1usize),
-                        Expr::$method($( $slot, )+ offsets, index),
+                        Expr::$method($( $slot, )+ offsets, previous),
+                        Expr::$method($( $slot, )+ offsets, current),
                     )
                 };
             }
@@ -220,7 +231,11 @@ trait AdjacentFlagDispatch<R, Input, Item, Slots, Op>
 where
     R: Runtime,
 {
-    fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error>;
+    fn run(
+        exec: &Executor<R>,
+        input: &Input,
+        order: Option<&DeviceVec<R, u32>>,
+    ) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 macro_rules! impl_adjacent_flags_dispatch {
@@ -239,8 +254,21 @@ macro_rules! impl_adjacent_flags_dispatch {
             >,
             Input::DeviceExpr: $eval<Item, $( $leaf ),+>,
         {
-            fn run(exec: &Executor<R>, input: &Input) -> Result<DeviceVec<R, u32>, Error> {
-                let len = input.logical_len()?;
+            fn run(
+                exec: &Executor<R>,
+                input: &Input,
+                order: Option<&DeviceVec<R, u32>>,
+            ) -> Result<DeviceVec<R, u32>, Error> {
+                let input_len = input.logical_len()?;
+                let len = order.map_or(input_len, DeviceVec::len);
+                if let Some(order) = order
+                    && order.len() != input_len
+                {
+                    return Err(Error::LengthMismatch {
+                        left: input_len,
+                        right: order.len(),
+                    });
+                }
                 let flags = exec.alloc_canonical::<u32>(len);
                 if len == 0 {
                     return Ok(flags);
@@ -251,6 +279,17 @@ macro_rules! impl_adjacent_flags_dispatch {
                 reads.pad_to_thirteen(exec.client());
                 let offsets = exec.client().create_from_slice(u32::as_bytes(&reads.offsets));
                 let len_handle = exec.client().create_from_slice(u32::as_bytes(&[len_u32]));
+                let use_order = exec
+                    .client()
+                    .create_from_slice(u32::as_bytes(&[u32::from(order.is_some())]));
+                let (order, order_len) = order
+                    .map(|order| (order.handle.clone(), order.len()))
+                    .unwrap_or_else(|| {
+                        (
+                            exec.client().create_from_slice(u32::as_bytes(&[0u32])),
+                            1,
+                        )
+                    });
                 unsafe {
                     $kernel::launch_unchecked::<Item, $( $leaf, )+ Input::DeviceExpr, Op, R>(
                         exec.client(),
@@ -258,6 +297,8 @@ macro_rules! impl_adjacent_flags_dispatch {
                         CubeDim::new_1d(BLOCK_SIZE),
                         $( BufferArg::from_raw_parts(reads.slots[$index].0.clone(), reads.slots[$index].1), )+
                         BufferArg::from_raw_parts(offsets, reads.offsets.len()),
+                        BufferArg::from_raw_parts(order, order_len),
+                        BufferArg::from_raw_parts(use_order, 1),
                         BufferArg::from_raw_parts(len_handle, 1),
                         BufferArg::from_raw_parts(flags.handle.clone(), flags.len()),
                     );
@@ -476,6 +517,18 @@ where
     }
 }
 
+pub(crate) fn unique_head_flags_ordered<R, Input, Equal>(
+    exec: &Executor<R>,
+    input: Input,
+    order: &DeviceVec<R, u32>,
+) -> Result<DeviceVec<R, u32>, Error>
+where
+    R: Runtime,
+    Input: AdjacentFlagInput<R, UniqueHead<Equal>>,
+{
+    input.adjacent_flags_ordered(exec, order)
+}
+
 pub(crate) fn sort_control_with<R, Input, Less>(
     exec: &Executor<R>,
     input: Input,
@@ -600,6 +653,11 @@ where
 
 pub(crate) trait AdjacentFlagInput<R: Runtime, Op>: ReadExpression + Sized {
     fn adjacent_flags(self, exec: &Executor<R>) -> Result<DeviceVec<R, u32>, Error>;
+    fn adjacent_flags_ordered(
+        self,
+        exec: &Executor<R>,
+        order: &DeviceVec<R, u32>,
+    ) -> Result<DeviceVec<R, u32>, Error>;
 }
 
 impl<R, Input, Op> AdjacentFlagInput<R, Op> for Input
@@ -617,7 +675,21 @@ where
             Input::Item,
             KernelReadSlots<Input::Slots>,
             Op,
-        >>::run(exec, &self)
+        >>::run(exec, &self, None)
+    }
+
+    fn adjacent_flags_ordered(
+        self,
+        exec: &Executor<R>,
+        order: &DeviceVec<R, u32>,
+    ) -> Result<DeviceVec<R, u32>, Error> {
+        <Dispatch<A13, crate::S1> as AdjacentFlagDispatch<
+            R,
+            Input,
+            Input::Item,
+            KernelReadSlots<Input::Slots>,
+            Op,
+        >>::run(exec, &self, Some(order))
     }
 }
 
@@ -891,7 +963,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CanonicalStorage, Counting, Permute, Zip};
+    use crate::{CanonicalStorage, Counting, Permute, Transform, Zip};
     use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
 
     type Seven = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
@@ -951,7 +1023,10 @@ mod tests {
                     ),
                 ),
             );
-            Permute::new(seven, Counting::new(0, 4))
+            Permute::new(
+                seven,
+                Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
+            )
         };
         assert!(is_sorted(&exec, make_input(), LexicographicLess).unwrap());
 
@@ -973,7 +1048,7 @@ mod tests {
                     ),
                 ),
             ),
-            Counting::new(0, 4),
+            Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
         );
         assert_eq!(
             is_sorted_until(&exec, bad_input, LexicographicLess).unwrap(),
@@ -1011,7 +1086,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, len));
+        let input = Permute::new(
+            seven,
+            Transform::new(Counting::new(0, len), crate::op::U32ToUsize),
+        );
         let output = exec.alloc_canonical::<Seven>(len);
 
         sort(&exec, input, LexicographicLess, output.write()).unwrap();
@@ -1057,7 +1135,7 @@ mod tests {
                         ),
                     ),
                 ),
-                Counting::new(0, 5),
+                Transform::new(Counting::new(0, 5), crate::op::U32ToUsize),
             )
         };
 

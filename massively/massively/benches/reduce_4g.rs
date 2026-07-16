@@ -7,14 +7,14 @@ use massively::{
     Executor, lazy, op::ReductionOp, op::UnaryOp, vector::reduce, zip2, zip3, zip4, zip5,
 };
 
-const LEN: u32 = 4_000_000_000;
+const LEN: usize = 4_000_000_000;
 const X_KEY: u32 = seed_key(0);
 const Y_KEY: u32 = seed_key(1);
 
-type FourU32 = (((u32, u32), u32), u32);
-type RandomArgs = (((u32, f32), f32), u32);
-type RuntimeKeyArgs = ((u32, u32), u32);
-type RuntimeRangeArgs = ((((u32, u32), u32), f32), f32);
+type FourArgs = (((usize, u32), u32), u32);
+type RandomArgs = (((usize, f32), f32), u32);
+type RuntimeKeyArgs = ((usize, u32), u32);
+type RuntimeRangeArgs = ((((usize, u32), u32), f32), f32);
 
 struct Sum;
 struct DetectHit;
@@ -85,11 +85,11 @@ impl UnaryOp<(f32, f32)> for DetectHit {
 }
 
 #[cubecl::cube]
-impl UnaryOp<FourU32> for FourMix {
+impl UnaryOp<FourArgs> for FourMix {
     type Output = u32;
 
-    fn apply(input: FourU32) -> u32 {
-        input.0.0.0 ^ input.0.0.1 ^ input.0.1 ^ input.1
+    fn apply(input: FourArgs) -> u32 {
+        input.0.0.0 as u32 ^ input.0.0.1 ^ input.0.1 ^ input.1
     }
 }
 
@@ -103,19 +103,21 @@ impl UnaryOp<(u32, u32)> for PairXor {
 }
 
 #[cubecl::cube]
-impl UnaryOp<u32> for PcgPairHash {
+impl UnaryOp<usize> for PcgPairHash {
     type Output = u32;
 
-    fn apply(index: u32) -> u32 {
+    fn apply(index: usize) -> u32 {
+        let index = index as u32;
         random_u32_at(X_KEY, index) ^ random_u32_at(Y_KEY, index)
     }
 }
 
 #[cubecl::cube]
-impl UnaryOp<u32> for PcgPairUnitCompare {
+impl UnaryOp<usize> for PcgPairUnitCompare {
     type Output = u32;
 
-    fn apply(index: u32) -> u32 {
+    fn apply(index: usize) -> u32 {
+        let index = index as u32;
         let x = unit_f32(X_KEY, index);
         let y = unit_f32(Y_KEY, index);
         if x <= y { 1u32 } else { 0u32 }
@@ -123,10 +125,11 @@ impl UnaryOp<u32> for PcgPairUnitCompare {
 }
 
 #[cubecl::cube]
-impl UnaryOp<u32> for PcgPairCircle {
+impl UnaryOp<usize> for PcgPairCircle {
     type Output = u32;
 
-    fn apply(index: u32) -> u32 {
+    fn apply(index: usize) -> u32 {
+        let index = index as u32;
         circle_hit(unit_f32(X_KEY, index), unit_f32(Y_KEY, index))
     }
 }
@@ -136,7 +139,8 @@ impl UnaryOp<RuntimeKeyArgs> for PcgPairCircleRuntime {
     type Output = u32;
 
     fn apply(input: RuntimeKeyArgs) -> u32 {
-        circle_hit(unit_f32(input.0.1, input.0.0), unit_f32(input.1, input.0.0))
+        let index = input.0.0 as u32;
+        circle_hit(unit_f32(input.0.1, index), unit_f32(input.1, index))
     }
 }
 
@@ -145,7 +149,7 @@ impl UnaryOp<RuntimeRangeArgs> for PcgPairCircleRuntimeRange {
     type Output = u32;
 
     fn apply(input: RuntimeRangeArgs) -> u32 {
-        let index = input.0.0.0.0;
+        let index = input.0.0.0.0 as u32;
         let x_key = input.0.0.0.1;
         let y_key = input.0.0.1;
         let min = input.0.1;
@@ -162,7 +166,7 @@ impl UnaryOp<RandomArgs> for UniformFromArgs {
     type Output = f32;
 
     fn apply(input: RandomArgs) -> f32 {
-        uniform_f32(input.0.0.1, input.0.1, input.1, input.0.0.0)
+        uniform_f32(input.0.0.1, input.0.1, input.1, input.0.0.0 as u32)
     }
 }
 
@@ -183,22 +187,22 @@ fn bench_reduce_4g(c: &mut Criterion) {
         b.iter(|| {
             let input = lazy::constant(black_box(1_u32)).take(LEN);
             let result = reduce(&exec, input, 0_u32, Sum).unwrap();
-            assert_eq!(black_box(result), LEN);
+            assert_eq!(black_box(result), LEN as u32);
         })
     });
     group.bench_function("diag_a8_parameter_mix", |b| {
         b.iter(|| {
             let left = zip4(
                 lazy::counting(black_box(0)).take(LEN),
-                lazy::constant(black_box(0x1357_9bdf)).take(LEN),
-                lazy::constant(black_box(0x2468_ace0)).take(LEN),
-                lazy::constant(black_box(0xfdb9_7531)).take(LEN),
+                lazy::constant(black_box(0x1357_9bdf_u32)).take(LEN),
+                lazy::constant(black_box(0x2468_ace0_u32)).take(LEN),
+                lazy::constant(black_box(0xfdb9_7531_u32)).take(LEN),
             );
             let right = zip4(
                 lazy::counting(black_box(1)).take(LEN),
-                lazy::constant(black_box(0x0f0f_0f0f)).take(LEN),
-                lazy::constant(black_box(0xf0f0_f0f0)).take(LEN),
-                lazy::constant(black_box(0x55aa_aa55)).take(LEN),
+                lazy::constant(black_box(0x0f0f_0f0f_u32)).take(LEN),
+                lazy::constant(black_box(0xf0f0_f0f0_u32)).take(LEN),
+                lazy::constant(black_box(0x55aa_aa55_u32)).take(LEN),
             );
             let left = lazy::transform(left, FourMix);
             let right = lazy::transform(right, FourMix);

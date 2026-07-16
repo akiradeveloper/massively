@@ -1,6 +1,34 @@
 //! Operations embedded in read expressions.
 
-use cubecl::prelude::CubeType;
+use cubecl::prelude::*;
+
+/// Converts a physical `u32` value into a logical boolean.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct U32ToBool;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for U32ToBool {
+    type Output = bool;
+
+    fn apply(input: u32) -> bool {
+        input != 0
+    }
+}
+
+/// Converts a physical `u32` value into the logical index type.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct U32ToUsize;
+
+#[cubecl::cube]
+impl UnaryOp<u32> for U32ToUsize {
+    type Output = usize;
+
+    fn apply(input: u32) -> usize {
+        input as usize
+    }
+}
 
 /// Compile-time unary operation used by [`crate::read::Transform`].
 ///
@@ -9,13 +37,12 @@ use cubecl::prelude::CubeType;
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::transform};
-/// use massively::op::UnaryOp;
+/// use massively::{Executor, op, vector::transform};
 ///
 /// struct Square;
 ///
 /// #[cubecl::cube]
-/// impl UnaryOp<u32> for Square {
+/// impl op::UnaryOp<u32> for Square {
 ///     type Output = u32;
 ///
 ///     fn apply(value: u32) -> u32 {
@@ -60,12 +87,11 @@ pub trait IndexedBinaryOp<Input: CubeType>: 'static + Send + Sync {
 ///
 /// ```
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::transform};
-/// use massively::op::Identity;
+/// use massively::{Executor, op, vector::transform};
 ///
 /// let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 /// let input = exec.to_device(&[1_u32, 2, 3]);
-/// let output = transform(&exec, input.slice(..), Identity).unwrap();
+/// let output = transform(&exec, input.slice(..), op::Identity).unwrap();
 ///
 /// assert_eq!(exec.to_host(&output).unwrap(), vec![1, 2, 3]);
 /// ```

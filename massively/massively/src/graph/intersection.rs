@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{Error, Executor, MIndex, MIter, MIterMut, MVec};
+use crate::{Error, Executor, MIter, MIterMut, MVec};
 
 use super::Csr;
 
@@ -53,16 +53,16 @@ pub fn intersect_count<R, Destinations, Offsets, Sources, Targets>(
     graph: Csr<Destinations, Offsets>,
     sources: Sources,
     targets: Targets,
-) -> Result<MVec<R, MIndex>, Error>
+) -> Result<MVec<R, u32>, Error>
 where
     R: Runtime,
-    Destinations: MIter<R, Item = MIndex>,
-    Offsets: MIter<R, Item = MIndex>,
-    Sources: MIter<R, Item = MIndex>,
-    Targets: MIter<R, Item = MIndex>,
+    Destinations: MIter<R, Item = u32>,
+    Offsets: MIter<R, Item = u32>,
+    Sources: MIter<R, Item = u32>,
+    Targets: MIter<R, Item = u32>,
 {
     let pair_count = sources.len()? as usize;
-    let output = exec.alloc_mvec::<MIndex>(pair_count);
+    let output = exec.alloc::<u32>(pair_count);
     intersect_count_into(exec, graph, sources, targets, output.slice_mut(..))?;
     Ok(output)
 }
@@ -77,11 +77,11 @@ fn intersect_count_into<R, Destinations, Offsets, Sources, Targets, Output>(
 ) -> Result<(), Error>
 where
     R: Runtime,
-    Destinations: MIter<R, Item = MIndex>,
-    Offsets: MIter<R, Item = MIndex>,
-    Sources: MIter<R, Item = MIndex>,
-    Targets: MIter<R, Item = MIndex>,
-    Output: MIterMut<R, Item = MIndex>,
+    Destinations: MIter<R, Item = u32>,
+    Offsets: MIter<R, Item = u32>,
+    Sources: MIter<R, Item = u32>,
+    Targets: MIter<R, Item = u32>,
+    Output: MIterMut<R, Item = u32>,
 {
     let pair_count = sources.len()?;
     let target_count = targets.len()?;
@@ -103,11 +103,11 @@ where
     }
 
     let (destinations, offsets) = graph.into_parts();
-    let destinations = crate::api::iter::materialize_indices(exec, destinations)?;
-    let offsets = crate::api::iter::materialize_indices(exec, offsets)?;
-    let sources = crate::api::iter::materialize_indices(exec, sources)?;
-    let targets = crate::api::iter::materialize_indices(exec, targets)?;
-    let counts = exec.alloc_column::<MIndex>(pair_count as usize);
+    let destinations = crate::api::iter::materialize_u32(exec, destinations)?;
+    let offsets = crate::api::iter::materialize_u32(exec, offsets)?;
+    let sources = crate::api::iter::materialize_u32(exec, sources)?;
+    let targets = crate::api::iter::materialize_u32(exec, targets)?;
+    let counts = exec.alloc_column::<u32>(pair_count as usize);
     unsafe {
         intersect_count_kernel::launch_unchecked::<R>(
             exec.client(),

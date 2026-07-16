@@ -21,3 +21,13 @@ macro_rules! impl_storage_element {
 }
 
 impl_storage_element!(u8, u16, u32, u64, i8, i16, i32, i64, f32, f64);
+
+#[cfg(test)]
+mod tests {
+    use static_assertions::assert_not_impl_any;
+
+    use super::MStorageElement;
+
+    assert_not_impl_any!(bool: MStorageElement);
+    assert_not_impl_any!(usize: MStorageElement);
+}

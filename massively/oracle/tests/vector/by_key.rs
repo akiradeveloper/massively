@@ -76,29 +76,27 @@ by_key_case!(reduce_by_key, |exec, keys, values, key_gpu, value_gpu| {
 });
 
 by_key_case!(unique_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let (out_keys, out_values) = massively::vector::unique_by_key(
+    let output = massively::vector::unique_by_key(
         &exec,
         lazify(key_gpu.slice(..)),
         lazify(value_gpu.slice(..)),
         Equal,
     )
     .unwrap();
-    let (expected_keys, expected_values) = reference::unique_by_key(keys, values, Equal);
-    prop_assert_eq!(exec.to_host(&out_keys).unwrap(), expected_keys);
-    prop_assert_eq!(exec.to_host(&out_values).unwrap(), expected_values);
+    let (_, expected_values) = reference::unique_by_key(keys, values, Equal);
+    prop_assert_eq!(exec.to_host(&output).unwrap(), expected_values);
 });
 
 by_key_case!(sort_by_key, |exec, keys, values, key_gpu, value_gpu| {
-    let (out_keys, out_values) = massively::vector::sort_by_key(
+    let output = massively::vector::sort_by_key(
         &exec,
         lazify(key_gpu.slice(..)),
         lazify(value_gpu.slice(..)),
         Less,
     )
     .unwrap();
-    let (expected_keys, expected_values) = reference::sort_by_key(keys, values, Less);
-    prop_assert_eq!(exec.to_host(&out_keys).unwrap(), expected_keys);
-    prop_assert_eq!(exec.to_host(&out_values).unwrap(), expected_values);
+    let (_, expected_values) = reference::sort_by_key(keys, values, Less);
+    prop_assert_eq!(exec.to_host(&output).unwrap(), expected_values);
 });
 
 by_key_case!(merge_by_key, |exec, keys, values, _key_gpu, _value_gpu| {
@@ -109,7 +107,7 @@ by_key_case!(merge_by_key, |exec, keys, values, _key_gpu, _value_gpu| {
     let left_values_gpu = exec.to_device(&left_values);
     let right_keys_gpu = exec.to_device(&right_keys);
     let right_values_gpu = exec.to_device(&right_values);
-    let (out_keys, out_values) = massively::vector::merge_by_key(
+    let output = massively::vector::merge_by_key(
         &exec,
         lazify(left_keys_gpu.slice(..)),
         lazify(left_values_gpu.slice(..)),
@@ -118,8 +116,7 @@ by_key_case!(merge_by_key, |exec, keys, values, _key_gpu, _value_gpu| {
         Less,
     )
     .unwrap();
-    let (expected_keys, expected_values) =
+    let (_, expected_values) =
         reference::merge_by_key(&left_keys, &left_values, &right_keys, &right_values, Less);
-    prop_assert_eq!(exec.to_host(&out_keys).unwrap(), expected_keys);
-    prop_assert_eq!(exec.to_host(&out_values).unwrap(), expected_values);
+    prop_assert_eq!(exec.to_host(&output).unwrap(), expected_values);
 });

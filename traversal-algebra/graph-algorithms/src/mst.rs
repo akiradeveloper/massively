@@ -46,22 +46,22 @@ pub fn solve<R: Runtime>(
     let sources = graph::traverse(
         exec,
         topology.csr(),
-        lazy::counting(0).take(topology.vertex_count()),
+        common::counting_u32(0, topology.vertex_count() as usize),
     )?
     .map(graph::source_id(), Identity)
     .emit(exec)?;
-    let (_, edge_order) = vector::sort_by_key(
+    let edge_order = vector::sort_by_key(
         exec,
         graph.weights().slice(..),
-        lazy::counting(0).take(edge_count as u32),
+        common::counting_u32(0, edge_count),
         LessF32,
     )?;
     let components = vector::transform(
         exec,
-        lazy::counting(0).take(topology.vertex_count()),
+        common::counting_u32(0, topology.vertex_count() as usize),
         Identity,
     )?;
-    let selected = vector::fill(exec, edge_count, 0u32)?;
+    let selected = common::filled(exec, edge_count, 0u32)?;
 
     for position in 0..edge_count {
         let edge = read_u32(exec, &edge_order, position)?;
@@ -77,20 +77,20 @@ pub fn solve<R: Runtime>(
             exec,
             zip2(
                 components.slice(..),
-                lazy::constant(destination_component).take(topology.vertex_count()),
+                lazy::constant(destination_component).take(topology.vertex_count() as usize),
             ),
             EqualPair,
         )?;
         vector::replace_where(
             exec,
             source_component,
-            stencil.slice(..),
+            common::stencil(stencil.slice(..)),
             components.slice_mut(..),
         )?;
         vector::scatter(
             exec,
             lazy::constant(1u32).take(1),
-            lazy::constant(edge).take(1),
+            common::indices(lazy::constant(edge).take(1)),
             selected.slice_mut(..),
         )?;
     }
@@ -102,7 +102,7 @@ pub fn solve<R: Runtime>(
             topology.destinations().slice(..),
             graph.weights().slice(..),
         ),
-        selected.slice(..),
+        common::stencil(selected.slice(..)),
     )
 }
 

@@ -153,7 +153,7 @@ where
             conceptual_flags.slice_mut(merge.left_len..),
         )?;
         let merged_flags = exec.alloc_canonical::<u32>(total);
-        crate::indexed::gather_direct(
+        crate::indexed::gather_u32(
             exec,
             conceptual_flags.column(),
             merge.permutation.column(),
@@ -162,7 +162,7 @@ where
         let selection = SelectionControl::from_flags(exec, merged_flags)?;
         let count = selection.count();
         let selected_permutation = exec.alloc_canonical::<u32>(count as usize);
-        crate::indexed::gather_direct(
+        crate::indexed::gather_u32(
             exec,
             merge.permutation.column(),
             selection.indices().column(),
@@ -237,7 +237,7 @@ where
         conceptual_flags.slice_mut(merge.left_len..),
     )?;
     let merged_flags = exec.alloc_canonical::<u32>(total);
-    crate::indexed::gather_direct(
+    crate::indexed::gather_u32(
         exec,
         conceptual_flags.column(),
         merge.permutation.column(),
@@ -246,7 +246,7 @@ where
     let selection = SelectionControl::from_flags(exec, merged_flags)?;
     let count = selection.count();
     let selected_permutation = exec.alloc_canonical::<u32>(count as usize);
-    crate::indexed::gather_direct(
+    crate::indexed::gather_u32(
         exec,
         merge.permutation.column(),
         selection.indices().column(),

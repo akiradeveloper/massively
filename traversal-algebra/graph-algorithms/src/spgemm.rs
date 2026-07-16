@@ -44,7 +44,7 @@ pub fn solve<R: Runtime>(
         vector::scatter(
             exec,
             lazy::constant(output_len).take(1),
-            lazy::constant(vertex).take(1),
+            common::indices(lazy::constant(vertex).take(1)),
             offsets.slice_mut(..),
         )?;
 
@@ -70,7 +70,7 @@ pub fn solve<R: Runtime>(
         vector::scatter(
             exec,
             row.slice(..),
-            lazy::counting(output_len).take(row_len),
+            common::indices(common::counting_u32(output_len as usize, row_len as usize)),
             destinations.slice_mut(..),
         )?;
         output_len += row_len;
@@ -79,7 +79,7 @@ pub fn solve<R: Runtime>(
     vector::scatter(
         exec,
         lazy::constant(output_len).take(1),
-        lazy::constant(n).take(1),
+        common::indices(lazy::constant(n).take(1)),
         offsets.slice_mut(..),
     )?;
     destinations.truncate(output_len as usize);

@@ -1,7 +1,9 @@
+#![allow(private_bounds)]
+
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
+    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
     op::BinaryPredicateOp,
 };
 
@@ -12,12 +14,12 @@ use crate::{
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::merge};
+/// use massively::{op, Executor, vector::merge};
 ///
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Less {
+/// impl op::BinaryPredicateOp<u32> for Less {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs < rhs
 ///     }
@@ -40,7 +42,7 @@ where
     R: Runtime,
     Left: MIter<R, Item = Item>,
     Right: MIter<R, Item = Item>,
-    Item: Materializable<R>,
+    Item: ToCanonical<R>,
     Less: BinaryPredicateOp<Item>,
 {
     let left_len = left.len()? as usize;
@@ -48,7 +50,7 @@ where
     let len = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let output = exec.alloc_mvec::<Item>(len);
+    let output = exec.alloc::<Item>(len);
     merge_into(exec, left, right, less, output.slice_mut(..))?;
     Ok(output)
 }
@@ -66,7 +68,7 @@ where
     R: Runtime,
     Left: MIter<R>,
     Right: MIter<R, Item = Left::Item>,
-    Left::Item: Materializable<R>,
+    Left::Item: crate::api::iter::CanonicalAbi<R>,
     Less: BinaryPredicateOp<Left::Item>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Left::Item>,
@@ -86,17 +88,19 @@ where
 
 /// Stably merges key/value ranges using the ordering of the keys.
 ///
+/// Keys are compared directly and are not materialized into owned storage.
+///
 /// # Examples
 ///
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{op::BinaryPredicateOp, Executor, vector::merge_by_key};
+/// use massively::{op, Executor, vector::merge_by_key};
 ///
 /// struct Less;
 ///
 /// #[cubecl::cube]
-/// impl BinaryPredicateOp<u32> for Less {
+/// impl op::BinaryPredicateOp<u32> for Less {
 ///     fn apply(lhs: u32, rhs: u32) -> bool {
 ///         lhs < rhs
 ///     }
@@ -107,7 +111,7 @@ where
 /// let left_values = exec.to_device(&[10_u32, 30]);
 /// let right_keys = exec.to_device(&[2_u32, 4]);
 /// let right_values = exec.to_device(&[20_u32, 40]);
-/// let (key_output, value_output) = merge_by_key(
+/// let output = merge_by_key(
 ///     &exec,
 ///     left_keys.slice(..),
 ///     left_values.slice(..),
@@ -117,34 +121,31 @@ where
 /// )
 /// .unwrap();
 ///
-/// assert_eq!(exec.to_host(&key_output).unwrap(), vec![1, 2, 3, 4]);
-/// assert_eq!(exec.to_host(&value_output).unwrap(), vec![10, 20, 30, 40]);
+/// assert_eq!(exec.to_host(&output).unwrap(), vec![10, 20, 30, 40]);
 /// ```
-pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, KeyItem, ValueItem, Less>(
+pub fn merge_by_key<R, LeftKeys, LeftValues, RightKeys, RightValues, Less>(
     exec: &Executor<R>,
     left_keys: LeftKeys,
     left_values: LeftValues,
     right_keys: RightKeys,
     right_values: RightValues,
     less: Less,
-) -> Result<(MVec<R, KeyItem>, MVec<R, ValueItem>), Error>
+) -> Result<MVec<R, LeftValues::Item>, Error>
 where
     R: Runtime,
-    LeftKeys: MIter<R, Item = KeyItem>,
-    LeftValues: MIter<R, Item = ValueItem>,
-    RightKeys: MIter<R, Item = KeyItem>,
-    RightValues: MIter<R, Item = ValueItem>,
-    KeyItem: Materializable<R>,
-    ValueItem: Materializable<R>,
-    Less: BinaryPredicateOp<KeyItem>,
+    LeftKeys: MIter<R>,
+    LeftValues: MIter<R>,
+    RightKeys: MIter<R, Item = LeftKeys::Item>,
+    RightValues: MIter<R, Item = LeftValues::Item>,
+    LeftValues::Item: ToCanonical<R>,
+    Less: BinaryPredicateOp<LeftKeys::Item>,
 {
     let left_len = left_keys.len()? as usize;
     let right_len = right_keys.len()? as usize;
     let len = left_len
         .checked_add(right_len)
         .ok_or(Error::LengthTooLarge { len: usize::MAX })?;
-    let key_output = exec.alloc_mvec::<KeyItem>(len);
-    let value_output = exec.alloc_mvec::<ValueItem>(len);
+    let value_output = exec.alloc::<LeftValues::Item>(len);
     merge_by_key_into(
         exec,
         left_keys,
@@ -152,13 +153,12 @@ where
         right_keys,
         right_values,
         less,
-        key_output.slice_mut(..),
         value_output.slice_mut(..),
     )?;
-    Ok((key_output, value_output))
+    Ok(value_output)
 }
 
-/// Stably merges key/value ranges into caller-provided storage.
+/// Stably merges values into caller-provided storage using key-derived control.
 #[doc(hidden)]
 pub(crate) fn merge_by_key_into<
     R,
@@ -167,7 +167,6 @@ pub(crate) fn merge_by_key_into<
     RightKeys,
     RightValues,
     Less,
-    KeyOutput,
     ValueOutput,
 >(
     exec: &Executor<R>,
@@ -176,7 +175,6 @@ pub(crate) fn merge_by_key_into<
     right_keys: RightKeys,
     right_values: RightValues,
     less: Less,
-    key_output: KeyOutput,
     value_output: ValueOutput,
 ) -> Result<(), Error>
 where
@@ -185,38 +183,16 @@ where
     LeftValues: MIter<R>,
     RightKeys: MIter<R, Item = LeftKeys::Item>,
     RightValues: MIter<R, Item = LeftValues::Item>,
-    LeftKeys::Item: Materializable<R>,
-    LeftValues::Item: Materializable<R>,
+    LeftValues::Item: crate::api::iter::CanonicalAbi<R>,
     Less: BinaryPredicateOp<LeftKeys::Item>,
-    KeyOutput: MIterMut<R>,
-    KeyOutput::Item: WritableFrom<LeftKeys::Item>,
     ValueOutput: MIterMut<R>,
     ValueOutput::Item: WritableFrom<LeftValues::Item>,
 {
-    let left_keys = crate::allocation::normalize_lowered(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(left_keys),
-    )?;
-    let right_keys = crate::allocation::normalize_lowered(
-        exec,
-        crate::api::iter::lower_fixed::<R, _>(right_keys),
-    )?;
     let control = crate::merge::merge_control_fixed(
         exec,
-        crate::read::FixedReassociate::<_, LeftKeys::Item>::new(crate::CanonicalStorage::read(
-            &left_keys,
-        )),
-        crate::read::FixedReassociate::<_, LeftKeys::Item>::new(crate::CanonicalStorage::read(
-            &right_keys,
-        )),
+        crate::api::iter::lower_fixed::<R, _>(left_keys),
+        crate::api::iter::lower_fixed::<R, _>(right_keys),
         less,
-    )?;
-    crate::merge::apply_canonical(
-        exec,
-        &left_keys,
-        &right_keys,
-        &control,
-        key_output.lower_output(),
     )?;
 
     let left_values = crate::allocation::normalize_lowered(

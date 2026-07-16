@@ -42,7 +42,7 @@ fn bench_sort_by_key(c: &mut Criterion) {
     let patterns = [
         ("shuffled", common::shuffled_u32(len)),
         ("sorted", (0..len as u32).collect()),
-        ("reverse", common::reverse_indices(len)),
+        ("reverse", common::reverse_u32(len)),
         ("equal", vec![7_u32; len]),
         (
             "low_cardinality",

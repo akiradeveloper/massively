@@ -1,7 +1,9 @@
+#![allow(private_bounds)]
+
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MIndex, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom,
+    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom,
     op::BinaryPredicateOp,
 };
 
@@ -18,15 +20,15 @@ macro_rules! set_api {
             R: Runtime,
             Left: MIter<R, Item = Item>,
             Right: MIter<R, Item = Item>,
-            Item: Materializable<R>,
+            Item: ToCanonical<R>,
             Less: BinaryPredicateOp<Item>,
         {
             let left_len = left.len()? as usize;
             let right_len = right.len()? as usize;
             let capacity = ($capacity)(left_len, right_len)?;
-            let mut output = exec.alloc_mvec::<Item>(capacity);
+            let mut output = exec.alloc::<Item>(capacity);
             let len = $into_name(exec, left, right, less, output.slice_mut(..))?;
-            output.truncate(len);
+            output.truncate(len as usize);
             Ok(output)
         }
 
@@ -38,12 +40,12 @@ macro_rules! set_api {
             right: Right,
             less: Less,
             output: Output,
-        ) -> Result<MIndex, Error>
+        ) -> Result<u32, Error>
         where
             R: Runtime,
             Left: MIter<R>,
             Right: MIter<R, Item = Left::Item>,
-            Left::Item: Materializable<R>,
+            Left::Item: crate::api::iter::CanonicalAbi<R>,
             Less: BinaryPredicateOp<Left::Item>,
             Output: MIterMut<R>,
             Output::Item: WritableFrom<Left::Item>,
@@ -75,12 +77,12 @@ set_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{op::BinaryPredicateOp, Executor, vector::set_union};
+use massively::{op, Executor, vector::set_union};
 
 struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for Less {
+impl op::BinaryPredicateOp<u32> for Less {
     fn apply(lhs: u32, rhs: u32) -> bool {
         lhs < rhs
     }
@@ -110,12 +112,12 @@ set_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{op::BinaryPredicateOp, Executor, vector::set_intersection};
+use massively::{op, Executor, vector::set_intersection};
 
 struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for Less {
+impl op::BinaryPredicateOp<u32> for Less {
     fn apply(lhs: u32, rhs: u32) -> bool {
         lhs < rhs
     }
@@ -142,12 +144,12 @@ set_api!(
 ```
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{op::BinaryPredicateOp, Executor, vector::set_difference};
+use massively::{op, Executor, vector::set_difference};
 
 struct Less;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for Less {
+impl op::BinaryPredicateOp<u32> for Less {
     fn apply(lhs: u32, rhs: u32) -> bool {
         lhs < rhs
     }

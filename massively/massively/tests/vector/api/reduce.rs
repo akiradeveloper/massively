@@ -26,7 +26,7 @@ impl ReductionOp<u32> for CountHit {
 #[test]
 fn reduce_estimates_pi_from_lazy_random_transform() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let samples = 100_000_u32;
+    let samples = 100_000_usize;
     let x = massively::util::random::uniform_f32(0.0, 1.0, 0)
         .unwrap()
         .take(samples);
@@ -45,7 +45,7 @@ fn reduce_estimates_pi_from_lazy_random_transform() {
 #[ignore = "4G-scale regression test; run explicitly on a GPU-capable machine"]
 fn reduce_estimates_pi_from_lazy_random_transform_4g() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let samples = 4_000_000_000_u32;
+    let samples = 4_000_000_000_usize;
     let x = massively::util::random::uniform_f32(0.0, 1.0, 0)
         .unwrap()
         .take(samples);
@@ -64,9 +64,9 @@ fn reduce_estimates_pi_from_lazy_random_transform_4g() {
 #[ignore = "4G-scale regression test; run explicitly on a GPU-capable machine"]
 fn reduce_counts_four_billion_lazy_constants() {
     let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
-    let len = 4_000_000_000_u32;
+    let len = 4_000_000_000_usize;
 
     let count = reduce(&exec, lazy::constant(1_u32).take(len), 0_u32, CountHit).unwrap();
 
-    assert_eq!(count, len);
+    assert_eq!(count, len as u32);
 }

@@ -139,27 +139,27 @@ pub fn solve<R: Runtime>(
     let degree = common::resident_degrees(exec, graph)?;
     let source_degree = exec.to_host(&degree.slice(source as usize..source as usize + 1))?[0];
     if source_degree == 0 {
-        return vector::fill(exec, 1, source);
+        return common::filled(exec, 1, source);
     }
 
     let rank = ppr::solve(exec, graph, source, damping, iterations)?;
     let score = vector::transform(exec, zip2(rank.slice(..), degree.slice(..)), RankPerDegree)?;
-    let (_, order) = vector::sort_by_key(
+    let order = vector::sort_by_key(
         exec,
-        zip2(score.slice(..), lazy::counting(0).take(n)),
-        lazy::counting(0).take(n),
+        zip2(score.slice(..), common::counting_u32(0, n as usize)),
+        common::counting_u32(0, n as usize),
         SweepOrder,
     )?;
 
-    let positions = vector::fill(exec, n as usize, 0u32)?;
+    let positions = common::filled(exec, n as usize, 0u32)?;
     vector::scatter(
         exec,
-        lazy::counting(0).take(n),
-        order.slice(..),
+        common::counting_u32(0, n as usize),
+        common::indices(order.slice(..)),
         positions.slice_mut(..),
     )?;
 
-    let earlier = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
+    let earlier = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
         .map(
             zip2(
                 graph::source(positions.slice(..)),
@@ -168,8 +168,9 @@ pub fn solve<R: Runtime>(
             EarlierNeighbor,
         )
         .reduce_by_source(exec, 0, SumU32)?;
-    let ordered_degree = vector::gather(exec, degree.slice(..), order.slice(..))?;
-    let ordered_earlier = vector::gather(exec, earlier.slice(..), order.slice(..))?;
+    let ordered_degree = vector::gather(exec, degree.slice(..), common::indices(order.slice(..)))?;
+    let ordered_earlier =
+        vector::gather(exec, earlier.slice(..), common::indices(order.slice(..)))?;
     let cut_delta = vector::transform(
         exec,
         zip2(ordered_degree.slice(..), ordered_earlier.slice(..)),
@@ -184,13 +185,13 @@ pub fn solve<R: Runtime>(
         zip3(
             cut.slice(..),
             volume.slice(..),
-            lazy::constant(total_volume).take(n),
+            lazy::constant(total_volume).take(n as usize),
         ),
         Conductance,
     )?;
     let best = vector::min_element(
         exec,
-        zip2(conductance.slice(..), lazy::counting(0).take(n)),
+        zip2(conductance.slice(..), common::counting_u32(0, n as usize)),
         BestPrefix,
     )?
     .expect("a nonempty graph has a nonempty sweep order");

@@ -10,6 +10,46 @@ use massively::{
 
 pub(crate) type Result<T> = std::result::Result<T, massively::Error>;
 
+pub(crate) fn counting_u32(start: usize, len: usize) -> lazy::Taken<lazy::CountingU32> {
+    lazy::counting_u32(u32::try_from(start).expect("counting value exceeds u32")).take(len)
+}
+
+pub(crate) fn indices<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToUsize> {
+    lazy::transform(input, massively::op::U32ToUsize)
+}
+
+pub(crate) fn stencil<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToBool> {
+    lazy::transform(input, massively::op::U32ToBool)
+}
+
+pub(crate) trait FillValue<R: Runtime>: Sized {
+    fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>>;
+}
+
+impl<R: Runtime> FillValue<R> for u32 {
+    fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>> {
+        let output = exec.alloc::<u32>(len);
+        vector::fill(exec, value, output.slice_mut(..))?;
+        Ok(output)
+    }
+}
+
+impl<R: Runtime> FillValue<R> for f32 {
+    fn filled(exec: &Executor<R>, len: usize, value: Self) -> Result<DeviceVec<R, Self>> {
+        let output = exec.alloc::<f32>(len);
+        vector::fill(exec, value, output.slice_mut(..))?;
+        Ok(output)
+    }
+}
+
+pub(crate) fn filled<R, T>(exec: &Executor<R>, len: usize, value: T) -> Result<DeviceVec<R, T>>
+where
+    R: Runtime,
+    T: FillValue<R>,
+{
+    T::filled(exec, len, value)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CsrGraph {
     pub offsets: Vec<u32>,
@@ -225,7 +265,7 @@ pub(crate) fn resident_degrees<R: Runtime>(
     graph::traverse(
         exec,
         graph.csr(),
-        lazy::counting(0).take(graph.vertex_count()),
+        counting_u32(0, graph.vertex_count() as usize),
     )?
     .map(graph::edge_id(), One)
     .reduce_by_source(exec, 0, SumU32)
@@ -255,13 +295,13 @@ pub(crate) fn accumulate_rank<R: Runtime>(
     graph::traverse(
         exec,
         graph.csr(),
-        lazy::counting(0).take(graph.vertex_count()),
+        counting_u32(0, graph.vertex_count() as usize),
     )?
     .map(
         zip3(
             graph::source(rank.slice(..)),
             graph::source(degree.slice(..)),
-            graph::source(lazy::constant(damping).take(graph.vertex_count())),
+            graph::source(lazy::constant(damping).take(graph.vertex_count() as usize)),
         ),
         RankContribution,
     )

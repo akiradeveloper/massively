@@ -20,13 +20,12 @@ use crate::{
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, vector::count_if};
-/// use massively::op::PredicateOp;
+/// use massively::{Executor, op, vector::count_if};
 ///
 /// struct Positive;
 ///
 /// #[cubecl::cube]
-/// impl PredicateOp<i32> for Positive {
+/// impl op::PredicateOp<i32> for Positive {
 ///     fn apply(value: i32) -> bool {
 ///         value > 0
 ///     }
@@ -449,7 +448,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, 4));
+        let input = Permute::new(
+            seven,
+            crate::Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
+        );
         assert_eq!(count_if(&exec, input, LastLeafIsThree).unwrap(), 1);
     }
 

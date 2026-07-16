@@ -102,7 +102,7 @@ fn lazify_reduce_at_read_arity_13() {
             device[10].slice(..),
             device[11].slice(..),
         ),
-        lazy::counting(0).take(A13_SCALE_LEN as MIndex),
+        lazy::counting(0).take(A13_SCALE_LEN),
     ));
     let zero = tuple12(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 

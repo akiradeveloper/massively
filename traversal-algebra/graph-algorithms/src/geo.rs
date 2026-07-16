@@ -2,8 +2,7 @@
 
 use cubecl::prelude::*;
 use massively::{
-    DeviceVec, Executor, MVec, graph, lazy, op::Identity, op::ReductionOp, op::UnaryOp, vector,
-    zip2,
+    DeviceVec, Executor, MVec, graph, op::Identity, op::ReductionOp, op::UnaryOp, vector, zip2,
 };
 
 use super::common::{self, DeviceCsr};
@@ -51,7 +50,7 @@ pub fn solve<R: Runtime>(
     let mut coordinates = initial.clone();
 
     for _ in 0..iterations {
-        let sums = graph::traverse(exec, graph.csr(), lazy::counting(0).take(n))?
+        let sums = graph::traverse(exec, graph.csr(), common::counting_u32(0, n as usize))?
             .map(
                 graph::destination(zip2(coordinates.0.slice(..), coordinates.1.slice(..))),
                 Identity,

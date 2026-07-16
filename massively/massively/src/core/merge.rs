@@ -6,7 +6,7 @@ use cubecl::prelude::*;
 
 use crate::{
     A13, CanonicalAlloc, CanonicalStorage, Column, DeviceVec, Error, Executor, MStorageElement,
-    ReadExpression, StorageLayout,
+    ReadExpression, StorageLayout, Transform,
     allocation::{CopyStorage, NormalizeInput},
     eval::Eval13,
     indexed::GatherInput,
@@ -18,18 +18,19 @@ use crate::{
 const BLOCK_SIZE: u32 = 256;
 
 macro_rules! define_merge_control_kernel {
-    ($name:ident,$eval:ident,$method:ident; [$( $leaf:ident:$left_slot:ident:$right_slot:ident ),+]) => {
+    ($name:ident,$eval:ident,$method:ident; [$( $left_leaf:ident:$left_slot:ident:$right_leaf:ident:$right_slot:ident ),+]) => {
         #[cubecl::cube(launch_unchecked, explicit_define)]
         fn $name<
             Item: CubeType + Send + Sync + 'static,
-            $( $leaf: CubePrimitive, )+
-            Left: $eval<Item, $( $leaf ),+>,
-            Right: $eval<Item, $( $leaf ),+>,
+            $( $left_leaf: CubePrimitive, )+
+            $( $right_leaf: CubePrimitive, )+
+            Left: $eval<Item, $( $left_leaf ),+>,
+            Right: $eval<Item, $( $right_leaf ),+>,
             Less: BinaryPredicateOp<Item>,
         >(
-            $( $left_slot: &[$leaf], )+
+            $( $left_slot: &[$left_leaf], )+
             left_offsets: &[u32],
-            $( $right_slot: &[$leaf], )+
+            $( $right_slot: &[$right_leaf], )+
             right_offsets: &[u32],
             lengths: &[u32],
             permutation: &mut [u32],
@@ -82,7 +83,7 @@ macro_rules! define_merge_control_kernel {
     };
 }
 
-define_merge_control_kernel!(merge_control_a13,Eval13,eval13; [L0:left0:right0,L1:left1:right1,L2:left2:right2,L3:left3:right3,L4:left4:right4,L5:left5:right5,L6:left6:right6,L7:left7:right7,L8:left8:right8,L9:left9:right9,L10:left10:right10,L11:left11:right11,L12:left12:right12]);
+define_merge_control_kernel!(merge_control_a13,Eval13,eval13; [LL0:left0:RL0:right0,LL1:left1:RL1:right1,LL2:left2:RL2:right2,LL3:left3:RL3:right3,LL4:left4:RL4:right4,LL5:left5:RL5:right5,LL6:left6:RL6:right6,LL7:left7:RL7:right7,LL8:left8:RL8:right8,LL9:left9:RL9:right9,LL10:left10:RL10:right10,LL11:left11:RL11:right11,LL12:left12:RL12:right12]);
 
 pub(crate) struct MergeDispatch<Storage>(PhantomData<fn() -> Storage>);
 
@@ -94,23 +95,32 @@ where
 }
 
 macro_rules! impl_merge_control_dispatch {
-    ($storage:ty,$arity:ty,$eval:ident,$kernel:ident,$env:ty; [$( $leaf:ident:$index:literal ),+]) => {
-        impl<R, Left, Right, Item, Less, $( $leaf ),+>
-            MergeControlDispatch<R, Left, Right, Item, $env, $env, Less>
+    ($storage:ty,$arity:ty,$eval:ident,$kernel:ident; [$( $left_leaf:ident:$left_index:literal:$right_leaf:ident:$right_index:literal ),+]) => {
+        impl<R, Left, Right, Item, Less, $( $left_leaf, )+ $( $right_leaf ),+>
+            MergeControlDispatch<
+                R,
+                Left,
+                Right,
+                Item,
+                Env13<$( $left_leaf ),+>,
+                Env13<$( $right_leaf ),+>,
+                Less,
+            >
             for MergeDispatch<$storage>
         where
             R: Runtime,
             Item: CubeType + Send + Sync + 'static,
             Less: BinaryPredicateOp<Item>,
-            $( $leaf: MStorageElement, )+
+            $( $left_leaf: MStorageElement, )+
+            $( $right_leaf: MStorageElement, )+
             Left: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = Env13<$( $left_leaf ),+>>
                 + StageRead<R, Env0>,
             Right: ReadExpression<Item = Item, ReadArity = $arity>
-                + LowerReadExpression<Slots = $env>
+                + LowerReadExpression<Slots = Env13<$( $right_leaf ),+>>
                 + StageRead<R, Env0>,
-            Left::DeviceExpr: $eval<Item, $( $leaf ),+>,
-            Right::DeviceExpr: $eval<Item, $( $leaf ),+>,
+            Left::DeviceExpr: $eval<Item, $( $left_leaf ),+>,
+            Right::DeviceExpr: $eval<Item, $( $right_leaf ),+>,
         {
             fn run(exec: &Executor<R>, left: &Left, right: &Right) -> Result<MergeControl<R>, Error> {
                 let left_len = left.logical_len()?;
@@ -130,13 +140,13 @@ macro_rules! impl_merge_control_dispatch {
                 let right_u32 = u32::try_from(right_len).map_err(|_| Error::LengthTooLarge { len: right_len })?;
                 let lengths = exec.client().create_from_slice(u32::as_bytes(&[left_u32, right_u32]));
                 unsafe {
-                    $kernel::launch_unchecked::<Item, $( $leaf, )+ Left::DeviceExpr, Right::DeviceExpr, Less, R>(
+                    $kernel::launch_unchecked::<Item, $( $left_leaf, )+ $( $right_leaf, )+ Left::DeviceExpr, Right::DeviceExpr, Less, R>(
                         exec.client(),
                         crate::launch::cube_count_1d(total.div_ceil(BLOCK_SIZE as usize).min(256))?,
                         CubeDim::new_1d(BLOCK_SIZE),
-                        $( BufferArg::from_raw_parts(left_bindings.slots[$index].0.clone(), left_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(left_bindings.slots[$left_index].0.clone(), left_bindings.slots[$left_index].1), )+
                         BufferArg::from_raw_parts(left_offsets, left_bindings.offsets.len()),
-                        $( BufferArg::from_raw_parts(right_bindings.slots[$index].0.clone(), right_bindings.slots[$index].1), )+
+                        $( BufferArg::from_raw_parts(right_bindings.slots[$right_index].0.clone(), right_bindings.slots[$right_index].1), )+
                         BufferArg::from_raw_parts(right_offsets, right_bindings.offsets.len()),
                         BufferArg::from_raw_parts(lengths, 2),
                         BufferArg::from_raw_parts(permutation.handle.clone(), permutation.len()),
@@ -148,7 +158,7 @@ macro_rules! impl_merge_control_dispatch {
     };
 }
 
-impl_merge_control_dispatch!(crate::S12,A13,Eval13,merge_control_a13,Env13<L0,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11,L12>; [L0:0,L1:1,L2:2,L3:3,L4:4,L5:5,L6:6,L7:7,L8:8,L9:9,L10:10,L11:11,L12:12]);
+impl_merge_control_dispatch!(crate::S12,A13,Eval13,merge_control_a13; [LL0:0:RL0:0,LL1:1:RL1:1,LL2:2:RL2:2,LL3:3:RL3:3,LL4:4:RL4:4,LL5:5:RL5:5,LL6:6:RL6:6,LL7:7:RL7:7,LL8:8:RL8:8,LL9:9:RL9:9,LL10:10:RL10:10,LL11:11:RL11:11,LL12:12:RL12:12]);
 
 /// Stable merge permutation over a conceptual `left || right` payload.
 #[doc(hidden)]
@@ -289,10 +299,10 @@ where
     >::new(combined.slice_mut(left_len..));
     crate::transform::materialize_fixed(exec, &right_read, &right_write)?;
 
-    crate::masked::MaskedCopyInput::indexed_copy(
-        crate::read::FixedReassociate::<_, Item>::new(combined.read()),
+    crate::indexed::gather_u32(
         exec,
-        &control.permutation,
+        crate::read::FixedReassociate::<_, Item>::new(combined.read()),
+        control.permutation.column(),
         output,
     )
 }
@@ -316,7 +326,8 @@ where
     Left::Item: CanonicalAlloc<R, CanonicalStorage = Left::Storage>,
     Left::Storage: CopyStorage<R>,
     Right: NormalizeInput<R, Storage = Left::Storage> + ReadExpression<Item = Left::Item>,
-    <Left::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Column<u32>, Output>,
+    <Left::Storage as CanonicalStorage<R>>::Read:
+        GatherInput<R, Transform<Column<u32>, crate::op::U32ToUsize>, Output>,
 {
     fn concat_apply(
         self,
@@ -338,9 +349,7 @@ where
         let combined = exec.alloc_canonical::<Left::Item>(left_len + right_len);
         left.copy_storage(exec, combined.slice_mut(..left_len))?;
         right.copy_storage(exec, combined.slice_mut(left_len..))?;
-        combined
-            .read()
-            .gather(exec, control.permutation.column(), output)
+        crate::indexed::gather_u32(exec, combined.read(), control.permutation.column(), output)
     }
 }
 

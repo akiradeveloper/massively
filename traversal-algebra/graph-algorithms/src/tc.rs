@@ -1,7 +1,7 @@
 //! Triangle counting by batched intersection over every directed CSR edge.
 
 use cubecl::prelude::*;
-use massively::{Executor, graph, lazy, op::Identity, op::ReductionOp};
+use massively::{Executor, graph, op::Identity, op::ReductionOp};
 
 use super::common::{self, DeviceCsr};
 
@@ -21,7 +21,7 @@ pub fn solve<R: Runtime>(exec: &Executor<R>, graph: &DeviceCsr<R>) -> common::Re
     let sources = graph::traverse(
         exec,
         graph.csr(),
-        lazy::counting(0).take(graph.vertex_count()),
+        common::counting_u32(0, graph.vertex_count() as usize),
     )?
     .map(graph::source_id(), Identity)
     .emit(exec)?;

@@ -1,7 +1,9 @@
+#![allow(private_bounds)]
+
 use cubecl::prelude::Runtime;
 
 use crate::{
-    Error, Executor, MIter, MIterMut, MStorage, MVec, Materializable, WritableFrom, op::ReductionOp,
+    Error, Executor, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom, op::ReductionOp,
 };
 
 /// Computes an inclusive scan and returns owned device storage.
@@ -11,12 +13,12 @@ use crate::{
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::ReductionOp, vector::inclusive_scan};
+/// use massively::{Executor, op, vector::inclusive_scan};
 ///
 /// struct Add;
 ///
 /// #[cubecl::cube]
-/// impl ReductionOp<u32> for Add {
+/// impl op::ReductionOp<u32> for Add {
 ///     fn apply(lhs: u32, rhs: u32) -> u32 {
 ///         lhs + rhs
 ///     }
@@ -36,12 +38,22 @@ pub fn inclusive_scan<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: Materializable<R>,
+    Item: ToCanonical<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Item>(len);
-    inclusive_scan_into(exec, input, op, output.slice_mut(..))?;
+    let output = exec.alloc::<Item>(len);
+    let output_view = crate::output::ReassociatedOutput::<
+        _,
+        Item,
+        <<Item as crate::StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+    >::new(output.slice_mut(..).lower_output());
+    crate::scan::inclusive_scan(
+        exec,
+        crate::api::iter::lower_fixed::<R, _>(input),
+        op,
+        output_view,
+    )?;
     Ok(output)
 }
 
@@ -56,7 +68,7 @@ pub(crate) fn inclusive_scan_into<R, Input, Output, Op>(
 where
     R: Runtime,
     Input: MIter<R>,
-    Input::Item: Materializable<R>,
+    Input::Item: crate::api::iter::CanonicalAbi<R>,
     Output: MIterMut<R>,
     Output::Item: WritableFrom<Input::Item>
         + crate::StorageLayout<
@@ -80,12 +92,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::ReductionOp, vector::adjacent_difference};
+/// use massively::{Executor, op, vector::adjacent_difference};
 ///
 /// struct Add;
 ///
 /// #[cubecl::cube]
-/// impl ReductionOp<u32> for Add {
+/// impl op::ReductionOp<u32> for Add {
 ///     fn apply(lhs: u32, rhs: u32) -> u32 {
 ///         lhs + rhs
 ///     }
@@ -105,11 +117,11 @@ pub fn adjacent_difference<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: Materializable<R>,
+    Item: ToCanonical<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Item>(len);
+    let output = exec.alloc::<Item>(len);
     adjacent_difference_into(exec, input, op, output.slice_mut(..))?;
     Ok(output)
 }
@@ -145,12 +157,12 @@ where
 /// ```
 /// use cubecl::prelude::*;
 /// use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-/// use massively::{Executor, op::ReductionOp, vector::exclusive_scan};
+/// use massively::{Executor, op, vector::exclusive_scan};
 ///
 /// struct Add;
 ///
 /// #[cubecl::cube]
-/// impl ReductionOp<u32> for Add {
+/// impl op::ReductionOp<u32> for Add {
 ///     fn apply(lhs: u32, rhs: u32) -> u32 {
 ///         lhs + rhs
 ///     }
@@ -171,41 +183,22 @@ pub fn exclusive_scan<R, Input, Item, Op>(
 where
     R: Runtime,
     Input: MIter<R, Item = Item>,
-    Item: Materializable<R>,
+    Item: ToCanonical<R>,
     Op: ReductionOp<Item>,
 {
     let len = input.len()? as usize;
-    let output = exec.alloc_mvec::<Item>(len);
-    exclusive_scan_into(exec, input, init, op, output.slice_mut(..))?;
-    Ok(output)
-}
-
-/// Computes an exclusive scan into caller-provided storage.
-#[doc(hidden)]
-pub(crate) fn exclusive_scan_into<R, Input, Output, Op>(
-    exec: &Executor<R>,
-    input: Input,
-    init: Input::Item,
-    op: Op,
-    output: Output,
-) -> Result<(), Error>
-where
-    R: Runtime,
-    Input: MIter<R>,
-    Input::Item: Materializable<R>,
-    Output: MIterMut<R>,
-    Output::Item: WritableFrom<Input::Item>
-        + crate::StorageLayout<
-            StorageArity = <Input::Item as crate::StorageLayout>::StorageArity,
-            StorageLeaves = <Input::Item as crate::StorageLayout>::StorageLeaves,
-        >,
-    Op: ReductionOp<Input::Item>,
-{
+    let output = exec.alloc::<Item>(len);
+    let output_view = crate::output::ReassociatedOutput::<
+        _,
+        Item,
+        <<Item as crate::StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
+    >::new(output.slice_mut(..).lower_output());
     crate::scan::exclusive_scan(
         exec,
         crate::api::iter::lower_fixed::<R, _>(input),
         init,
         op,
-        output.lower_output(),
-    )
+        output_view,
+    )?;
+    Ok(output)
 }

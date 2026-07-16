@@ -2,7 +2,7 @@
 
 use cubecl::prelude::Runtime;
 
-use crate::{Allocable, DeviceVec, Error, Executor, MIndex, MIter, MStorage, Zip};
+use crate::{CanonicalForm, DeviceVec, Error, Executor, MIter, MStorage, Zip};
 
 use super::control::TraversalControl;
 
@@ -29,7 +29,7 @@ pub(crate) mod private {
 /// that the backend can change its fused representation without exposing traversal control.
 #[allow(private_bounds)]
 pub trait EdgeExpr<R: Runtime>: private::Sealed {
-    type Item: Allocable<R>;
+    type Item: CanonicalForm<R>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -91,8 +91,8 @@ impl<R, Values> EdgeExpr<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R>,
-    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: CanonicalForm<R>,
+    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -101,8 +101,8 @@ impl<R, Values> EdgeExpr<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R>,
-    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: CanonicalForm<R>,
+    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
@@ -111,40 +111,40 @@ impl<R, Values> EdgeExpr<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R>,
-    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: CanonicalForm<R>,
+    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
     type Item = Values::Item;
 }
 
 impl<R: Runtime> EdgeExpr<R> for SourceId {
-    type Item = MIndex;
+    type Item = u32;
 }
 
 impl<R: Runtime> EdgeExpr<R> for DestinationId {
-    type Item = MIndex;
+    type Item = u32;
 }
 
 impl<R: Runtime> EdgeExpr<R> for EdgeId {
-    type Item = MIndex;
+    type Item = u32;
 }
 
 impl<R, Values> private::EdgeExprImpl<R> for Source<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R>,
-    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: CanonicalForm<R>,
+    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as Allocable<R>>::Storage;
+    type Storage = <Values::Item as CanonicalForm<R>>::Storage;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Values::Item as Allocable<R>>::alloc(exec, control.output_len as usize);
-        crate::vector::gather_into(
+        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.output_len as usize);
+        crate::vector::gather_raw_into(
             exec,
             self.0,
             control.sources.slice(..),
@@ -158,18 +158,18 @@ impl<R, Values> private::EdgeExprImpl<R> for Destination<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R>,
-    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: CanonicalForm<R>,
+    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as Allocable<R>>::Storage;
+    type Storage = <Values::Item as CanonicalForm<R>>::Storage;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Values::Item as Allocable<R>>::alloc(exec, control.output_len as usize);
-        crate::vector::gather_into(
+        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.output_len as usize);
+        crate::vector::gather_raw_into(
             exec,
             self.0,
             control.destinations.slice(..),
@@ -183,24 +183,29 @@ impl<R, Values> private::EdgeExprImpl<R> for Edge<Values>
 where
     R: Runtime,
     Values: MIter<R>,
-    Values::Item: Allocable<R>,
-    <Values::Item as Allocable<R>>::Storage: MStorage<R, Item = Values::Item>,
+    Values::Item: CanonicalForm<R>,
+    <Values::Item as CanonicalForm<R>>::Storage: MStorage<R, Item = Values::Item>,
 {
-    type Storage = <Values::Item as Allocable<R>>::Storage;
+    type Storage = <Values::Item as CanonicalForm<R>>::Storage;
 
     fn materialize(
         self,
         exec: &Executor<R>,
         control: &TraversalControl<R>,
     ) -> Result<Self::Storage, Error> {
-        let output = <Values::Item as Allocable<R>>::alloc(exec, control.output_len as usize);
-        crate::vector::gather_into(exec, self.0, control.edges.slice(..), output.slice_mut(..))?;
+        let output = <Self::Storage as MStorage<R>>::allocate(exec, control.output_len as usize);
+        crate::vector::gather_raw_into(
+            exec,
+            self.0,
+            control.edges.slice(..),
+            output.slice_mut(..),
+        )?;
         Ok(output)
     }
 }
 
 impl<R: Runtime> private::EdgeExprImpl<R> for SourceId {
-    type Storage = DeviceVec<R, MIndex>;
+    type Storage = DeviceVec<R, u32>;
 
     fn materialize(
         self,
@@ -212,7 +217,7 @@ impl<R: Runtime> private::EdgeExprImpl<R> for SourceId {
 }
 
 impl<R: Runtime> private::EdgeExprImpl<R> for DestinationId {
-    type Storage = DeviceVec<R, MIndex>;
+    type Storage = DeviceVec<R, u32>;
 
     fn materialize(
         self,
@@ -224,7 +229,7 @@ impl<R: Runtime> private::EdgeExprImpl<R> for DestinationId {
 }
 
 impl<R: Runtime> private::EdgeExprImpl<R> for EdgeId {
-    type Storage = DeviceVec<R, MIndex>;
+    type Storage = DeviceVec<R, u32>;
 
     fn materialize(
         self,
@@ -247,7 +252,7 @@ where
     R: Runtime,
     Left: EdgeExpr<R>,
     Right: EdgeExpr<R>,
-    (Left::Item, Right::Item): Allocable<R>,
+    (Left::Item, Right::Item): CanonicalForm<R>,
 {
     type Item = (Left::Item, Right::Item);
 }
@@ -257,7 +262,7 @@ where
     R: Runtime,
     Left: EdgeExpr<R> + private::EdgeExprImpl<R>,
     Right: EdgeExpr<R> + private::EdgeExprImpl<R>,
-    (Left::Item, Right::Item): Allocable<R>,
+    (Left::Item, Right::Item): CanonicalForm<R>,
     Zip<Left::Storage, Right::Storage>: MStorage<R, Item = (Left::Item, Right::Item)>,
 {
     type Storage = Zip<Left::Storage, Right::Storage>;

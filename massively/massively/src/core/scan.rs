@@ -4,7 +4,7 @@ use cubecl::prelude::*;
 
 use crate::{
     A13, CanonicalAlloc, CanonicalStorage, Counting, DeviceVec, Dispatch, Error, Executor,
-    MStorageElement, ReadExpression, S12, StorageLayout, WritableFrom,
+    MStorageElement, ReadExpression, S12, StorageLayout, Transform, WritableFrom,
     allocation::PrependInput,
     eval::Eval13,
     indexed::GatherInput,
@@ -1637,7 +1637,8 @@ where
             >,
             Op,
         >,
-    <Input::Storage as CanonicalStorage<R>>::Read: GatherInput<R, Counting, Output>,
+    <Input::Storage as CanonicalStorage<R>>::Read:
+        GatherInput<R, Transform<Counting, crate::op::U32ToUsize>, Output>,
     Op: ReductionOp<Input::Item>,
 {
     fn exclusive_scan_into(
@@ -1656,7 +1657,7 @@ where
             <<Input::Item as StorageLayout>::StorageLeaves as crate::output::OutputSlotLayout>::Slots,
         >::new(scanned.write());
         inclusive_scan(exec, Input::semantic_read(&prefixed), op, scanned_output)?;
-        crate::indexed::gather_direct(
+        crate::indexed::gather_u32(
             exec,
             scanned.read(),
             Counting::new(0, prefixed_len.saturating_sub(1)),
@@ -1869,7 +1870,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, 600));
+        let input = Permute::new(
+            seven,
+            Transform::new(Counting::new(0, 600), crate::op::U32ToUsize),
+        );
         let output = exec.alloc_canonical::<Seven>(600);
 
         inclusive_scan(&exec, input, SumSevenItems, output.write()).unwrap();
@@ -1903,7 +1907,13 @@ mod tests {
                 ),
             ),
         );
-        let input = Transform::new(Permute::new(seven, Counting::new(0, 600)), SumSeven);
+        let input = Transform::new(
+            Permute::new(
+                seven,
+                Transform::new(Counting::new(0, 600), crate::op::U32ToUsize),
+            ),
+            SumSeven,
+        );
         let output = exec.to_device(&[0_u32; 600]);
         inclusive_scan(&exec, input, Sum, output.slice_mut(..)).unwrap();
         let actual = exec.to_host(&output).unwrap();
@@ -1953,7 +1963,10 @@ mod tests {
                 ),
             ),
         );
-        let input = Permute::new(seven, Counting::new(0, 4));
+        let input = Permute::new(
+            seven,
+            Transform::new(Counting::new(0, 4), crate::op::U32ToUsize),
+        );
         let output = exec.alloc_canonical::<Seven>(4);
         let init: Seven = (10, (20, (30, (40, (50, (60, 70))))));
         exclusive_scan(&exec, input, init, SumSevenItems, output.write()).unwrap();

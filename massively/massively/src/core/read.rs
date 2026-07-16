@@ -197,12 +197,12 @@ impl Counting {
 #[derive(Clone, Copy, Debug)]
 pub struct Taken<Source> {
     pub(crate) source: Source,
-    pub(crate) offset: u32,
-    pub(crate) len: u32,
+    pub(crate) offset: usize,
+    pub(crate) len: usize,
 }
 
 impl<Source> Taken<Source> {
-    pub(crate) const fn new(source: Source, len: u32) -> Self {
+    pub(crate) const fn new(source: Source, len: usize) -> Self {
         Self {
             source,
             offset: 0,
@@ -223,7 +223,7 @@ impl<Source> Taken<Source> {
 pub trait TakenSource {
     type Read: ReadExpression;
 
-    fn lower(&self, offset: u32, len: u32) -> Self::Read;
+    fn lower(&self, offset: usize, len: usize) -> Self::Read;
 }
 
 /// A lazy unary transform expression.
@@ -485,7 +485,7 @@ where
 impl<Values, Indices> ReadExpression for Permute<Values, Indices>
 where
     Values: ReadExpression,
-    Indices: ReadExpression<Item = u32>,
+    Indices: ReadExpression<Item = usize>,
     Values::ReadArity: AddArity<Indices::ReadArity>,
 {
     type Item = Values::Item;
@@ -559,7 +559,7 @@ where
 
 impl SliceExpression for Counting {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
-        let start = u32::try_from(start).expect("slice start exceeds MIndex");
+        let start = u32::try_from(start).expect("slice start exceeds u32");
         Self::new(
             self.start
                 .checked_add(start)
@@ -583,8 +583,6 @@ where
     Source: TakenSource + Clone,
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
-        let start = u32::try_from(start).expect("slice start exceeds MIndex");
-        let len = u32::try_from(len).expect("slice length exceeds MIndex");
         Self {
             source: self.source.clone(),
             offset: self
@@ -652,7 +650,7 @@ where
 impl<Values, Indices> SliceExpression for Permute<Values, Indices>
 where
     Values: ReadExpression + Clone,
-    Indices: SliceExpression<Item = u32>,
+    Indices: SliceExpression<Item = usize>,
     Permute<Values, Indices>: ReadExpression,
 {
     fn slice_expression(&self, start: usize, len: usize) -> Self {
@@ -871,7 +869,7 @@ where
 impl<Values, Indices, Env> BindSlots<Env> for Permute<Values, Indices>
 where
     Values: BindSlots<Env>,
-    Indices: BindSlots<Values::NextEnv>,
+    Indices: ReadExpression<Item = usize> + BindSlots<Values::NextEnv>,
 {
     type Expr = PermuteExpr<Values::Expr, Indices::Expr>;
     type NextEnv = Indices::NextEnv;
@@ -882,7 +880,14 @@ where
     Values: BindSlots<Env>,
     ReverseCounting: BindSlots<Values::NextEnv>,
 {
-    type Expr = PermuteExpr<Values::Expr, <ReverseCounting as BindSlots<Values::NextEnv>>::Expr>;
+    type Expr = PermuteExpr<
+        Values::Expr,
+        TransformExpr<
+            <ReverseCounting as BindSlots<Values::NextEnv>>::Expr,
+            u32,
+            crate::op::U32ToUsize,
+        >,
+    >;
     type NextEnv = <ReverseCounting as BindSlots<Values::NextEnv>>::NextEnv;
 }
 
@@ -1468,12 +1473,13 @@ mod tests {
         >,
     >;
     type SevenItem = (u8, (u16, (u32, (u64, (i8, (i16, i32))))));
-    type Lazified = Transform<Permute<Seven, Counting>, Identity>;
-    type Nine = Transform<Permute<Lazified, Counting>, Identity>;
-    type Ten = Transform<Permute<Nine, Counting>, Identity>;
-    type Eleven = Transform<Permute<Ten, Counting>, Identity>;
-    type Twelve = Transform<Permute<Eleven, Counting>, Identity>;
-    type Thirteen = Transform<Permute<Twelve, Counting>, Identity>;
+    type Indices = Transform<Counting, crate::op::U32ToUsize>;
+    type Lazified = Transform<Permute<Seven, Indices>, Identity>;
+    type Nine = Transform<Permute<Lazified, Indices>, Identity>;
+    type Ten = Transform<Permute<Nine, Indices>, Identity>;
+    type Eleven = Transform<Permute<Ten, Indices>, Identity>;
+    type Twelve = Transform<Permute<Eleven, Indices>, Identity>;
+    type Thirteen = Transform<Permute<Twelve, Indices>, Identity>;
     type One = Column<u8>;
     type Two = Zip<Column<u8>, Column<u16>>;
     type Three = Zip<Two, Column<u32>>;
@@ -1494,8 +1500,11 @@ mod tests {
             >,
         >,
     >;
-    type LazifiedDevice =
-        TransformExpr<PermuteExpr<SevenDevice, Slot7<u32, Count>>, SevenItem, Identity>;
+    type LazifiedDevice = TransformExpr<
+        PermuteExpr<SevenDevice, TransformExpr<Slot7<u32, Count>, u32, crate::op::U32ToUsize>>,
+        SevenItem,
+        Identity,
+    >;
     type LazifiedSlots = Env8<u8, u16, u32, u64, i8, i16, i32, u32>;
 
     type RuntimeSevenItem = (u32, (u32, (u32, (u32, (u32, (u32, u32))))));
@@ -1513,7 +1522,10 @@ mod tests {
         >,
     >;
     type RuntimeLazifiedDevice = TransformExpr<
-        PermuteExpr<RuntimeSevenDevice, Slot7<u32, Count>>,
+        PermuteExpr<
+            RuntimeSevenDevice,
+            TransformExpr<Slot7<u32, Count>, u32, crate::op::U32ToUsize>,
+        >,
         RuntimeSevenItem,
         Identity,
     >;

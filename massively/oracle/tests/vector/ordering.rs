@@ -92,19 +92,18 @@ fn sort_by_key_preserves_equal_key_value_order() {
         let values: Vec<u32> = (0..len as u32).collect();
         let key_device = exec.to_device(&input_keys);
         let value_device = exec.to_device(&values);
-        let (out_keys, out_values) =
+        let out_values =
             sort_by_key(&exec, key_device.slice(..), value_device.slice(..), LessU32).unwrap();
 
         let mut expected: Vec<_> = input_keys.into_iter().zip(values).collect();
         expected.sort_by_key(|item| item.0);
-        let actual_keys = exec.to_host(&out_keys).unwrap();
         let actual_values = exec.to_host(&out_values).unwrap();
         assert_eq!(
-            actual_keys
+            actual_values,
+            expected
                 .into_iter()
-                .zip(actual_values)
+                .map(|(_, value)| value)
                 .collect::<Vec<_>>(),
-            expected,
             "len={len}",
         );
     }

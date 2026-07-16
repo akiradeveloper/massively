@@ -5,7 +5,7 @@
 //! is the smallest vertex identifier in its connected component.
 
 use cubecl::prelude::*;
-use massively::{DeviceVec, Executor, graph, lazy, op::Identity, vector};
+use massively::{DeviceVec, Executor, graph, op::Identity, vector};
 
 use super::common::{self, DeviceCsr};
 
@@ -14,8 +14,8 @@ pub fn solve<R: Runtime>(
     graph: &DeviceCsr<R>,
 ) -> common::Result<DeviceVec<R, u32>> {
     let n = graph.vertex_count();
-    let labels = vector::transform(exec, lazy::counting(0).take(n), Identity)?;
-    let mut frontier = vector::transform(exec, lazy::counting(0).take(n), Identity)?;
+    let labels = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
+    let mut frontier = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
 
     while !frontier.is_empty() {
         frontier = graph::traverse(exec, graph.csr(), frontier.slice(..))?

@@ -8,16 +8,16 @@ use massively::{
     vector::minmax_element, zip7,
 };
 
-const SIZES: &[u32] = &[1 << 20, 1 << 24];
+const SIZES: &[usize] = &[1 << 20, 1 << 24];
 
-type Seven = ((((((u32, u32), u32), u32), u32), u32), u32);
+type Seven = ((((((usize, usize), usize), usize), usize), usize), usize);
 
 struct LessU32;
 struct FirstLeafLess;
 
 #[cubecl::cube]
-impl BinaryPredicateOp<u32> for LessU32 {
-    fn apply(lhs: u32, rhs: u32) -> bool {
+impl BinaryPredicateOp<usize> for LessU32 {
+    fn apply(lhs: usize, rhs: usize) -> bool {
         lhs < rhs
     }
 }

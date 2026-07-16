@@ -92,10 +92,14 @@ fn vertices_at_depth<R: Runtime>(
     })?;
     let stencil = vector::transform(
         exec,
-        zip2(distance.slice(..), lazy::constant(depth).take(n)),
+        zip2(distance.slice(..), lazy::constant(depth).take(n as usize)),
         IsDepth,
     )?;
-    vector::copy_where(exec, lazy::counting(0).take(n), stencil.slice(..))
+    vector::copy_where(
+        exec,
+        common::counting_u32(0, n as usize),
+        common::stencil(stencil.slice(..)),
+    )
 }
 
 pub fn solve<R: Runtime>(
@@ -103,15 +107,15 @@ pub fn solve<R: Runtime>(
     graph: &DeviceCsr<R>,
 ) -> common::Result<DeviceVec<R, f32>> {
     let n = graph.vertex_count();
-    let centrality = vector::fill(exec, n as usize, 0.0f32)?;
+    let centrality = common::filled(exec, n as usize, 0.0f32)?;
 
     for source in 0..n {
         let distance = bfs::solve(exec, graph, source)?;
-        let paths = vector::fill(exec, n as usize, 0.0f32)?;
+        let paths = common::filled(exec, n as usize, 0.0f32)?;
         vector::scatter(
             exec,
             lazy::constant(1.0f32).take(1),
-            lazy::constant(source).take(1),
+            common::indices(lazy::constant(source).take(1)),
             paths.slice_mut(..),
         )?;
 
@@ -127,14 +131,14 @@ pub fn solve<R: Runtime>(
                     zip3(
                         graph::destination(distance.slice(..)),
                         graph::source(paths.slice(..)),
-                        graph::source(lazy::constant(depth + 1).take(n)),
+                        graph::source(lazy::constant(depth + 1).take(n as usize)),
                     ),
                     PathContribution,
                 )
                 .update_by_destination(exec, 0.0f32, SumF32, paths.slice_mut(..))?;
         }
 
-        let dependency = vector::fill(exec, n as usize, 0.0f32)?;
+        let dependency = common::filled(exec, n as usize, 0.0f32)?;
         for depth in (0..=max_depth).rev() {
             let frontier = vertices_at_depth(exec, &distance, depth)?;
             let values = graph::traverse(exec, graph.csr(), frontier.slice(..))?
@@ -152,7 +156,7 @@ pub fn solve<R: Runtime>(
             vector::scatter(
                 exec,
                 values.slice(..),
-                frontier.slice(..),
+                common::indices(frontier.slice(..)),
                 dependency.slice_mut(..),
             )?;
         }
@@ -161,14 +165,17 @@ pub fn solve<R: Runtime>(
             exec,
             zip2(
                 zip2(centrality.slice(..), dependency.slice(..)),
-                zip2(lazy::counting(0).take(n), lazy::constant(source).take(n)),
+                zip2(
+                    common::counting_u32(0, n as usize),
+                    lazy::constant(source).take(n as usize),
+                ),
             ),
             AccumulateCentrality,
         )?;
         vector::scatter(
             exec,
             next.slice(..),
-            lazy::counting(0).take(n),
+            common::indices(common::counting_u32(0, n as usize)),
             centrality.slice_mut(..),
         )?;
     }

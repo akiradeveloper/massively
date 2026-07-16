@@ -1,7 +1,7 @@
 //! PageRank with device-resident rank and degree vectors.
 
 use cubecl::prelude::Runtime;
-use massively::{DeviceVec, Executor, vector};
+use massively::{DeviceVec, Executor};
 
 use super::common::{self, DeviceCsr};
 
@@ -14,12 +14,12 @@ pub fn solve<R: Runtime>(
     let n = graph.vertex_count();
     assert!(n != 0);
     let degree = common::resident_degrees(exec, graph)?;
-    let mut rank = vector::fill(exec, n as usize, 1.0 / n as f32)?;
+    let mut rank = common::filled(exec, n as usize, 1.0 / n as f32)?;
 
     for _ in 0..iterations {
         let dangling = common::dangling_mass(exec, &rank, &degree)?;
         let base = (1.0 - damping + damping * dangling) / n as f32;
-        let output = vector::fill(exec, n as usize, base)?;
+        let output = common::filled(exec, n as usize, base)?;
         common::accumulate_rank(exec, graph, &degree, &rank, damping, &output)?;
         rank = output;
     }

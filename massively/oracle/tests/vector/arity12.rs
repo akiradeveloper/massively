@@ -346,7 +346,7 @@ proptest! {
         // maximum of thirteen physical read slots.
         let permuted = lazy::identity(lazy::permute(
             zip12_columns!(device),
-            lazy::counting(0).take(seed.len() as MIndex),
+            lazy::counting(0).take(seed.len()),
         ));
         let copied = massively::vector::transform(&exec, permuted, Identity).unwrap();
         assert_twelve!(exec, copied, expected_columns);

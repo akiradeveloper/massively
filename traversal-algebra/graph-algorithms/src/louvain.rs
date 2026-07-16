@@ -122,7 +122,7 @@ fn strengths<R: Runtime>(
     graph::traverse(
         exec,
         graph.graph().csr(),
-        lazy::counting(0).take(graph.graph().vertex_count()),
+        common::counting_u32(0, graph.graph().vertex_count() as usize),
     )?
     .map(graph::edge(graph.weights().slice(..)), Identity)
     .reduce_by_source(exec, 0, SumU32)
@@ -137,7 +137,7 @@ fn local_move<R: Runtime>(
     let n = topology.vertex_count();
     let m2 = vector::reduce(exec, graph.weights().slice(..), 0, SumU32)?;
     let strength = strengths(exec, graph)?;
-    let communities = vector::transform(exec, lazy::counting(0).take(n), Identity)?;
+    let communities = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
     let totals = vector::transform(exec, strength.slice(..), Identity)?;
     if m2 == 0 {
         return Ok(communities);
@@ -153,7 +153,7 @@ fn local_move<R: Runtime>(
             vector::scatter(
                 exec,
                 lazy::constant(current_total - vertex_strength).take(1),
-                lazy::constant(current).take(1),
+                common::indices(lazy::constant(current).take(1)),
                 totals.slice_mut(..),
             )?;
 
@@ -165,16 +165,23 @@ fn local_move<R: Runtime>(
                 .weights()
                 .slice(bounds[0] as usize..bounds[1] as usize);
             let row_len = bounds[1] - bounds[0];
-            let neighbor_communities =
-                vector::gather(exec, communities.slice(..), destinations.clone())?;
+            let neighbor_communities = vector::gather(
+                exec,
+                communities.slice(..),
+                common::indices(destinations.clone()),
+            )?;
             let non_self = vector::transform(
                 exec,
-                zip2(destinations, lazy::constant(vertex).take(row_len)),
+                zip2(destinations, lazy::constant(vertex).take(row_len as usize)),
                 Different,
             )?;
-            let neighbor_communities =
-                vector::copy_where(exec, neighbor_communities.slice(..), non_self.slice(..))?;
-            let neighbor_weights = vector::copy_where(exec, edge_weights, non_self.slice(..))?;
+            let neighbor_communities = vector::copy_where(
+                exec,
+                neighbor_communities.slice(..),
+                common::stencil(non_self.slice(..)),
+            )?;
+            let neighbor_weights =
+                vector::copy_where(exec, edge_weights, common::stencil(non_self.slice(..)))?;
             let neighbor_count = u32::try_from(neighbor_communities.len()).map_err(|_| {
                 massively::Error::LengthTooLarge {
                     len: neighbor_communities.len(),
@@ -189,28 +196,29 @@ fn local_move<R: Runtime>(
             vector::scatter(
                 exec,
                 neighbor_communities.slice(..),
-                lazy::counting(0).take(neighbor_count),
+                common::indices(common::counting_u32(0, neighbor_count as usize)),
                 candidate_communities.slice_mut(..),
             )?;
             vector::scatter(
                 exec,
                 neighbor_weights.slice(..),
-                lazy::counting(0).take(neighbor_count),
+                common::indices(common::counting_u32(0, neighbor_count as usize)),
                 candidate_weights.slice_mut(..),
             )?;
             vector::scatter(
                 exec,
                 lazy::constant(current).take(1),
-                lazy::constant(neighbor_count).take(1),
+                common::indices(lazy::constant(neighbor_count).take(1)),
                 candidate_communities.slice_mut(..),
             )?;
             vector::scatter(
                 exec,
                 lazy::constant(0u32).take(1),
-                lazy::constant(neighbor_count).take(1),
+                common::indices(lazy::constant(neighbor_count).take(1)),
                 candidate_weights.slice_mut(..),
             )?;
-            let (sorted_communities, sorted_weights) = vector::sort_by_key(
+            let sorted_communities = vector::sort(exec, candidate_communities.slice(..), LessU32)?;
+            let sorted_weights = vector::sort_by_key(
                 exec,
                 candidate_communities.slice(..),
                 candidate_weights.slice(..),
@@ -224,8 +232,11 @@ fn local_move<R: Runtime>(
                 0,
                 SumU32,
             )?;
-            let candidate_totals =
-                vector::gather(exec, totals.slice(..), unique_communities.slice(..))?;
+            let candidate_totals = vector::gather(
+                exec,
+                totals.slice(..),
+                common::indices(unique_communities.slice(..)),
+            )?;
             let candidate_count = u32::try_from(unique_communities.len()).map_err(|_| {
                 massively::Error::LengthTooLarge {
                     len: unique_communities.len(),
@@ -235,9 +246,9 @@ fn local_move<R: Runtime>(
                 exec,
                 massively::zip4(
                     incident_weights.slice(..),
-                    lazy::constant(vertex_strength).take(candidate_count),
+                    lazy::constant(vertex_strength).take(candidate_count as usize),
                     candidate_totals.slice(..),
-                    lazy::constant(m2).take(candidate_count),
+                    lazy::constant(m2).take(candidate_count as usize),
                 ),
                 GainScore,
             )?;
@@ -253,23 +264,23 @@ fn local_move<R: Runtime>(
                 lazy::constant(current).take(1),
                 LessU32,
             )?;
-            let current_index = read_u32(exec, &current_location, 0)? as usize;
-            let best = read_u32(exec, &unique_communities, best_index as usize)?;
-            let best_score = read_f32(exec, &scores, best_index as usize)?;
-            let current_score = read_f32(exec, &scores, current_index)?;
+            let current_index = exec.to_host(&current_location)?[0];
+            let best = read_u32(exec, &unique_communities, best_index)?;
+            let best_score = read_f32(exec, &scores, best_index)?;
+            let current_score = read_f32(exec, &scores, current_index as usize)?;
 
             if best != current && best_score > current_score + 1.0e-6 {
                 let best_total = read_u32(exec, &totals, best as usize)?;
                 vector::scatter(
                     exec,
                     lazy::constant(best_total + vertex_strength).take(1),
-                    lazy::constant(best).take(1),
+                    common::indices(lazy::constant(best).take(1)),
                     totals.slice_mut(..),
                 )?;
                 vector::scatter(
                     exec,
                     lazy::constant(best).take(1),
-                    lazy::constant(vertex).take(1),
+                    common::indices(lazy::constant(vertex).take(1)),
                     communities.slice_mut(..),
                 )?;
                 moved = true;
@@ -277,7 +288,7 @@ fn local_move<R: Runtime>(
                 vector::scatter(
                     exec,
                     lazy::constant(current_total).take(1),
-                    lazy::constant(current).take(1),
+                    common::indices(lazy::constant(current).take(1)),
                     totals.slice_mut(..),
                 )?;
             }
@@ -312,19 +323,19 @@ fn contract<R: Runtime>(
     let sources = graph::traverse(
         exec,
         topology.csr(),
-        lazy::counting(0).take(topology.vertex_count()),
+        common::counting_u32(0, topology.vertex_count() as usize),
     )?
     .map(graph::source_id(), Identity)
     .emit(exec)?;
-    let source_labels = vector::gather(exec, labels.slice(..), sources.slice(..))?;
-    let destination_labels =
-        vector::gather(exec, labels.slice(..), topology.destinations().slice(..))?;
-    let (sorted_pairs, sorted_weights) = vector::sort_by_key(
+    let source_labels = vector::gather(exec, labels.slice(..), common::indices(sources.slice(..)))?;
+    let destination_labels = vector::gather(
         exec,
-        zip2(source_labels.slice(..), destination_labels.slice(..)),
-        graph.weights().slice(..),
-        PairLess,
+        labels.slice(..),
+        common::indices(topology.destinations().slice(..)),
     )?;
+    let pair_keys = zip2(source_labels.slice(..), destination_labels.slice(..));
+    let sorted_pairs = vector::sort(exec, pair_keys.clone(), PairLess)?;
+    let sorted_weights = vector::sort_by_key(exec, pair_keys, graph.weights().slice(..), PairLess)?;
     let (pairs, weights) = vector::reduce_by_key(
         exec,
         zip2(sorted_pairs.0.slice(..), sorted_pairs.1.slice(..)),
@@ -337,24 +348,24 @@ fn contract<R: Runtime>(
     let (row_ids, row_counts) = vector::reduce_by_key(
         exec,
         pairs.0.slice(..),
-        lazy::constant(1u32).take(edge_count),
+        lazy::constant(1u32).take(edge_count as usize),
         EqualU32,
         0,
         SumU32,
     )?;
-    let counts = vector::fill(exec, community_count as usize, 0u32)?;
+    let counts = common::filled(exec, community_count as usize, 0u32)?;
     vector::scatter(
         exec,
         row_counts.slice(..),
-        row_ids.slice(..),
+        common::indices(row_ids.slice(..)),
         counts.slice_mut(..),
     )?;
     let ends = vector::inclusive_scan(exec, counts.slice(..), SumU32)?;
-    let offsets = vector::fill(exec, community_count as usize + 1, 0u32)?;
+    let offsets = common::filled(exec, community_count as usize + 1, 0u32)?;
     vector::scatter(
         exec,
         ends.slice(..),
-        lazy::counting(1).take(community_count),
+        common::indices(common::counting_u32(1, community_count as usize)),
         offsets.slice_mut(..),
     )?;
     let topology = DeviceCsr::from_parts(pairs.1, offsets)?;
@@ -369,14 +380,18 @@ pub fn solve<R: Runtime>(
 ) -> common::Result<DeviceVec<R, u32>> {
     let n = graph.vertex_count();
     assert!(n != 0);
-    let weights = vector::fill(exec, graph.edge_count(), 1u32)?;
+    let weights = common::filled(exec, graph.edge_count(), 1u32)?;
     let mut level_graph = DeviceWeightedCsr::from_parts(graph.clone(), weights)?;
-    let mut assignment = vector::transform(exec, lazy::counting(0).take(n), Identity)?;
+    let mut assignment = vector::transform(exec, common::counting_u32(0, n as usize), Identity)?;
 
     for _ in 0..max_levels {
         let communities = local_move(exec, &level_graph, max_passes)?;
         let (labels, community_count) = compact(exec, &communities)?;
-        assignment = vector::gather(exec, labels.slice(..), assignment.slice(..))?;
+        assignment = vector::gather(
+            exec,
+            labels.slice(..),
+            common::indices(assignment.slice(..)),
+        )?;
         if community_count == level_graph.graph().vertex_count() {
             break;
         }

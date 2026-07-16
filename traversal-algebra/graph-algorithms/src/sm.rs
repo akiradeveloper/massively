@@ -175,7 +175,7 @@ pub fn solve<R: Runtime>(
     assert!(k != 0);
     if k > n {
         return Ok(Matches {
-            mappings: vector::fill(exec, 0, 0u32)?,
+            mappings: common::filled(exec, 0, 0u32)?,
             match_count: 0,
             query_vertex_count: k,
         });
@@ -187,14 +187,14 @@ pub fn solve<R: Runtime>(
     let mut stencil = vector::transform(
         exec,
         zip3(
-            lazy::counting(0).take(candidate_count),
-            lazy::constant(n).take(candidate_count),
-            lazy::constant(k).take(candidate_count),
+            common::counting_u32(0, candidate_count as usize),
+            lazy::constant(n).take(candidate_count as usize),
+            lazy::constant(k).take(candidate_count as usize),
         ),
         Injective,
     )?;
 
-    let edge_pairs = graph::traverse(exec, data.csr(), lazy::counting(0).take(n))?
+    let edge_pairs = graph::traverse(exec, data.csr(), common::counting_u32(0, n as usize))?
         .map(zip2(graph::source_id(), graph::destination_id()), Identity)
         .emit(exec)?;
     let sorted_pairs = vector::sort(exec, edge_pairs.slice(..), PairLess)?;
@@ -205,11 +205,11 @@ pub fn solve<R: Runtime>(
             .ok_or(massively::Error::LengthTooLarge {
                 len: edge_count as usize,
             })?;
-    let searchable = exec.alloc_mvec::<(u32, u32)>(searchable_len);
+    let searchable = exec.alloc::<(u32, u32)>(searchable_len);
     vector::scatter(
         exec,
         sorted_pairs.slice(..),
-        lazy::counting(0).take(edge_count),
+        common::indices(common::counting_u32(0, edge_count as usize)),
         searchable.slice_mut(..),
     )?;
     vector::scatter(
@@ -227,16 +227,20 @@ pub fn solve<R: Runtime>(
             let candidates = vector::transform(
                 exec,
                 massively::zip4(
-                    lazy::counting(0).take(candidate_count),
-                    lazy::constant(n).take(candidate_count),
-                    lazy::constant(query_source as u32).take(candidate_count),
-                    lazy::constant(query_destination).take(candidate_count),
+                    common::counting_u32(0, candidate_count as usize),
+                    lazy::constant(n).take(candidate_count as usize),
+                    lazy::constant(query_source as u32).take(candidate_count as usize),
+                    lazy::constant(query_destination).take(candidate_count as usize),
                 ),
                 DecodePair,
             )?;
             let locations =
                 vector::lower_bound(exec, searchable.slice(..), candidates.slice(..), PairLess)?;
-            let found = vector::gather(exec, searchable.slice(..), locations.slice(..))?;
+            let found = vector::gather(
+                exec,
+                searchable.slice(..),
+                common::indices(locations.slice(..)),
+            )?;
             let present = vector::transform(
                 exec,
                 zip2(
@@ -251,8 +255,8 @@ pub fn solve<R: Runtime>(
 
     let codes = vector::copy_where(
         exec,
-        lazy::counting(0).take(candidate_count),
-        stencil.slice(..),
+        common::counting_u32(0, candidate_count as usize),
+        common::stencil(stencil.slice(..)),
     )?;
     let match_count = u32::try_from(codes.len())
         .map_err(|_| massively::Error::LengthTooLarge { len: codes.len() })?;
@@ -262,25 +266,29 @@ pub fn solve<R: Runtime>(
     let code_indices = vector::transform(
         exec,
         zip2(
-            lazy::counting(0).take(mapping_count),
-            lazy::constant(k).take(mapping_count),
+            common::counting_u32(0, mapping_count as usize),
+            lazy::constant(k).take(mapping_count as usize),
         ),
         Divide,
     )?;
     let positions = vector::transform(
         exec,
         zip2(
-            lazy::counting(0).take(mapping_count),
-            lazy::constant(k).take(mapping_count),
+            common::counting_u32(0, mapping_count as usize),
+            lazy::constant(k).take(mapping_count as usize),
         ),
         Modulo,
     )?;
-    let repeated_codes = vector::gather(exec, codes.slice(..), code_indices.slice(..))?;
+    let repeated_codes = vector::gather(
+        exec,
+        codes.slice(..),
+        common::indices(code_indices.slice(..)),
+    )?;
     let mappings = vector::transform(
         exec,
         zip3(
             repeated_codes.slice(..),
-            lazy::constant(n).take(mapping_count),
+            lazy::constant(n).take(mapping_count as usize),
             positions.slice(..),
         ),
         Decode,

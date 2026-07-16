@@ -1,7 +1,7 @@
 //! Unweighted Forman–Ricci curvature emitted in CSR edge order.
 
 use cubecl::prelude::*;
-use massively::{DeviceVec, Executor, graph, lazy, op::UnaryOp, zip2};
+use massively::{DeviceVec, Executor, graph, op::UnaryOp, zip2};
 
 use super::common::{self, DeviceCsr};
 
@@ -24,7 +24,7 @@ pub fn solve<R: Runtime>(
     graph::traverse(
         exec,
         graph.csr(),
-        lazy::counting(0).take(graph.vertex_count()),
+        common::counting_u32(0, graph.vertex_count() as usize),
     )?
     .map(
         zip2(

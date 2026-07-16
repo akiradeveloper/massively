@@ -1,7 +1,7 @@
 use cubecl::prelude::*;
 
 use crate::{
-    DeviceVec, Error, Executor, MIndex, MIter, MIterMut, WritableFrom, op::BinaryPredicateOp,
+    DeviceVec, Error, Executor, MIter, MIterMut, WritableFrom, op::BinaryPredicateOp,
     op::ReductionOp,
 };
 
@@ -160,9 +160,9 @@ impl<R: Runtime> SegmentControl<R> {
         value_len: usize,
     ) -> Result<Self, Error>
     where
-        Offsets: MIter<R, Item = MIndex>,
+        Offsets: MIter<R, Item = u32>,
     {
-        let offsets = crate::api::iter::materialize_indices(exec, offsets)?;
+        let offsets = crate::api::iter::materialize_u32(exec, offsets)?;
         Self::from_materialized(exec, offsets, value_len)
     }
 
@@ -371,12 +371,12 @@ impl<R: Runtime> SegmentControl<R> {
         flags: DeviceVec<R, u32>,
         output: Output,
         output_offsets: OutputOffsets,
-    ) -> Result<MIndex, Error>
+    ) -> Result<u32, Error>
     where
         Input: crate::core::facade::KernelInput<R>,
         Output: MIterMut<R>,
         Output::Item: WritableFrom<Input::Item>,
-        OutputOffsets: MIterMut<R, Item = MIndex>,
+        OutputOffsets: MIterMut<R, Item = u32>,
     {
         let positions = crate::core::scan::inclusive_scan_u32(exec, &flags)?;
         let offset_count = self.segment_count + 1;

@@ -140,7 +140,7 @@ pub fn solve<R: Runtime>(
         .expect("random-choice count exceeds u32");
     let choices = vector::transform(
         exec,
-        random::uniform_u32(0, u32::MAX, seed)?.take(choice_count),
+        random::uniform_u32(0, u32::MAX, seed)?.take(choice_count as usize),
         Identity,
     )?;
     solve_with_choices(exec, graph, walk_length, walks_per_vertex, &choices)
@@ -177,23 +177,28 @@ pub fn solve_with_choices<R: Runtime>(
     let mut current = vector::transform(
         exec,
         zip2(
-            lazy::counting(0).take(walker_count),
-            lazy::constant(graph.vertex_count()).take(walker_count),
+            common::counting_u32(0, walker_count as usize),
+            lazy::constant(graph.vertex_count()).take(walker_count as usize),
         ),
         WalkerStart,
     )?;
-    let paths = vector::fill(exec, path_count as usize, u32::MAX)?;
+    let paths = common::filled(exec, path_count as usize, u32::MAX)?;
 
     for step in 0..walk_length {
         let path_indices = lazy::transform(
             zip3(
-                lazy::counting(0).take(walker_count),
-                lazy::constant(walk_length).take(walker_count),
-                lazy::constant(step).take(walker_count),
+                common::counting_u32(0, walker_count as usize),
+                lazy::constant(walk_length).take(walker_count as usize),
+                lazy::constant(step).take(walker_count as usize),
             ),
             PathIndex,
         );
-        vector::scatter(exec, current.slice(..), path_indices, paths.slice_mut(..))?;
+        vector::scatter(
+            exec,
+            current.slice(..),
+            common::indices(path_indices),
+            paths.slice_mut(..),
+        )?;
         if step == transitions {
             break;
         }
@@ -201,13 +206,17 @@ pub fn solve_with_choices<R: Runtime>(
         let active_stencil = vector::transform(exec, current.slice(..), Valid)?;
         let active_positions = vector::copy_where(
             exec,
-            lazy::counting(0).take(walker_count),
-            active_stencil.slice(..),
+            common::counting_u32(0, walker_count as usize),
+            common::stencil(active_stencil.slice(..)),
         )?;
         if active_positions.is_empty() {
             break;
         }
-        let active_vertices = vector::gather(exec, current.slice(..), active_positions.slice(..))?;
+        let active_vertices = vector::gather(
+            exec,
+            current.slice(..),
+            common::indices(active_positions.slice(..)),
+        )?;
         let degree = graph::traverse(exec, graph.csr(), active_vertices.slice(..))?
             .map(graph::edge_id(), One)
             .reduce_by_source(exec, 0, SumU32)?;
@@ -219,17 +228,31 @@ pub fn solve_with_choices<R: Runtime>(
         })?;
         let live_indices = vector::copy_where(
             exec,
-            lazy::counting(0).take(active_count),
-            live_stencil.slice(..),
+            common::counting_u32(0, active_count as usize),
+            common::stencil(live_stencil.slice(..)),
         )?;
-        let next = vector::fill(exec, walker_count as usize, u32::MAX)?;
+        let next = common::filled(exec, walker_count as usize, u32::MAX)?;
         if !live_indices.is_empty() {
-            let live_positions =
-                vector::gather(exec, active_positions.slice(..), live_indices.slice(..))?;
-            let live_vertices =
-                vector::gather(exec, active_vertices.slice(..), live_indices.slice(..))?;
-            let live_degree = vector::gather(exec, degree.slice(..), live_indices.slice(..))?;
-            let offsets = vector::gather(exec, graph.offsets().slice(..), live_vertices.slice(..))?;
+            let live_positions = vector::gather(
+                exec,
+                active_positions.slice(..),
+                common::indices(live_indices.slice(..)),
+            )?;
+            let live_vertices = vector::gather(
+                exec,
+                active_vertices.slice(..),
+                common::indices(live_indices.slice(..)),
+            )?;
+            let live_degree = vector::gather(
+                exec,
+                degree.slice(..),
+                common::indices(live_indices.slice(..)),
+            )?;
+            let offsets = vector::gather(
+                exec,
+                graph.offsets().slice(..),
+                common::indices(live_vertices.slice(..)),
+            )?;
             let live_count = u32::try_from(live_positions.len()).map_err(|_| {
                 massively::Error::LengthTooLarge {
                     len: live_positions.len(),
@@ -239,12 +262,16 @@ pub fn solve_with_choices<R: Runtime>(
                 exec,
                 zip3(
                     live_positions.slice(..),
-                    lazy::constant(transitions).take(live_count),
-                    lazy::constant(step).take(live_count),
+                    lazy::constant(transitions).take(live_count as usize),
+                    lazy::constant(step).take(live_count as usize),
                 ),
                 ChoiceIndex,
             )?;
-            let random_words = vector::gather(exec, choices.slice(..), choice_indices.slice(..))?;
+            let random_words = vector::gather(
+                exec,
+                choices.slice(..),
+                common::indices(choice_indices.slice(..)),
+            )?;
             let edge_indices = vector::transform(
                 exec,
                 zip3(
@@ -254,12 +281,15 @@ pub fn solve_with_choices<R: Runtime>(
                 ),
                 SelectEdge,
             )?;
-            let destinations =
-                vector::gather(exec, graph.destinations().slice(..), edge_indices.slice(..))?;
+            let destinations = vector::gather(
+                exec,
+                graph.destinations().slice(..),
+                common::indices(edge_indices.slice(..)),
+            )?;
             vector::scatter(
                 exec,
                 destinations.slice(..),
-                live_positions.slice(..),
+                common::indices(live_positions.slice(..)),
                 next.slice_mut(..),
             )?;
         }

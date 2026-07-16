@@ -10,12 +10,12 @@
 //! ```
 //! use cubecl::prelude::*;
 //! use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-//! use massively::{Executor, op::UnaryOp, vector::transform};
+//! use massively::{Executor, op, vector::transform};
 //!
 //! struct Double;
 //!
 //! #[cubecl::cube]
-//! impl UnaryOp<u32> for Double {
+//! impl op::UnaryOp<u32> for Double {
 //!     type Output = u32;
 //!
 //!     fn apply(value: u32) -> u32 {
@@ -61,14 +61,14 @@ pub(crate) use core::storage::{S1, S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, S12
 pub(crate) use core::transform::materialize;
 pub(crate) use core::value::MStorageElement;
 pub(crate) use core::{
-    allocation, arg_reduce, arity, eval, indexed, launch, masked, merge, ordering, output,
-    predicate, read, reduce, scan, search, segmented, selection, storage, transform, value,
+    allocation, arg_reduce, arity, eval, indexed, launch, merge, ordering, output, predicate, read,
+    reduce, scan, search, segmented, selection, storage, transform, value,
 };
 
 pub use api::iter::{
-    Allocable, Canonicalizable, MItem, MIter, MIterMut, MStorage, MVec, Materializable,
-    WritableFrom, Zip, unzip2, unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9, unzip10,
-    unzip11, unzip12, zip2, zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+    CanonicalForm, MItem, MIter, MIterMut, MStorage, MVec, ToCanonical, WritableFrom, Zip, unzip2,
+    unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, zip2, zip3,
+    zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
 };
 #[doc(hidden)]
 pub use api::runtime::{DeviceSlice, DeviceSliceMut, DeviceVec, Executor};
@@ -78,16 +78,16 @@ pub use api::tuple::{
     flatten12, tuple2, tuple3, tuple4, tuple5, tuple6, tuple7, tuple8, tuple9, tuple10, tuple11,
     tuple12,
 };
-pub use api::{Error, MIndex, lazy, op, util};
+pub use api::{Error, lazy, op, util};
 /// Common public data and operation types.
 pub mod prelude {
     pub use crate::{
-        Allocable, Canonicalizable, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MIndex,
-        MItem, MIter, MIterMut, MStorage, MVec, Materializable, Tuple2, Tuple3, Tuple4, Tuple5,
-        Tuple6, Tuple7, Tuple8, Tuple9, Tuple10, Tuple11, Tuple12, Zip, flatten3, flatten4,
-        flatten5, flatten6, flatten7, flatten8, flatten9, flatten10, flatten11, flatten12, tuple2,
-        tuple3, tuple4, tuple5, tuple6, tuple7, tuple8, tuple9, tuple10, tuple11, tuple12, unzip2,
-        unzip3, unzip4, unzip5, unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, zip2,
-        zip3, zip4, zip5, zip6, zip7, zip8, zip9, zip10, zip11, zip12,
+        CanonicalForm, DeviceSlice, DeviceSliceMut, DeviceVec, Executor, MItem, MIter, MIterMut,
+        MStorage, MVec, ToCanonical, Tuple2, Tuple3, Tuple4, Tuple5, Tuple6, Tuple7, Tuple8,
+        Tuple9, Tuple10, Tuple11, Tuple12, Zip, flatten3, flatten4, flatten5, flatten6, flatten7,
+        flatten8, flatten9, flatten10, flatten11, flatten12, tuple2, tuple3, tuple4, tuple5,
+        tuple6, tuple7, tuple8, tuple9, tuple10, tuple11, tuple12, unzip2, unzip3, unzip4, unzip5,
+        unzip6, unzip7, unzip8, unzip9, unzip10, unzip11, unzip12, zip2, zip3, zip4, zip5, zip6,
+        zip7, zip8, zip9, zip10, zip11, zip12,
     };
 }

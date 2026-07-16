@@ -1,6 +1,8 @@
 use cubecl::prelude::*;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp};
+use massively::{
+    Executor, lazy, op::BinaryPredicateOp, op::PredicateOp, op::ReductionOp, op::UnaryOp,
+};
 use oracle::op;
 use proptest::prelude::*;
 
@@ -94,31 +96,30 @@ impl op::BinaryPredicateOp<u32> for Less {
     }
 }
 
+pub fn as_stencil<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToBool> {
+    lazy::transform(input, massively::op::U32ToBool)
+}
+
+pub fn as_indices<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToUsize> {
+    lazy::transform(input, massively::op::U32ToUsize)
+}
+
 pub fn exec() -> Executor<WgpuRuntime> {
     Executor::new(WgpuDevice::DefaultDevice)
 }
 
-pub fn lazify<Input>(
-    input: Input,
-) -> massively::lazy::Transform<
-    massively::lazy::Permute<Input, massively::lazy::Taken<massively::lazy::Counting>>,
-    massively::op::Identity,
->
+pub fn lazify<Input>(input: Input) -> Input
 where
     Input: massively::MIter<WgpuRuntime>,
 {
-    let len = input.len().unwrap();
-    massively::lazy::identity(massively::lazy::permute(
-        input,
-        massively::lazy::counting(0).take(len),
-    ))
+    input
 }
 
 pub fn flags_for(input: &[u32]) -> Vec<u32> {
     input
         .iter()
         .enumerate()
-        .map(|(index, value)| ((index as u32 + value) % 3 != 0) as u32)
+        .map(|(index, value)| u32::from((index as u32 + value) % 3 != 0))
         .collect()
 }
 

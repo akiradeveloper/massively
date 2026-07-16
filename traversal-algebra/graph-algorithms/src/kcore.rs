@@ -51,8 +51,8 @@ pub fn solve<R: Runtime>(
 ) -> common::Result<DeviceVec<R, u32>> {
     let n = graph.vertex_count() as usize;
     let current_degree = common::resident_degrees(exec, graph)?;
-    let removed = vector::fill(exec, n, 0u32)?;
-    let core = vector::fill(exec, n, 0u32)?;
+    let removed = common::filled(exec, n, 0u32)?;
+    let core = common::filled(exec, n, 0u32)?;
     let mut running_core = 0u32;
 
     for _ in 0..n {
@@ -82,8 +82,9 @@ pub fn solve<R: Runtime>(
         let neighbors = graph
             .destinations()
             .slice(offsets[0] as usize..offsets[1] as usize);
-        let neighbor_degree = lazy::permute(current_degree.slice(..), neighbors.clone());
-        let neighbor_removed = lazy::permute(removed.slice(..), neighbors.clone());
+        let neighbor_degree =
+            lazy::permute(current_degree.slice(..), common::indices(neighbors.clone()));
+        let neighbor_removed = lazy::permute(removed.slice(..), common::indices(neighbors.clone()));
         let updated = vector::transform(
             exec,
             zip2(neighbor_degree, neighbor_removed),
@@ -92,7 +93,7 @@ pub fn solve<R: Runtime>(
         vector::scatter(
             exec,
             updated.slice(..),
-            neighbors,
+            common::indices(neighbors),
             current_degree.slice_mut(..),
         )?;
     }

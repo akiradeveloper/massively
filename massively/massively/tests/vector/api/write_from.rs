@@ -87,7 +87,8 @@ fn copy_where_writes_right_associated_items_to_left_associated_output() {
     let b = exec.to_device(&[10_u32, 20, 30, 40]);
     let c = exec.to_device(&[100_u32, 200, 300, 400]);
     let flags = exec.to_device(&[0_u32, 1, 1, 0]);
-    let output = copy_where(&exec, right_input(&a, &b, &c), flags.slice(..)).unwrap();
+    let flags = lazy::transform(flags.slice(..), massively::op::U32ToBool);
+    let output = copy_where(&exec, right_input(&a, &b, &c), flags).unwrap();
 
     assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![2, 3]);
     assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![20, 30]);
@@ -101,7 +102,8 @@ fn gather_writes_right_associated_items_to_left_associated_output() {
     let b = exec.to_device(&[10_u32, 20, 30]);
     let c = exec.to_device(&[100_u32, 200, 300]);
     let indices = exec.to_device(&[2_u32, 0]);
-    let output = gather(&exec, right_input(&a, &b, &c), indices.slice(..)).unwrap();
+    let indices = lazy::transform(indices.slice(..), massively::op::U32ToUsize);
+    let output = gather(&exec, right_input(&a, &b, &c), indices).unwrap();
 
     assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![3, 1]);
     assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![30, 10]);
@@ -137,10 +139,8 @@ fn sort_by_key_reassociates_value_output() {
     let a = exec.to_device(&[30_u32, 10, 20]);
     let b = exec.to_device(&[300_u32, 100, 200]);
     let c = exec.to_device(&[3_000_u32, 1_000, 2_000]);
-    let (out_keys, output) =
-        sort_by_key(&exec, keys.slice(..), right_input(&a, &b, &c), LessU32).unwrap();
+    let output = sort_by_key(&exec, keys.slice(..), right_input(&a, &b, &c), LessU32).unwrap();
 
-    assert_eq!(exec.to_host(&out_keys).unwrap(), vec![1, 2, 3]);
     assert_eq!(exec.to_host(&output.0.0).unwrap(), vec![10, 20, 30]);
     assert_eq!(exec.to_host(&output.0.1).unwrap(), vec![100, 200, 300]);
     assert_eq!(exec.to_host(&output.1).unwrap(), vec![1_000, 2_000, 3_000]);
@@ -156,12 +156,13 @@ fn transform_where_reassociates_operation_output() {
     let oa = exec.to_device(&[90_u32, 90, 90]);
     let ob = exec.to_device(&[80_u32, 80, 80]);
     let oc = exec.to_device(&[70_u32, 70, 70]);
+    let flags = lazy::transform(flags.slice(..), massively::op::U32ToBool);
 
     transform_where(
         &exec,
         right_input(&a, &b, &c),
         AddOne,
-        flags.slice(..),
+        flags,
         zip3(oa.slice_mut(..), ob.slice_mut(..), oc.slice_mut(..)),
     )
     .unwrap();

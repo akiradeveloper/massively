@@ -16,18 +16,18 @@ pub fn solve<R: Runtime>(
     assert!(n != 0);
     assert!(source < n);
     let degree = common::resident_degrees(exec, graph)?;
-    let source_index = vector::fill(exec, 1, source)?;
-    let mut rank = vector::fill(exec, n as usize, 1.0 / n as f32)?;
+    let source_index = common::filled(exec, 1, source)?;
+    let mut rank = common::filled(exec, n as usize, 1.0 / n as f32)?;
 
     for _ in 0..iterations {
         let dangling = common::dangling_mass(exec, &rank, &degree)?;
         let base = damping * dangling / n as f32;
-        let output = vector::fill(exec, n as usize, base)?;
-        let source_rank = vector::fill(exec, 1, base + 1.0 - damping)?;
+        let output = common::filled(exec, n as usize, base)?;
+        let source_rank = common::filled(exec, 1, base + 1.0 - damping)?;
         vector::scatter(
             exec,
             source_rank.slice(..),
-            source_index.slice(..),
+            common::indices(source_index.slice(..)),
             output.slice_mut(..),
         )?;
         common::accumulate_rank(exec, graph, &degree, &rank, damping, &output)?;

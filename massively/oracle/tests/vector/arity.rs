@@ -611,7 +611,7 @@ macro_rules! transform_where_arity_case {
                     &exec,
                     input_expr!($input_arity, device),
                     $op,
-                    lazify(flags_device.slice(..)),
+                    as_stencil(lazify(flags_device.slice(..))),
                     output_expr!($output_arity, output),
                 )
                 .unwrap();
@@ -724,7 +724,7 @@ proptest! {
                     device[5].slice(..),
                     device[6].slice(..),
                 ),
-                lazy::counting(0).take(seed.len() as MIndex),
+                lazy::counting(0).take(seed.len()),
             ))
         };
 

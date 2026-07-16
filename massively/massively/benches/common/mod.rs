@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use criterion::Criterion;
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::Executor;
+use massively::{Executor, lazy};
 
 pub const SIZES: &[usize] = &[1_024, 16 * 1_024, 256 * 1_024, 1_024 * 1_024];
 pub const SORT_SIZES: &[usize] = &[1_024, 16 * 1_024, 256 * 1_024, 1_024 * 1_024];
@@ -28,10 +28,22 @@ pub fn reverse_indices(len: usize) -> Vec<u32> {
     (0..len).rev().map(|index| index as u32).collect()
 }
 
+pub fn reverse_u32(len: usize) -> Vec<u32> {
+    (0..len).rev().map(|index| index as u32).collect()
+}
+
 pub fn flags(len: usize, selected_per_100: usize) -> Vec<u32> {
     (0..len)
-        .map(|index| (index % 100 < selected_per_100) as u32)
+        .map(|index| u32::from(index % 100 < selected_per_100))
         .collect()
+}
+
+pub fn as_indices<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToUsize> {
+    lazy::transform(input, massively::op::U32ToUsize)
+}
+
+pub fn as_stencil<Input>(input: Input) -> lazy::Transform<Input, massively::op::U32ToBool> {
+    lazy::transform(input, massively::op::U32ToBool)
 }
 
 pub fn run_keys(len: usize, run_len: usize) -> Vec<u32> {

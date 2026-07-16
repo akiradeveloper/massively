@@ -8,22 +8,22 @@ use massively::{
     vector::find_if, vector::is_partitioned, vector::none_of, zip7,
 };
 
-const SIZES: &[u32] = &[1 << 20, 1 << 24];
+const SIZES: &[usize] = &[1 << 20, 1 << 24];
 
 struct Even;
 struct FirstLeafEven;
 
 #[cubecl::cube]
-impl PredicateOp<u32> for Even {
-    fn apply(value: u32) -> bool {
-        value % 2u32 == 0u32
+impl PredicateOp<usize> for Even {
+    fn apply(value: usize) -> bool {
+        value % 2usize == 0usize
     }
 }
 
 #[cubecl::cube]
-impl PredicateOp<((((((u32, u32), u32), u32), u32), u32), u32)> for FirstLeafEven {
-    fn apply(value: ((((((u32, u32), u32), u32), u32), u32), u32)) -> bool {
-        value.0.0.0.0.0.0 % 2u32 == 0u32
+impl PredicateOp<((((((usize, usize), usize), usize), usize), usize), usize)> for FirstLeafEven {
+    fn apply(value: ((((((usize, usize), usize), usize), usize), usize), usize)) -> bool {
+        value.0.0.0.0.0.0 % 2usize == 0usize
     }
 }
 

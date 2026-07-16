@@ -804,23 +804,29 @@ macro_rules! impl_sort_leaves {
             $( $leaf: MStorageElement, )+
             Item: CanonicalAlloc<
                     R,
-                    CanonicalStorage = $storage,
                     StorageArity = $arity,
                     StorageLeaves = $leaves,
                 > + StorageLayout
                 + Send
                 + Sync
                 + 'static,
-            $storage: CanonicalStorage<R, ReadSlots = $env, WriteSlots = $env>,
-            Reassociate<<$storage as CanonicalStorage<R>>::Read, Item>:
+            <Item as CanonicalAlloc<R>>::CanonicalStorage:
+                CanonicalStorage<R, ReadSlots = $env, WriteSlots = $env>,
+            Reassociate<
+                <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
+                Item,
+            >:
                 ReadExpression<Item = Item, ReadArity = $read_arity>
                     + LowerReadExpression<Slots = $env>
                     + StageRead<R, Env0>,
-            <Reassociate<<$storage as CanonicalStorage<R>>::Read, Item> as LowerReadExpression>::DeviceExpr:
+            <Reassociate<
+                <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Read,
+                Item,
+            > as LowerReadExpression>::DeviceExpr:
                 $eval<Item, $( $leaf ),+>,
             Item::DeviceLayout:
                 Decompose<Item, Leaves = $leaves> + Recompose<Item, Leaves = $leaves>,
-            <$storage as CanonicalStorage<R>>::Write:
+            <<Item as CanonicalAlloc<R>>::CanonicalStorage as CanonicalStorage<R>>::Write:
                 OutputExpression<StorageArity = $arity>
                     + LowerOutputExpression<Slots = $env>
                     + StageOutput<R, Env0>,

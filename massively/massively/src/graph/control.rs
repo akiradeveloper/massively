@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{DeviceVec, Error, Executor, MIndex, MIter, seg::control::SegmentControl};
+use crate::{DeviceVec, Error, Executor, MIter, seg::control::SegmentControl};
 
 const BLOCK_SIZE: u32 = 256;
 
@@ -54,9 +54,9 @@ pub(crate) struct TraversalControl<R: Runtime> {
     pub(super) sources: DeviceVec<R, u32>,
     pub(super) destinations: DeviceVec<R, u32>,
     pub(super) edges: DeviceVec<R, u32>,
-    pub(super) output_len: MIndex,
-    pub(super) source_count: MIndex,
-    pub(super) vertex_count: MIndex,
+    pub(super) output_len: u32,
+    pub(super) source_count: u32,
+    pub(super) vertex_count: u32,
 }
 
 impl<R: Runtime> TraversalControl<R> {
@@ -67,22 +67,22 @@ impl<R: Runtime> TraversalControl<R> {
         vertices: Vertices,
     ) -> Result<Self, Error>
     where
-        Destinations: MIter<R, Item = MIndex>,
-        InputOffsets: MIter<R, Item = MIndex>,
-        Vertices: MIter<R, Item = MIndex>,
+        Destinations: MIter<R, Item = u32>,
+        InputOffsets: MIter<R, Item = u32>,
+        Vertices: MIter<R, Item = u32>,
     {
-        let destinations = crate::api::iter::materialize_indices(exec, destinations)?;
-        let input_offsets = crate::api::iter::materialize_indices(exec, input_offsets)?;
+        let destinations = crate::api::iter::materialize_u32(exec, destinations)?;
+        let input_offsets = crate::api::iter::materialize_u32(exec, input_offsets)?;
         if input_offsets.is_empty() {
             return Err(Error::LengthMismatch { left: 1, right: 0 });
         }
-        let vertices = crate::api::iter::materialize_indices(exec, vertices)?;
+        let vertices = crate::api::iter::materialize_u32(exec, vertices)?;
         let source_count = vertices.len();
         let vertex_count = input_offsets.len() - 1;
-        let source_count_index = MIndex::try_from(source_count)
-            .map_err(|_| Error::LengthTooLarge { len: source_count })?;
-        let vertex_count_index = MIndex::try_from(vertex_count)
-            .map_err(|_| Error::LengthTooLarge { len: vertex_count })?;
+        let source_count_index =
+            u32::try_from(source_count).map_err(|_| Error::LengthTooLarge { len: source_count })?;
+        let vertex_count_index =
+            u32::try_from(vertex_count).map_err(|_| Error::LengthTooLarge { len: vertex_count })?;
         let lengths = exec.alloc::<u32>(source_count);
 
         if source_count != 0 {

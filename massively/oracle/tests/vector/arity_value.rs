@@ -702,12 +702,12 @@ macro_rules! value_case {
 macro_rules! value_case_other {
     (copy_where, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags);
-        let output = massively::vector::copy_where(&exec, input_expr!($arity, device), lazify(flags_gpu.slice(..))).unwrap();
+        let output = massively::vector::copy_where(&exec, input_expr!($arity, device), as_stencil(lazify(flags_gpu.slice(..)))).unwrap();
         let expected = reference::copy_where(&input, &flags); let len = massively::MStorage::len(&output).unwrap() as usize; prop_assert_eq!(len, expected.len()); assert_mvec!($arity, exec, output, expected, len);
     }};
     (remove_where, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags);
-        let output = massively::vector::remove_where(&exec, input_expr!($arity, device), lazify(flags_gpu.slice(..))).unwrap();
+        let output = massively::vector::remove_where(&exec, input_expr!($arity, device), as_stencil(lazify(flags_gpu.slice(..)))).unwrap();
         let expected = reference::remove_where(&input, &flags); let len = massively::MStorage::len(&output).unwrap() as usize; prop_assert_eq!(len, expected.len()); assert_mvec!($arity, exec, output, expected, len);
     }};
     (reverse, $arity:tt, $seed:expr) => {{
@@ -727,32 +727,32 @@ macro_rules! value_case_other {
         setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let mut expected = vec![splat!($arity, 0u32); input.len()]; reference::gather(&input, &indices, &mut expected);
         let permuted = lazy::identity(lazy::permute(
             raw_input_expr!($arity, device),
-            indices_gpu.slice(..),
+            as_indices(indices_gpu.slice(..)),
         ));
         let output = massively::vector::transform(&exec, permuted, Identity).unwrap(); assert_mvec!($arity, exec, output, expected, input.len());
     }};
     (gather, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let mut expected = vec![splat!($arity, 0u32); input.len()]; reference::gather(&input, &indices, &mut expected);
-        let output = massively::vector::gather(&exec, input_expr!($arity, device), lazify(indices_gpu.slice(..))).unwrap(); assert_mvec!($arity, exec, output, expected, input.len());
+        let output = massively::vector::gather(&exec, input_expr!($arity, device), as_indices(lazify(indices_gpu.slice(..)))).unwrap(); assert_mvec!($arity, exec, output, expected, input.len());
     }};
     (gather_where, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = device_rows!($arity, exec, input); let mut expected = input.clone(); reference::gather_where(&input, &indices, &flags, &mut expected);
-        massively::vector::gather_where(&exec, input_expr!($arity, device), lazify(indices_gpu.slice(..)), lazify(flags_gpu.slice(..)), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
+        massively::vector::gather_where(&exec, input_expr!($arity, device), as_indices(lazify(indices_gpu.slice(..))), as_stencil(lazify(flags_gpu.slice(..))), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
     }};
     (scatter, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let output = empty_output!(exec, $arity, input.len()); let mut expected = vec![splat!($arity, 0u32); input.len()]; reference::scatter(&input, &indices, &mut expected);
-        massively::vector::scatter(&exec, input_expr!($arity, device), lazify(indices_gpu.slice(..)), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
+        massively::vector::scatter(&exec, input_expr!($arity, device), as_indices(lazify(indices_gpu.slice(..))), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
     }};
     (scatter_where, $arity:tt, $seed:expr) => {{
         setup!($arity, $seed; exec, input, device, columns); let indices = indices_for(input.len()); let indices_gpu = exec.to_device(&indices); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = device_rows!($arity, exec, input); let mut expected = input.clone(); reference::scatter_where(&input, &indices, &flags, &mut expected);
-        massively::vector::scatter_where(&exec, input_expr!($arity, device), lazify(indices_gpu.slice(..)), lazify(flags_gpu.slice(..)), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
+        massively::vector::scatter_where(&exec, input_expr!($arity, device), as_indices(lazify(indices_gpu.slice(..))), as_stencil(lazify(flags_gpu.slice(..))), output_expr!($arity, output)).unwrap(); assert_output!($arity, exec, output, expected, input.len());
     }};
     (equal, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::equal(&exec, input_expr!($arity, device), input_expr!($arity, device), EqualItem).unwrap(), reference::equal(&input, &input, EqualItem)); }};
     (mismatch, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let mut other = input.clone(); if let Some(last) = other.last_mut() { *last = splat!($arity, 999u32); } let other_device = device_rows!($arity, exec, other); prop_assert_eq!(massively::vector::mismatch(&exec, input_expr!($arity, device), input_expr!($arity, other_device), EqualItem).unwrap().map(|v| v as usize), reference::mismatch(&input, &other, EqualItem)); }};
     (adjacent_find, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); prop_assert_eq!(massively::vector::adjacent_find(&exec, input_expr!($arity, device), EqualItem).unwrap().map(|v| v as usize), reference::adjacent_find(&input, EqualItem)); }};
     (find_first_of, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let needles: Vec<_> = input.iter().step_by(3).copied().collect(); let needles_device = device_rows!($arity, exec, needles); prop_assert_eq!(massively::vector::find_first_of(&exec, input_expr!($arity, device), input_expr!($arity, needles_device), EqualItem).unwrap().map(|v| v as usize), reference::find_first_of(&input, &needles, EqualItem)); }};
-    (fill, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let value = splat!($arity, 42u32); let output = massively::vector::fill(&exec, input.len(), value).unwrap(); let mut expected = vec![splat!($arity, 0u32); input.len()]; reference::fill(value, &mut expected); assert_mvec!($arity, exec, output, expected, input.len()); }};
-    (replace_where, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = device_rows!($arity, exec, input); let value = splat!($arity, 42u32); massively::vector::replace_where(&exec, value, lazify(flags_gpu.slice(..)), output_expr!($arity, output)).unwrap(); let mut expected = input.clone(); reference::replace_where(value, &flags, &mut expected); assert_output!($arity, exec, output, expected, input.len()); }};
+    (fill, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let value = splat!($arity, 42u32); let output = empty_output!(exec, $arity, input.len()); massively::vector::fill(&exec, value, output_expr!($arity, output)).unwrap(); let mut expected = vec![splat!($arity, 0u32); input.len()]; reference::fill(value, &mut expected); assert_output!($arity, exec, output, expected, input.len()); }};
+    (replace_where, $arity:tt, $seed:expr) => {{ setup!($arity, $seed; exec, input, device, columns); let flags = flags_for(&$seed); let flags_gpu = exec.to_device(&flags); let output = device_rows!($arity, exec, input); let value = splat!($arity, 42u32); massively::vector::replace_where(&exec, value, as_stencil(lazify(flags_gpu.slice(..))), output_expr!($arity, output)).unwrap(); let mut expected = input.clone(); reference::replace_where(value, &flags, &mut expected); assert_output!($arity, exec, output, expected, input.len()); }};
     ($case:ident, $arity:tt, $seed:expr) => {{ ordering_case!($case, $arity, $seed) }};
 }
 
@@ -865,10 +865,9 @@ macro_rules! by_key_setup {
 macro_rules! by_key_case {
     (sort_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let (key_output, value_output) = massively::vector::sort_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), LessItem).unwrap();
-        let (expected_keys, expected_values) = reference::sort_by_key(&keys, &values, LessItem);
-        assert_mvec!($key_arity, exec, key_output, expected_keys, keys.len());
-        assert_mvec!($value_arity, exec, value_output, expected_values, values.len());
+        let output = massively::vector::sort_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), LessItem).unwrap();
+        let (_, expected_values) = reference::sort_by_key(&keys, &values, LessItem);
+        assert_mvec!($value_arity, exec, output, expected_values, values.len());
     }};
     (inclusive_scan_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
@@ -892,17 +891,17 @@ macro_rules! by_key_case {
     }};
     (unique_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
-        let (key_output, value_output) = massively::vector::unique_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem).unwrap();
-        let (expected_keys, expected_values) = reference::unique_by_key(&keys, &values, EqualItem); let len = expected_keys.len(); prop_assert_eq!(massively::MStorage::len(&key_output).unwrap() as usize, len);
-        assert_mvec!($key_arity, exec, key_output, expected_keys, len); assert_mvec!($value_arity, exec, value_output, expected_values, len);
+        let output = massively::vector::unique_by_key(&exec, input_expr!($key_arity, key_device), input_expr!($value_arity, value_device), EqualItem).unwrap();
+        let (_, expected_values) = reference::unique_by_key(&keys, &values, EqualItem); let len = expected_values.len(); prop_assert_eq!(massively::MStorage::len(&output).unwrap() as usize, len);
+        assert_mvec!($value_arity, exec, output, expected_values, len);
     }};
     (merge_by_key, $key_arity:tt, $value_arity:tt, $pairs:expr) => {{
         by_key_setup!($key_arity, $value_arity, $pairs; exec, keys, values, key_device, value_device);
         let split = keys.len()/2; let (left_keys, left_values) = reference::sort_by_key(&keys[..split], &values[..split], LessItem); let (right_keys, right_values) = reference::sort_by_key(&keys[split..], &values[split..], LessItem);
         let left_key_device = device_rows!($key_arity, exec, left_keys); let right_key_device = device_rows!($key_arity, exec, right_keys); let left_value_device = device_rows!($value_arity, exec, left_values); let right_value_device = device_rows!($value_arity, exec, right_values);
-        let (key_output, value_output) = massively::vector::merge_by_key(&exec, input_expr!($key_arity, left_key_device), input_expr!($value_arity, left_value_device), input_expr!($key_arity, right_key_device), input_expr!($value_arity, right_value_device), LessItem).unwrap();
-        let (expected_keys, expected_values) = reference::merge_by_key(&left_keys, &left_values, &right_keys, &right_values, LessItem);
-        assert_mvec!($key_arity, exec, key_output, expected_keys, keys.len()); assert_mvec!($value_arity, exec, value_output, expected_values, values.len());
+        let output = massively::vector::merge_by_key(&exec, input_expr!($key_arity, left_key_device), input_expr!($value_arity, left_value_device), input_expr!($key_arity, right_key_device), input_expr!($value_arity, right_value_device), LessItem).unwrap();
+        let (_, expected_values) = reference::merge_by_key(&left_keys, &left_values, &right_keys, &right_values, LessItem);
+        assert_mvec!($value_arity, exec, output, expected_values, values.len());
     }};
 }
 

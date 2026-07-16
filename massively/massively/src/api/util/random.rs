@@ -2,7 +2,7 @@
 
 use cubecl::prelude::*;
 
-use crate::{Error, MIndex, Zip, lazy};
+use crate::{Error, Zip, lazy};
 
 type RandomInput<T> = Zip<
     Zip<Zip<crate::read::Counting, crate::read::Constant<T>>, crate::read::Constant<T>>,
@@ -59,7 +59,7 @@ macro_rules! uniform_stream {
 
         impl $stream {
             /// Limits this generator to `len` logical items.
-            pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+            pub fn take(self, len: usize) -> lazy::Taken<Self> {
                 lazy::Taken::new(self, len)
             }
         }
@@ -67,13 +67,17 @@ macro_rules! uniform_stream {
         impl crate::read::TakenSource for $stream {
             type Read = lazy::Transform<RandomInput<$item>, $op>;
 
-            fn lower(&self, offset: MIndex, len: MIndex) -> Self::Read {
+            fn lower(&self, offset: usize, len: usize) -> Self::Read {
                 crate::read::Transform::new(
                     crate::zip4(
-                        crate::read::Counting::new(offset, len as usize),
-                        crate::read::Constant::new(self.min, len as usize),
-                        crate::read::Constant::new(self.max, len as usize),
-                        crate::read::Constant::new(self.key, len as usize),
+                        crate::read::Counting::new(
+                            u32::try_from(offset)
+                                .expect("random stream offset exceeds device u32 range"),
+                            len,
+                        ),
+                        crate::read::Constant::new(self.min, len),
+                        crate::read::Constant::new(self.max, len),
+                        crate::read::Constant::new(self.key, len),
                     ),
                     $op,
                 )
@@ -90,12 +94,11 @@ uniform_stream!(
     "A deterministic uniform `u32` stream over an inclusive range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, vector::transform};
-use massively::{op::Identity, util::random};
+use massively::{Executor, op, util::random, vector::transform};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_u32(10, 20, 123).unwrap().take(8);
-let output = transform(&exec, values, Identity).unwrap();
+let output = transform(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (10..=20).contains(value)));
@@ -109,12 +112,11 @@ uniform_stream!(
     "A deterministic uniform `u64` stream over an inclusive range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, vector::transform};
-use massively::{op::Identity, util::random};
+use massively::{Executor, op, util::random, vector::transform};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_u64(100, 200, 123).unwrap().take(8);
-let output = transform(&exec, values, Identity).unwrap();
+let output = transform(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (100..=200).contains(value)));
@@ -128,12 +130,11 @@ uniform_stream!(
     "A deterministic uniform `f32` stream over a bounded range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, vector::transform};
-use massively::{op::Identity, util::random};
+use massively::{Executor, op, util::random, vector::transform};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_f32(-1.0, 1.0, 123).unwrap().take(8);
-let output = transform(&exec, values, Identity).unwrap();
+let output = transform(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
@@ -147,12 +148,11 @@ uniform_stream!(
     "A deterministic uniform `f64` stream over a bounded range.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, vector::transform};
-use massively::{op::Identity, util::random};
+use massively::{Executor, op, util::random, vector::transform};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::uniform_f64(-1.0, 1.0, 123).unwrap().take(8);
-let output = transform(&exec, values, Identity).unwrap();
+let output = transform(&exec, values, op::Identity).unwrap();
 
 let values = exec.to_host(&output).unwrap();
 assert!(values.iter().all(|value| (-1.0..=1.0).contains(value)));
@@ -186,7 +186,7 @@ macro_rules! normal_stream {
 
         impl $stream {
             /// Limits this generator to `len` logical items.
-            pub fn take(self, len: MIndex) -> lazy::Taken<Self> {
+            pub fn take(self, len: usize) -> lazy::Taken<Self> {
                 lazy::Taken::new(self, len)
             }
         }
@@ -194,13 +194,17 @@ macro_rules! normal_stream {
         impl crate::read::TakenSource for $stream {
             type Read = lazy::Transform<RandomInput<$item>, $op>;
 
-            fn lower(&self, offset: MIndex, len: MIndex) -> Self::Read {
+            fn lower(&self, offset: usize, len: usize) -> Self::Read {
                 crate::read::Transform::new(
                     crate::zip4(
-                        crate::read::Counting::new(offset, len as usize),
-                        crate::read::Constant::new(self.mean, len as usize),
-                        crate::read::Constant::new(self.stddev, len as usize),
-                        crate::read::Constant::new(self.key, len as usize),
+                        crate::read::Counting::new(
+                            u32::try_from(offset)
+                                .expect("random stream offset exceeds device u32 range"),
+                            len,
+                        ),
+                        crate::read::Constant::new(self.mean, len),
+                        crate::read::Constant::new(self.stddev, len),
+                        crate::read::Constant::new(self.key, len),
                     ),
                     $op,
                 )
@@ -217,12 +221,11 @@ normal_stream!(
     "A deterministic normally distributed `f32` stream.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, vector::transform};
-use massively::{op::Identity, util::random};
+use massively::{Executor, op, util::random, vector::transform};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::normal_f32(0.0, 1.0, 123).take(8);
-let output = transform(&exec, values, Identity).unwrap();
+let output = transform(&exec, values, op::Identity).unwrap();
 
 assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
 ```"#
@@ -235,12 +238,11 @@ normal_stream!(
     "A deterministic normally distributed `f64` stream.",
     r#"```
 use cubecl::wgpu::{WgpuDevice, WgpuRuntime};
-use massively::{Executor, vector::transform};
-use massively::{op::Identity, util::random};
+use massively::{Executor, op, util::random, vector::transform};
 
 let exec = Executor::<WgpuRuntime>::new(WgpuDevice::DefaultDevice);
 let values = random::normal_f64(0.0, 1.0, 123).take(8);
-let output = transform(&exec, values, Identity).unwrap();
+let output = transform(&exec, values, op::Identity).unwrap();
 
 assert!(exec.to_host(&output).unwrap().iter().all(|value| value.is_finite()));
 ```"#
@@ -259,10 +261,10 @@ pub struct NormalF32Op;
 #[doc(hidden)]
 pub struct NormalF64Op;
 
-type RandomU32Args = (((MIndex, u32), u32), u32);
-type RandomU64Args = (((MIndex, u64), u64), u32);
-type RandomF32Args = (((MIndex, f32), f32), u32);
-type RandomF64Args = (((MIndex, f64), f64), u32);
+type RandomU32Args = (((u32, u32), u32), u32);
+type RandomU64Args = (((u32, u64), u64), u32);
+type RandomF32Args = (((u32, f32), f32), u32);
+type RandomF64Args = (((u32, f64), f64), u32);
 
 #[cubecl::cube]
 impl crate::op::UnaryOp<RandomU32Args> for UniformU32Op {
@@ -326,45 +328,45 @@ fn pcg_hash32(input: u32) -> u32 {
 }
 
 #[cubecl::cube]
-fn random_u32_at(key: u32, index: MIndex, stream: u32) -> u32 {
+fn random_u32_at(key: u32, index: u32, stream: u32) -> u32 {
     pcg_hash32(index ^ key ^ stream)
 }
 
 #[cubecl::cube]
-fn random_u64_at(key: u32, index: MIndex, stream: u32) -> u64 {
+fn random_u64_at(key: u32, index: u32, stream: u32) -> u64 {
     let low = random_u32_at(key, index, stream);
     let high = random_u32_at(key, index, stream ^ 0x9e37_79b9u32);
     (low as u64) | ((high as u64) << 32u64)
 }
 
 #[cubecl::cube]
-fn unit_f32(key: u32, index: MIndex, stream: u32) -> f32 {
+fn unit_f32(key: u32, index: u32, stream: u32) -> f32 {
     ((random_u32_at(key, index, stream) >> 8u32) as f32) * 0.00000005960464832810486063f32
 }
 
 #[cubecl::cube]
-fn unit_f64(key: u32, index: MIndex, stream: u32) -> f64 {
+fn unit_f64(key: u32, index: u32, stream: u32) -> f64 {
     ((random_u64_at(key, index, stream) >> 11u64) as f64) * 0.00000000000000011102230246251567f64
 }
 
 #[cubecl::cube]
-fn open_unit_f32(key: u32, index: MIndex, stream: u32) -> f32 {
+fn open_unit_f32(key: u32, index: u32, stream: u32) -> f32 {
     (((random_u32_at(key, index, stream) >> 8u32) as f32) + 0.5f32)
         * 0.00000005960464832810486063f32
 }
 
 #[cubecl::cube]
-fn uniform_f32_value(min: f32, max: f32, key: u32, index: MIndex) -> f32 {
+fn uniform_f32_value(min: f32, max: f32, key: u32, index: u32) -> f32 {
     min + unit_f32(key, index, 0u32) * (max - min)
 }
 
 #[cubecl::cube]
-fn uniform_f64_value(min: f64, max: f64, key: u32, index: MIndex) -> f64 {
+fn uniform_f64_value(min: f64, max: f64, key: u32, index: u32) -> f64 {
     min + unit_f64(key, index, 0u32) * (max - min)
 }
 
 #[cubecl::cube]
-fn uniform_u32_value(min: u32, max: u32, key: u32, index: MIndex) -> u32 {
+fn uniform_u32_value(min: u32, max: u32, key: u32, index: u32) -> u32 {
     let span = max - min;
     let value = random_u32_at(key, index, 0u32);
     if span == 0xffff_ffffu32 {
@@ -375,7 +377,7 @@ fn uniform_u32_value(min: u32, max: u32, key: u32, index: MIndex) -> u32 {
 }
 
 #[cubecl::cube]
-fn uniform_u64_value(min: u64, max: u64, key: u32, index: MIndex) -> u64 {
+fn uniform_u64_value(min: u64, max: u64, key: u32, index: u32) -> u64 {
     let span = max - min;
     let value = random_u64_at(key, index, 0u32);
     if span == 0xffff_ffff_ffff_ffffu64 {
@@ -386,7 +388,7 @@ fn uniform_u64_value(min: u64, max: u64, key: u32, index: MIndex) -> u64 {
 }
 
 #[cubecl::cube]
-fn normal_f32_value(mean: f32, stddev: f32, key: u32, index: MIndex) -> f32 {
+fn normal_f32_value(mean: f32, stddev: f32, key: u32, index: u32) -> f32 {
     let u1 = open_unit_f32(key, index, 0u32);
     let u2 = open_unit_f32(key, index, 0x9e37_79b9u32);
     let radius = (-2.0f32 * u1.ln()).sqrt();
@@ -395,7 +397,7 @@ fn normal_f32_value(mean: f32, stddev: f32, key: u32, index: MIndex) -> f32 {
 }
 
 #[cubecl::cube]
-fn normal_f64_value(mean: f64, stddev: f64, key: u32, index: MIndex) -> f64 {
+fn normal_f64_value(mean: f64, stddev: f64, key: u32, index: u32) -> f64 {
     let u1 = open_unit_f32(key, index, 0u32);
     let u2 = open_unit_f32(key, index, 0x9e37_79b9u32);
     let radius = (-2.0f32 * u1.ln()).sqrt();

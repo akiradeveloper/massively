@@ -52,7 +52,7 @@ unary_case!(transform_where, |exec, input, gpu| {
         &exec,
         lazify(gpu.slice(..)),
         AddOne,
-        lazify(flags_gpu.slice(..)),
+        as_stencil(lazify(flags_gpu.slice(..))),
         output.slice_mut(..),
     )
     .unwrap();
@@ -139,9 +139,12 @@ unary_case!(is_partitioned, |exec, input, gpu| {
 unary_case!(copy_where, |exec, input, gpu| {
     let flags = flags_for(&input);
     let flags_gpu = exec.to_device(&flags);
-    let output =
-        massively::vector::copy_where(&exec, lazify(gpu.slice(..)), lazify(flags_gpu.slice(..)))
-            .unwrap();
+    let output = massively::vector::copy_where(
+        &exec,
+        lazify(gpu.slice(..)),
+        as_stencil(lazify(flags_gpu.slice(..))),
+    )
+    .unwrap();
     let expected = reference::copy_where(&input, &flags);
     prop_assert_eq!(output.len(), expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -150,9 +153,12 @@ unary_case!(copy_where, |exec, input, gpu| {
 unary_case!(remove_where, |exec, input, gpu| {
     let flags = flags_for(&input);
     let flags_gpu = exec.to_device(&flags);
-    let output =
-        massively::vector::remove_where(&exec, lazify(gpu.slice(..)), lazify(flags_gpu.slice(..)))
-            .unwrap();
+    let output = massively::vector::remove_where(
+        &exec,
+        lazify(gpu.slice(..)),
+        as_stencil(lazify(flags_gpu.slice(..))),
+    )
+    .unwrap();
     let expected = reference::remove_where(&input, &flags);
     prop_assert_eq!(output.len(), expected.len());
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -169,7 +175,8 @@ unary_case!(partition, |exec, input, gpu| {
 });
 
 unary_case!(fill, |exec, input, _gpu| {
-    let output = massively::vector::fill(&exec, input.len(), 42_u32).unwrap();
+    let output = exec.alloc::<u32>(input.len());
+    massively::vector::fill(&exec, 42_u32, output.slice_mut(..)).unwrap();
     let mut expected = vec![0; input.len()];
     reference::fill(42, &mut expected);
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -179,8 +186,13 @@ unary_case!(replace_where, |exec, input, _gpu| {
     let flags = flags_for(&input);
     let flags_gpu = exec.to_device(&flags);
     let output = exec.to_device(&input);
-    massively::vector::replace_where(&exec, 42, lazify(flags_gpu.slice(..)), output.slice_mut(..))
-        .unwrap();
+    massively::vector::replace_where(
+        &exec,
+        42,
+        as_stencil(lazify(flags_gpu.slice(..))),
+        output.slice_mut(..),
+    )
+    .unwrap();
     let mut expected = input.clone();
     reference::replace_where(42, &flags, &mut expected);
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -189,9 +201,12 @@ unary_case!(replace_where, |exec, input, _gpu| {
 unary_case!(gather, |exec, input, gpu| {
     let indices = indices_for(input.len());
     let indices_gpu = exec.to_device(&indices);
-    let output =
-        massively::vector::gather(&exec, lazify(gpu.slice(..)), lazify(indices_gpu.slice(..)))
-            .unwrap();
+    let output = massively::vector::gather(
+        &exec,
+        lazify(gpu.slice(..)),
+        as_indices(lazify(indices_gpu.slice(..))),
+    )
+    .unwrap();
     let mut expected = vec![0; input.len()];
     reference::gather(&input, &indices, &mut expected);
     prop_assert_eq!(exec.to_host(&output).unwrap(), expected);
@@ -206,8 +221,8 @@ unary_case!(gather_where, |exec, input, gpu| {
     massively::vector::gather_where(
         &exec,
         lazify(gpu.slice(..)),
-        lazify(indices_gpu.slice(..)),
-        lazify(flags_gpu.slice(..)),
+        as_indices(lazify(indices_gpu.slice(..))),
+        as_stencil(lazify(flags_gpu.slice(..))),
         output.slice_mut(..),
     )
     .unwrap();
@@ -223,7 +238,7 @@ unary_case!(scatter, |exec, input, gpu| {
     massively::vector::scatter(
         &exec,
         lazify(gpu.slice(..)),
-        lazify(indices_gpu.slice(..)),
+        as_indices(lazify(indices_gpu.slice(..))),
         output.slice_mut(..),
     )
     .unwrap();
@@ -241,8 +256,8 @@ unary_case!(scatter_where, |exec, input, gpu| {
     massively::vector::scatter_where(
         &exec,
         lazify(gpu.slice(..)),
-        lazify(indices_gpu.slice(..)),
-        lazify(flags_gpu.slice(..)),
+        as_indices(lazify(indices_gpu.slice(..))),
+        as_stencil(lazify(flags_gpu.slice(..))),
         output.slice_mut(..),
     )
     .unwrap();

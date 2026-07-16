@@ -1,7 +1,7 @@
 //! CSR sparse matrix-vector multiplication as an edge expression reduced by row.
 
 use cubecl::prelude::*;
-use massively::{DeviceVec, Executor, graph, lazy, op::ReductionOp, op::UnaryOp, zip2};
+use massively::{DeviceVec, Executor, graph, op::ReductionOp, op::UnaryOp, zip2};
 
 use super::common::{self, DeviceWeightedCsr};
 
@@ -31,7 +31,7 @@ pub fn solve<R: Runtime>(
     vector: &DeviceVec<R, f32>,
 ) -> common::Result<DeviceVec<R, f32>> {
     assert_eq!(vector.len(), matrix.graph().vertex_count() as usize);
-    let frontier = lazy::counting(0).take(matrix.graph().vertex_count());
+    let frontier = common::counting_u32(0, matrix.graph().vertex_count() as usize);
     graph::traverse(exec, matrix.graph().csr(), frontier)?
         .map(
             zip2(
@@ -54,7 +54,7 @@ mod tests {
         let exec = Executor::<WgpuRuntime>::new(WgpuDevice::Cpu);
         let matrix = WeightedCsr::new(common::path_graph(), vec![1.0; 6]);
         let matrix = DeviceWeightedCsr::<_, f32>::from_host(&exec, &matrix).unwrap();
-        let vector = exec.to_device(&[1.0, 2.0, 3.0, 4.0]);
+        let vector = exec.to_device(&[1.0_f32, 2.0, 3.0, 4.0]);
         assert_eq!(
             exec.to_host(&solve(&exec, &matrix, &vector).unwrap())
                 .unwrap(),
